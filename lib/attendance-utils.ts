@@ -53,26 +53,35 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
 /**
  * Returns true when a lateness reason SHOULD be required.
  * - Requires reason only on weekdays (Mon-Fri)
- * - Security and Research departments are exempt
- * - Department heads and regional managers are exempt
+ * - Security, Research, Operational, and Transport departments are exempt
+ * - Admin, Department heads and regional managers are exempt
  */
 export function requiresLatenessReason(date: Date = new Date(), dept?: DeptInfo, role?: string | null): boolean {
   if (isWeekend(date)) return false
-  if (isSecurityDept(dept)) return false
+  // All non-restricted departments are exempt
+  if (isExemptFromTimeRestrictions(dept, role)) return false
   if (isResearchDept(dept)) return false
-  if (isExemptFromAttendanceReasons(role)) return false
+  // Admin role is also exempt
+  const lowerRole = (role || "").toLowerCase()
+  if (lowerRole === "admin") return false
   return true
 }
 
 /**
  * Returns true when an early-checkout reason should be enforced.
  * - Enforced only when location-level flag is true and it's not a weekend
- * - Department heads and regional managers are exempt
+ * - All non-restricted departments (Security, Operational, Transport) are exempt
+ * - Admin, Department heads and regional managers are exempt
  */
-export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null): boolean {
+export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null, dept?: DeptInfo): boolean {
   if (!locationRequires) return false
   if (isWeekend(date)) return false
-  if (isExemptFromAttendanceReasons(role)) return false
+  // All non-restricted departments are exempt
+  if (isExemptFromTimeRestrictions(dept, role)) return false
+  if (isResearchDept(dept)) return false
+  // Admin role is also exempt
+  const lowerRole = (role || "").toLowerCase()
+  if (lowerRole === "admin") return false
   return true
 }
 

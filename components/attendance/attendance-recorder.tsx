@@ -1037,7 +1037,7 @@ export function AttendanceRecorder({
       const checkInHour = checkInTime.getHours()
       const checkInMinutes = checkInTime.getMinutes()
       const isLateArrival = checkInHour > 9 || (checkInHour === 9 && checkInMinutes > 0)
-      const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments)
+      const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role)
 
       // Require lateness reason only on weekdays and for non‑security staff
       if (isLateArrival && latenessRequired) {
@@ -1391,7 +1391,7 @@ export function AttendanceRecorder({
       const assignedLocation = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
       const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
       const requireEarlyCheckoutReason = assignedLocation?.require_early_checkout_reason ?? true
-      const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(now, requireEarlyCheckoutReason)
+      const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(now, requireEarlyCheckoutReason, userProfile?.role, userProfile?.departments)
       // Persist effective requirement into state so the modal can relax validation on weekends
       setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason))
 
