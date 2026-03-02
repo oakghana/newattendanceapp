@@ -32,6 +32,10 @@ export const metadata = {
   description: "Your modern dashboard with comprehensive attendance metrics and insights",
 }
 
+// This route uses `cookies()` via `createClient()` and therefore must be
+// server-rendered dynamically. Explicitly force dynamic rendering so the
+// build step does not attempt static prerendering.
+export const dynamic = "force-dynamic"
 export default async function DashboardPage() {
   try {
     const supabase = await createClient()
