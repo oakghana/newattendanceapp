@@ -11,11 +11,19 @@ export function IndependenceDayFlyer() {
   useEffect(() => {
     setIsClient(true)
     // Show flyer on page load
-    const timer = setTimeout(() => {
+    const showTimer = setTimeout(() => {
       setIsOpen(true)
     }, 300)
 
-    return () => clearTimeout(timer)
+    // Auto-close flyer after 5 seconds
+    const closeTimer = setTimeout(() => {
+      setIsOpen(false)
+    }, 5300) // 5000ms for display + 300ms for show delay
+
+    return () => {
+      clearTimeout(showTimer)
+      clearTimeout(closeTimer)
+    }
   }, [])
 
   if (!isClient) return null
