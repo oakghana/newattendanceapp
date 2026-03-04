@@ -17,6 +17,7 @@ import { useState } from "react"
 import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
 import { Eye, EyeOff } from "lucide-react"
+import { IndependenceDayFlyer } from "@/components/celebrations/independence-day-flyer"
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("")
@@ -483,6 +484,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4 fade-in">
+      <IndependenceDayFlyer />
       <div className="w-full max-w-md scale-in">
         <Card className="glass-effect shadow-2xl border-border/50">
           <CardHeader className="text-center space-y-5 pb-6 sm:pb-8 px-4 sm:px-8 pt-6 sm:pt-8">
