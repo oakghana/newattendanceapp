@@ -98,6 +98,7 @@ export function StaffManagement() {
   })
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
+  const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
 
   const fetchStaff = useCallback(async () => {
     try {
@@ -195,6 +196,9 @@ export function StaffManagement() {
       if (result.success && result.user) {
         console.log("[v0] Setting current user role to:", result.user.role)
         setCurrentUserRole(result.user.role)
+        if (result.user.assigned_location_id) {
+          setCurrentUserLocationId(result.user.assigned_location_id)
+        }
       } else {
         console.error("[v0] Failed to fetch user role - response:", result)
       }
@@ -487,6 +491,19 @@ export function StaffManagement() {
             <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
               <AlertDescription className="font-medium">{error}</AlertDescription>
             </Alert>
+          )}
+
+          {currentUserRole === "regional_manager" && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg text-sm text-primary mb-2">
+              <MapPin className="h-4 w-4 shrink-0" />
+              <span className="font-medium">
+                Showing all staff at:{" "}
+                <span className="font-semibold">
+                  {locations.find((l) => l.id === currentUserLocationId)?.name || "Your assigned location"}
+                </span>
+              </span>
+              <span className="text-xs text-muted-foreground ml-1">(filter by department below)</span>
+            </div>
           )}
 
           <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50">

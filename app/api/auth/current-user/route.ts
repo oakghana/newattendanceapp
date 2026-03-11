@@ -18,7 +18,7 @@ export async function GET() {
     // Get user profile
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, email, role, department_id")
+      .select("id, first_name, last_name, email, role, department_id, assigned_location_id")
       .eq("id", user.id)
       .single()
 
@@ -35,6 +35,7 @@ export async function GET() {
         email: profile.email,
         role: profile.role,
         department_id: profile.department_id,
+        assigned_location_id: profile.assigned_location_id,
       },
     })
   } catch (error) {

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("role, department_id")
+      .select("role, department_id, assigned_location_id")
       .eq("id", user.id)
       .single()
 
@@ -71,6 +71,11 @@ export async function GET(request: NextRequest) {
       .gte("check_in_time", `${startDate}T00:00:00`)
       .lte("check_in_time", `${endDate}T23:59:59`)
 
+    // Validate incoming UUID-like params to avoid invalid input to Postgres
+    const safeLocationId = locationId && locationId !== "undefined" ? locationId : null
+    const safeDistrictId = districtId && districtId !== "undefined" ? districtId : null
+    const safeDepartmentId = departmentId && departmentId !== "undefined" ? departmentId : null
+
     if (profile.role === "staff") {
       query = query.eq("user_id", user.id)
     } else if (userId) {
@@ -79,12 +84,20 @@ export async function GET(request: NextRequest) {
       // For department heads, we need to filter by their department
       // This is a workaround until we can do a proper join at query time
       // We'll filter the results after fetching user profiles
-    }
+    } else if (profile.role === "regional_manager" && profile.assigned_location_id) {
+      // Regional managers are scoped to their assigned location.
+      // The location filter param may override to a sub-location but we always
+      // enforce the manager's own location as the ceiling scope via a subquery on user_profiles.
+      const { data: locationStaff } = await supabase
+        .from("user_profiles")
+        .select("id")
+        .eq("assigned_location_id", profile.assigned_location_id)
 
-    // Validate incoming UUID-like params to avoid invalid input to Postgres
-    const safeLocationId = locationId && locationId !== "undefined" ? locationId : null
-    const safeDistrictId = districtId && districtId !== "undefined" ? districtId : null
-    const safeDepartmentId = departmentId && departmentId !== "undefined" ? departmentId : null
+      const locationUserIds = (locationStaff || []).map((s: any) => s.id)
+      if (locationUserIds.length > 0) {
+        query = query.in("user_id", locationUserIds)
+      }
+    }
 
     if (safeLocationId) {
       query = query.eq("check_in_location_id", safeLocationId)
@@ -173,14 +186,12 @@ export async function GET(request: NextRequest) {
 
     if (profile.role === "department_head") {
       // Department heads can see all records from their department
-      // Even if user profile is missing, include the record (likely their staff)
       console.log('[v0] Reports API - Filtering for department head, dept_id:', profile.department_id)
       
       filteredRecords = attendanceRecords.filter((record) => {
         const user = userMap.get(record.user_id)
         
         if (user) {
-          // If we have the profile, check department match
           const matches = user.department_id === profile.department_id
           if (!matches) {
             console.log('[v0] Reports API - Excluding record, dept mismatch:', {
@@ -192,21 +203,28 @@ export async function GET(request: NextRequest) {
           return matches
         } else {
           // If no profile, include it (belongs to their staff based on attendance)
-          console.log('[v0] Reports API - Including record without profile for dept head:', record.id)
           return true
         }
       })
     } else if (profile.role === "regional_manager") {
-      // Regional managers can see all records nationwide (no filtering needed)
-      filteredRecords = attendanceRecords
+      // Records are already scoped to the manager's location in the query above.
+      // Apply an optional department filter if the manager chose one.
+      if (safeDepartmentId) {
+        filteredRecords = attendanceRecords.filter((record) => {
+          const u = userMap.get(record.user_id)
+          return u ? u.department_id === safeDepartmentId : true
+        })
+      } else {
+        filteredRecords = attendanceRecords
+      }
     } else if (profile.role === "staff") {
       // Staff can only see their own records (already filtered in query above)
       filteredRecords = attendanceRecords
-    } else if (departmentId) {
+    } else if (safeDepartmentId) {
       // Admins can filter by specific department
       filteredRecords = attendanceRecords.filter((record) => {
-        const user = userMap.get(record.user_id)
-        return user?.department_id === departmentId
+        const u = userMap.get(record.user_id)
+        return u?.department_id === safeDepartmentId
       })
     }
 
