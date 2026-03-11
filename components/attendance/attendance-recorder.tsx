@@ -2314,17 +2314,6 @@ export function AttendanceRecorder({
                 <p className={`text-xs ${earlyCheckoutReasonRequired && earlyCheckoutReason.length < 10 ? 'text-red-500' : 'text-muted-foreground'}`}>
                   {earlyCheckoutReason.length}/500 characters {earlyCheckoutReasonRequired ? '(minimum 10 required)' : '(optional)'}
                 </p>
-                <div className="mt-2">
-                  <Label htmlFor="early-proved-by">Provided/Verified By <span className="text-gray-400 text-xs">(optional)</span></Label>
-                  <input
-                    id="early-proved-by"
-                    value={earlyCheckoutProvedBy}
-                    onChange={(e) => setEarlyCheckoutProvedBy(e.target.value)}
-                    placeholder="Name or staff id of verifier"
-                    className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary"
-                    maxLength={200}
-                  />
-                </div>
               </div>
 
               <div className="flex gap-2">
@@ -2390,17 +2379,6 @@ export function AttendanceRecorder({
                 <p className={`text-xs ${latenessReason.length < 10 ? 'text-red-500' : 'text-muted-foreground'}`}>
                   {latenessReason.length}/500 characters (minimum 10 required)
                 </p>
-                <div className="mt-2">
-                  <Label htmlFor="lateness-proved-by">Provided/Verified By <span className="text-gray-400 text-xs">(optional)</span></Label>
-                  <input
-                    id="lateness-proved-by"
-                    value={latenessProvedBy}
-                    onChange={(e) => setLatenessProvedBy(e.target.value)}
-                    placeholder="Name or staff id of verifier"
-                    className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary"
-                    maxLength={200}
-                  />
-                </div>
               </div>
 
               <div className="flex gap-2">
