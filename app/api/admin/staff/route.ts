@@ -76,6 +76,13 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Staff API - Filters:", { searchTerm, departmentFilter, roleFilter, sortBy, sortOrder, page, limit })
 
+    // Fetch the requesting user's profile to check role and location
+    const { data: requestingProfile } = await supabase
+      .from("user_profiles")
+      .select("role, assigned_location_id")
+      .eq("id", user.id)
+      .single()
+
     // Build a server-side query with pagination and optional filters (returns count)
     let query = supabase
       .from("user_profiles")
@@ -96,6 +103,11 @@ export async function GET(request: NextRequest) {
         created_at,
         updated_at
       `, { count: 'exact' })
+
+    // Regional managers only see staff assigned to their own location (all departments)
+    if (requestingProfile?.role === "regional_manager" && requestingProfile?.assigned_location_id) {
+      query = query.eq("assigned_location_id", requestingProfile.assigned_location_id)
+    }
 
     if (departmentFilter && departmentFilter !== "all") {
       query = query.eq("department_id", departmentFilter)
