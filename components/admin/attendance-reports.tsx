@@ -425,12 +425,40 @@ export function AttendanceReports() {
     }
   }
 
+  const fetchAllRecordsForExport = async (): Promise<AttendanceRecord[]> => {
+    // Fetch all matching records without pagination for export
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+      page: "1",
+      page_size: "10000",
+    })
+
+    if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
+    if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+    if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+    if (selectedStatus !== "all") params.append("status", selectedStatus)
+
+    const res = await fetch(`/api/admin/reports/attendance?${params}`)
+    const json = await res.json()
+
+    if (!json.success) {
+      throw new Error(json.error || "Failed to fetch records for export")
+    }
+
+    return json.data.records || []
+  }
+
   const exportReport = async (format: "excel" | "pdf" | "csv") => {
     setExporting(true)
     setExportError(null)
 
     try {
       console.log(`[v0] Starting ${format} export...`)
+
+      // Always fetch the full dataset (not just the current page) for export
+      const allRecords = await fetchAllRecordsForExport()
+      console.log(`[v0] Fetched ${allRecords.length} total records for export`)
 
       if (format === "csv") {
         const csvContent = [
@@ -454,7 +482,7 @@ export function AttendanceReports() {
             "Status",
             "Location Status",
           ].join(","),
-          ...records.map((record) => {
+          ...allRecords.map((record) => {
               const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
                 ? record.google_maps_name
                 : record.check_in_location?.name || record.check_in_location_name || "N/A"
@@ -496,7 +524,7 @@ export function AttendanceReports() {
         window.URL.revokeObjectURL(url)
         console.log("[v0] CSV export completed successfully")
       } else if (format === "excel") {
-        // Build Excel client-side from the already-loaded enriched records (same data as the Detailed view)
+        // Build Excel client-side from all enriched records (full dataset, not just current page)
         const XLSX = await import("xlsx")
 
         const sheetData = [
@@ -520,7 +548,7 @@ export function AttendanceReports() {
             "Status",
             "Location Status",
           ],
-          ...records.map((record) => {
+          ...allRecords.map((record) => {
             const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
               ? record.google_maps_name
               : record.check_in_location?.name || record.check_in_location_name || "N/A"
@@ -607,7 +635,7 @@ export function AttendanceReports() {
             signal: controller.signal,
             body: JSON.stringify({
               format,
-              data: records,
+              data: allRecords,
               summary,
               filters: {
                 startDate,
