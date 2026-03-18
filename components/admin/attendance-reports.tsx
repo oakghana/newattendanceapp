@@ -426,27 +426,45 @@ export function AttendanceReports() {
   }
 
   const fetchAllRecordsForExport = async (): Promise<AttendanceRecord[]> => {
-    // Fetch all matching records without pagination for export
-    const params = new URLSearchParams({
-      start_date: startDate,
-      end_date: endDate,
-      page: "1",
-      page_size: "10000",
-    })
+    // Paginate through ALL matching records in chunks of 1000 to bypass Supabase's row limit
+    const PAGE_SIZE = 1000
+    const allRecords: AttendanceRecord[] = []
+    let page = 1
+    let hasMore = true
 
-    if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-    if (selectedLocation !== "all") params.append("location_id", selectedLocation)
-    if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
-    if (selectedStatus !== "all") params.append("status", selectedStatus)
+    while (hasMore) {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        export: "true",
+        page: String(page),
+        page_size: String(PAGE_SIZE),
+      })
 
-    const res = await fetch(`/api/admin/reports/attendance?${params}`)
-    const json = await res.json()
+      if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
+      if (selectedLocation !== "all") params.append("location_id", selectedLocation)
+      if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
+      if (selectedStatus !== "all") params.append("status", selectedStatus)
 
-    if (!json.success) {
-      throw new Error(json.error || "Failed to fetch records for export")
+      const res = await fetch(`/api/admin/reports/attendance?${params}`)
+      const json = await res.json()
+
+      if (!json.success) {
+        throw new Error(json.error || "Failed to fetch records for export")
+      }
+
+      const batch: AttendanceRecord[] = json.data.records || []
+      allRecords.push(...batch)
+
+      // If the batch is smaller than PAGE_SIZE we've reached the last page
+      hasMore = batch.length === PAGE_SIZE
+      page++
+
+      // Safety: stop if we somehow exceed 100k records to avoid infinite loops
+      if (allRecords.length >= 100000) break
     }
 
-    return json.data.records || []
+    return allRecords
   }
 
   const exportReport = async (format: "excel" | "pdf" | "csv") => {

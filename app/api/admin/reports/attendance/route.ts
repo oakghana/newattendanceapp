@@ -130,8 +130,12 @@ export async function GET(request: NextRequest) {
     // Apply ordering and pagination
     const pageParam = searchParams.get("page")
     const pageSizeParam = searchParams.get("page_size")
+    const exportMode = searchParams.get("export") === "true"
     const page = pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1
-    const pageSize = pageSizeParam ? Math.max(1, parseInt(pageSizeParam, 10) || 50) : 50
+    // Cap normal page size at 200 for UI performance; export mode fetches in large chunks
+    const pageSize = exportMode
+      ? Math.min(1000, pageSizeParam ? parseInt(pageSizeParam, 10) || 1000 : 1000)
+      : Math.min(200, pageSizeParam ? parseInt(pageSizeParam, 10) || 50 : 50)
     const startIndex = (page - 1) * pageSize
     const endIndex = startIndex + pageSize - 1
 
