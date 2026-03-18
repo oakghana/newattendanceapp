@@ -55,20 +55,6 @@ export async function GET(request: NextRequest) {
       .from("attendance_records")
       .select(`
         *,
-        user_profiles:user_id (
-          id,
-          employee_id,
-          first_name,
-          last_name,
-          departments:department_id (
-            id,
-            name
-          ),
-          assigned_location:assigned_location_id (
-            id,
-            name
-          )
-        ),
         check_in_location:geofence_locations!check_in_location_id (
           id,
           name,
