@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useCallback, memo, useMemo } from "react"
+import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -170,7 +170,7 @@ const navigationItems = [
     title: "Device Monitoring",
     href: "/dashboard/device-violations",
     icon: ShieldAlert,
-    roles: ["admin"],
+    roles: ["admin", "department_head"],
     category: "admin",
     subItems: [
       {
@@ -238,7 +238,55 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
   const pathname = usePathname()
-  const router = useRouter()
+  const [ghanaTime, setGhanaTime] = useState<string>("")
+
+  useEffect(() => {
+    let baseServerMs = 0
+    let basePerfMs = 0
+
+    const formatAccraTime = (utcMs: number) => {
+      return new Date(utcMs).toLocaleTimeString("en-GH", {
+        timeZone: "Africa/Accra",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
+    }
+
+    const syncServerTime = async () => {
+      try {
+        const response = await fetch("/api/system-time", { cache: "no-store" })
+        if (!response.ok) return
+
+        const data = (await response.json()) as { utcEpochMs?: number }
+        if (!data.utcEpochMs) return
+
+        baseServerMs = data.utcEpochMs
+        basePerfMs = performance.now()
+        setGhanaTime(formatAccraTime(baseServerMs))
+      } catch {
+        // Keep previous time if sync fails, next poll will retry.
+      }
+    }
+
+    const tick = () => {
+      if (!baseServerMs) return
+      const elapsedMs = performance.now() - basePerfMs
+      setGhanaTime(formatAccraTime(baseServerMs + elapsedMs))
+    }
+
+    void syncServerTime()
+    const tickId = setInterval(tick, 1000)
+    const syncId = setInterval(() => {
+      void syncServerTime()
+    }, 60_000)
+
+    return () => {
+      clearInterval(tickId)
+      clearInterval(syncId)
+    }
+  }, [])
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -618,6 +666,10 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     <p className="text-xs text-muted-foreground font-normal mt-1">
                       {profile?.departments?.name || "No department"}
                     </p>
+                    <p className="text-xs text-primary font-mono mt-1 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {ghanaTime} (GMT)
+                    </p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-border/50" />
                   <DropdownMenuItem asChild>
@@ -670,6 +722,10 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     </p>
                     <p className="text-xs text-muted-foreground font-medium">
                       {profile?.departments?.name || "No department"}
+                    </p>
+                    <p className="text-xs text-primary font-mono flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {ghanaTime} (GMT)
                     </p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1" />

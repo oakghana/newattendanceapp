@@ -17,7 +17,8 @@ import { useState } from "react"
 import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
 import { Eye, EyeOff } from "lucide-react"
-import { IndependenceDayFlyer } from "@/components/celebrations/independence-day-flyer"
+import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
+import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("")
@@ -68,7 +69,7 @@ export default function LoginPage() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("is_active, first_name, last_name")
+        .select("is_active, first_name, last_name, password_changed_at")
         .eq("id", userId)
         .single()
 
@@ -84,10 +85,23 @@ export default function LoginPage() {
       return {
         approved: data.is_active,
         name: `${data.first_name} ${data.last_name}`,
+        passwordChangedAt: data.password_changed_at || null,
         error: data.is_active ? null : "Your account is pending admin approval. Please wait for activation.",
       }
       } catch (error) {
         return { approved: false, error: "Failed to verify account status" }
+    }
+  }
+
+  const getRuntimeFlags = async (): Promise<RuntimeFlags> => {
+    try {
+      const response = await fetch("/api/settings/runtime", { cache: "no-store" })
+      if (!response.ok) return DEFAULT_RUNTIME_FLAGS
+
+      const data = (await response.json()) as { flags?: RuntimeFlags }
+      return data.flags || DEFAULT_RUNTIME_FLAGS
+    } catch {
+      return DEFAULT_RUNTIME_FLAGS
     }
   }
 
@@ -206,6 +220,24 @@ export default function LoginPage() {
           if (approvalCheck.error?.includes("pending admin approval")) {
             router.push("/auth/pending-approval")
           }
+          return
+        }
+
+        const runtimeFlags = await getRuntimeFlags()
+
+        const mustChangePassword =
+          runtimeFlags.passwordEnforcementEnabled &&
+          (Boolean(data.user.user_metadata?.force_password_change) ||
+            isPasswordChangeRequired(approvalCheck.passwordChangedAt))
+
+        if (mustChangePassword) {
+          await logLoginActivity(data.user.id, "login_password_change_required", true, "password")
+          clearAttendanceCache()
+          clearGeolocationCache()
+          showWarning(getPasswordEnforcementMessage(), "Password Change Required")
+          setTimeout(() => {
+            window.location.href = "/dashboard/profile?forceChange=true&reason=monthly"
+          }, 800)
           return
         }
 
@@ -465,6 +497,24 @@ export default function LoginPage() {
           return
         }
 
+        const runtimeFlags = await getRuntimeFlags()
+
+        const mustChangePassword =
+          runtimeFlags.passwordEnforcementEnabled &&
+          (Boolean(data.user.user_metadata?.force_password_change) ||
+            isPasswordChangeRequired(approvalCheck.passwordChangedAt))
+
+        if (mustChangePassword) {
+          await logLoginActivity(data.user.id, "otp_password_change_required", true, "otp")
+          clearAttendanceCache()
+          clearGeolocationCache()
+          showWarning(getPasswordEnforcementMessage(), "Password Change Required")
+          setTimeout(() => {
+            window.location.href = "/dashboard/profile?forceChange=true&reason=monthly"
+          }, 800)
+          return
+        }
+
         await logLoginActivity(data.user.id, "otp_login_success", true, "otp")
       }
 
@@ -484,7 +534,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4 fade-in">
-      <IndependenceDayFlyer />
       <div className="w-full max-w-md scale-in">
         <Card className="glass-effect shadow-2xl border-border/50">
           <CardHeader className="text-center space-y-5 pb-6 sm:pb-8 px-4 sm:px-8 pt-6 sm:pt-8">

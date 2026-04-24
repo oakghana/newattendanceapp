@@ -1,16 +1,12 @@
-import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+
+export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
     console.log("[v0] Reports API - Starting request")
-    const supabase = await createClient()
-
-    // Get authenticated user and check role
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const { supabase, user, authError } = await createClientAndGetUser()
 
     if (authError || !user) {
       console.error("[v0] Reports API - Auth error:", authError)
@@ -41,6 +37,7 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get("user_id")
     const locationId = searchParams.get("location_id")
     const districtId = searchParams.get("district_id")
+    const status = searchParams.get("status")
 
     console.log("[v0] Reports API - Filters:", {
       startDate,
@@ -49,6 +46,7 @@ export async function GET(request: NextRequest) {
       userId,
       locationId,
       districtId,
+      status,
     })
 
     let query = supabase
@@ -75,6 +73,7 @@ export async function GET(request: NextRequest) {
     const safeLocationId = locationId && locationId !== "undefined" ? locationId : null
     const safeDistrictId = districtId && districtId !== "undefined" ? districtId : null
     const safeDepartmentId = departmentId && departmentId !== "undefined" ? departmentId : null
+    const safeStatus = status && status !== "undefined" && status !== "all" ? status : null
 
     if (profile.role === "staff") {
       query = query.eq("user_id", user.id)
@@ -87,6 +86,11 @@ export async function GET(request: NextRequest) {
     // If a location filter is selected, scope records by check_in_location_id
     if (safeLocationId) {
       query = query.eq("check_in_location_id", safeLocationId)
+    }
+
+    // If a status filter is selected, scope records by status
+    if (safeStatus) {
+      query = query.eq("status", safeStatus)
     }
 
     // If a department filter is provided, resolve the matching user IDs first,
@@ -315,6 +319,7 @@ export async function GET(request: NextRequest) {
         countQuery = countQuery.eq("user_id", userId)
       }
       if (safeLocationId) countQuery = countQuery.eq("check_in_location_id", safeLocationId)
+      if (safeStatus) countQuery = countQuery.eq("status", safeStatus)
 
       // Mirror department user scoping for the count
       if (safeDepartmentId && profile.role !== "staff") {

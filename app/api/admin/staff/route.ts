@@ -72,9 +72,11 @@ export async function GET(request: NextRequest) {
     const sortBy = urlParams.get("sortBy") || "created_at"
     const sortOrder = urlParams.get("sortOrder") || "desc"
     const page = parseInt(urlParams.get("page") || "1", 10)
-    const limit = Math.min(parseInt(urlParams.get("limit") || "50", 10), 200) // sane max
+    const trimmedSearchTerm = searchTerm?.trim() || ""
+    const requestedLimit = parseInt(urlParams.get("limit") || "50", 10)
+    const limit = trimmedSearchTerm ? Math.min(requestedLimit || 2000, 5000) : Math.min(requestedLimit || 50, 200)
 
-    console.log("[v0] Staff API - Filters:", { searchTerm, departmentFilter, roleFilter, sortBy, sortOrder, page, limit })
+    console.log("[v0] Staff API - Filters:", { searchTerm: trimmedSearchTerm, departmentFilter, roleFilter, sortBy, sortOrder, page, limit })
 
     // Fetch the requesting user's profile to check role and location
     const { data: requestingProfile } = await supabase
@@ -118,11 +120,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Server-side search (use ILIKE for case-insensitive partial match)
-    if (searchTerm) {
-      const pattern = `%${searchTerm.replace(/%/g, '\\%')}%`
-      // Search across first_name, last_name, email, employee_id
+    if (trimmedSearchTerm) {
+      const pattern = `%${trimmedSearchTerm.replace(/%/g, '\\%')}%`
+      // Search across first_name, last_name, email, employee_id, and position
       query = query.or(
-        `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern},employee_id.ilike.${pattern}`,
+        `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern},employee_id.ilike.${pattern},position.ilike.${pattern}`,
       )
     }
 

@@ -1,6 +1,18 @@
 "use client"
 
 import { useState, useEffect } from "react"
+
+const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  return fetch(input, {
+    ...init,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-store",
+      ...(init.headers || {}),
+    },
+  })
+}
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,6 +29,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Key, Shield, Search, Eye, EyeOff } from "lucide-react"
+import { toast } from "sonner"
 
 interface User {
   id: string
@@ -32,6 +45,9 @@ interface PasswordManagementProps {
   userEmail?: string
   isAdmin?: boolean
 }
+
+const SERVICE_ROLE_ERROR_MESSAGE =
+  "Admin password reset requires the server SUPABASE_SERVICE_ROLE_KEY to be configured. Enter a new password in the modal and submit once the server is ready."
 
 export function PasswordManagement({ userId, userEmail, isAdmin = false }: PasswordManagementProps) {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
@@ -53,20 +69,47 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
+  const [hasServiceKey, setHasServiceKey] = useState(true)
+
+  const showErrorMessage = (message: string) => {
+    setSuccess(null)
+    setError(message)
+    toast.error(message)
+  }
+
+  const showSuccessMessage = (message: string) => {
+    setError(null)
+    setSuccess(message)
+    toast.success(message)
+  }
 
   useEffect(() => {
     if (isAdmin) {
-      fetchUsers()
       fetchCurrentUserRole()
+      fetchServerConfig()
     }
   }, [isAdmin])
 
-  const fetchUsers = async () => {
+  useEffect(() => {
+    if (!isAdmin) return
+
+    const timer = setTimeout(() => {
+      fetchUsers(searchTerm)
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [isAdmin, searchTerm])
+
+  const fetchUsers = async (term = "") => {
     setLoadingUsers(true)
     setError(null)
     try {
-      console.log("[v0] Password Management: Fetching users")
-      const response = await fetch("/api/admin/users")
+      console.log("[v0] Password Management: Fetching users", { term })
+      const params = new URLSearchParams()
+      if (term.trim()) params.append("search", term.trim())
+      params.append("limit", "5000")
+
+      const response = await authenticatedFetch(`/api/admin/users?${params.toString()}`)
 
       console.log("[v0] Password Management: Response status:", response.status)
       console.log("[v0] Password Management: Response headers:", Object.fromEntries(response.headers.entries()))
@@ -112,13 +155,27 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
 
   const fetchCurrentUserRole = async () => {
     try {
-      const response = await fetch("/api/settings")
+      const response = await authenticatedFetch("/api/settings")
       const result = await response.json()
       if (result.success && result.profile) {
         setCurrentUserRole(result.profile.role)
       }
     } catch (error) {
       console.error("[v0] Failed to fetch current user role:", error)
+    }
+  }
+
+  const fetchServerConfig = async () => {
+    try {
+      const response = await authenticatedFetch("/api/admin/supabase-config")
+      const result = await response.json()
+      const available = Boolean(result?.hasServiceKey)
+      setHasServiceKey(available)
+      return available
+    } catch (error) {
+      console.warn("[v0] Failed to verify service-role configuration:", error)
+      setHasServiceKey(false)
+      return false
     }
   }
 
@@ -140,21 +197,30 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
     return true
   })
 
-  const filteredUsers = availableUsers.filter(
-    (user) =>
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.employee_id.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const filteredUsers = availableUsers.filter((user) => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+    if (!normalizedSearch) return true
+
+    return (
+      String(user.email || "").toLowerCase().includes(normalizedSearch) ||
+      `${user.first_name || ""} ${user.last_name || ""}`.toLowerCase().includes(normalizedSearch) ||
+      String(user.employee_id || "").toLowerCase().includes(normalizedSearch)
+    )
+  })
 
   const handleUserPasswordChange = async () => {
+    if (!currentPassword.trim()) {
+      showErrorMessage("Current password is required")
+      return
+    }
+
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match")
+      showErrorMessage("Passwords do not match")
       return
     }
 
     if (newPassword.length < 6) {
-      setError("Password must be at least 6 characters long")
+      showErrorMessage("Password must be at least 6 characters long")
       return
     }
 
@@ -162,7 +228,7 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
     setError(null)
 
     try {
-      const response = await fetch("/api/auth/change-password", {
+      const response = await authenticatedFetch("/api/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -173,17 +239,18 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
 
       const result = await response.json()
 
-      if (result.success) {
-        setSuccess("Password changed successfully")
-        setCurrentPassword("")
-        setNewPassword("")
-        setConfirmPassword("")
-        setIsChangePasswordOpen(false)
-      } else {
-        setError(result.error || "Failed to change password")
+      if (!response.ok || !result.success) {
+        showErrorMessage(result.error || "Failed to change password")
+        return
       }
+
+      showSuccessMessage(result.message || "Password changed successfully")
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      setIsChangePasswordOpen(false)
     } catch (error) {
-      setError("Failed to change password")
+      showErrorMessage(error instanceof Error ? error.message : "Failed to change password")
     } finally {
       setLoading(false)
     }
@@ -192,13 +259,25 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
   const handleAdminPasswordReset = async () => {
     const targetUserId = selectedUserId || userId
 
-    if (!targetUserId || !adminNewPassword) {
-      setError("Please select a user and enter a new password")
+    const configAvailable = await fetchServerConfig()
+
+    if (!targetUserId) {
+      showErrorMessage("Please select a user")
+      return
+    }
+
+    if (!configAvailable) {
+      showErrorMessage(SERVICE_ROLE_ERROR_MESSAGE)
+      return
+    }
+
+    if (!adminNewPassword) {
+      showErrorMessage("Please enter a new password")
       return
     }
 
     if (adminNewPassword.length < 6) {
-      setError("Password must be at least 6 characters long")
+      showErrorMessage("Password must be at least 6 characters long")
       return
     }
 
@@ -206,7 +285,7 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
     setError(null)
 
     try {
-      const response = await fetch("/api/admin/reset-password", {
+      const response = await authenticatedFetch("/api/admin/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -217,17 +296,18 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
 
       const result = await response.json()
 
-      if (result.success) {
-        setSuccess(`Password reset successfully for ${selectedUserEmail || userEmail}`)
-        setAdminNewPassword("")
-        setSelectedUserId("")
-        setSelectedUserEmail("")
-        setIsChangePasswordOpen(false)
-      } else {
-        setError(result.error || "Failed to reset password")
+      if (!response.ok || !result.success) {
+        showErrorMessage(result.error || "Failed to reset password")
+        return
       }
+
+      showSuccessMessage(result.message || `Password reset successfully for ${selectedUserEmail || userEmail}`)
+      setAdminNewPassword("")
+      setSelectedUserId("")
+      setSelectedUserEmail("")
+      setIsChangePasswordOpen(false)
     } catch (error) {
-      setError("Failed to reset password")
+      showErrorMessage(error instanceof Error ? error.message : "Failed to reset password")
     } finally {
       setLoading(false)
     }
@@ -248,6 +328,12 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
         {error && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {isAdmin && !hasServiceKey && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{SERVICE_ROLE_ERROR_MESSAGE}</AlertDescription>
           </Alert>
         )}
 
@@ -325,7 +411,7 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
               <DialogTitle>{isAdmin ? "Reset User Password" : "Change Password"}</DialogTitle>
               <DialogDescription>
                 {isAdmin
-                  ? `Reset password for ${selectedUserEmail || userEmail || "selected user"}`
+                  ? `Reset password for ${selectedUserEmail || userEmail || "selected user"}. The user will be required to change it at next login.`
                   : "Enter your current password and choose a new one"}
               </DialogDescription>
             </DialogHeader>
@@ -446,7 +532,10 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
               <Button variant="outline" onClick={() => setIsChangePasswordOpen(false)} disabled={loading}>
                 Cancel
               </Button>
-              <Button onClick={isAdmin ? handleAdminPasswordReset : handleUserPasswordChange} disabled={loading}>
+              <Button
+                onClick={isAdmin ? handleAdminPasswordReset : handleUserPasswordChange}
+                disabled={loading}
+              >
                 {loading ? "Processing..." : isAdmin ? "Reset Password" : "Change Password"}
               </Button>
             </DialogFooter>

@@ -104,6 +104,18 @@ interface District {
 
 const COLORS = ["#4B8B3B", "#8B5CF6", "#6b7280", "#f97316", "#ea580c"]
 
+const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  return fetch(input, {
+    ...init,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-store",
+      ...(init.headers || {}),
+    },
+  })
+}
+
 export function AttendanceReports() {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [summary, setSummary] = useState<ReportSummary | null>(null)
@@ -113,6 +125,8 @@ export function AttendanceReports() {
   // Current user context (role + assigned location)
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   
   // Auto-enable compact mode on small screens for denser layout
   useEffect(() => {
@@ -130,16 +144,36 @@ export function AttendanceReports() {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const res = await fetch("/api/auth/current-user")
+        const supabase = createClient()
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError || !user) {
+          setIsAuthenticated(false)
+          setExportError("Your session has expired. Please sign in again.")
+          return
+        }
+
+        const res = await authenticatedFetch("/api/auth/current-user")
         const data = await res.json()
-        if (data.success && data.user) {
+        if (res.ok && data.success && data.user) {
           setCurrentUserRole(data.user.role)
           if (data.user.assigned_location_id) {
             setCurrentUserLocationId(data.user.assigned_location_id)
           }
+          setIsAuthenticated(true)
+        } else {
+          setIsAuthenticated(false)
+          setExportError(data.error || "Your session has expired. Please sign in again.")
         }
       } catch (err) {
         console.error("[v0] AttendanceReports - Failed to fetch current user:", err)
+        setIsAuthenticated(false)
+        setExportError("Unable to verify your session. Please sign in again.")
+      } finally {
+        setAuthChecked(true)
       }
     }
     fetchCurrentUser()
@@ -252,20 +286,26 @@ export function AttendanceReports() {
   }
 
   useEffect(() => {
+    if (!authChecked || !isAuthenticated) return
+
     fetchReport()
     fetchDepartments()
     fetchLocations()
     fetchDistricts()
-  }, [startDate, endDate, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, page, pageSize])
+  }, [authChecked, isAuthenticated, startDate, endDate, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, page, pageSize])
 
   useEffect(() => {
     // When the Reasons tab is opened, fetch a larger set that contains all reason entries
+    if (!authChecked || !isAuthenticated) return
+
     if (activeTab === "reasons") {
       fetchReasons()
     }
-  }, [activeTab, startDate, endDate, selectedLocation, selectedDepartment, selectedDistrict])
+  }, [authChecked, isAuthenticated, activeTab, startDate, endDate, selectedLocation, selectedDepartment, selectedDistrict])
 
   const fetchReasons = async () => {
+    if (!isAuthenticated) return
+
     setReasonsLoading(true)
     try {
       const params = new URLSearchParams({
@@ -279,8 +319,16 @@ export function AttendanceReports() {
       if (selectedLocation !== "all") params.append("location_id", selectedLocation)
       if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
 
-      const res = await fetch(`/api/admin/reports/attendance?${params}`)
+      const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const json = await res.json()
+
+      if (res.status === 401) {
+        console.error("Failed to fetch reasons:", json.error)
+        setExportError("Your session has expired. Please sign in again.")
+        setReasonsRecords([])
+        return
+      }
+
       if (json.success) {
         let fetchedRecords: AttendanceRecord[] = json.data.records || []
 
@@ -336,6 +384,8 @@ export function AttendanceReports() {
   }
 
   const fetchReport = async () => {
+    if (!isAuthenticated) return
+
     setLoading(true)
     setExportError(null)
     try {
@@ -356,8 +406,16 @@ export function AttendanceReports() {
 
       console.log("[v0] API call URL:", `/api/admin/reports/attendance?${params}`)
 
-      const response = await fetch(`/api/admin/reports/attendance?${params}`)
+      const response = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const result = await response.json()
+
+      if (response.status === 401) {
+        console.error("[v0] API error:", result.error)
+        setExportError("Your session has expired. Please sign in again.")
+        setRecords([])
+        setSummary(null)
+        return
+      }
 
       console.log("[v0] API response:", result)
 
@@ -381,7 +439,7 @@ export function AttendanceReports() {
   const fetchDepartments = async () => {
     try {
       console.log("[v0] Fetching departments...")
-      const response = await fetch("/api/admin/departments")
+      const response = await authenticatedFetch("/api/admin/departments")
       const result = await response.json()
       console.log("[v0] Departments response:", result)
 
@@ -446,7 +504,7 @@ export function AttendanceReports() {
       if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
 
-      const res = await fetch(`/api/admin/reports/attendance?${params}`)
+      const res = await authenticatedFetch(`/api/admin/reports/attendance?${params}`)
       const json = await res.json()
 
       if (!json.success) {
@@ -476,7 +534,8 @@ export function AttendanceReports() {
 
       // Always fetch the full dataset (not just the current page) for export
       const allRecords = await fetchAllRecordsForExport()
-      console.log(`[v0] Fetched ${allRecords.length} total records for export`)
+      const exportRecords = applyClientFilters(allRecords)
+      console.log(`[v0] Fetched ${allRecords.length} total records for export, ${exportRecords.length} after client-side filtering`)
 
       if (format === "csv") {
         const csvContent = [
@@ -500,7 +559,7 @@ export function AttendanceReports() {
             "Status",
             "Location Status",
           ].join(","),
-          ...allRecords.map((record) => {
+          ...exportRecords.map((record) => {
               const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
                 ? record.google_maps_name
                 : record.check_in_location?.name || record.check_in_location_name || "N/A"
@@ -566,7 +625,7 @@ export function AttendanceReports() {
             "Status",
             "Location Status",
           ],
-          ...allRecords.map((record) => {
+          ...exportRecords.map((record) => {
             const checkInLabel = record.google_maps_name && record.is_check_in_outside_location
               ? record.google_maps_name
               : record.check_in_location?.name || record.check_in_location_name || "N/A"
@@ -647,13 +706,13 @@ export function AttendanceReports() {
         const timeoutId = setTimeout(() => controller.abort(), 120000)
 
         try {
-          const response = await fetch("/api/admin/reports/export", {
+          const response = await authenticatedFetch("/api/admin/reports/export", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             signal: controller.signal,
             body: JSON.stringify({
               format,
-              data: allRecords,
+              data: exportRecords,
               summary,
               filters: {
                 startDate,
@@ -726,16 +785,13 @@ export function AttendanceReports() {
     [summary?.departmentStats],
   )
 
-  const filteredRecords = useMemo(() => {
-    let filtered = records
+  const applyClientFilters = (inputRecords: AttendanceRecord[]) => {
+    let filtered = inputRecords
 
     // Department filter
     if (selectedDepartment !== "all") {
       filtered = filtered.filter((r) => r.user_profiles?.departments?.id === selectedDepartment)
     }
-
-    // User filter
-    // employee filter removed
 
     // Location filter
     if (selectedLocation !== "all") {
@@ -749,7 +805,7 @@ export function AttendanceReports() {
       filtered = filtered.filter((r) => r.user_profiles?.assigned_location?.districts?.id === selectedDistrict)
     }
 
-    // Status filter retained (if needed)
+    // Status filter
     if (selectedStatus !== "all") {
       filtered = filtered.filter((r) => r.status === selectedStatus)
     }
@@ -775,7 +831,9 @@ export function AttendanceReports() {
     }
 
     return filtered
-  }, [records, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, searchQuery])
+  }
+
+  const filteredRecords = useMemo(() => applyClientFilters(records), [records, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, searchQuery])
 
   const presentCount = useMemo(() => records.filter((r) => r.status === "present" || r.check_in_time).length, [records])
 

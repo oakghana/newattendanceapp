@@ -15,7 +15,9 @@ import { clearAppCache } from "@/lib/cache-manager"
 import { RequestLeaveButton } from "@/components/leave/request-leave-button"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { SecureInput } from "@/components/ui/secure-input"
-import { validatePassword } from "@/lib/security"
+import { useToast } from "@/hooks/use-toast"
+import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
+import { toast } from "sonner"
 
 interface UserProfile {
   id: string
@@ -66,6 +68,7 @@ interface ProfileClientProps {
 }
 
 export function ProfileClient({ initialUser, initialProfile }: ProfileClientProps) {
+  const { toast: appToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -91,7 +94,13 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   useEffect(() => {
     try {
       const force = searchParams?.get?.("forceChange")
-      if (force) setShowPasswordChange(true)
+      const reason = searchParams?.get?.("reason")
+      if (force) {
+        setShowPasswordChange(true)
+        if (reason === "monthly") {
+          setError(getPasswordEnforcementMessage())
+        }
+      }
     } catch (e) {
       // ignore
     }
@@ -293,25 +302,50 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       if (error) throw error
 
       setSuccess("Profile updated successfully")
+      appToast({
+        title: "Profile updated",
+        description: "Your profile information was saved successfully.",
+      })
+      toast.success("Profile updated successfully")
       setIsEditing(false)
       fetchProfile() // Refresh profile data
       setTimeout(() => setSuccess(null), 3000)
     } catch (error) {
       setError("Failed to update profile")
+      appToast({
+        title: "Update failed",
+        description: "Failed to update profile.",
+        variant: "destructive",
+      })
+      toast.error("Failed to update profile")
     } finally {
       setSaving(false)
     }
   }
 
   const handlePasswordChange = async () => {
+    if (!passwordForm.currentPassword.trim()) {
+      const message = "Current password is required"
+      setError(message)
+      appToast({ title: "Password update failed", description: message, variant: "destructive" })
+      toast.error(message)
+      return
+    }
+
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setError("New passwords do not match")
+      const message = "New passwords do not match"
+      setError(message)
+      appToast({ title: "Password update failed", description: message, variant: "destructive" })
+      toast.error(message)
       return
     }
 
     const passwordValidation = validatePassword(passwordForm.newPassword)
     if (!passwordValidation.isValid) {
-      setError(`Password requirements not met: ${passwordValidation.errors.join(", ")}`)
+      const message = `Password requirements not met: ${passwordValidation.errors.join(", ")}`
+      setError(message)
+      appToast({ title: "Password requirements not met", description: message, variant: "destructive" })
+      toast.error(message)
       return
     }
 
@@ -324,6 +358,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "same-origin",
+        cache: "no-store",
         body: JSON.stringify({
           currentPassword: passwordForm.currentPassword,
           newPassword: passwordForm.newPassword,
@@ -333,10 +369,17 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to update password")
+        const detailMessage = Array.isArray(result.details) ? result.details.join(", ") : null
+        throw new Error(detailMessage ? `${result.error || "Failed to update password"}: ${detailMessage}` : (result.error || "Failed to update password"))
       }
 
-      setSuccess("Password updated successfully")
+      const successMessage = result.message || "Password updated successfully"
+      setSuccess(successMessage)
+      appToast({
+        title: "Password updated",
+        description: successMessage,
+      })
+      toast.success(successMessage)
       setShowPasswordChange(false)
       setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
       setShowCurrentPassword(false)
@@ -344,7 +387,10 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       setShowConfirmPassword(false)
       setTimeout(() => setSuccess(null), 3000)
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to update password")
+      const message = error instanceof Error ? error.message : "Failed to update password"
+      setError(message)
+      appToast({ title: "Password update failed", description: message, variant: "destructive" })
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -646,10 +692,11 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={handlePasswordChange} disabled={saving}>
+                      <Button type="button" onClick={handlePasswordChange} disabled={saving}>
                         {saving ? "Updating..." : "Update Password"}
                       </Button>
                       <Button
+                        type="button"
                         variant="outline"
                         onClick={() => {
                           setShowPasswordChange(false)
@@ -683,7 +730,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
             </CardHeader>
             <CardContent className="space-y-4">
               {!showPasswordChange ? (
-                <Button onClick={() => setShowPasswordChange(true)} className="w-full">
+                <Button type="button" onClick={() => setShowPasswordChange(true)} className="w-full">
                   <Key className="h-4 w-4 mr-2" />
                   Change Password
                 </Button>

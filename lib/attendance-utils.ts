@@ -1,5 +1,21 @@
 export type DeptInfo = { code?: string | null; name?: string | null } | undefined | null
 
+function normalizeRole(role?: string | null): string {
+  return (role || "").toString().trim().toLowerCase().replace(/[\s-]+/g, "_")
+}
+
+function isManagerOrAdminRole(role?: string | null): boolean {
+  const normalizedRole = normalizeRole(role)
+  return [
+    "admin",
+    "super_admin",
+    "it_admin",
+    "department_head",
+    "head_of_department",
+    "regional_manager",
+  ].includes(normalizedRole)
+}
+
 export function isWeekend(date: Date = new Date()): boolean {
   const d = date.getDay()
   return d === 0 || d === 6
@@ -40,14 +56,11 @@ export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | nu
   if (isSecurityDept(dept)) return true
   if (isTransportDept(dept)) return true
   // Admin, department/head and regional manager roles are also exempt
-  const lowerRole = (role || "").toLowerCase()
-  return lowerRole === "admin" || lowerRole === "department_head" || lowerRole === "regional_manager"
+  return isManagerOrAdminRole(role)
 }
 
 export function isExemptFromAttendanceReasons(role?: string | null): boolean {
-  if (!role) return false
-  const lowerRole = role.toLowerCase()
-  return lowerRole === "department_head" || lowerRole === "regional_manager"
+  return isManagerOrAdminRole(role)
 }
 
 /**
@@ -62,8 +75,7 @@ export function requiresLatenessReason(date: Date = new Date(), dept?: DeptInfo,
   if (isSecurityDept(dept)) return false
   if (isTransportDept(dept)) return false
   // Admin, department heads and regional managers are exempt
-  const lowerRole = (role || "").toLowerCase()
-  if (lowerRole === "admin" || lowerRole === "department_head" || lowerRole === "regional_manager") return false
+  if (isExemptFromAttendanceReasons(role)) return false
   return true
 }
 
@@ -80,8 +92,7 @@ export function requiresEarlyCheckoutReason(date: Date = new Date(), locationReq
   if (isSecurityDept(dept)) return false
   if (isTransportDept(dept)) return false
   // Admin, department heads and regional managers are exempt
-  const lowerRole = (role || "").toLowerCase()
-  if (lowerRole === "admin" || lowerRole === "department_head" || lowerRole === "regional_manager") return false
+  if (isExemptFromAttendanceReasons(role)) return false
   return true
 }
 
@@ -116,6 +127,40 @@ export function canCheckOutAtTime(date: Date = new Date(), dept?: DeptInfo, role
   const minutes = date.getMinutes()
   // Allow check-out only before 5:40 PM (17:40)
   return hours < 17 || (hours === 17 && minutes < 40)
+}
+
+export function canAutoCheckoutOutOfRange({
+  now = new Date(),
+  hasCheckedIn,
+  hasCheckedOut,
+  isOutOfRange,
+  isOnLeave = false,
+  hasMetMinimumTime = true,
+  hoursWorked = 0,
+  minimumHours = 7,
+}: {
+  now?: Date
+  hasCheckedIn: boolean
+  hasCheckedOut: boolean
+  isOutOfRange: boolean
+  isOnLeave?: boolean
+  hasMetMinimumTime?: boolean
+  hoursWorked?: number
+  minimumHours?: number
+}): boolean {
+  const hours = now.getHours()
+  const minutes = now.getMinutes()
+  const isAfterCutoff = hours > 16 || (hours === 16 && minutes >= 0)
+
+  return Boolean(
+    hasCheckedIn &&
+      !hasCheckedOut &&
+      isOutOfRange &&
+      !isOnLeave &&
+      hasMetMinimumTime &&
+      hoursWorked >= minimumHours &&
+      isAfterCutoff,
+  )
 }
 
 /**

@@ -1,7 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { validateCheckoutLocation, type LocationData } from "@/lib/geolocation"
-import { requiresEarlyCheckoutReason, canCheckOutAtTime, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +18,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { latitude, longitude, location_id, qr_code_used, qr_timestamp, early_checkout_reason, early_checkout_proved_by, early_checkout_proved_by_id, override_request, override_reason } = body
+    const {
+      latitude,
+      longitude,
+      location_id,
+      qr_code_used,
+      qr_timestamp,
+      early_checkout_reason,
+      early_checkout_proved_by,
+      early_checkout_proved_by_id,
+      override_request,
+      override_reason,
+      auto_checkout,
+      auto_checkout_reason,
+    } = body
 
     if (!qr_code_used && (!latitude || !longitude)) {
       return NextResponse.json({ error: "Location coordinates are required for GPS check-out" }, { status: 400 })
@@ -394,6 +407,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No active QCC locations found" }, { status: 400 })
     }
 
+    const checkInTime = new Date(attendanceRecord.check_in_time)
+    const checkOutTime = new Date()
+    const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
+
     // OPTIMIZATION: Parallelize settings fetches
     const [
       { data: settingsData },
@@ -439,8 +456,19 @@ export async function POST(request: NextRequest) {
       // If the staff was checked-in via approved off-premises, skip strict geofence validation
       if (!isAttendanceOffPremises) {
         const validation = validateCheckoutLocation(userLocation, qccLocations, deviceCheckOutRadius)
+        const allowAutomaticOutOfRangeCheckout = Boolean(
+          auto_checkout &&
+            canAutoCheckoutOutOfRange({
+              now,
+              hasCheckedIn: true,
+              hasCheckedOut: false,
+              isOutOfRange: !validation.canCheckOut,
+              hasMetMinimumTime: workHours >= 7,
+              hoursWorked: workHours,
+            }),
+        )
 
-        if (!validation.canCheckOut) {
+        if (!validation.canCheckOut && !allowAutomaticOutOfRangeCheckout) {
           return NextResponse.json(
             {
               error: `You are currently out of range. Check-out requires being within range of your assigned QCC location. ${validation.message}`,
@@ -449,7 +477,12 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        checkoutLocationData = validation.nearestLocation
+        if (allowAutomaticOutOfRangeCheckout) {
+          console.log("[v0] Automatic out-of-range checkout allowed after 4 PM")
+          checkoutLocationData = null
+        } else {
+          checkoutLocationData = validation.nearestLocation
+        }
       } else {
         // off-premises checked-in — treat this as remote checkout (no geofence enforcement)
         checkoutLocationData = null
@@ -474,10 +507,6 @@ export async function POST(request: NextRequest) {
       // immediately rather than blocking
       console.log("[v0] Out-of-range checkout allowed (remote)")
     }
-
-    const checkInTime = new Date(attendanceRecord.check_in_time)
-    const checkOutTime = new Date()
-    const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
 
     // determine remote checkout status: anything outside a known location is treated
     // as a remote/off-premises checkout.  Approved off-premises check-ins are also
@@ -504,7 +533,12 @@ export async function POST(request: NextRequest) {
     // Get location-specific checkout end time (default to 17:00 if not set)
     const checkOutEndTime = userProfileData?.assigned_location?.check_out_end_time || "17:00"
     const requireEarlyCheckoutReason = userProfileData?.assigned_location?.require_early_checkout_reason ?? true
-    const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(checkOutTime, requireEarlyCheckoutReason, userProfileData?.role)
+    const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(
+      checkOutTime,
+      requireEarlyCheckoutReason,
+      userProfileData?.role,
+      userProfileData?.departments,
+    )
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
@@ -555,10 +589,20 @@ export async function POST(request: NextRequest) {
       check_out_location_id: checkoutLocationData?.id || null,
       work_hours: Math.round(workHours * 100) / 100,
       updated_at: new Date().toISOString(),
-      check_out_method: willBeRemoteCheckout ? "remote_offpremises" : (qr_code_used ? "qr_code" : "gps"),
-      check_out_location_name: checkoutLocationData?.name || (willBeRemoteCheckout ? "Off‑Premises (approved)" : "Unknown Location"),
+      check_out_method: auto_checkout
+        ? "auto_out_of_range_after_4pm"
+        : willBeRemoteCheckout
+          ? "remote_offpremises"
+          : (qr_code_used ? "qr_code" : "gps"),
+      check_out_location_name: checkoutLocationData?.name || (auto_checkout
+        ? "Auto Check-out (Out of Range after 4 PM)"
+        : (willBeRemoteCheckout ? "Off‑Premises (approved)" : "Unknown Location")),
       // mark remote checkout if user was approved off‑premises and not within a QCC location
       is_remote_checkout: willBeRemoteCheckout || false,
+    }
+
+    if (auto_checkout_reason && String(auto_checkout_reason).trim().length > 0) {
+      checkoutData.notes = String(auto_checkout_reason).trim()
     }
 
     if (latitude && longitude) {

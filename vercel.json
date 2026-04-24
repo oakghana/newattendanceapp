@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/monthly-password-reset",
+      "schedule": "0 23 28-31 3,6,9,12 *"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import {
   isSecurityDept,
   requiresLatenessReason,
   requiresEarlyCheckoutReason,
+  canAutoCheckoutOutOfRange,
 } from "../lib/attendance-utils"
 
 describe("attendance-utils", () => {
@@ -33,6 +34,18 @@ describe("attendance-utils", () => {
     expect(requiresLatenessReason(weekday, { code: "security" })).toBe(false)
   })
 
+  it("does not require lateness or early-checkout reasons for admin, regional manager, and department head", () => {
+    const weekday = new Date("2026-02-12T10:30:00Z")
+
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "admin")).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "department_head")).toBe(false)
+
+    expect(requiresEarlyCheckoutReason(weekday, true, "admin", { code: "HR" })).toBe(false)
+    expect(requiresEarlyCheckoutReason(weekday, true, "regional_manager", { code: "HR" })).toBe(false)
+    expect(requiresEarlyCheckoutReason(weekday, true, "department_head", { code: "HR" })).toBe(false)
+  })
+
   it("enforces early-checkout reason only when location requires it and not on weekends", () => {
     const weekday = new Date("2026-02-12T15:00:00Z")
     const saturday = new Date("2026-02-14T15:00:00Z")
@@ -40,5 +53,57 @@ describe("attendance-utils", () => {
     expect(requiresEarlyCheckoutReason(weekday, true)).toBe(true)
     expect(requiresEarlyCheckoutReason(weekday, false)).toBe(false)
     expect(requiresEarlyCheckoutReason(saturday, true)).toBe(false)
+  })
+
+  it("allows automatic out-of-range checkout from 4 PM only after 7 hours", () => {
+    const eligibleTime = new Date("2026-02-12T16:05:00")
+
+    expect(
+      canAutoCheckoutOutOfRange({
+        now: eligibleTime,
+        hasCheckedIn: true,
+        hasCheckedOut: false,
+        isOutOfRange: true,
+        isOnLeave: false,
+        hoursWorked: 7.1,
+      }),
+    ).toBe(true)
+  })
+
+  it("blocks automatic out-of-range checkout before 4 PM, before 7 hours, or after checkout", () => {
+    const earlyTime = new Date("2026-02-12T15:59:00")
+
+    expect(
+      canAutoCheckoutOutOfRange({
+        now: earlyTime,
+        hasCheckedIn: true,
+        hasCheckedOut: false,
+        isOutOfRange: true,
+        isOnLeave: false,
+        hoursWorked: 8,
+      }),
+    ).toBe(false)
+
+    expect(
+      canAutoCheckoutOutOfRange({
+        now: new Date("2026-02-12T16:10:00"),
+        hasCheckedIn: true,
+        hasCheckedOut: false,
+        isOutOfRange: true,
+        isOnLeave: false,
+        hoursWorked: 6.9,
+      }),
+    ).toBe(false)
+
+    expect(
+      canAutoCheckoutOutOfRange({
+        now: new Date("2026-02-12T16:10:00"),
+        hasCheckedIn: true,
+        hasCheckedOut: true,
+        isOutOfRange: true,
+        isOnLeave: false,
+        hoursWorked: 8,
+      }),
+    ).toBe(false)
   })
 })

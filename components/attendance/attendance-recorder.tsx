@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
 import {
   getCurrentLocation,
+  safeGetCurrentLocation,
   getAveragedLocation,
   validateAttendanceLocation,
   validateCheckoutLocation,
@@ -43,9 +45,14 @@ import { Label } from "@/components/ui/label"
 import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils"
-import { requiresLatenessReason, requiresEarlyCheckoutReason, canCheckInAtTime, canCheckOutAtTime, getCheckInDeadline, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { requiresLatenessReason, requiresEarlyCheckoutReason, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
+import {
+  getPasswordEnforcementMessage,
+  isPasswordChangeRequired,
+} from "@/lib/security"
+import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
 interface GeofenceLocation {
   id: string
@@ -62,6 +69,7 @@ interface UserProfile {
   last_name: string
   employee_id: string
   position: string
+  role?: string
   assigned_location_id?: string
   departments?: {
     name: string
@@ -127,8 +135,10 @@ export function AttendanceRecorder({
   className,
   userLeaveStatus,
 }: AttendanceRecorderProps) {
+  const router = useRouter()
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [checkingMessage, setCheckingMessage] = useState("")
+  const [runtimeFlags, setRuntimeFlags] = useState<RuntimeFlags>(DEFAULT_RUNTIME_FLAGS)
 
   const [isLoading, setIsLoading] = useState(false)
   const [userLocation, setUserLocation] = useState<LocationData | null>(null)
@@ -228,6 +238,10 @@ export function AttendanceRecorder({
   const [recentCheckIn, setRecentCheckIn] = useState(false)
   const [recentCheckOut, setRecentCheckOut] = useState(false)
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
+  const serverClockRef = useRef<{ baseServerMs: number; basePerfMs: number } | null>(null)
+  const [, setSystemClockTick] = useState(0)
+  const autoCheckoutAttemptedRef = useRef(false)
+  const autoCheckInAttemptedRef = useRef(false)
 
   const [checkoutTimeReached, setCheckoutTimeReached] = useState(false)
   // remote checkout timer disabled (only normal checkouts allowed)
@@ -237,9 +251,83 @@ export function AttendanceRecorder({
   const [deviceInfo, setDeviceInfo] = useState(() => getDeviceInfo())
   const [timeRestrictionWarning, setTimeRestrictionWarning] = useState<{ type: 'checkin' | 'checkout'; message: string } | null>(null)
 
+  const loadRuntimeFlags = useCallback(async () => {
+    try {
+      const response = await fetch("/api/settings/runtime", { cache: "no-store" })
+      if (!response.ok) return
+
+      const data = (await response.json()) as { flags?: RuntimeFlags }
+      if (data.flags) {
+        setRuntimeFlags(data.flags)
+      }
+    } catch {
+      // Keep defaults when runtime settings endpoint is unavailable.
+    }
+  }, [])
+
+  const getSystemNow = useCallback(() => {
+    const clock = serverClockRef.current
+    if (!clock) return new Date()
+
+    const elapsedMs = performance.now() - clock.basePerfMs
+    return new Date(clock.baseServerMs + elapsedMs)
+  }, [])
+
+  useEffect(() => {
+    void loadRuntimeFlags()
+    const id = setInterval(() => {
+      void loadRuntimeFlags()
+    }, 60_000)
+
+    return () => clearInterval(id)
+  }, [loadRuntimeFlags])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    const syncServerTime = async () => {
+      try {
+        const response = await fetch("/api/system-time", { cache: "no-store" })
+        if (!response.ok) return
+
+        const payload = (await response.json()) as { utcEpochMs?: number }
+        if (!payload.utcEpochMs) return
+
+        serverClockRef.current = {
+          baseServerMs: payload.utcEpochMs,
+          basePerfMs: performance.now(),
+        }
+
+        if (!isCancelled) {
+          setSystemClockTick((value) => value + 1)
+        }
+      } catch {
+        // Keep fallback clock and retry on next sync cycle.
+      }
+    }
+
+    void syncServerTime()
+
+    const tickId = setInterval(() => {
+      if (!isCancelled && serverClockRef.current) {
+        setSystemClockTick((value) => value + 1)
+      }
+    }, 1000)
+
+    const syncId = setInterval(() => {
+      void syncServerTime()
+    }, 60_000)
+
+    return () => {
+      isCancelled = true
+      clearInterval(tickId)
+      clearInterval(syncId)
+    }
+  }, [])
+
   // Check time restrictions and show warnings
   useEffect(() => {
-    const now = new Date()
+    const now = getSystemNow()
     const userDept = userProfile?.departments
     const userRole = userProfile?.role
 
@@ -267,7 +355,7 @@ export function AttendanceRecorder({
     } else {
       setTimeRestrictionWarning(null)
     }
-  }, [userProfile, localTodayAttendance])
+  }, [userProfile, localTodayAttendance, getSystemNow])
 
   // Check if cache should be cleared (new day)
   useEffect(() => {
@@ -285,10 +373,10 @@ export function AttendanceRecorder({
       // fetchLeaveStatus() // Fetch leave status again on new day
 
       // Update cached date
-      const today = new Date().toISOString().split("T")[0]
+      const today = getSystemNow().toISOString().split("T")[0]
       setCachedDate(today)
     }
-  }, []) // Run once on component mount
+  }, [getSystemNow]) // Run once on component mount
 
   useEffect(() => {
     const checkDateChange = setInterval(() => {
@@ -306,13 +394,13 @@ export function AttendanceRecorder({
         // fetchLeaveStatus() // Fetch leave status again on date change
 
         // Update cached date
-        const today = new Date().toISOString().split("T")[0]
+        const today = getSystemNow().toISOString().split("T")[0]
         setCachedDate(today)
       }
     }, 60000) // Check every minute
 
     return () => clearInterval(checkDateChange)
-  }, [])
+  }, [getSystemNow])
 
   const [flashMessage, setFlashMessage] = useState<{
     message: string
@@ -332,7 +420,7 @@ export function AttendanceRecorder({
 
       if (!user) return
 
-      const today = new Date().toISOString().split("T")[0]
+      const today = getSystemNow().toISOString().split("T")[0]
 
       const { data, error } = await supabase
         .from("attendance_records")
@@ -515,14 +603,25 @@ export function AttendanceRecorder({
     setDeviceInfo(getDeviceInfo())
 
     const autoLoadLocation = async () => {
+      const shouldSilentlyLoadLocation = Boolean(
+        initialTodayAttendance?.check_in_time && !initialTodayAttendance?.check_out_time,
+      )
+
+      if (!shouldSilentlyLoadLocation) {
+        console.log("[v0] Skipping automatic GPS load until attendance action is needed")
+        return
+      }
+
       try {
-        console.log("[v0] Auto-loading location on page load...")
-        const location = await getCurrentLocation()
-        setUserLocation(location)
-        setLocationPermissionStatus({ granted: true, message: "Location access granted" })
-        console.log("[v0] Location auto-loaded successfully:", location)
+        console.log("[v0] Silently loading location for active attendance session...")
+        const { location } = await safeGetCurrentLocation(true)
+        if (location) {
+          setUserLocation(location)
+          setLocationPermissionStatus({ granted: true, message: "Location access granted" })
+          console.log("[v0] Silent location load succeeded:", location)
+        }
       } catch (error) {
-        console.log("[v0] Auto-load location failed, user can try manual check-in or QR code:", error)
+        console.log("[v0] Silent location load skipped; user can use QR or refresh manually:", error)
       }
     }
 
@@ -546,7 +645,7 @@ export function AttendanceRecorder({
 
   useEffect(() => {
     const checkDateChange = () => {
-      const newDate = new Date().toISOString().split("T")[0]
+      const newDate = getSystemNow().toISOString().split("T")[0]
       if (newDate !== currentDate) {
         console.log("[v0] Date changed from", currentDate, "to", newDate)
         setCurrentDate(newDate)
@@ -557,12 +656,12 @@ export function AttendanceRecorder({
     const interval = setInterval(checkDateChange, 60000)
 
     return () => clearInterval(interval)
-  }, [currentDate])
+  }, [currentDate, getSystemNow])
 
   useEffect(() => {
     if (localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
       const checkInTime = new Date(localTodayAttendance.check_in_time)
-      const now = new Date()
+      const now = getSystemNow()
       const hoursSinceCheckIn = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
 
       // normal 2‑hour timer logic; off-premises status does not change countdown – user must be within range to checkout
@@ -571,7 +670,7 @@ export function AttendanceRecorder({
         setMinutesUntilCheckout(minutesLeft)
 
         const interval = setInterval(() => {
-          const now2 = new Date()
+          const now2 = getSystemNow()
           const hours2 = (now2.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
           if (hours2 >= 2) {
             setMinutesUntilCheckout(null)
@@ -593,13 +692,13 @@ export function AttendanceRecorder({
       setMinutesUntilCheckout(null)
       setCheckoutTimeReached(false)
     }
-  }, [localTodayAttendance?.check_in_time, localTodayAttendance?.check_out_time])
+  }, [localTodayAttendance?.check_in_time, localTodayAttendance?.check_out_time, getSystemNow])
 
   useEffect(() => {
     const checkCheckoutTime = () => {
       if (localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
         const checkInTime = new Date(localTodayAttendance.check_in_time)
-        const now = new Date()
+        const now = getSystemNow()
         const hoursSinceCheckIn = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
         setCheckoutTimeReached(hoursSinceCheckIn >= 2)
       } else {
@@ -610,7 +709,7 @@ export function AttendanceRecorder({
     checkCheckoutTime()
     const interval = setInterval(checkCheckoutTime, 60000)
     return () => clearInterval(interval)
-  }, [localTodayAttendance])
+  }, [localTodayAttendance, getSystemNow])
 
   const loadProximitySettings = async () => {
     try {
@@ -790,6 +889,7 @@ export function AttendanceRecorder({
             last_name,
             employee_id,
             position,
+            role,
             assigned_location_id,
             password_changed_at,
             departments (
@@ -810,20 +910,25 @@ export function AttendanceRecorder({
           name: `${profileData.first_name} ${profileData.last_name}`,
           employee_id: profileData.employee_id,
           position: profileData.position,
+          role: profileData.role,
           assigned_location_id: profileData.assigned_location_id,
           department: profileData.departments?.name,
           password_changed_at: profileData.password_changed_at,
         })
 
-        // enforce 90-day password expiry
-        if (profileData.password_changed_at) {
-          const last = new Date(profileData.password_changed_at)
-          const now = new Date()
-          const days = (now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24)
-          if (days >= 90) {
-            console.log('[v0] Password expired, redirecting to profile')
-            router.push('/dashboard/profile?forceChange=true')
-          }
+        const mustChangePassword =
+          runtimeFlags.passwordEnforcementEnabled &&
+          (Boolean(user.user_metadata?.force_password_change) || isPasswordChangeRequired(profileData.password_changed_at))
+
+        if (mustChangePassword) {
+          console.log("[v0] Monthly password change required, redirecting to profile")
+          toast({
+            title: "Password Change Required",
+            description: getPasswordEnforcementMessage(),
+            variant: "destructive",
+          })
+          router.push("/dashboard/profile?forceChange=true&reason=monthly")
+          return
         }
       } catch (authError) {
         console.error("[v0] Supabase auth error:", authError)
@@ -838,7 +943,7 @@ export function AttendanceRecorder({
           data: { user: currentUser },
         } = await supabase2.auth.getUser()
         if (currentUser?.id) {
-          const today = new Date().toISOString().split("T")[0]
+          const today = getSystemNow().toISOString().split("T")[0]
           const { data: pendingReq, error: pendingErr } = await supabase2
             .from("pending_offpremises_checkins")
             .select("*")
@@ -856,6 +961,8 @@ export function AttendanceRecorder({
             const isPending = (pendingReq.status && String(pendingReq.status).toLowerCase() === "pending") || (!pendingReq.approved_at && !pendingReq.rejected_at)
             setHasPendingOffPremisesRequest(Boolean(isPending))
             console.log("[v0] Pending off-premises request for today:", Boolean(isPending))
+          } else {
+            setHasPendingOffPremisesRequest(false)
           }
         }
       } catch (err) {
@@ -888,7 +995,7 @@ export function AttendanceRecorder({
       setLocationPermissionStatusSimplified({ granted: true, message: "Location access granted" })
       return location
     } catch (error) {
-      console.error("[v0] Failed to get location:", error)
+      console.warn("[v0] Failed to get location:", error)
       const errorMessage =
         error instanceof Error ? error.message : "Unable to access location. Please enable GPS or use QR code option."
       setError(errorMessage)
@@ -930,6 +1037,15 @@ export function AttendanceRecorder({
 
   const handleCheckIn = async () => {
     console.log("[v0] Check-in initiated")
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      toast({
+        title: "Internet connection required",
+        description: "You must be online and within range for the app to authenticate and record your check-in.",
+        variant: "destructive",
+      })
+      return
+    }
 
     if (isCheckInProcessing) {
       console.log("[v0] Check-in already in progress - ignoring duplicate request")
@@ -1033,7 +1149,7 @@ export function AttendanceRecorder({
       }
 
       // Check if check-in is after 9:00 AM (late arrival)
-      const checkInTime = new Date()
+      const checkInTime = getSystemNow()
       const checkInHour = checkInTime.getHours()
       const checkInMinutes = checkInTime.getMinutes()
       const isLateArrival = checkInHour > 9 || (checkInHour === 9 && checkInMinutes > 0)
@@ -1351,14 +1467,12 @@ export function AttendanceRecorder({
             } else if (deviceInfoLocal.device_type === "desktop") {
               proximityRadius = deviceRadiusSettings.desktop.checkOut
             }
+          } else if (deviceInfoLocal.isMobile || deviceInfoLocal.isTablet) {
+            proximityRadius = 400
+          } else if (deviceInfoLocal.isLaptop) {
+            proximityRadius = 700
           } else {
-            if (deviceInfoLocal.isMobile || deviceInfoLocal.isTablet) {
-              proximityRadius = 400
-            } else if (deviceInfoLocal.isLaptop) {
-              proximityRadius = 700
-            } else {
-              proximityRadius = 1000
-            }
+            proximityRadius = 1000
           }
 
           const distances = (realTimeLocations || [])
@@ -1384,7 +1498,7 @@ export function AttendanceRecorder({
       }
 
       // Check if early checkout is needed
-      const now = new Date()
+      const now = getSystemNow()
       const checkoutHour = now.getHours()
       const checkoutMinutes = now.getMinutes()
 
@@ -1464,7 +1578,13 @@ export function AttendanceRecorder({
   }
 
   // OPTIMIZATION: Extracted checkout API call into separate function for cleaner flow
-  const performCheckoutAPI = async (locationData: any, nearestLocation: any, reason: string, provedBy: string | null = null) => {
+  const performCheckoutAPI = async (
+    locationData: any,
+    nearestLocation: any,
+    reason: string,
+    provedBy: string | null = null,
+    autoCheckout = false,
+  ) => {
     try {
       const response = await fetch("/api/attendance/check-out", {
         method: "POST",
@@ -1478,8 +1598,10 @@ export function AttendanceRecorder({
           accuracy: locationData.accuracy,
           location_source: locationData.source,
           location_name: nearestLocation?.name || "Unknown Location",
-          early_checkout_reason: reason || null,
-          early_checkout_proved_by: provedBy || null,
+          early_checkout_reason: autoCheckout ? null : (reason || null),
+          early_checkout_proved_by: autoCheckout ? null : (provedBy || null),
+          auto_checkout: autoCheckout,
+          auto_checkout_reason: autoCheckout ? reason : null,
         }),
       })
 
@@ -1500,8 +1622,10 @@ export function AttendanceRecorder({
           const checkOutTime = new Date(result.data.check_out_time)
           const workHours = ((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2)
           toast({
-            title: "Check-out recorded",
-            description: `Checked out from ${result.data.check_out_location_name || nearestLocation?.name || 'location'}. Worked ${workHours} hours.`,
+            title: autoCheckout ? "Automatic check-out recorded" : "Check-out recorded",
+            description: autoCheckout
+              ? `You were automatically checked out at ${result.data.check_out_location_name || nearestLocation?.name || 'your current location'} after 4:00 PM.`
+              : `Checked out from ${result.data.check_out_location_name || nearestLocation?.name || 'location'}. Worked ${workHours} hours.`,
           })
         } catch (e) {
           // swallow toast errors
@@ -1513,8 +1637,10 @@ export function AttendanceRecorder({
         const workHours = ((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2)
 
         setFlashMessage({
-          message: `Successfully checked out from ${result.data.check_out_location_name}! Great work today. Total work hours: ${workHours} hours. See you tomorrow!`,
-          type: "success",
+          message: autoCheckout
+            ? `You were automatically checked out after 4:00 PM because you were outside the approved location range. Total work hours: ${workHours} hours.`
+            : `Successfully checked out from ${result.data.check_out_location_name}! Great work today. Total work hours: ${workHours} hours. See you tomorrow!`,
+          type: autoCheckout ? "info" : "success",
         })
 
         setEarlyCheckoutReason("")
@@ -1536,6 +1662,226 @@ export function AttendanceRecorder({
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!runtimeFlags.autoCheckoutEnabled) {
+      autoCheckoutAttemptedRef.current = false
+      return
+    }
+
+    if (!localTodayAttendance?.check_in_time || localTodayAttendance?.check_out_time) {
+      autoCheckoutAttemptedRef.current = false
+      return
+    }
+
+    const attemptAutomaticCheckout = async () => {
+      if (autoCheckoutAttemptedRef.current || isLoading || recentCheckOut) return
+
+      const hoursWorked = localTodayAttendance?.check_in_time
+        ? (Date.now() - new Date(localTodayAttendance.check_in_time).getTime()) / (1000 * 60 * 60)
+        : 0
+
+      const eligibleForAutoCheckout = canAutoCheckoutOutOfRange({
+        now: getSystemNow(),
+        hasCheckedIn: !!localTodayAttendance?.check_in_time,
+        hasCheckedOut: !!localTodayAttendance?.check_out_time,
+        isOutOfRange: locationValidation?.canCheckOut === false,
+        isOnLeave,
+        hasMetMinimumTime: hoursWorked >= 7,
+        hoursWorked,
+      })
+
+      if (!eligibleForAutoCheckout) return
+
+      autoCheckoutAttemptedRef.current = true
+      setIsLoading(true)
+
+      try {
+        let locationData = await getCurrentLocationData()
+        if (!locationData && userLocation) {
+          locationData = userLocation
+        }
+
+        if (!locationData) {
+          throw new Error("Current location unavailable for automatic checkout")
+        }
+
+        let checkOutRadius: number | undefined
+        if (deviceRadiusSettings) {
+          if (deviceInfo.device_type === "mobile") {
+            checkOutRadius = deviceRadiusSettings.mobile.checkOut
+          } else if (deviceInfo.device_type === "tablet") {
+            checkOutRadius = deviceRadiusSettings.tablet.checkOut
+          } else if (deviceInfo.device_type === "laptop") {
+            checkOutRadius = deviceRadiusSettings.laptop.checkOut
+          } else if (deviceInfo.device_type === "desktop") {
+            checkOutRadius = deviceRadiusSettings.desktop.checkOut
+          }
+        }
+
+        const autoValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
+
+        if (autoValidation.canCheckOut) {
+          autoCheckoutAttemptedRef.current = false
+          setIsLoading(false)
+          return
+        }
+
+        await performCheckoutAPI(
+          locationData,
+          autoValidation.nearestLocation || null,
+          "Automatic check-out after 4:00 PM while outside the approved location range.",
+          null,
+          true,
+        )
+      } catch (error) {
+        console.warn("[v0] Automatic out-of-range checkout skipped:", error)
+        autoCheckoutAttemptedRef.current = false
+        setIsLoading(false)
+      }
+    }
+
+    attemptAutomaticCheckout()
+    const interval = setInterval(attemptAutomaticCheckout, 60000)
+
+    return () => clearInterval(interval)
+  }, [
+    runtimeFlags.autoCheckoutEnabled,
+    localTodayAttendance?.check_in_time,
+    localTodayAttendance?.check_out_time,
+    locationValidation?.canCheckOut,
+    isOnLeave,
+    checkoutTimeReached,
+    userLocation,
+    realTimeLocations,
+    deviceRadiusSettings,
+    deviceInfo.device_type,
+    isLoading,
+    recentCheckOut,
+  ])
+
+  useEffect(() => {
+    if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave) {
+      autoCheckInAttemptedRef.current = false
+      return
+    }
+
+    const attemptAutomaticCheckIn = async () => {
+      if (
+        autoCheckInAttemptedRef.current ||
+        isLoading ||
+        isCheckingIn ||
+        isProcessing ||
+        recentCheckIn ||
+        isCheckInProcessing ||
+        !userProfile ||
+        !realTimeLocations ||
+        realTimeLocations.length === 0
+      ) {
+        return
+      }
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        return
+      }
+
+      const now = getSystemNow()
+      if (!canCheckInAtTime(now, userProfile?.departments, userProfile?.role)) {
+        return
+      }
+
+      const isLateArrival = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0)
+      const latenessRequired = requiresLatenessReason(now, userProfile?.departments, userProfile?.role)
+      if (isLateArrival && latenessRequired) {
+        return
+      }
+
+      try {
+        let locationData = userLocation
+
+        if (!locationData) {
+          const { location } = await safeGetCurrentLocation(true)
+          if (!location) return
+          locationData = location
+          setUserLocation(location)
+        }
+
+        let checkInRadius: number | undefined
+        if (deviceRadiusSettings) {
+          if (deviceInfo.device_type === "mobile") {
+            checkInRadius = deviceRadiusSettings.mobile.checkIn
+          } else if (deviceInfo.device_type === "tablet") {
+            checkInRadius = deviceRadiusSettings.tablet.checkIn
+          } else if (deviceInfo.device_type === "laptop") {
+            checkInRadius = deviceRadiusSettings.laptop.checkIn
+          } else if (deviceInfo.device_type === "desktop") {
+            checkInRadius = deviceRadiusSettings.desktop.checkIn
+          }
+        }
+
+        const validation = validateAttendanceLocation(locationData, realTimeLocations || [], checkInRadius)
+
+        if (!validation.canCheckIn || !validation.nearestLocation) {
+          return
+        }
+
+        autoCheckInAttemptedRef.current = true
+        setRecentCheckIn(true)
+        setIsCheckingIn(true)
+        setCheckingMessage("Automatic check-in...")
+
+        await performCheckInAPI(locationData, validation.nearestLocation, "")
+
+        toast({
+          title: "Automatic check-in recorded",
+          description: `You were automatically checked in because you are online and within range of ${validation.nearestLocation.name}.`,
+        })
+      } catch (error) {
+        console.warn("[v0] Automatic in-range check-in skipped:", error)
+        autoCheckInAttemptedRef.current = false
+        setRecentCheckIn(false)
+      } finally {
+        setIsCheckingIn(false)
+        setCheckingMessage("")
+      }
+    }
+
+    void attemptAutomaticCheckIn()
+
+    const onlineHandler = () => {
+      autoCheckInAttemptedRef.current = false
+      void attemptAutomaticCheckIn()
+    }
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", onlineHandler)
+    }
+
+    const interval = setInterval(() => {
+      void attemptAutomaticCheckIn()
+    }, 60000)
+
+    return () => {
+      clearInterval(interval)
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", onlineHandler)
+      }
+    }
+  }, [
+    localTodayAttendance?.check_in_time,
+    hasPendingOffPremisesRequest,
+    isOnLeave,
+    isLoading,
+    isCheckingIn,
+    isProcessing,
+    recentCheckIn,
+    isCheckInProcessing,
+    userProfile,
+    userLocation,
+    realTimeLocations,
+    deviceRadiusSettings,
+    deviceInfo.device_type,
+  ])
 
   // Extracted check-in API call for lateness dialog flow
   const performCheckInAPI = async (locationData: any, nearestLocation: any, reason: string, provedBy: string | null = null) => {
@@ -1780,7 +2126,18 @@ export function AttendanceRecorder({
     setError(null)
     try {
       console.log("[v0] Manually refreshing location...")
-      const location = await getCurrentLocation()
+      const { location, error: locationError } = await safeGetCurrentLocation()
+
+      if (!location) {
+        const errorMessage = locationError?.message || "Unable to access location. Please enable GPS or use QR code option."
+        console.warn("[v0] Failed to refresh location:", errorMessage)
+        setError(errorMessage)
+        setLocationPermissionStatus({ granted: false, message: errorMessage })
+        setLocationPermissionStatusSimplified({ granted: false, message: errorMessage })
+        setShowLocationHelp(true)
+        return
+      }
+
       setUserLocation(location)
 
       if (location.accuracy > 1000) {
@@ -2018,11 +2375,11 @@ export function AttendanceRecorder({
                     <Button
                       onClick={handleCheckIn}
                       disabled={
-                        !locationValidation?.canCheckIn || isCheckingIn || isProcessing || recentCheckIn || isLoading || !canCheckInAtTime(new Date(), userProfile?.departments, userProfile?.role) || hasPendingOffPremisesRequest
+                        !locationValidation?.canCheckIn || isCheckingIn || isProcessing || recentCheckIn || isLoading || !canCheckInAtTime(getSystemNow(), userProfile?.departments, userProfile?.role) || hasPendingOffPremisesRequest
                       }
                       className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                       size="lg"
-                      title={!canCheckInAtTime(new Date(), userProfile?.departments, userProfile?.role) ? `Check-in only allowed before ${getCheckInDeadline()}` : "Check in to your assigned location"}
+                      title={!canCheckInAtTime(getSystemNow(), userProfile?.departments, userProfile?.role) ? `Check-in only allowed before ${getCheckInDeadline()}` : "Check in to your assigned location"}
                     >
                       <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       <div className="relative z-10 flex items-center justify-center w-full">
@@ -2161,7 +2518,7 @@ export function AttendanceRecorder({
 
                 {checkoutTimeReached && !locationValidation?.canCheckOut && (
                     <p className="text-xs text-green-700 mt-2 text-center">
-                      You are outside the approved location range. You must return within range of a registered location in order to check out normally.
+                      You are outside the approved location range. If you remain out of range after 4:00 PM and have worked at least 7 hours, the system will check you out automatically.
                     </p>
                 )}
               </>

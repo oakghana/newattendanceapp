@@ -1,23 +1,12 @@
 import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
+import { EmailService, emailService } from "@/lib/email-service"
+import { buildForcedPasswordChangeMetadata } from "@/lib/security"
 
 export async function POST(request: NextRequest) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("[v0] Admin password reset: Missing Supabase credentials")
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
-    }
-
-    // Create admin client with service role key
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     // Create regular client for user verification
     const { createClient: createRegularClient } = await import("@/lib/supabase/server")
@@ -25,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     const { userId, newPassword } = await request.json()
 
-    console.log("[v0] Admin password reset: Received request for userId:", userId)
+    console.log("[v0] Admin password reset: Received request", { userId })
 
     if (!userId || !newPassword) {
       return NextResponse.json({ error: "User ID and new password are required" }, { status: 400 })
@@ -84,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     const { data: targetUser, error: userError } = await supabase
       .from("user_profiles")
-      .select("first_name, last_name, employee_id, email, role")
+      .select("id, first_name, last_name, employee_id, email, role")
       .eq("id", userId)
       .single()
 
@@ -106,8 +95,34 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Admin password reset: Found target user:", targetUser.email)
 
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    if (!supabaseServiceKey || !supabaseUrl) {
+      console.error("[v0] Admin password reset: Missing Supabase admin configuration")
+      return NextResponse.json(
+        {
+          error: "Server configuration error: SUPABASE_SERVICE_ROLE_KEY is required for admin password resets.",
+        },
+        { status: 500 },
+      )
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+
+    const issuedAt = new Date().toISOString()
+    const { data: authUserResult, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(targetUser.id)
+
+    if (authUserError) {
+      console.error("[v0] Admin password reset: Failed to load auth user metadata:", authUserError)
+      return NextResponse.json({ error: "Failed to prepare password reset" }, { status: 500 })
+    }
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
       password: newPassword,
+      user_metadata: buildForcedPasswordChangeMetadata(authUserResult.user.user_metadata, issuedAt),
     })
 
     if (updateError) {
@@ -121,6 +136,26 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[v0] Admin password reset: Password updated successfully for:", targetUser.email)
+
+    try {
+      await supabase.from("user_profiles").update({ password_changed_at: null }).eq("id", targetUser.id)
+    } catch (err) {
+      console.warn("[v0] Failed to flag password for forced change:", err)
+    }
+
+    let deliveryNote = "The user must change this temporary password at next login."
+    const emailResult = await emailService.sendEmail(targetUser.email, EmailService.templates.passwordReset, {
+      firstName: targetUser.first_name || "Staff",
+      tempPassword: newPassword,
+    })
+
+    if (emailResult.success) {
+      deliveryNote = "The temporary password has been sent to the user's email and must be changed at next login."
+    } else {
+      console.warn("[v0] Temporary password email was not delivered:", emailResult.error)
+      deliveryNote =
+        "The password was reset successfully, but the server email service is not configured. Share the temporary password securely with the user; they will be forced to change it at next login."
+    }
 
     // Log the password reset action
     await supabase.from("audit_logs").insert({
@@ -139,7 +174,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Password updated successfully for ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email})`,
+      message: `Password updated successfully for ${targetUser.first_name} ${targetUser.last_name} (${targetUser.email}). ${deliveryNote}`,
     })
   } catch (error) {
     console.error("[v0] Admin password reset: Unexpected error:", error)

@@ -195,7 +195,16 @@ export function PendingOffPremisesRequests() {
 
 
       const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result.error || 'Failed to process request')
+      if (!response.ok) {
+        const message = result.error || 'Failed to process request'
+        if (String(message).toLowerCase().includes('already been processed')) {
+          toast({ title: 'Already processed', description: 'This request was already handled.' })
+          loadPendingRequests()
+          setQuickSelectedRequest(null)
+          return
+        }
+        throw new Error(message)
+      }
 
       // Capture attendance record id if the approval created one so we can offer Undo
       const attendanceId = result.attendance_record_id || null

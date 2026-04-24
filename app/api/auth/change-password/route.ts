@@ -1,6 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { rateLimit, getClientIdentifier, validatePassword, createSecurityHeaders } from "@/lib/security"
+import {
+  rateLimit,
+  getClientIdentifier,
+  validatePassword,
+  createSecurityHeaders,
+  clearForcedPasswordChangeMetadata,
+} from "@/lib/security"
 
 export async function POST(request: NextRequest) {
   const headers = createSecurityHeaders()
@@ -21,6 +27,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
     const { currentPassword, newPassword } = await request.json()
+
+    if (!currentPassword) {
+      return NextResponse.json({ error: "Current password is required" }, { status: 400, headers })
+    }
 
     if (!newPassword) {
       return NextResponse.json({ error: "New password is required" }, { status: 400, headers })
@@ -53,9 +63,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Current password is incorrect" }, { status: 400, headers })
     }
 
-    // Update password
+    // Update password and clear any force-change flag from temporary or rotated passwords
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword,
+      data: clearForcedPasswordChangeMetadata(user.user_metadata),
     })
 
     if (updateError) {
@@ -64,20 +75,24 @@ export async function POST(request: NextRequest) {
     }
 
     // update profile timestamp so we can enforce expiry
-    await supabase
-      .from('user_profiles')
-      .update({ password_changed_at: new Date().toISOString() })
-      .eq('id', user.id)
-      .catch(err => console.warn('[v0] Failed to update password_changed_at:', err))
+    try {
+      await supabase.from("user_profiles").update({ password_changed_at: new Date().toISOString() }).eq("id", user.id)
+    } catch (err) {
+      console.warn("[v0] Failed to update password_changed_at:", err)
+    }
 
-    // Log the action
-    await supabase.from("audit_logs").insert({
-      user_id: user.id,
-      action: "password_changed",
-      table_name: "auth.users",
-      ip_address: request.ip || null,
-      user_agent: request.headers.get("user-agent"),
-    })
+    // Audit logging should never block a successful password change
+    try {
+      await supabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: "password_changed",
+        table_name: "auth.users",
+        ip_address: request.headers.get("x-forwarded-for") || null,
+        user_agent: request.headers.get("user-agent"),
+      })
+    } catch (auditError) {
+      console.warn("[v0] Failed to write password change audit log:", auditError)
+    }
 
     return NextResponse.json(
       {

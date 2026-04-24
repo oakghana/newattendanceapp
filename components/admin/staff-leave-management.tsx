@@ -15,6 +15,18 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
 
+const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  return fetch(input, {
+    ...init,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-store",
+      ...(init.headers || {}),
+    },
+  })
+}
+
 interface StaffMember {
   id: string
   first_name: string
@@ -49,7 +61,7 @@ export function StaffLeaveManagement() {
   const fetchData = async () => {
     try {
       // First check if user is authorized to access this
-      const authResponse = await fetch("/api/auth/current-user")
+      const authResponse = await authenticatedFetch("/api/auth/current-user")
       if (!authResponse.ok) {
         toast({
           title: "Error",
@@ -63,7 +75,7 @@ export function StaffLeaveManagement() {
       const { user } = await authResponse.json()
       
       // Check if user is admin or god
-      const userProfileResponse = await fetch(`/api/admin/staff/${user.id}`)
+      const userProfileResponse = await authenticatedFetch(`/api/admin/staff/${user.id}`)
       if (!userProfileResponse.ok) {
         toast({
           title: "Access Denied",
@@ -88,7 +100,7 @@ export function StaffLeaveManagement() {
       setUserRole(userProfile.role)
 
       // Fetch all staff members
-      const staffResponse = await fetch("/api/admin/staff")
+      const staffResponse = await authenticatedFetch("/api/admin/staff?limit=2000")
       if (!staffResponse.ok) {
         throw new Error("Failed to fetch staff")
       }

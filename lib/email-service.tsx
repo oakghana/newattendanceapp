@@ -20,9 +20,10 @@ interface EmailTemplate {
 class EmailService {
   private transporter: nodemailer.Transporter | null = null
   private isConfigured = false
+  private initializationPromise: Promise<void> | null = null
 
   constructor() {
-    this.initializeTransporter()
+    this.initializationPromise = this.initializeTransporter()
   }
 
   private async initializeTransporter() {
@@ -55,7 +56,22 @@ class EmailService {
     }
   }
 
+  private async ensureInitialized() {
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.initializeTransporter()
+    }
+
+    await this.initializationPromise
+  }
+
+  async isAvailable() {
+    await this.ensureInitialized()
+    return this.isConfigured && !!this.transporter
+  }
+
   async sendEmail(to: string, template: EmailTemplate, data: Record<string, any> = {}) {
+    await this.ensureInitialized()
+
     if (!this.isConfigured || !this.transporter) {
       console.warn("[EmailService] Email service not configured, skipping email send")
       return { success: false, error: "Email service not configured" }

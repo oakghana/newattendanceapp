@@ -2,6 +2,49 @@ import { createClient } from "@/lib/supabase/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    const supabase = await createClient()
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { data: requester } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const allowedRoles = ["admin", "it-admin", "regional_manager", "department_head", "god"]
+    const canView = user.id === id || allowedRoles.includes(requester?.role || "")
+
+    if (!canView) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select(`
+        *,
+        departments:department_id(id, name, code),
+        geofence_locations:assigned_location_id(id, name, address)
+      `)
+      .eq("id", id)
+      .single()
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, data: profile })
+  } catch (error) {
+    console.error("[v0] Get staff profile error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params

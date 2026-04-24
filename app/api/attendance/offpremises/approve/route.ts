@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
           first_name,
           last_name,
           email,
-          department_id
+          department_id,
+          assigned_location_id
         )
       `)
       .eq("id", request_id)
@@ -207,29 +208,103 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Default: approve as a CHECK‑IN (existing behavior)
-      console.log("[v0] Approving request and creating check-in")
-      
-      // Create attendance record for the user with ORIGINAL request time (not approval time)
-      const { data: attendanceRecord, error: attendanceError } = await supabase
+      // Default: approve as a CHECK‑IN
+      console.log("[v0] Approving request and creating/updating check-in")
+
+      const requestTime = pendingRequest.created_at || new Date().toISOString()
+      const requestDate = new Date(requestTime)
+      const dayStart = new Date(requestDate)
+      dayStart.setUTCHours(0, 0, 0, 0)
+      const dayEnd = new Date(requestDate)
+      dayEnd.setUTCHours(23, 59, 59, 999)
+
+      const assignedLocationId = pendingRequest.user_profiles?.assigned_location_id || null
+      let assignedLocationName: string | null = null
+
+      if (assignedLocationId) {
+        const { data: assignedLocation } = await supabase
+          .from("geofence_locations")
+          .select("name")
+          .eq("id", assignedLocationId)
+          .maybeSingle()
+
+        assignedLocationName = assignedLocation?.name || null
+      }
+
+      const baseAttendancePayload: any = {
+        actual_location_name: pendingRequest.google_maps_name || pendingRequest.current_location_name,
+        actual_latitude: pendingRequest.latitude,
+        actual_longitude: pendingRequest.longitude,
+        on_official_duty_outside_premises: true,
+        device_info: pendingRequest.device_info,
+        check_in_type: "offpremises_confirmed",
+        check_in_method: "approved_offpremises",
+        is_remote_location: true,
+        status: "present",
+        check_in_location_id: assignedLocationId,
+        check_in_location_name: assignedLocationName || "Assigned Location",
+        updated_at: new Date().toISOString(),
+        notes: `Off-premises check-in approved by manager. ${comments ? "Comments: " + comments : ""}`,
+      }
+
+      const { data: existingAttendance, error: existingAttendanceError } = await supabase
         .from("attendance_records")
-        .insert({
-          user_id: pendingRequest.user_id,
-          check_in_time: pendingRequest.created_at, // Use original request time, not approval time
-          actual_location_name: pendingRequest.current_location_name,
-          actual_latitude: pendingRequest.latitude,
-          actual_longitude: pendingRequest.longitude,
-          on_official_duty_outside_premises: true,
-          device_info: pendingRequest.device_info,
-          check_in_type: "offpremises_confirmed",
-          notes: `Off-premises check-in approved by manager. ${comments ? "Comments: " + comments : ""}`,
-        })
-        .select()
-        .single()
+        .select("*")
+        .eq("user_id", pendingRequest.user_id)
+        .gte("check_in_time", dayStart.toISOString())
+        .lte("check_in_time", dayEnd.toISOString())
+        .order("check_in_time", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existingAttendanceError) {
+        console.error("[v0] Failed to look up existing attendance record:", existingAttendanceError)
+        return NextResponse.json(
+          { error: "Failed to verify existing attendance for this request" },
+          { status: 500 }
+        )
+      }
+
+      let attendanceRecord = existingAttendance
+      let attendanceError = null
+
+      if (existingAttendance?.id) {
+        const { data: updatedAttendance, error: updateAttendanceError } = await supabase
+          .from("attendance_records")
+          .update({
+            ...baseAttendancePayload,
+            check_in_location_id: existingAttendance.check_in_location_id || assignedLocationId,
+            check_in_location_name: existingAttendance.check_in_location_name || assignedLocationName || "Assigned Location",
+            check_in_method: existingAttendance.check_in_method || "approved_offpremises",
+            status: existingAttendance.status || "present",
+          })
+          .eq("id", existingAttendance.id)
+          .select()
+          .single()
+
+        attendanceRecord = updatedAttendance
+        attendanceError = updateAttendanceError
+      } else {
+        const { data: newAttendanceRecord, error: insertAttendanceError } = await supabase
+          .from("attendance_records")
+          .insert({
+            user_id: pendingRequest.user_id,
+            check_in_time: requestTime,
+            ...baseAttendancePayload,
+          })
+          .select()
+          .single()
+
+        attendanceRecord = newAttendanceRecord
+        attendanceError = insertAttendanceError
+      }
 
       if (attendanceError) {
-        console.error("[v0] Failed to create attendance record:", attendanceError)
-        // Continue even if notification fails
+        console.error("[v0] Failed to create/update attendance record:", attendanceError)
+        return NextResponse.json(
+          { error: attendanceError.message || "Failed to record approved off-premises attendance" },
+          { status: 500 }
+        )
       }
 
       // Update pending request status

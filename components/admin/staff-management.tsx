@@ -22,6 +22,18 @@ import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filte
 import { PasswordManagement } from "./password-management"
 import { useNotifications } from "@/components/ui/notification-system"
 
+const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  return fetch(input, {
+    ...init,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-store",
+      ...(init.headers || {}),
+    },
+  })
+}
+
 interface StaffMember {
   id: string
   first_name: string
@@ -102,17 +114,26 @@ export function StaffManagement() {
 
   const fetchStaff = useCallback(async () => {
     try {
-      console.log("[v0] Fetching staff with filters:", { searchTerm, selectedDepartment, selectedRole })
+      console.log("[v0] Fetching staff with filters:", { searchTerm, selectedDepartment, selectedRole, page })
       const params = new URLSearchParams()
-      if (searchTerm) params.append("search", searchTerm)
+      const trimmedSearch = searchTerm.trim()
+      const effectiveLimit = trimmedSearch ? 2000 : limit
+
+      if (trimmedSearch) params.append("search", trimmedSearch)
       if (selectedDepartment !== "all") params.append("department", selectedDepartment)
       if (selectedRole !== "all") params.append("role", selectedRole)
-      params.append("page", String(page))
-      params.append("limit", String(limit))
+      params.append("page", String(trimmedSearch ? 1 : page))
+      params.append("limit", String(effectiveLimit))
 
-      const response = await fetch(`/api/admin/staff?${params}`)
+      const response = await authenticatedFetch(`/api/admin/staff?${params}`)
       const result = await response.json()
       console.log("[v0] Staff fetch result:", result)
+
+      if (response.status === 401) {
+        setError("Your session has expired. Please sign in again.")
+        setStaff([])
+        return
+      }
 
       if (result.success) {
         setStaff(result.data)
@@ -128,7 +149,7 @@ export function StaffManagement() {
     } finally {
       setLoading(false)
     }
-  }, [searchTerm, selectedDepartment, selectedRole])
+  }, [searchTerm, selectedDepartment, selectedRole, page, limit])
 
   useEffect(() => {
     fetchStaff()
@@ -150,7 +171,7 @@ export function StaffManagement() {
   const fetchDepartments = async () => {
     try {
       console.log("[v0] Fetching departments...")
-      const response = await fetch("/api/admin/departments")
+      const response = await authenticatedFetch("/api/admin/departments")
       const result = await response.json()
       console.log("[v0] Departments fetch result:", result)
 
@@ -169,7 +190,7 @@ export function StaffManagement() {
   const fetchLocations = async () => {
     try {
       console.log("[v0] Fetching locations...")
-      const response = await fetch("/api/admin/locations")
+      const response = await authenticatedFetch("/api/admin/locations")
       const result = await response.json()
       console.log("[v0] Locations fetch result:", result)
 
@@ -190,7 +211,7 @@ export function StaffManagement() {
   const fetchCurrentUserRole = async () => {
     try {
       console.log("[v0] Fetching current user role...")
-      const response = await fetch("/api/auth/current-user")
+      const response = await authenticatedFetch("/api/auth/current-user")
       const result = await response.json()
       console.log("[v0] Current user role fetch result:", result)
       if (result.success && result.user) {
@@ -208,7 +229,7 @@ export function StaffManagement() {
 
     // Also probe server-side supabase config to detect misconfiguration early
     try {
-      const cfg = await fetch('/api/admin/supabase-config')
+      const cfg = await authenticatedFetch('/api/admin/supabase-config')
       const data = await cfg.json()
       if (!data.hasServiceKey) {
         console.warn('[v0] Server missing SUPABASE_SERVICE_ROLE_KEY')
@@ -237,7 +258,7 @@ export function StaffManagement() {
       }
 
       console.log("[v0] Adding new staff:", newStaff)
-      const response = await fetch("/api/admin/staff", {
+      const response = await authenticatedFetch("/api/admin/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newStaff),
@@ -296,7 +317,7 @@ export function StaffManagement() {
     try {
       setError(null)
       console.log("[v0] Updating staff member:", staffId, updates)
-      const response = await fetch(`/api/admin/staff/${staffId}`, {
+      const response = await authenticatedFetch(`/api/admin/staff/${staffId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -334,7 +355,7 @@ export function StaffManagement() {
 
     try {
       setError(null)
-      const response = await fetch(`/api/admin/staff/${staffId}`, {
+      const response = await authenticatedFetch(`/api/admin/staff/${staffId}`, {
         method: "DELETE",
       })
 
@@ -391,7 +412,7 @@ export function StaffManagement() {
 
       console.log("[v0] Updating staff member:", editingStaff.id, updateData)
 
-      const response = await fetch(`/api/admin/staff/${editingStaff.id}`, {
+      const response = await authenticatedFetch(`/api/admin/staff/${editingStaff.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updateData),
@@ -419,15 +440,18 @@ export function StaffManagement() {
         // Prefer a non-empty details object, otherwise fall back to error or raw text
         const hasDetails = parsed.details && typeof parsed.details === "object" && Object.keys(parsed.details).length > 0
         const errorDetail = hasDetails ? parsed.details : (parsed.error || text || `HTTP ${response.status}`)
+        const errorString = typeof errorDetail === "object" ? JSON.stringify(errorDetail) : String(errorDetail)
 
-        console.error("[v0] Update response error:", errorDetail)
-
-        // Show a user-friendly message for common misconfiguration
-        if (String(errorDetail).toLowerCase().includes("supabase") || String(parsed.error).toLowerCase().includes("supabase")) {
-          throw new Error("Server misconfiguration: Supabase is not properly configured. Please contact your administrator.")
+        // Show a user-friendly message for known server configuration issues without noisy console errors
+        if (String(errorString).toLowerCase().includes("supabase") || String(parsed.error).toLowerCase().includes("supabase")) {
+          console.warn("[v0] Update response warning:", errorString)
+          const friendly = "This admin update needs the server SUPABASE_SERVICE_ROLE_KEY to be configured. Staff search and viewing still work normally."
+          showError(friendly, "Server Configuration")
+          setError(friendly)
+          return
         }
 
-        const errorString = typeof errorDetail === "object" ? JSON.stringify(errorDetail) : String(errorDetail)
+        console.warn("[v0] Update response warning:", errorDetail)
         throw new Error(`HTTP ${response.status}: ${errorString}`)
       }
 
@@ -481,12 +505,6 @@ export function StaffManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {supabaseConfigMissing && currentUserRole === 'admin' && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
-              <AlertDescription className="font-medium">Server misconfiguration detected: <strong>SUPABASE_SERVICE_ROLE_KEY</strong> is missing. Admin actions (email updates, role changes) will fail. Please set the environment variable on the server.</AlertDescription>
-            </Alert>
-          )}
-
           {error && (
             <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
               <AlertDescription className="font-medium">{error}</AlertDescription>

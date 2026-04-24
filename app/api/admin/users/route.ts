@@ -5,6 +5,9 @@ export async function GET(request: NextRequest) {
   try {
     console.log("[v0] Users API: Starting user fetch")
     const supabase = await createClient()
+    const searchTerm = request.nextUrl.searchParams.get("search")?.trim() || ""
+    const requestedLimit = parseInt(request.nextUrl.searchParams.get("limit") || "5000", 10)
+    const limit = Math.min(Math.max(requestedLimit || 5000, 1), 5000)
 
     // Get authenticated user
     const {
@@ -59,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Users API: Permission check passed", profile.role)
 
-    const { data: users, error } = await supabase
+    let usersQuery = supabase
       .from("user_profiles")
       .select(`
         id,
@@ -71,7 +74,15 @@ export async function GET(request: NextRequest) {
         is_active
       `)
       .eq("is_active", true)
-      .order("first_name")
+
+    if (searchTerm) {
+      const pattern = `%${searchTerm.replace(/%/g, "\\%")}%`
+      usersQuery = usersQuery.or(
+        `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern},employee_id.ilike.${pattern}`,
+      )
+    }
+
+    const { data: users, error } = await usersQuery.order("first_name").range(0, limit - 1)
 
     if (error) {
       console.error("[v0] Users fetch error:", error)
@@ -99,7 +110,7 @@ export async function GET(request: NextRequest) {
       console.log("[v0] Users API: IT-Admin filtering applied, showing", filteredUsers.length, "users")
     }
 
-    console.log("[v0] Users API: Successfully fetched", filteredUsers.length, "users")
+    console.log("[v0] Users API: Successfully fetched", filteredUsers.length, "users", { searchTerm, limit })
 
     return NextResponse.json(
       {

@@ -56,7 +56,7 @@ export const FloatingHomeButton = memo(function FloatingHomeButton() {
   return (
     <div
       className={cn(
-        "fixed bottom-6 right-6 z-50 flex flex-col gap-3 transition-all duration-300",
+        "fixed bottom-6 right-6 z-50 hidden flex-col gap-3 transition-all duration-300 lg:flex",
         isVisible ? "translate-y-0 opacity-100" : "translate-y-16 opacity-0"
       )}
     >

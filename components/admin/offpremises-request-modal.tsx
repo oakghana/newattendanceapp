@@ -77,7 +77,19 @@ export function OffPremisesRequestModal({
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to process request')
+        const message = result.error || 'Failed to process request'
+
+        if (String(message).toLowerCase().includes('already been processed')) {
+          toast({
+            title: 'Request already updated',
+            description: 'This off-premises request was already handled. The list will refresh now.',
+          })
+          onClose()
+          onApprovalComplete()
+          return
+        }
+
+        throw new Error(message)
       }
 
       // Show toast (success or rejection) with action link and close modal

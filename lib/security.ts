@@ -8,6 +8,9 @@ export interface RateLimitConfig {
   maxRequests: number // Maximum requests per window
 }
 
+// Temporary operational switch: disable forced password-change enforcement.
+export const PASSWORD_CHANGE_ENFORCEMENT_ENABLED = false
+
 export function rateLimit(identifier: string, config: RateLimitConfig): boolean {
   const now = Date.now()
   const key = identifier
@@ -72,6 +75,81 @@ export function validatePassword(password: string): { isValid: boolean; errors: 
     isValid: errors.length === 0,
     errors,
   }
+}
+
+export function isPasswordChangeRequired(passwordChangedAt?: string | null, referenceDate: Date = new Date()): boolean {
+  if (!PASSWORD_CHANGE_ENFORCEMENT_ENABLED) return false
+
+  if (!passwordChangedAt) return true
+
+  const changedAt = new Date(passwordChangedAt)
+  if (Number.isNaN(changedAt.getTime())) return true
+
+  const startOfCurrentQuarter = new Date(referenceDate)
+  const currentMonth = startOfCurrentQuarter.getMonth()
+  const quarterStartMonth = Math.floor(currentMonth / 3) * 3
+  startOfCurrentQuarter.setMonth(quarterStartMonth, 1)
+  startOfCurrentQuarter.setHours(0, 0, 0, 0)
+
+  return changedAt < startOfCurrentQuarter
+}
+
+export function isEndOfQuarter(referenceDate: Date = new Date()): boolean {
+  const month = referenceDate.getMonth()
+  const isQuarterEndMonth = month === 2 || month === 5 || month === 8 || month === 11
+  if (!isQuarterEndMonth) return false
+
+  const tomorrow = new Date(referenceDate)
+  tomorrow.setDate(referenceDate.getDate() + 1)
+  return tomorrow.getMonth() !== referenceDate.getMonth()
+}
+
+export function getPasswordEnforcementMessage(): string {
+  if (!PASSWORD_CHANGE_ENFORCEMENT_ENABLED) {
+    return "Password-change enforcement is temporarily disabled."
+  }
+  return "For security, your password must be changed quarterly before you can continue using the app."
+}
+
+type PasswordMetadata = Record<string, unknown> | null | undefined
+
+export function buildForcedPasswordChangeMetadata(
+  metadata: PasswordMetadata,
+  issuedAt: string = new Date().toISOString(),
+): Record<string, unknown> {
+  return {
+    ...(metadata || {}),
+    force_password_change: true,
+    temporary_password: true,
+    temp_password_issued_at: issuedAt,
+  }
+}
+
+export function clearForcedPasswordChangeMetadata(metadata: PasswordMetadata): Record<string, unknown> {
+  return {
+    ...(metadata || {}),
+    force_password_change: false,
+    temporary_password: false,
+    temp_password_issued_at: null,
+  }
+}
+
+export function generateTemporaryPassword(length = 6): string {
+  const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+  const lowercase = "abcdefghijkmnopqrstuvwxyz"
+  const numbers = "23456789"
+  const special = "!@#$%^&*"
+  const allChars = `${uppercase}${lowercase}${numbers}${special}`
+
+  const pick = (source: string) => source[Math.floor(Math.random() * source.length)]
+
+  const passwordChars = [pick(uppercase), pick(lowercase), pick(numbers), pick(special)]
+
+  while (passwordChars.length < Math.max(length, 10)) {
+    passwordChars.push(pick(allChars))
+  }
+
+  return passwordChars.sort(() => Math.random() - 0.5).join("")
 }
 
 export function createSecurityHeaders() {
