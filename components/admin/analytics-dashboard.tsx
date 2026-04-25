@@ -109,32 +109,40 @@ export function AnalyticsDashboard() {
         value: `${data.attendanceRate.toFixed(1)}%`,
         change: data.attendanceRate > 85 ? 2.5 : -1.2,
         icon: Users,
-        color: data.attendanceRate > 85 ? "text-green-600" : "text-red-600",
-        bgColor: data.attendanceRate > 85 ? "bg-green-50" : "bg-red-50",
+        color: "text-white",
+        bgColor: "bg-white/20",
+        cardBg: data.attendanceRate > 85 ? "bg-emerald-600" : "bg-red-600",
+        label: data.attendanceRate > 85 ? "On Track" : "Needs Attention",
       },
       {
         title: "Active Employees",
         value: data.totalEmployees.toString(),
         change: 5.2,
         icon: Activity,
-        color: "text-blue-600",
-        bgColor: "bg-blue-50",
+        color: "text-white",
+        bgColor: "bg-white/20",
+        cardBg: "bg-blue-600",
+        label: "Total staff",
       },
       {
         title: "Avg Work Hours",
         value: `${data.avgWorkHours.toFixed(1)}h`,
         change: data.avgWorkHours > 8 ? 1.8 : -0.5,
         icon: Clock,
-        color: data.avgWorkHours > 8 ? "text-green-600" : "text-orange-600",
-        bgColor: data.avgWorkHours > 8 ? "bg-green-50" : "bg-orange-50",
+        color: "text-white",
+        bgColor: "bg-white/20",
+        cardBg: data.avgWorkHours > 8 ? "bg-indigo-600" : "bg-orange-600",
+        label: "Per employee",
       },
       {
         title: "Active Locations",
         value: data.activeLocations.toString(),
         change: 0,
         icon: MapPin,
-        color: "text-purple-600",
-        bgColor: "bg-purple-50",
+        color: "text-white",
+        bgColor: "bg-white/20",
+        cardBg: "bg-teal-600",
+        label: "Monitored sites",
       },
     ]
   }, [data])
@@ -163,86 +171,80 @@ export function AnalyticsDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-primary flex items-center gap-2">
-            <BarChart3 className="h-8 w-8" />
-            Analytics Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Real-time insights and predictive analytics for attendance management
-          </p>
-        </div>
+      {/* Filter bar */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-slate-400">Showing data for the selected period:</p>
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-36 h-9 bg-white border-gray-200 shadow-sm text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="7d">7 Days</SelectItem>
-            <SelectItem value="30d">30 Days</SelectItem>
-            <SelectItem value="90d">90 Days</SelectItem>
-            <SelectItem value="1y">1 Year</SelectItem>
+            <SelectItem value="7d">Last 7 Days</SelectItem>
+            <SelectItem value="30d">Last 30 Days</SelectItem>
+            <SelectItem value="90d">Last 90 Days</SelectItem>
+            <SelectItem value="1y">Last Year</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {kpiCards.map((kpi, index) => (
-          <Card key={index} className="shadow-sm border-0 bg-gradient-to-br from-white to-gray-50/50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-foreground">{kpi.value}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    {kpi.change > 0 ? (
-                      <TrendingUp className="h-3 w-3 text-green-600" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3 text-red-600" />
-                    )}
-                    <span className={`text-xs font-medium ${kpi.change > 0 ? "text-green-600" : "text-red-600"}`}>
-                      {kpi.change > 0 ? "+" : ""}
-                      {kpi.change}%
-                    </span>
-                  </div>
+          <div key={index} className={`relative overflow-hidden rounded-xl p-5 text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${kpi.cardBg}`}>
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+            <div className="relative">
+              <div className="flex items-start justify-between mb-4">
+                <div className={`p-2.5 rounded-xl ${kpi.bgColor}`}>
+                  <kpi.icon className="h-5 w-5 text-white" />
                 </div>
-                <div className={`p-3 rounded-lg ${kpi.bgColor}`}>
-                  <kpi.icon className={`h-6 w-6 ${kpi.color}`} />
+                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  kpi.change > 0 ? "bg-white/20" : kpi.change < 0 ? "bg-black/20" : "bg-white/10"
+                }`}>
+                  {kpi.change > 0 ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : kpi.change < 0 ? (
+                    <TrendingDown className="h-3 w-3" />
+                  ) : null}
+                  <span>{kpi.change !== 0 ? `${kpi.change > 0 ? "+" : ""}${kpi.change}%` : "stable"}</span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+              <p className="text-white/70 text-xs font-medium uppercase tracking-wide">{kpi.title}</p>
+              <p className="text-3xl font-bold mt-0.5">{kpi.value}</p>
+              <p className="text-white/60 text-xs mt-1">{kpi.label}</p>
+            </div>
+          </div>
         ))}
       </div>
 
       {/* Predictive Insights */}
-      <Card className="shadow-sm border-0 bg-gradient-to-br from-primary/5 to-primary/10">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-primary">
-            <Target className="h-5 w-5" />
-            Predictive Insights
-          </CardTitle>
-          <CardDescription>AI-powered predictions and recommendations</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="text-center p-4 bg-white/50 rounded-lg">
-              <div className="text-2xl font-bold text-primary mb-1">{data.predictions.nextWeekAttendance}%</div>
-              <div className="text-sm text-muted-foreground">Predicted Next Week Attendance</div>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 to-purple-700 p-6 shadow-xl">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
+        <div className="relative">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2.5 bg-white/20 rounded-xl">
+              <Target className="h-5 w-5 text-white" />
             </div>
-            <div className="text-center p-4 bg-white/50 rounded-lg">
-              <div className="text-2xl font-bold text-orange-600 mb-1">{data.predictions.riskEmployees}</div>
-              <div className="text-sm text-muted-foreground">At-Risk Employees</div>
-            </div>
-            <div className="text-center p-4 bg-white/50 rounded-lg">
-              <div className="text-sm font-medium text-green-600 mb-1">Peak Days</div>
-              <div className="text-xs text-muted-foreground">{data.predictions.peakDays.join(", ")}</div>
+            <div>
+              <h3 className="text-base font-bold text-white">Predictive Insights</h3>
+              <p className="text-violet-200 text-xs">AI-powered predictions and recommendations</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+              <div className="text-3xl font-bold text-white mb-1">{data.predictions.nextWeekAttendance}%</div>
+              <div className="text-sm text-violet-200">Predicted Next Week</div>
+            </div>
+            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+              <div className="text-3xl font-bold text-orange-300 mb-1">{data.predictions.riskEmployees}</div>
+              <div className="text-sm text-violet-200">At-Risk Employees</div>
+            </div>
+            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+              <div className="text-sm font-bold text-green-300 mb-2">Peak Days</div>
+              <div className="text-xs text-violet-200">{data.predictions.peakDays.join(", ")}</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Analytics Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

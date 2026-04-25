@@ -921,20 +921,19 @@ export function AttendanceReports() {
 
   return (
     <div className={compactMode ? "space-y-2 text-sm" : "space-y-4"}>
-      {/* Advanced Filters - Modern Design */}
-        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-          <div className={compactMode ? "p-2" : "p-3 sm:p-4 md:p-6"}>
+      {/* Advanced Filters */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-blue-500 via-violet-500 to-pink-500" />
+          <div className={compactMode ? "p-2" : "p-4 sm:p-5 md:p-6"}>
             {exportError && (
-              <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/30 rounded-xl p-4 mt-2">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-300" />
-                  <p className="text-red-200 font-medium">{exportError}</p>
-                </div>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-2 flex items-start gap-3">
+                <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                <p className="text-red-700 text-sm font-medium">{exportError}</p>
               </div>
             )}
           </div>
 
-        <div className={compactMode ? "p-2" : "p-3 sm:p-4 md:p-6"}>
+        <div className={compactMode ? "p-2" : "p-4 sm:p-5 md:p-6"}>
           {/* Primary Filters */}
           <div className={compactMode ? "grid gap-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 mb-3 items-end" : "grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-4 items-end"}>
             <div className="space-y-3">
@@ -1258,34 +1257,40 @@ export function AttendanceReports() {
 
       {/* Column visibility controls removed per request */}
 
-      <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-        <div className="border-b border-gray-100">
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-blue-500 via-violet-500 to-pink-500" />
+        <div className="border-b border-gray-200">
           <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="details" className="w-full">
             <div className="px-4 pt-4">
-              <TabsList className={`grid w-full grid-cols-4 bg-gray-100 p-1 rounded-xl ${compactMode ? 'h-10' : 'h-12'}`}>
+              <TabsList className={`grid w-full grid-cols-4 bg-slate-100 p-1 rounded-xl ${compactMode ? 'h-10' : 'h-12'}`}>
                 <TabsTrigger
                   value="details"
-                  className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
+                  className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
-                  📋 Details
+                  <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>Details</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="overview"
-                  className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
+                  className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
-                  📊 Overview
+                  <BarChart3 className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>Overview</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="departments"
-                  className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
+                  className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
-                  🏢 Departments
+                  <Users className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="hidden sm:inline">Departments</span>
+                  <span className="sm:hidden">Depts</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="reasons"
-                  className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
+                  className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
-                  📝 Reasons
+                  <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>Reasons</span>
                 </TabsTrigger>
               </TabsList>
             </div>
