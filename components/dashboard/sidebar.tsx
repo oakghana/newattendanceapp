@@ -170,7 +170,7 @@ const navigationItems = [
     title: "Device Monitoring",
     href: "/dashboard/device-violations",
     icon: ShieldAlert,
-    roles: ["admin", "department_head"],
+    roles: ["admin"],
     category: "admin",
     subItems: [
       {
@@ -359,11 +359,17 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     : navigationItems
 
   // Support role hierarchy: map 'audit_staff' to behave like 'staff' for base permissions
-  const effectiveRole = profile?.role === "audit_staff" ? "staff" : profile?.role || "staff"
+  const normalizedRole = (profile?.role || "staff").toLowerCase().trim()
+  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
 
-  const filteredNavItems = allNavigationItems.filter((item) =>
-    item.roles.includes(effectiveRole) || item.roles.includes(profile?.role || "")
-  )
+  const filteredNavItems = allNavigationItems.filter((item) => {
+    // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
+    if (item.href === "/dashboard/device-violations") {
+      return effectiveRole === "admin"
+    }
+
+    return item.roles.includes(effectiveRole)
+  })
 
   const mainItems = filteredNavItems.filter((item) => item.category === "main")
   const adminItems = filteredNavItems.filter((item) => item.category === "admin")
