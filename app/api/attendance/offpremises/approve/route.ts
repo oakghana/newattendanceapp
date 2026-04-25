@@ -171,14 +171,18 @@ export async function POST(request: NextRequest) {
           }
 
           // Notify staff
-          await supabase.from('staff_notifications').insert({
-            user_id: pendingRequest.user_id,
-            type: 'offpremises_checkout_approved',
-            title: 'Off‑Premises Check‑Out Approved',
-            message: `Your off‑premises check‑out request from ${pendingRequest.google_maps_name || pendingRequest.current_location_name} has been approved — you were checked out remotely at ${new Date(checkOutTime).toLocaleString()}.`,
-            data: { request_id, attendance_record_id: updated?.id },
-            is_read: false,
-          }).catch(err => console.warn('[v0] Failed to send checkout approval notification:', err))
+          try {
+            await supabase.from('staff_notifications').insert({
+              user_id: pendingRequest.user_id,
+              type: 'offpremises_checkout_approved',
+              title: 'Off‑Premises Check‑Out Approved',
+              message: `Your off‑premises check‑out request from ${pendingRequest.google_maps_name || pendingRequest.current_location_name} has been approved — you were checked out remotely at ${new Date(checkOutTime).toLocaleString()}.`,
+              data: { request_id, attendance_record_id: updated?.id },
+              is_read: false,
+            })
+          } catch (err) {
+            console.warn('[v0] Failed to send checkout approval notification:', err)
+          }
 
           return NextResponse.json({ success: true, message: 'Off‑premises check‑out approved and recorded', attendance_record_id: updated?.id }, { status: 200 })
         } else {
@@ -195,14 +199,19 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Failed to update request status' }, { status: 500 })
           }
 
-          await supabase.from('staff_notifications').insert({
-            user_id: pendingRequest.user_id,
-            type: 'offpremises_checkout_approved',
-            title: 'Off‑Premises Check‑Out Approved (manual follow-up required)',
-            message: `Your off‑premises check‑out request has been approved by your manager but no active check‑in was found to attach the checkout to. Please contact HR or your manager for manual correction.`,
-            data: { request_id },
-            is_read: false,
-          }).catch(err => console.warn('[v0] Failed to send notification (no open attendance):', err))
+          // Notify staff
+          try {
+            await supabase.from('staff_notifications').insert({
+              user_id: pendingRequest.user_id,
+              type: 'offpremises_checkout_approved',
+              title: 'Off‑Premises Check‑Out Approved (manual follow-up required)',
+              message: `Your off‑premises check‑out request has been approved by your manager but no active check‑in was found to attach the checkout to. Please contact HR or your manager for manual correction.`,
+              data: { request_id },
+              is_read: false,
+            })
+          } catch (err) {
+            console.warn('[v0] Failed to send notification (no open attendance):', err)
+          }
 
           return NextResponse.json({ success: true, message: 'Request approved but no open attendance record found' }, { status: 200 })
         }
@@ -326,17 +335,21 @@ export async function POST(request: NextRequest) {
       }
 
       // Send notification to the staff member
-      await supabase.from("staff_notifications").insert({
-        user_id: pendingRequest.user_id,
-        type: "offpremises_checkin_approved",
-        title: "Off-Premises Check-In Approved",
-        message: `Your off-premises check-in request from ${pendingRequest.google_maps_name || pendingRequest.current_location_name} has been approved. You are checked in to your assigned location on official duty.`,
-        data: {
-          request_id: request_id,
-          attendance_record_id: attendanceRecord?.id,
-        },
-        is_read: false,
-      }).catch((err) => console.warn("[v0] Failed to send approval notification:", err))
+      try {
+        await supabase.from("staff_notifications").insert({
+          user_id: pendingRequest.user_id,
+          type: "offpremises_checkin_approved",
+          title: "Off-Premises Check-In Approved",
+          message: `Your off-premises check-in request from ${pendingRequest.google_maps_name || pendingRequest.current_location_name} has been approved. You are checked in to your assigned location on official duty.`,
+          data: {
+            request_id: request_id,
+            attendance_record_id: attendanceRecord?.id,
+          },
+          is_read: false,
+        })
+      } catch (err) {
+        console.warn("[v0] Failed to send approval notification:", err)
+      }
 
       console.log("[v0] Request approved successfully:", request_id)
       
@@ -371,16 +384,20 @@ export async function POST(request: NextRequest) {
       }
 
       // Send notification to the staff member
-      await supabase.from("staff_notifications").insert({
-        user_id: pendingRequest.user_id,
-        type: "offpremises_checkin_rejected",
-        title: "Off-Premises Check-In Rejected",
-        message: `Your off-premises check-in request from ${pendingRequest.google_maps_name || pendingRequest.current_location_name} has been rejected. ${comments ? `Reason: ${comments}` : ""}`,
-        data: {
-          request_id: request_id,
-        },
-        is_read: false,
-      }).catch((err) => console.warn("[v0] Failed to send rejection notification:", err))
+      try {
+        await supabase.from("staff_notifications").insert({
+          user_id: pendingRequest.user_id,
+          type: "offpremises_checkin_rejected",
+          title: "Off-Premises Check-In Rejected",
+          message: `Your off-premises check-in request from ${pendingRequest.google_maps_name || pendingRequest.current_location_name} has been rejected. ${comments ? `Reason: ${comments}` : ""}`,
+          data: {
+            request_id: request_id,
+          },
+          is_read: false,
+        })
+      } catch (err) {
+        console.warn("[v0] Failed to send rejection notification:", err)
+      }
 
       console.log("[v0] Request rejected successfully:", request_id)
 
