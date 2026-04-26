@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -65,17 +65,7 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
   const [startDate, setStartDate] = useState<string>("")
   const [endDate, setEndDate] = useState<string>("")
 
-  useEffect(() => {
-    fetchLocations()
-    fetchDepartments()
-    fetchSharedDevices()
-  }, [])
-
-  useEffect(() => {
-    fetchSharedDevices()
-  }, [selectedLocation, selectedDepartment, startDate, endDate])
-
-  const fetchLocations = async () => {
+  const fetchLocations = useCallback(async () => {
     try {
       const response = await fetch("/api/locations/active")
       const data = await response.json()
@@ -83,9 +73,9 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
     } catch (err) {
       console.error("[v0] Error fetching locations:", err)
     }
-  }
+  }, [])
 
-  const fetchDepartments = async () => {
+  const fetchDepartments = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/departments")
       const data = await response.json()
@@ -93,9 +83,9 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
     } catch (err) {
       console.error("[v0] Error fetching departments:", err)
     }
-  }
+  }, [])
 
-  const fetchSharedDevices = async () => {
+  const fetchSharedDevices = useCallback(async () => {
     try {
       setLoading(true)
       
@@ -120,7 +110,16 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedLocation, selectedDepartment, startDate, endDate])
+
+  useEffect(() => {
+    fetchLocations()
+    fetchDepartments()
+  }, [fetchLocations, fetchDepartments])
+
+  useEffect(() => {
+    fetchSharedDevices()
+  }, [fetchSharedDevices])
 
   const clearFilters = () => {
     setSelectedLocation("all")
@@ -159,11 +158,15 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
 
   const hasActiveFilters = selectedLocation !== "all" || selectedDepartment !== "all" || startDate || endDate
 
-  const criticalCount = sharedDevices.filter((d) => d.risk_level === "critical").length
-  const crossLocationCount = sharedDevices.filter((d) => !d.same_location_only).length
-  const crossDepartmentCount = sharedDevices.filter((d) => !d.same_department_only).length
+  const { criticalCount, crossLocationCount, crossDepartmentCount } = useMemo(() => {
+    return {
+      criticalCount: sharedDevices.filter((d) => d.risk_level === "critical").length,
+      crossLocationCount: sharedDevices.filter((d) => !d.same_location_only).length,
+      crossDepartmentCount: sharedDevices.filter((d) => !d.same_department_only).length,
+    }
+  }, [sharedDevices])
 
-  const getRiskBadge = (level: string) => {
+  const getRiskBadge = useCallback((level: string) => {
     const colors = {
       low: "bg-blue-100 text-blue-800",
       medium: "bg-yellow-100 text-yellow-800",
@@ -172,7 +175,7 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
     }
 
     return <Badge className={colors[level as keyof typeof colors] || colors.low}>{level.toUpperCase()}</Badge>
-  }
+  }, [])
 
   if (loading) {
     return (

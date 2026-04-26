@@ -24,11 +24,11 @@ async function getAuthorizedProfile() {
     .eq("id", user.id)
     .single()
 
-  if (!profile || (profile.role !== "admin" && profile.role !== "department_head")) {
+  if (!profile || profile.role !== "admin") {
     return {
       supabase,
       profile: null as RoleProfile | null,
-      error: NextResponse.json({ error: "Forbidden: Admin or Department Head access required" }, { status: 403 }),
+      error: NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 }),
     }
   }
 

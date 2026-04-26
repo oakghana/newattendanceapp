@@ -15,16 +15,21 @@ export interface Notification {
   persistent?: boolean
 }
 
+interface NotificationOptions {
+  duration?: number
+  persistent?: boolean
+}
+
 interface NotificationContextType {
   notifications: Notification[]
   addNotification: (notification: Omit<Notification, "id">) => void
   removeNotification: (id: string) => void
   clearAll: () => void
   showFieldError: (field: string, message: string) => void
-  showSuccess: (message: string, title?: string) => void
-  showError: (message: string, title?: string) => void
-  showWarning: (message: string, title?: string) => void
-  showInfo: (message: string, title?: string) => void
+  showSuccess: (message: string, title?: string, options?: NotificationOptions) => void
+  showError: (message: string, title?: string, options?: NotificationOptions) => void
+  showWarning: (message: string, title?: string, options?: NotificationOptions) => void
+  showInfo: (message: string, title?: string, options?: NotificationOptions) => void
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
@@ -81,44 +86,48 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   )
 
   const showSuccess = useCallback(
-    (message: string, title?: string) => {
+    (message: string, title?: string, options?: NotificationOptions) => {
       addNotification({
         type: "success",
         message,
         title: title || "Success",
+        ...options,
       })
     },
     [addNotification],
   )
 
   const showError = useCallback(
-    (message: string, title?: string) => {
+    (message: string, title?: string, options?: NotificationOptions) => {
       addNotification({
         type: "error",
         message,
         title: title || "Error",
+        ...options,
       })
     },
     [addNotification],
   )
 
   const showWarning = useCallback(
-    (message: string, title?: string) => {
+    (message: string, title?: string, options?: NotificationOptions) => {
       addNotification({
         type: "warning",
         message,
         title: title || "Warning",
+        ...options,
       })
     },
     [addNotification],
   )
 
   const showInfo = useCallback(
-    (message: string, title?: string) => {
+    (message: string, title?: string, options?: NotificationOptions) => {
       addNotification({
         type: "info",
         message,
         title: title || "Information",
+        ...options,
       })
     },
     [addNotification],

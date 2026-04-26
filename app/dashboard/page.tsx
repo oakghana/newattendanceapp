@@ -26,6 +26,7 @@ import RequestLeaveButtonWrapper from "@/components/leave/request-leave-button-c
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { GPSStatusBanner } from "@/components/attendance/gps-status-banner"
+import { SecurityHealthCard } from "@/components/admin/security-health-card"
 
 export const metadata = {
   title: "Dashboard | QCC Electronic Attendance",
@@ -37,12 +38,12 @@ export const metadata = {
 // build step does not attempt static prerendering.
 export const dynamic = "force-dynamic"
 export default async function DashboardPage() {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect("/auth/login")
+
   try {
-    const supabase = await createClient()
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) redirect("/auth/login")
-
     // Get current date info
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -183,6 +184,13 @@ export default async function DashboardPage() {
 
           {/* GPS Status Banner */}
           <GPSStatusBanner />
+
+          {/* Admin Security Health */}
+          {profile?.role === "admin" && (
+            <div className="max-w-sm">
+              <SecurityHealthCard />
+            </div>
+          )}
 
           {/* Admin Alert */}
           {profile?.role === "admin" && pendingApprovals > 0 && (

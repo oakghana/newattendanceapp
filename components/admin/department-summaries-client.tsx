@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -60,7 +60,6 @@ interface DepartmentSummariesClientProps {
 export function DepartmentSummariesClient({ userRole, departmentId }: DepartmentSummariesClientProps) {
   const [period, setPeriod] = useState<"weekly" | "monthly" | "yearly">("weekly")
   const [summaries, setSummaries] = useState<Summary[]>([])
-  const [filteredSummaries, setFilteredSummaries] = useState<Summary[]>([])
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState({ start: "", end: "" })
   const [totalStaff, setTotalStaff] = useState(0)
@@ -77,10 +76,6 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
     fetchDepartments()
     fetchSummaries()
   }, [period, selectedWeek, selectedMonth])
-
-  useEffect(() => {
-    filterSummaries()
-  }, [summaries, searchQuery, selectedDepartment])
 
   const fetchDepartments = async () => {
     try {
@@ -128,7 +123,12 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
     }
   }
 
-  const filterSummaries = () => {
+  const selectedDepartmentName = useMemo(
+    () => departments.find((d) => d.id === selectedDepartment)?.name,
+    [departments, selectedDepartment],
+  )
+
+  const filteredSummaries = useMemo(() => {
     let filtered = [...summaries]
 
     // SMART LEAVE FILTERING: Exclude inactive staff on leave from analytics
@@ -166,11 +166,11 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
     }
 
     if (userRole === "admin" && selectedDepartment !== "all") {
-      filtered = filtered.filter((s) => s.department === departments.find((d) => d.id === selectedDepartment)?.name)
+      filtered = filtered.filter((s) => s.department === selectedDepartmentName)
     }
 
-    setFilteredSummaries(filtered)
-  }
+    return filtered
+  }, [summaries, searchQuery, userRole, selectedDepartment, selectedDepartmentName])
 
   const fetchStaffDetails = async (staff: Summary) => {
     setSelectedStaff(staff)

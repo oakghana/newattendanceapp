@@ -281,6 +281,93 @@ export async function POST(request: NextRequest) {
           
           ipSharingSession = ipSession
         }
+
+        // Persist detection and return warning metadata for client visibility.
+        if (recentDeviceSession) {
+          const { data: previousUserProfile } = await supabase
+            .from("user_profiles")
+            .select("first_name, last_name, employee_id")
+            .eq("id", recentDeviceSession.user_id)
+            .maybeSingle()
+
+          const previousUserName = previousUserProfile
+            ? `${previousUserProfile.first_name} ${previousUserProfile.last_name}`
+            : "another staff member"
+          const previousEmployeeId = previousUserProfile?.employee_id || "unknown"
+          const timeSinceLastUse = Math.round((Date.now() - new Date(recentDeviceSession.last_activity).getTime()) / (1000 * 60))
+
+          deviceSharingWarning = {
+            type: "device_sharing",
+            message: `Device sharing detected during check-in: ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}) was used by ${previousUserName} (${previousEmployeeId}) ${timeSinceLastUse} min ago.`,
+            deviceDetails: {
+              device_id: device_info.device_id,
+              device_type: device_info.device_type,
+              device_name: device_info.device_name,
+            },
+          }
+
+          await supabase
+            .from("device_security_violations")
+            .insert({
+              device_id: device_info.device_id,
+              ip_address: ipAddress,
+              attempted_user_id: user.id,
+              bound_user_id: recentDeviceSession.user_id,
+              violation_type: "checkin_attempt",
+              device_info: {
+                ...device_info,
+                detection_method: "device_fingerprint",
+                previous_user_id: recentDeviceSession.user_id,
+                previous_ip: recentDeviceSession.ip_address,
+                time_since_last_use_minutes: timeSinceLastUse,
+              },
+            })
+            .catch((err) => {
+              console.warn("[v0] Could not persist check-in device sharing violation:", err)
+            })
+        } else if (ipSharingSession) {
+          const { data: ipSharerProfile } = await supabase
+            .from("user_profiles")
+            .select("first_name, last_name, employee_id")
+            .eq("id", ipSharingSession.user_id)
+            .maybeSingle()
+
+          const sharerName = ipSharerProfile
+            ? `${ipSharerProfile.first_name} ${ipSharerProfile.last_name}`
+            : "another staff member"
+          const sharerEmployeeId = ipSharerProfile?.employee_id || "unknown"
+          const timeSinceLastUse = Math.round((Date.now() - new Date(ipSharingSession.last_activity).getTime()) / (1000 * 60))
+
+          deviceSharingWarning = {
+            type: "ip_sharing",
+            message: `IP sharing detected during check-in: Network ${ipAddress} was used by ${sharerName} (${sharerEmployeeId}) ${timeSinceLastUse} min ago. Current device: ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}).`,
+            deviceDetails: {
+              device_id: device_info.device_id,
+              device_type: device_info.device_type,
+              device_name: device_info.device_name,
+            },
+          }
+
+          await supabase
+            .from("device_security_violations")
+            .insert({
+              device_id: device_info.device_id,
+              ip_address: ipAddress,
+              attempted_user_id: user.id,
+              bound_user_id: ipSharingSession.user_id,
+              violation_type: "checkin_attempt",
+              device_info: {
+                ...device_info,
+                detection_method: "ip_address",
+                previous_user_id: ipSharingSession.user_id,
+                previous_device_id: ipSharingSession.device_id,
+                time_since_last_use_minutes: timeSinceLastUse,
+              },
+            })
+            .catch((err) => {
+              console.warn("[v0] Could not persist check-in IP sharing violation:", err)
+            })
+        }
       }
     } // close device_info?.device_id outer block
 
@@ -771,6 +858,7 @@ export async function POST(request: NextRequest) {
       success: true,
       attendance: attendanceRecord,
       message: checkInMessage,
+      deviceSharingWarning,
       checkInPosition: checkInPosition,
       overrideUsed: overrideMeta !== null,
       overrideType: overrideMeta?.type || null,

@@ -1,16 +1,11 @@
-const CACHE_NAME = "qcc-attendance-v1"
-const STATIC_CACHE = "qcc-static-v1"
-const DYNAMIC_CACHE = "qcc-dynamic-v1"
-
-const APP_VERSION = "1.9.0"
+const APP_VERSION = "1.9.1"
+const CACHE_VERSION = "2026-04-25"
+const STATIC_CACHE = `qcc-static-${CACHE_VERSION}`
+const DYNAMIC_CACHE = `qcc-dynamic-${CACHE_VERSION}`
 
 const CACHE_EXPIRATION_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
 
 const STATIC_ASSETS = [
-  "/",
-  "/dashboard",
-  "/dashboard/attendance",
-  "/dashboard/reports",
   "/auth/login",
   "/images/qcc-logo.png",
   "/manifest.json",
@@ -101,12 +96,65 @@ function shouldNotCache(url) {
   return NO_CACHE_ENDPOINTS.some((endpoint) => url.pathname.includes(endpoint))
 }
 
+function isNextAssetRequest(url) {
+  return url.pathname.startsWith("/_next/")
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event
   const url = new URL(request.url)
 
   // Skip non-GET requests and external URLs
   if (request.method !== "GET" || !url.origin.includes(self.location.origin)) {
+    return
+  }
+
+  // Always prefer the network for app shell and route navigation pages.
+  // This prevents old cached HTML from referencing deleted chunk files.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const responseClone = response.clone()
+            caches.open(DYNAMIC_CACHE).then((cache) => {
+              cache.put(request, responseClone)
+            })
+          }
+          return response
+        })
+        .catch(() => {
+          return caches.match(request).then((cachedResponse) => {
+            return (
+              cachedResponse ||
+              caches.match("/auth/login") ||
+              new Response("<html><body><h1>Offline</h1><p>You are currently offline.</p></body></html>", {
+                headers: { "Content-Type": "text/html" },
+              })
+            )
+          })
+        }),
+    )
+    return
+  }
+
+  // Next.js runtime/chunk assets must be network-first to avoid stale chunk mismatch
+  // after deployments (e.g. failed to load /_next/static/chunks/*.js).
+  if (isNextAssetRequest(url)) {
+    event.respondWith(
+      fetch(request).catch(() => {
+        return caches.match(request).then((cachedResponse) => {
+          return (
+            cachedResponse ||
+            new Response("Asset unavailable", {
+              status: 503,
+              statusText: "Service Unavailable",
+              headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
+            })
+          )
+        })
+      }),
+    )
     return
   }
 
@@ -212,17 +260,6 @@ self.addEventListener("fetch", (event) => {
           return response
         })
         .catch(() => {
-          // Return offline page for navigation requests
-          if (request.mode === "navigate") {
-            return caches.match("/dashboard").then((dashboardResponse) => {
-              return (
-                dashboardResponse ||
-                new Response("<html><body><h1>Offline</h1><p>You are currently offline.</p></body></html>", {
-                  headers: { "Content-Type": "text/html" },
-                })
-              )
-            })
-          }
           throw new Error("Network error and no cached response available")
         })
     }),

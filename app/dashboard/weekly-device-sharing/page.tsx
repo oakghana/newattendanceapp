@@ -19,7 +19,7 @@ export default async function WeeklyDeviceSharingPage() {
     .eq("id", user.id)
     .single()
 
-  if (!profile || (profile.role !== "admin" && profile.role !== "department_head")) {
+  if (!profile || profile.role !== "admin") {
     redirect("/dashboard")
   }
 

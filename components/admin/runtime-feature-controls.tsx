@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, CheckCircle2, Loader2, Shield, Timer } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Loader2, Shield, Timer, Users } from "lucide-react"
 import type { RuntimeFlags } from "@/lib/runtime-flags"
 
 interface RuntimeFeatureControlsProps {
@@ -15,6 +15,9 @@ interface RuntimeFeatureControlsProps {
 export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: RuntimeFeatureControlsProps) {
   const [passwordEnforcementEnabled, setPasswordEnforcementEnabled] = useState(initialFlags.passwordEnforcementEnabled)
   const [autoCheckoutEnabled, setAutoCheckoutEnabled] = useState(initialFlags.autoCheckoutEnabled)
+  const [deviceSharingEnforcementEnabled, setDeviceSharingEnforcementEnabled] = useState(
+    initialFlags.deviceSharingEnforcementEnabled
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +39,7 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
               ...initialSystemSettings,
               password_enforcement_enabled: passwordEnforcementEnabled,
               auto_checkout_enabled: autoCheckoutEnabled,
+              device_sharing_enforcement_enabled: deviceSharingEnforcementEnabled,
             },
           },
         }),
@@ -77,7 +81,7 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -100,7 +104,7 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
               </Button>
               <Button
                 type="button"
-                variant={!passwordEnforcementEnabled ? "default" : "outline"}
+                variant={passwordEnforcementEnabled ? "outline" : "default"}
                 onClick={() => setPasswordEnforcementEnabled(false)}
               >
                 Disable
@@ -131,8 +135,42 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
               </Button>
               <Button
                 type="button"
-                variant={!autoCheckoutEnabled ? "default" : "outline"}
+                variant={autoCheckoutEnabled ? "outline" : "default"}
                 onClick={() => setAutoCheckoutEnabled(false)}
+              >
+                Disable
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={deviceSharingEnforcementEnabled ? "" : "border-amber-300 bg-amber-50/40 dark:bg-amber-950/20"}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Users className="h-5 w-5" />
+              Device Sharing Policy
+            </CardTitle>
+            <CardDescription>
+              When enforced, staff cannot log in on a device already bound to another user.
+              Disable to allow shared devices — violations are still recorded.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Badge variant={deviceSharingEnforcementEnabled ? "default" : "secondary"}>
+              {deviceSharingEnforcementEnabled ? "Enforced" : "Disabled — shared devices allowed"}
+            </Badge>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={deviceSharingEnforcementEnabled ? "default" : "outline"}
+                onClick={() => setDeviceSharingEnforcementEnabled(true)}
+              >
+                Enforce
+              </Button>
+              <Button
+                type="button"
+                variant={deviceSharingEnforcementEnabled ? "outline" : "default"}
+                onClick={() => setDeviceSharingEnforcementEnabled(false)}
               >
                 Disable
               </Button>

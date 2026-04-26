@@ -85,6 +85,7 @@ export function StaffManagement() {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [selectedDepartment, setSelectedDepartment] = useState("all")
   const [selectedRole, setSelectedRole] = useState("all")
   const [page, setPage] = useState(1)
@@ -114,9 +115,14 @@ export function StaffManagement() {
 
   const fetchStaff = useCallback(async () => {
     try {
-      console.log("[v0] Fetching staff with filters:", { searchTerm, selectedDepartment, selectedRole, page })
+      console.log("[v0] Fetching staff with filters:", {
+        searchTerm: debouncedSearchTerm,
+        selectedDepartment,
+        selectedRole,
+        page,
+      })
       const params = new URLSearchParams()
-      const trimmedSearch = searchTerm.trim()
+      const trimmedSearch = debouncedSearchTerm.trim()
       const effectiveLimit = trimmedSearch ? 2000 : limit
 
       if (trimmedSearch) params.append("search", trimmedSearch)
@@ -149,24 +155,29 @@ export function StaffManagement() {
     } finally {
       setLoading(false)
     }
-  }, [searchTerm, selectedDepartment, selectedRole, page, limit])
+  }, [debouncedSearchTerm, selectedDepartment, selectedRole, page, limit])
 
   useEffect(() => {
-    fetchStaff()
     fetchDepartments()
     fetchLocations()
     fetchCurrentUserRole()
-  }, [fetchStaff, page])
+  }, [])
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      // when search term changes, reset to first page
-      setPage(1)
-      fetchStaff()
+      setDebouncedSearchTerm(searchTerm)
     }, 300) // Wait 300ms after user stops typing
 
     return () => clearTimeout(debounceTimer)
-  }, [searchTerm, fetchStaff])
+  }, [searchTerm])
+
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearchTerm, selectedDepartment, selectedRole])
+
+  useEffect(() => {
+    fetchStaff()
+  }, [fetchStaff])
 
   const fetchDepartments = async () => {
     try {

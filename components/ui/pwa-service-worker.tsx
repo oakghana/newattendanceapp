@@ -10,7 +10,25 @@ export function PWAServiceWorker() {
       process.env.NODE_ENV === "development"
 
     if (isPreview) {
-      console.log("[PWA] Preview/development environment detected, skipping service worker registration")
+      console.log("[PWA] Preview/development environment detected, cleaning old service workers and skipping registration")
+
+      const cleanupPreviewCaches = async () => {
+        try {
+          if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations()
+            await Promise.all(registrations.map((registration) => registration.unregister()))
+          }
+
+          if ("caches" in window) {
+            const cacheKeys = await caches.keys()
+            await Promise.all(cacheKeys.map((key) => caches.delete(key)))
+          }
+        } catch (error) {
+          console.warn("[PWA] Failed to cleanup preview service worker/cache state:", error)
+        }
+      }
+
+      void cleanupPreviewCaches()
       return
     }
 

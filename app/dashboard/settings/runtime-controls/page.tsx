@@ -5,7 +5,7 @@ import { redirect } from "next/navigation"
 
 export const metadata = {
   title: "Runtime Feature Controls | QCC Electronic Attendance",
-  description: "Enable or disable runtime features like password enforcement and automatic checkout",
+  description: "Enable or disable runtime features like password enforcement, automatic checkout, and device-sharing policy",
 }
 
 export default async function RuntimeControlsPage() {

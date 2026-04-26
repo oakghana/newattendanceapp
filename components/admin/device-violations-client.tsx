@@ -149,8 +149,18 @@ export default function DeviceViolationsClient({
                       {new Date(violation.created_at).toLocaleString()}
                     </CardDescription>
                   </div>
-                  <Badge variant={violation.violation_type === "checkin_attempt" ? "destructive" : "secondary"}>
-                    {violation.violation_type === "checkin_attempt" ? "Check-in Blocked" : "Login Attempt"}
+                  <Badge
+                    variant={
+                      violation.violation_type === "checkin_attempt" || violation.violation_type === "checkout_attempt"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                  >
+                    {violation.violation_type === "checkin_attempt"
+                      ? "Check-in Attempt"
+                      : violation.violation_type === "checkout_attempt"
+                        ? "Check-out Attempt"
+                        : "Login Attempt"}
                   </Badge>
                 </div>
               </CardHeader>

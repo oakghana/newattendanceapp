@@ -40,7 +40,7 @@ export default async function SettingsPage() {
     },
     {
       title: "Runtime Feature Controls",
-      description: "Enable or disable password enforcement and automatic checkout live",
+      description: "Enable or disable password enforcement, automatic checkout, and device-sharing policy live",
       icon: ToggleLeft,
       href: "/dashboard/settings/runtime-controls",
       roles: ["admin"],

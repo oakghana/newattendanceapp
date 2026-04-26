@@ -54,6 +54,8 @@ import {
 } from "@/lib/security"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
+const DEVICE_SHARING_WARNING_STORAGE_KEY = "qcc_pending_device_sharing_warning"
+
 interface GeofenceLocation {
   id: string
   name: string
@@ -238,6 +240,7 @@ export function AttendanceRecorder({
   const [recentCheckIn, setRecentCheckIn] = useState(false)
   const [recentCheckOut, setRecentCheckOut] = useState(false)
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
+  const [pendingDeviceSharingWarning, setPendingDeviceSharingWarning] = useState<string | null>(null)
   const serverClockRef = useRef<{ baseServerMs: number; basePerfMs: number } | null>(null)
   const [, setSystemClockTick] = useState(0)
   const autoCheckoutAttemptedRef = useRef(false)
@@ -273,6 +276,16 @@ export function AttendanceRecorder({
     return new Date(clock.baseServerMs + elapsedMs)
   }, [])
 
+  const clearPendingDeviceSharingWarning = useCallback(() => {
+    setPendingDeviceSharingWarning(null)
+
+    try {
+      window.sessionStorage.removeItem(DEVICE_SHARING_WARNING_STORAGE_KEY)
+    } catch {
+      // Ignore storage failures and continue attendance flow.
+    }
+  }, [])
+
   useEffect(() => {
     void loadRuntimeFlags()
     const id = setInterval(() => {
@@ -281,6 +294,20 @@ export function AttendanceRecorder({
 
     return () => clearInterval(id)
   }, [loadRuntimeFlags])
+
+  useEffect(() => {
+    if (localTodayAttendance?.check_in_time) {
+      clearPendingDeviceSharingWarning()
+      return
+    }
+
+    try {
+      const storedWarning = window.sessionStorage.getItem(DEVICE_SHARING_WARNING_STORAGE_KEY)
+      setPendingDeviceSharingWarning(storedWarning || null)
+    } catch {
+      setPendingDeviceSharingWarning(null)
+    }
+  }, [clearPendingDeviceSharingWarning, localTodayAttendance?.check_in_time])
 
   useEffect(() => {
     let isCancelled = false
@@ -1513,15 +1540,26 @@ export function AttendanceRecorder({
       const checkoutEndTimeMinutes = endHour * 60 + (endMinute || 0)
       const currentTimeMinutes = checkoutHour * 60 + checkoutMinutes
       const isBeforeCheckoutTime = currentTimeMinutes < checkoutEndTimeMinutes
+      const isAfterFivePm = currentTimeMinutes >= 17 * 60
 
-      // If the user is not inside any location, block checkout
-      if (!checkoutValidation.canCheckOut) {
+      // After 5:00 PM, allow cross-location/out-of-range checkout for all staff.
+      if (!checkoutValidation.canCheckOut && !isAfterFivePm) {
         setFlashMessage({
-          message: "Check-out is only allowed while within range of an active registered location. Please move to a valid site and try again.",
+          message: "Check-out is only allowed while within range of an active registered location before 5:00 PM. After 5:00 PM, cross-location check-out is allowed.",
           type: "error",
         })
         setIsLoading(false)
         return
+      }
+
+      if (!checkoutValidation.canCheckOut && isAfterFivePm) {
+        setFlashMessage({
+          message: "After 5:00 PM, cross-location check-out is allowed. Processing your check-out now.",
+          type: "info",
+        })
+        console.log("[v0] After 5:00 PM cross-location checkout allowed", {
+          currentTime: `${checkoutHour}:${checkoutMinutes.toString().padStart(2, "0")}`,
+        })
       }
 
       console.log("[v0] Location validation passed - user within range")
@@ -1886,6 +1924,7 @@ export function AttendanceRecorder({
   // Extracted check-in API call for lateness dialog flow
   const performCheckInAPI = async (locationData: any, nearestLocation: any, reason: string, provedBy: string | null = null) => {
     try {
+      clearPendingDeviceSharingWarning()
       const deviceInfo = getDeviceInfo()
       const checkInData: any = {
         device_info: deviceInfo,
@@ -2289,6 +2328,18 @@ export function AttendanceRecorder({
         </div>
       )}
 
+      {pendingDeviceSharingWarning && !(localTodayAttendance as any)?.device_sharing_warning && (
+        <Alert className="bg-yellow-50 border-yellow-400 dark:bg-yellow-900/60 dark:border-yellow-500/50 mb-4">
+          <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-300" />
+          <AlertTitle className="text-yellow-800 dark:text-yellow-100 font-semibold">
+            ⚠️ Shared Device Detected
+          </AlertTitle>
+          <AlertDescription className="text-yellow-700 dark:text-yellow-200">
+            {pendingDeviceSharingWarning}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {(localTodayAttendance as any)?.device_sharing_warning && (
         <Alert className="bg-yellow-50 border-yellow-400 dark:bg-yellow-900/60 dark:border-yellow-500/50 mb-4">
           <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-300" />
@@ -2574,7 +2625,7 @@ export function AttendanceRecorder({
                     <p className="text-sm font-medium">{deviceInfo.device_name || 'Windows PC'}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">MAC Address</p>
+                    <p className="text-xs font-medium text-muted-foreground">Device ID</p>
                     <p className="text-sm font-mono text-xs">{deviceInfo.device_id || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">

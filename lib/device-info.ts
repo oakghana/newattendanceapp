@@ -10,55 +10,87 @@ export interface DeviceInfo {
   isLaptop?: boolean
 }
 
+const DEVICE_ID_STORAGE_KEY = "qcc_device_fingerprint_v2"
+
+function hashString(input: string): string {
+  // FNV-1a 32-bit hash (fast, deterministic, browser-safe)
+  let hash = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = (hash * 0x01000193) >>> 0
+  }
+  return hash.toString(16).padStart(8, "0")
+}
+
+function getBrowserFamily(userAgent: string): string {
+  if (/edg\//i.test(userAgent)) return "Edge"
+  if (/opr\//i.test(userAgent) || /opera/i.test(userAgent)) return "Opera"
+  if (/firefox/i.test(userAgent)) return "Firefox"
+  if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) return "Safari"
+  if (/chrome\//i.test(userAgent)) return "Chrome"
+  return "Unknown"
+}
+
+function buildStableFingerprintSource(): string {
+  const ua = navigator.userAgent || ""
+  const uaData = (navigator as any).userAgentData
+  const brands = Array.isArray(uaData?.brands)
+    ? uaData.brands.map((b: any) => `${b.brand}:${b.version}`).join(",")
+    : ""
+
+  return [
+    getBrowserFamily(ua),
+    navigator.platform || "",
+    navigator.language || "",
+    navigator.languages?.join(",") || "",
+    `${screen.width}x${screen.height}`,
+    String(screen.colorDepth || ""),
+    String(new Date().getTimezoneOffset()),
+    String(navigator.hardwareConcurrency || ""),
+    String((navigator as any).deviceMemory || ""),
+    String(navigator.maxTouchPoints || 0),
+    navigator.vendor || "",
+    brands,
+  ].join("|")
+}
+
+function formatDeviceId(hash: string): string {
+  const normalized = hash.toUpperCase().padEnd(12, "0").slice(0, 12)
+  const chunks = normalized.match(/.{1,4}/g) || [normalized]
+  return `DEV:${chunks.join("-")}`
+}
+
 export function generateDeviceId(): string {
   if (typeof document === "undefined") {
-    throw new Error("generateDeviceId must be called on the client side.");
+    throw new Error("generateDeviceId must be called on the client side.")
   }
 
-  // Create a comprehensive device fingerprint that mimics MAC address uniqueness
-  const canvas = document.createElement("canvas")
-  const ctx = canvas.getContext("2d")
-  if (ctx) {
-    ctx.textBaseline = "top"
-    ctx.font = "14px Arial"
-    ctx.fillText("Device fingerprint", 2, 2)
+  // Browsers do not expose the real MAC address for privacy reasons.
+  // We use a stable device fingerprint id instead.
+  try {
+    const storedId = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY)
+    if (storedId && storedId.startsWith("DEV:")) {
+      return storedId
+    }
+  } catch {
+    // ignore localStorage failures
   }
 
-  // Collect comprehensive device characteristics
-  const fingerprint = [
-    navigator.userAgent,
-    navigator.language,
-    navigator.languages?.join(",") || "",
-    screen.width + "x" + screen.height,
-    screen.colorDepth,
-    new Date().getTimezoneOffset(),
-    canvas.toDataURL(),
-    navigator.hardwareConcurrency || 0, // CPU cores
-    (navigator as any).deviceMemory || 0, // RAM in GB (if available)
-    navigator.maxTouchPoints || 0, // Touch support
-    (navigator as any).connection?.effectiveType || "", // Network type
-    navigator.platform,
-    navigator.vendor || "",
-  ].join("|")
+  const fingerprintSource = buildStableFingerprintSource()
+  const deviceId = formatDeviceId(hashString(fingerprintSource))
 
-  // Create a robust hash
-  let hash = 0
-  for (let i = 0; i < fingerprint.length; i++) {
-    const char = fingerprint.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash = hash & hash // Convert to 32-bit integer
+  try {
+    window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId)
+  } catch {
+    // ignore localStorage failures
   }
 
-  // Generate MAC-like format for better identification (e.g., MAC:AB:CD:EF:12)
-  const hashStr = Math.abs(hash).toString(16).padStart(12, '0')
-  const macLike = hashStr.match(/.{1,2}/g)?.slice(0, 6).join(':').toUpperCase() || hashStr
-  
-  return `MAC:${macLike}`
+  return deviceId
 }
 
 export function getDeviceInfo(): DeviceInfo {
   if (typeof window === "undefined") {
-    throw new Error("getDeviceInfo must be called on the client side.");
+    throw new Error("getDeviceInfo must be called on the client side.")
   }
 
   const deviceId = generateDeviceId()

@@ -239,16 +239,34 @@ export async function POST(request: NextRequest) {
     
     if (device_info?.device_id) {
       const getValidIpAddress = () => {
+        const forwardedFor = request.headers.get("x-forwarded-for")
+        const forwardedCandidates = forwardedFor
+          ? forwardedFor
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : []
+
         const possibleIps = [
-          request.ip,
-          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+          request.headers.get("x-vercel-forwarded-for"),
+          request.headers.get("cf-connecting-ip"),
           request.headers.get("x-real-ip"),
+          request.headers.get("x-client-ip"),
+          request.ip,
+          ...forwardedCandidates,
         ]
-        for (const ip of possibleIps) {
-          if (ip && ip !== "unknown" && ip !== "::1" && ip !== "127.0.0.1") {
-            return ip
+
+        for (const rawIp of possibleIps) {
+          if (!rawIp || rawIp === "unknown") continue
+
+          const normalizedIp = rawIp.startsWith("::ffff:") ? rawIp.slice(7) : rawIp
+          if (normalizedIp === "::1" || normalizedIp === "127.0.0.1") continue
+
+          if (/^(\d{1,3}\.){3}\d{1,3}$/.test(normalizedIp) || /^[0-9a-fA-F:]+$/.test(normalizedIp)) {
+            return normalizedIp
           }
         }
+
         return null
       }
 
@@ -304,15 +322,35 @@ export async function POST(request: NextRequest) {
           
           deviceSharingWarning = {
             type: "device_sharing",
-            message: `Device sharing detected during checkout: ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}) was used by ${previousUserName} (${previousUserProfile.employee_id}) ${timeSinceLastUse} min ago.`,
+            message: `Device sharing detected during checkout: ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}) was used by ${previousUserName} (${previousUserProfile.employee_id}) ${timeSinceLastUse} min ago.`,
             deviceDetails: {
-              mac_address: device_info.device_id,
+              device_id: device_info.device_id,
               device_type: device_info.device_type,
               device_name: device_info.device_name
             }
           }
 
-          console.warn(`[v0] ⚠️ CHECKOUT - Device Sharing: ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}) used by ${previousUserName}`)
+          console.warn(`[v0] CHECKOUT - Device Sharing: ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}) used by ${previousUserName}`)
+
+          await supabase
+            .from("device_security_violations")
+            .insert({
+              device_id: device_info.device_id,
+              ip_address: ipAddress,
+              attempted_user_id: user.id,
+              bound_user_id: recentDeviceSession.user_id,
+              violation_type: "checkout_attempt",
+              device_info: {
+                ...device_info,
+                detection_method: "device_fingerprint",
+                previous_user_id: recentDeviceSession.user_id,
+                previous_ip: recentDeviceSession.ip_address,
+                time_since_last_use_minutes: timeSinceLastUse,
+              },
+            })
+            .catch((err) => {
+              console.warn("[v0] Failed to persist checkout device sharing violation:", err)
+            })
 
           await supabase.from("audit_logs").insert({
             user_id: user.id,
@@ -324,6 +362,7 @@ export async function POST(request: NextRequest) {
               previous_user: recentDeviceSession.user_id,
               previous_user_name: previousUserName,
               time_since_last_use_minutes: timeSinceLastUse,
+              device_id: device_info.device_id,
               device_mac_address: device_info.device_id,
               device_type: device_info.device_type,
               device_name: device_info.device_name,
@@ -349,15 +388,35 @@ export async function POST(request: NextRequest) {
           
           deviceSharingWarning = {
             type: "ip_sharing",
-            message: `IP sharing detected during checkout: Network ${ipAddress} was used by ${sharerName} (${ipSharerProfile.employee_id}) ${timeSinceLastUse} min ago. Current device: ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}).`,
+            message: `IP sharing detected during checkout: Network ${ipAddress} was used by ${sharerName} (${ipSharerProfile.employee_id}) ${timeSinceLastUse} min ago. Current device: ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}).`,
             deviceDetails: {
-              mac_address: device_info.device_id,
+              device_id: device_info.device_id,
               device_type: device_info.device_type,
               device_name: device_info.device_name
             }
           }
 
-          console.warn(`[v0] ⚠️ CHECKOUT - IP Sharing: Current ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}) | Previous MAC: ${ipSharingSession.device_id}`)
+          console.warn(`[v0] CHECKOUT - IP Sharing: Current ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}) | Previous Device ID: ${ipSharingSession.device_id}`)
+
+          await supabase
+            .from("device_security_violations")
+            .insert({
+              device_id: device_info.device_id,
+              ip_address: ipAddress,
+              attempted_user_id: user.id,
+              bound_user_id: ipSharingSession.user_id,
+              violation_type: "checkout_attempt",
+              device_info: {
+                ...device_info,
+                detection_method: "ip_address",
+                previous_user_id: ipSharingSession.user_id,
+                previous_device_id: ipSharingSession.device_id,
+                time_since_last_use_minutes: timeSinceLastUse,
+              },
+            })
+            .catch((err) => {
+              console.warn("[v0] Failed to persist checkout IP sharing violation:", err)
+            })
 
           await supabase.from("audit_logs").insert({
             user_id: user.id,
@@ -369,9 +428,11 @@ export async function POST(request: NextRequest) {
               previous_user: ipSharingSession.user_id,
               previous_user_name: sharerName,
               time_since_last_use_minutes: timeSinceLastUse,
+              current_device_id: device_info.device_id,
               current_device_mac: device_info.device_id,
               current_device_type: device_info.device_type,
               current_device_name: device_info.device_name,
+              previous_device_id: ipSharingSession.device_id,
               previous_device_mac: ipSharingSession.device_id,
               shared_ip: ipAddress,
               detection_method: "ip_address",
@@ -442,6 +503,7 @@ export async function POST(request: NextRequest) {
     })
 
     // `checkoutLocationData` already declared above; assign as needed below
+    let usedAfterFivePmCrossLocationCheckout = false
 
     // Determine whether this attendance record was created from an approved off-premises request
     const isAttendanceOffPremises = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
@@ -452,6 +514,8 @@ export async function POST(request: NextRequest) {
         longitude,
         accuracy: 10,
       }
+      const currentTimeMinutes = now.getHours() * 60 + now.getMinutes()
+      const isAfterFivePm = currentTimeMinutes >= 17 * 60
 
       // If the staff was checked-in via approved off-premises, skip strict geofence validation
       if (!isAttendanceOffPremises) {
@@ -467,8 +531,9 @@ export async function POST(request: NextRequest) {
               hoursWorked: workHours,
             }),
         )
+        const allowAfterFivePmCrossLocationCheckout = !validation.canCheckOut && isAfterFivePm
 
-        if (!validation.canCheckOut && !allowAutomaticOutOfRangeCheckout) {
+        if (!validation.canCheckOut && !allowAutomaticOutOfRangeCheckout && !allowAfterFivePmCrossLocationCheckout) {
           return NextResponse.json(
             {
               error: `You are currently out of range. Check-out requires being within range of your assigned QCC location. ${validation.message}`,
@@ -479,6 +544,10 @@ export async function POST(request: NextRequest) {
 
         if (allowAutomaticOutOfRangeCheckout) {
           console.log("[v0] Automatic out-of-range checkout allowed after 4 PM")
+          checkoutLocationData = null
+        } else if (allowAfterFivePmCrossLocationCheckout) {
+          console.log("[v0] After 5:00 PM cross-location checkout allowed")
+          usedAfterFivePmCrossLocationCheckout = true
           checkoutLocationData = null
         } else {
           checkoutLocationData = validation.nearestLocation
@@ -591,11 +660,15 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
       check_out_method: auto_checkout
         ? "auto_out_of_range_after_4pm"
+        : usedAfterFivePmCrossLocationCheckout
+          ? "cross_location_after_5pm"
         : willBeRemoteCheckout
           ? "remote_offpremises"
           : (qr_code_used ? "qr_code" : "gps"),
       check_out_location_name: checkoutLocationData?.name || (auto_checkout
         ? "Auto Check-out (Out of Range after 4 PM)"
+        : usedAfterFivePmCrossLocationCheckout
+          ? "Cross-Location Check-out (After 5:00 PM)"
         : (willBeRemoteCheckout ? "Off‑Premises (approved)" : "Unknown Location")),
       // mark remote checkout if user was approved off‑premises and not within a QCC location
       is_remote_checkout: willBeRemoteCheckout || false,
@@ -710,7 +783,7 @@ export async function POST(request: NextRequest) {
       earlyCheckoutWarning,
       deviceSharingWarning,
       data: updatedRecord,
-      message: `Successfully checked out at ${checkoutLocationData?.name}. Work hours: ${workHours.toFixed(2)}`,
+      message: `Successfully checked out at ${updatedRecord?.check_out_location_name || checkoutLocationData?.name || "recorded location"}. Work hours: ${workHours.toFixed(2)}`,
       overrideUsed: overrideMeta !== null,
       overrideType: overrideMeta?.type || null,
     })

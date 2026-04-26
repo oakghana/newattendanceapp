@@ -20,6 +20,8 @@ import { Eye, EyeOff } from "lucide-react"
 import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
+const DEVICE_SHARING_WARNING_STORAGE_KEY = "qcc_pending_device_sharing_warning"
+
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
@@ -33,6 +35,22 @@ export default function LoginPage() {
   const router = useRouter()
 
   const { showFieldError, showSuccess, showError, showWarning } = useNotifications()
+
+  const persistPendingDeviceSharingWarning = (message: string) => {
+    try {
+      window.sessionStorage.setItem(DEVICE_SHARING_WARNING_STORAGE_KEY, message)
+    } catch {
+      // Ignore storage failures and continue login flow.
+    }
+  }
+
+  const clearPendingDeviceSharingWarning = () => {
+    try {
+      window.sessionStorage.removeItem(DEVICE_SHARING_WARNING_STORAGE_KEY)
+    } catch {
+      // Ignore storage failures and continue login flow.
+    }
+  }
 
   const logLoginActivity = async (userId: string, action: string, success: boolean, method: string) => {
     try {
@@ -109,6 +127,7 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
+    clearPendingDeviceSharingWarning()
 
     try {
       const supabase = createClient()
@@ -259,8 +278,14 @@ export default function LoginPage() {
           showError(
             deviceCheck.message || "This device is registered to another user. Your supervisor has been notified.",
             "Device Security Violation",
+            { duration: 20000 },
           )
           return
+        }
+
+        if (deviceCheck.warning && deviceCheck.message) {
+          persistPendingDeviceSharingWarning(deviceCheck.message)
+          showWarning(deviceCheck.message, "Shared Device Detected", { duration: 20000 })
         }
 
         // If there are concurrent active sessions on other devices, warn the user but allow login to continue
@@ -425,6 +450,7 @@ export default function LoginPage() {
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
+    clearPendingDeviceSharingWarning()
 
     try {
       if (!otp.trim()) {

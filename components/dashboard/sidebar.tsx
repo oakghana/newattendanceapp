@@ -181,6 +181,10 @@ const navigationItems = [
         title: "Weekly Sharing",
         href: "/dashboard/weekly-device-sharing",
       },
+      {
+        title: "Device Policy Toggle",
+        href: "/dashboard/settings/runtime-controls",
+      },
     ],
   },
   {

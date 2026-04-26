@@ -185,7 +185,7 @@ export function DeviceActivityHistory({ userId }: DeviceActivityHistoryProps) {
               {activity.device_session && (
                 <div className="mt-3 pt-3 border-t flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">MAC:</span>
+                    <span className="text-xs text-muted-foreground">Device ID:</span>
                     <code className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
                       {activity.device_session.device_id.substring(0, 17)}...
                     </code>
