@@ -7,6 +7,7 @@ import { Clock, MapPin, Timer, Calendar, LogOut, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { canCheckOutAtTime, getCheckOutDeadline } from "@/lib/attendance-utils"
+import type { AttendanceTimeConfig } from "@/lib/attendance-utils"
 
 interface ActiveSessionTimerProps {
   checkInTime: string
@@ -20,6 +21,7 @@ interface ActiveSessionTimerProps {
   isCheckingOut?: boolean
   userDepartment?: { code?: string | null; name?: string | null } | undefined | null
   userRole?: string | null
+  runtimeConfig?: AttendanceTimeConfig
   // New: indicates the user was checked in via an approved off‑premises request
 }
 
@@ -35,6 +37,7 @@ export function ActiveSessionTimer({
   isCheckingOut = false,
   userDepartment,
   userRole,
+  runtimeConfig,
 }: ActiveSessionTimerProps) {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [timeUntilCheckout, setTimeUntilCheckout] = useState<{
@@ -147,7 +150,7 @@ export function ActiveSessionTimer({
               isCheckingOut ||
               !(
                 canCheckOut ||
-                canCheckOutAtTime(new Date(), userDepartment, userRole) ||
+                canCheckOutAtTime(new Date(), userDepartment, userRole, runtimeConfig) ||
                 timeUntilCheckout.canCheckout
               )
             }
@@ -156,8 +159,8 @@ export function ActiveSessionTimer({
             size="lg"
             title={
               // explain why button is disabled if still blocked by time restrictions
-              !(canCheckOut || canCheckOutAtTime(new Date(), userDepartment, userRole) || timeUntilCheckout.canCheckout)
-                ? `Check-out only allowed before ${getCheckOutDeadline()} or after minimum work period of ${minimumWorkMinutes} minutes or if in range`
+              !(canCheckOut || canCheckOutAtTime(new Date(), userDepartment, userRole, runtimeConfig) || timeUntilCheckout.canCheckout)
+                ? `Check-out only allowed before ${getCheckOutDeadline(runtimeConfig)} or after minimum work period of ${minimumWorkMinutes} minutes or if in range`
                 : "Check out from your location"
             }
           >

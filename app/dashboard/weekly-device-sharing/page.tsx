@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import WeeklyDeviceSharingClient from "@/components/admin/weekly-device-sharing-client"
 
-export default async function WeeklyDeviceSharingPage() {
+const WeeklyDeviceSharingRoutePage = async () => {
   const supabase = await createClient()
 
   const {
@@ -29,3 +29,5 @@ export default async function WeeklyDeviceSharingPage() {
     </div>
   )
 }
+
+export default WeeklyDeviceSharingRoutePage

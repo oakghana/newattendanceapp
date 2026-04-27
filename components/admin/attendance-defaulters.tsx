@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, Send, Users, Calendar, MapPin } from "lucide-react"
+import { AlertCircle, Send, Users, Calendar, MapPin, ChevronLeft, ChevronRight } from "lucide-react"
 import Image from "next/image"
 
 interface DefaultingStaff {
@@ -52,11 +52,21 @@ export function AttendanceDefaulters({ userRole, departmentId }: AttendanceDefau
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([])
   const [locations, setLocations] = useState<{ id: string; name: string }[]>([])
   const [showWarningDialog, setShowWarningDialog] = useState(false)
+  const [pageSize, setPageSize] = useState<100 | 200 | 500>(100)
+  const [checkInPage, setCheckInPage] = useState(1)
+  const [checkOutPage, setCheckOutPage] = useState(1)
 
   useEffect(() => {
     fetchDefaulters()
     fetchFilters()
+    setCheckInPage(1)
+    setCheckOutPage(1)
   }, [timeframe, departmentFilter, locationFilter])
+
+  useEffect(() => {
+    setCheckInPage(1)
+    setCheckOutPage(1)
+  }, [pageSize])
 
   const fetchDefaulters = async () => {
     setLoading(true)
@@ -222,6 +232,11 @@ ${senderLabel}`
   const noCheckIn = defaulters.filter((d) => d.issue_type === "no_check_in" || d.issue_type === "both")
   const noCheckOut = defaulters.filter((d) => d.issue_type === "no_check_out" || d.issue_type === "both")
 
+  const checkInTotalPages = Math.max(1, Math.ceil(noCheckIn.length / pageSize))
+  const checkOutTotalPages = Math.max(1, Math.ceil(noCheckOut.length / pageSize))
+  const paginatedCheckIn = noCheckIn.slice((checkInPage - 1) * pageSize, checkInPage * pageSize)
+  const paginatedCheckOut = noCheckOut.slice((checkOutPage - 1) * pageSize, checkOutPage * pageSize)
+
   if (loading) {
     return (
       <Card>
@@ -285,6 +300,17 @@ ${senderLabel}`
                 ))}
               </SelectContent>
             </Select>
+
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v) as 100 | 200 | 500)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="100">100 per page</SelectItem>
+                <SelectItem value="200">200 per page</SelectItem>
+                <SelectItem value="500">500 per page</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {success && (
@@ -336,6 +362,36 @@ ${senderLabel}`
         </TabsList>
 
         <TabsContent value="no_check_in" className="space-y-2">
+          {noCheckIn.length > 0 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
+              <span>
+                Showing {(checkInPage - 1) * pageSize + 1}–{Math.min(checkInPage * pageSize, noCheckIn.length)} of {noCheckIn.length} staff
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={checkInPage === 1}
+                  onClick={() => setCheckInPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-2 min-w-[60px] text-center">
+                  {checkInPage} / {checkInTotalPages}
+                </span>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={checkInPage === checkInTotalPages}
+                  onClick={() => setCheckInPage((p) => p + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
           {noCheckIn.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
@@ -343,7 +399,7 @@ ${senderLabel}`
               </CardContent>
             </Card>
           ) : (
-            noCheckIn.map((staff) => (
+            paginatedCheckIn.map((staff) => (
               <Card key={staff.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
@@ -377,9 +433,62 @@ ${senderLabel}`
               </Card>
             ))
           )}
+          {checkInTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={checkInPage === 1}
+                onClick={() => setCheckInPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground px-2">
+                Page {checkInPage} of {checkInTotalPages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={checkInPage === checkInTotalPages}
+                onClick={() => setCheckInPage((p) => p + 1)}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="no_check_out" className="space-y-2">
+          {noCheckOut.length > 0 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
+              <span>
+                Showing {(checkOutPage - 1) * pageSize + 1}–{Math.min(checkOutPage * pageSize, noCheckOut.length)} of {noCheckOut.length} staff
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={checkOutPage === 1}
+                  onClick={() => setCheckOutPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-2 min-w-[60px] text-center">
+                  {checkOutPage} / {checkOutTotalPages}
+                </span>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={checkOutPage === checkOutTotalPages}
+                  onClick={() => setCheckOutPage((p) => p + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
           {noCheckOut.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
@@ -387,7 +496,7 @@ ${senderLabel}`
               </CardContent>
             </Card>
           ) : (
-            noCheckOut.map((staff) => (
+            paginatedCheckOut.map((staff) => (
               <Card key={staff.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
@@ -420,6 +529,29 @@ ${senderLabel}`
                 </CardContent>
               </Card>
             ))
+          )}
+          {checkOutTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={checkOutPage === 1}
+                onClick={() => setCheckOutPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground px-2">
+                Page {checkOutPage} of {checkOutTotalPages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={checkOutPage === checkOutTotalPages}
+                onClick={() => setCheckOutPage((p) => p + 1)}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           )}
         </TabsContent>
       </Tabs>

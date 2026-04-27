@@ -210,6 +210,60 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const { supabase, profile, error } = await getAuthorizedProfile()
+    if (error || !profile) return error
+
+    if (profile.role !== "admin") {
+      return NextResponse.json({ error: "Only admins can clear user device flags" }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { user_id, device_id } = body
+
+    if (!user_id || !device_id) {
+      return NextResponse.json({ error: "user_id and device_id are required" }, { status: 400 })
+    }
+
+    // Remove the user's device sessions for this specific device
+    const { error: sessionsError, count: sessionsDeleted } = await supabase
+      .from("device_sessions")
+      .delete({ count: "exact" })
+      .eq("user_id", user_id)
+      .eq("device_id", device_id)
+
+    if (sessionsError) {
+      console.error("[v0] Clear user device - sessions delete error:", sessionsError)
+      return NextResponse.json({ error: "Failed to clear user device sessions" }, { status: 500 })
+    }
+
+    // Remove any device sharing violations recorded against this user
+    const { error: violationsError, count: violationsDeleted } = await supabase
+      .from("device_security_violations")
+      .delete({ count: "exact" })
+      .eq("attempted_user_id", user_id)
+      .in("violation_type", ["weekly_sharing", "shared_device", "device_sharing"])
+
+    if (violationsError) {
+      console.error("[v0] Clear user device - violations delete error:", violationsError)
+      // Non-fatal: sessions were already cleared; return partial success
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "User device flag cleared. They can now check in with their device again.",
+      cleared: {
+        sessions: sessionsDeleted || 0,
+        violations: violationsDeleted || 0,
+      },
+    })
+  } catch (error) {
+    console.error("Clear user device flag error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 export async function DELETE() {
   try {
     const { supabase, profile, error } = await getAuthorizedProfile()

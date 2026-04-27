@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, ChevronLeft, Smartphone, Users, Calendar, MapPin, Filter, X, Trash2, Loader2, Shield } from "lucide-react"
+import { AlertTriangle, ChevronLeft, Smartphone, Users, Calendar, MapPin, Filter, X, Trash2, Loader2, Shield, UserX, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -55,6 +55,8 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isResetting, setIsResetting] = useState(false)
+  const [clearingUser, setClearingUser] = useState<string | null>(null) // "userId:deviceId" while in-flight
+  const [clearedUsers, setClearedUsers] = useState<Set<string>>(new Set())
   const [locations, setLocations] = useState<Location[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [showFilters, setShowFilters] = useState(false)
@@ -126,6 +128,34 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
     setSelectedDepartment("all")
     setStartDate("")
     setEndDate("")
+  }
+
+  const handleClearUser = async (userId: string, deviceId: string, userName: string) => {
+    const confirmed =
+      typeof window !== "undefined" &&
+      window.confirm(
+        `Clear device flag for ${userName}?\n\nThis will remove their device sharing record so they can check in again. Only do this if you have verified their identity and the flag was raised in error.`,
+      )
+    if (!confirmed) return
+
+    const key = `${userId}:${deviceId}`
+    try {
+      setClearingUser(key)
+      const response = await fetch("/api/admin/weekly-device-sharing", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, device_id: deviceId }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Failed to clear user flag")
+      setClearedUsers((prev) => new Set(prev).add(key))
+      // Refresh after brief delay so admin can see the success state
+      setTimeout(() => fetchSharedDevices(), 1500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear user")
+    } finally {
+      setClearingUser(null)
+    }
   }
 
   const handleResetDefaulters = async () => {
@@ -457,19 +487,47 @@ export default function WeeklyDeviceSharingClient({ userRole, departmentId }: We
                 <h4 className="font-semibold text-sm">Staff Members Using This Device:</h4>
                 <div className="space-y-2">
                   {device.users && device.users.length > 0 ? (
-                    device.users.map((user, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                        <div>
-                          <p className="font-medium">{user.first_name} {user.last_name}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                          <p className="text-xs text-muted-foreground">Location: {user.location_name || "Unassigned"}</p>
+                    device.users.map((user, idx) => {
+                      const clearKey = `${user.user_id}:${device.device_id}`
+                      const isClearing = clearingUser === clearKey
+                      const wasCleared = clearedUsers.has(clearKey)
+                      return (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium">{user.first_name} {user.last_name}</p>
+                            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                            <p className="text-xs text-muted-foreground">Location: {user.location_name || "Unassigned"}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            <Badge variant="outline">{user.department_name || "N/A"}</Badge>
+                            <Badge variant="secondary">{user.location_name || "Unassigned"}</Badge>
+                            {userRole === "admin" && (
+                              wasCleared ? (
+                                <Badge className="bg-green-100 text-green-800 flex items-center gap-1">
+                                  <CheckCircle className="h-3 w-3" />
+                                  Cleared
+                                </Badge>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-7 border-orange-300 text-orange-700 hover:bg-orange-50"
+                                  disabled={isClearing}
+                                  onClick={() => handleClearUser(user.user_id, device.device_id, `${user.first_name} ${user.last_name}`)}
+                                >
+                                  {isClearing ? (
+                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                  ) : (
+                                    <UserX className="h-3 w-3 mr-1" />
+                                  )}
+                                  Clear Flag
+                                </Button>
+                              )
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <Badge variant="outline">{user.department_name || "N/A"}</Badge>
-                          <Badge variant="secondary">{user.location_name || "Unassigned"}</Badge>
-                        </div>
-                      </div>
-                    ))
+                      )
+                    })
                   ) : (
                     <p className="text-sm text-muted-foreground">No user details available</p>
                   )}

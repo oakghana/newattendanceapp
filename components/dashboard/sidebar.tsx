@@ -188,6 +188,13 @@ const navigationItems = [
     ],
   },
   {
+    title: "Weekly Device Sharing",
+    href: "/dashboard/weekly-device-sharing",
+    icon: ShieldAlert,
+    roles: ["admin"],
+    category: "admin",
+  },
+  {
     title: "Staff Management",
     href: "/dashboard/staff",
     icon: Users,
@@ -396,28 +403,27 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-sidebar to-sidebar/95 backdrop-blur-xl border-r border-sidebar-border/50 shadow-2xl transform transition-all duration-300 ease-out",
-          isCollapsed ? "w-20" : "w-64",
+          "fixed inset-y-0 left-0 z-40 bg-sidebar/95 backdrop-blur border-r border-sidebar-border shadow-lg transform transition-all duration-300 ease-out",
+          isCollapsed ? "w-16" : "w-56",
           "lg:translate-x-0",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center gap-3 p-6 border-b border-sidebar-border/50 bg-gradient-to-r from-primary/5 to-accent/5 relative">
+          <div className="flex items-center gap-3 p-4 border-b border-sidebar-border bg-sidebar relative">
             {!isCollapsed && (
               <>
-                <div className="relative p-2 bg-gradient-to-br from-primary/10 to-accent/10 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:scale-105">
+                <div className="relative p-2 bg-primary/10 rounded-lg">
                   <Image src="/images/qcc-logo.png" alt="QCC Logo" width={36} height={36} className="rounded-lg" />
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-transparent rounded-xl opacity-0 hover:opacity-100 transition-opacity duration-300" />
                 </div>
                 <div className="flex-1">
-                  <h2 className="font-bold text-sidebar-foreground text-lg tracking-tight">QCC Attendance</h2>
-                  <p className="text-xs text-muted-foreground font-medium">Electronic System</p>
+                  <h2 className="font-semibold text-sidebar-foreground text-base tracking-tight">QCC Attendance</h2>
+                  <p className="text-xs text-muted-foreground">Electronic System</p>
                 </div>
               </>
             )}
             {isCollapsed && (
-              <div className="relative p-2 bg-gradient-to-br from-primary/10 to-accent/10 rounded-xl shadow-sm mx-auto">
+              <div className="relative p-2 bg-primary/10 rounded-lg mx-auto">
                 <Image src="/images/qcc-logo.png" alt="QCC Logo" width={32} height={32} className="rounded-lg" />
               </div>
             )}
@@ -431,11 +437,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
             </Button>
           </div>
 
-          <nav className="flex-1 p-4 space-y-8 overflow-y-auto">
-            <div className="space-y-2">
+          <nav className="flex-1 p-2.5 space-y-4 overflow-y-auto">
+            <div className="space-y-1.5">
               {!isCollapsed && (
-                <div className="px-3 mb-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Main</h3>
+                <div className="px-3 mb-2">
+                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">Main</h3>
                 </div>
               )}
               {mainItems.map((item) => {
@@ -447,11 +453,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     href={item.href}
                     title={isCollapsed ? item.title : undefined}
                     className={cn(
-                      "group flex items-center rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px]",
-                      isCollapsed ? "gap-0 px-0 py-4 justify-center" : "gap-3 px-4 py-4",
+                    "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
+                    isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
                       isActive
-                        ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/25 scale-[1.02]"
-                        : "text-sidebar-foreground hover:bg-gradient-to-r hover:from-muted hover:to-muted/50 hover:text-foreground hover:shadow-md hover:scale-[1.01]",
+                        ? "bg-primary/12 border-primary/30 text-primary"
+                        : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                     )}
                     onClick={() => {
                       setIsMobileMenuOpen(false)
@@ -459,8 +465,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                   >
                     <Icon
                       className={cn(
-                        "h-5 w-5 flex-shrink-0 transition-transform duration-300",
-                        isActive ? "scale-110" : "group-hover:scale-105",
+                        "h-4.5 w-4.5 flex-shrink-0",
                       )}
                     />
                     {!isCollapsed && (
@@ -469,24 +474,21 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                         {isActive && <ChevronRight className="h-4 w-4 opacity-70" />}
                       </>
                     )}
-                    {isActive && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-50" />
-                    )}
                   </Link>
                 )
               })}
             </div>
 
             {adminItems.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {!isCollapsed && (
-                  <div className="px-3 mb-3 flex items-center justify-between">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="px-3 mb-2 flex items-center justify-between">
+                    <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">
                       Administration
                     </h3>
                     <Badge
                       variant="secondary"
-                      className="text-xs px-2 py-0.5 bg-primary/10 text-primary border-primary/20"
+                      className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary border-primary/20"
                     >
                       Admin
                     </Badge>
@@ -504,12 +506,14 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                           <button
                             title={isCollapsed ? item.title : undefined}
                             className={cn(
-                              "w-full group flex items-center rounded-xl text-sm font-medium transition-all duration-300 touch-manipulation min-h-[48px]",
-                              isCollapsed ? "gap-0 px-0 py-4 justify-center" : "gap-3 px-4 py-4",
-                              isActive ? "bg-primary text-primary-foreground hover:bg-primary/90" : "hover:bg-muted/50",
+                              "w-full group flex items-center rounded-lg text-sm font-medium transition-all duration-200 touch-manipulation min-h-[38px] border",
+                              isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
+                              isActive
+                                ? "bg-primary/12 border-primary/30 text-primary"
+                                : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border",
                             )}
                           >
-                            <Icon className="h-5 w-5 flex-shrink-0" />
+                            <Icon className="h-4.5 w-4.5 flex-shrink-0" />
                             {!isCollapsed && (
                               <>
                                 <span className="flex-1 font-medium text-left">{item.title}</span>
@@ -520,13 +524,13 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align="end"
-                          className="w-64 shadow-xl border-border/50 bg-background/95 backdrop-blur-xl"
+                          className="w-64 shadow-lg border-border bg-background"
                         >
                           {item.subItems.map((subItem) => (
                             <DropdownMenuItem asChild key={subItem.href}>
                               <Link
                                 href={subItem.href}
-                                className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted rounded-md transition-all duration-150 touch-manipulation min-h-[40px]"
                                 onClick={() => setIsMobileMenuOpen(false)}
                               >
                                 <span className="font-medium">{subItem.title}</span>
@@ -545,17 +549,16 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                       href={item.href}
                       title={isCollapsed ? item.title : undefined}
                       className={cn(
-                        "group flex items-center rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px]",
-                        isCollapsed ? "gap-0 px-0 py-4 justify-center" : "gap-3 px-4 py-4",
+                        "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
+                        isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                          : "hover:bg-muted/50 text-foreground",
+                          ? "bg-primary/12 border-primary/30 text-primary"
+                          : "border-transparent hover:bg-muted/60 hover:border-border text-sidebar-foreground",
                       )}
                     >
                       <Icon
                         className={cn(
-                          "h-5 w-5 flex-shrink-0 transition-transform duration-300",
-                          isActive ? "scale-110" : "group-hover:scale-105",
+                          "h-4.5 w-4.5 flex-shrink-0",
                         )}
                       />
                       {!isCollapsed && (
@@ -564,19 +567,16 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                           {isActive && <ChevronRight className="h-4 w-4 opacity-70" />}
                         </>
                       )}
-                      {isActive && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-50" />
-                      )}
                     </Link>
                   )
                 })}
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {!isCollapsed && (
-                <div className="px-3 mb-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Settings</h3>
+                <div className="px-3 mb-2">
+                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">Settings</h3>
                 </div>
               )}
               {settingsItems.map((item) => {
@@ -588,11 +588,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     href={item.href}
                     title={isCollapsed ? item.title : undefined}
                     className={cn(
-                      "group flex items-center rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px]",
-                      isCollapsed ? "gap-0 px-0 py-4 justify-center" : "gap-3 px-4 py-4",
+                      "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
+                      isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
                       isActive
-                        ? "bg-gradient-to-r from-accent to-accent/90 text-accent-foreground shadow-lg shadow-accent/25 scale-[1.02]"
-                        : "text-sidebar-foreground hover:bg-gradient-to-r hover:from-muted hover:to-muted/50 hover:text-foreground hover:shadow-md hover:scale-[1.01]",
+                        ? "bg-primary/12 border-primary/30 text-primary"
+                        : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                     )}
                     onClick={() => {
                       setIsMobileMenuOpen(false)
@@ -600,8 +600,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                   >
                     <Icon
                       className={cn(
-                        "h-5 w-5 flex-shrink-0 transition-transform duration-300",
-                        isActive ? "scale-110" : "group-hover:scale-105",
+                        "h-4.5 w-4.5 flex-shrink-0",
                       )}
                     />
                     {!isCollapsed && (
@@ -609,9 +608,6 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                         <span className="flex-1">{item.title}</span>
                         {isActive && <ChevronRight className="h-4 w-4 opacity-70" />}
                       </>
-                    )}
-                    {isActive && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-50" />
                     )}
                   </Link>
                 )
@@ -621,13 +617,13 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 disabled={isClearingCache}
                 title={isCollapsed ? "Clear Cache" : undefined}
                 className={cn(
-                  "group flex items-center rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px] w-full text-sidebar-foreground hover:bg-gradient-to-r hover:from-muted hover:to-muted/50 hover:text-foreground hover:shadow-md hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed",
-                  isCollapsed ? "gap-0 px-0 py-4 justify-center" : "gap-3 px-4 py-4"
+                  "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] w-full text-sidebar-foreground border border-transparent hover:bg-muted/60 hover:border-border disabled:opacity-50 disabled:cursor-not-allowed",
+                  isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2"
                 )}
               >
                 <RefreshCw
                   className={cn(
-                    "h-5 w-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-105",
+                    "h-4.5 w-4.5 flex-shrink-0",
                     isClearingCache && "animate-spin",
                   )}
                 />
@@ -637,29 +633,29 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 onClick={handleSignOut}
                 title={isCollapsed ? "Sign Out" : undefined}
                 className={cn(
-                  "group flex items-center rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px] w-full text-destructive hover:bg-gradient-to-r hover:from-destructive/10 hover:to-destructive/5 hover:text-destructive hover:shadow-md hover:scale-[1.01]",
-                  isCollapsed ? "gap-0 px-0 py-4 justify-center" : "gap-3 px-4 py-4"
+                  "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] w-full text-destructive border border-transparent hover:bg-destructive/10 hover:border-destructive/20",
+                  isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2"
                 )}
               >
-                <LogOut className="h-5 w-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-105" />
+                <LogOut className="h-4.5 w-4.5 flex-shrink-0" />
                 {!isCollapsed && <span className="flex-1 text-left">Sign Out</span>}
               </button>
             </div>
           </nav>
 
-          <div className="p-4 border-t border-sidebar-border/50 bg-gradient-to-r from-muted/20 to-transparent">
+          <div className="p-2.5 border-t border-sidebar-border bg-sidebar/80">
             {isCollapsed ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-full h-12 hover:bg-muted/50 rounded-xl transition-all duration-200 touch-manipulation"
+                    className="w-full h-11 hover:bg-muted rounded-lg transition-all duration-150 touch-manipulation"
                   >
                     <div className="relative">
-                      <Avatar className="h-8 w-8 ring-2 ring-primary/20 transition-all duration-300 hover:ring-primary/40">
+                      <Avatar className="h-8 w-8 ring-2 ring-primary/20">
                         <AvatarImage src={profile?.profile_image_url || "/placeholder.svg"} />
-                        <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-xs font-bold">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
                           {userInitials}
                         </AvatarFallback>
                       </Avatar>
@@ -669,7 +665,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-64 shadow-xl border-border/50 bg-background/95 backdrop-blur-xl"
+                  className="w-64 shadow-lg border-border bg-background"
                 >
                   <DropdownMenuLabel className="font-semibold">
                     {profile ? `${profile.first_name} ${profile.last_name}` : "Loading..."}
@@ -685,7 +681,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                   <DropdownMenuItem asChild>
                     <Link
                       href="/dashboard/profile"
-                      className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted rounded-md transition-all duration-150 touch-manipulation min-h-[40px]"
                     >
                       <User className="h-4 w-4" />
                       <span className="font-medium">Profile Settings</span>
@@ -694,7 +690,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                   <DropdownMenuItem asChild>
                     <Link
                       href="/dashboard/settings"
-                      className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted rounded-md transition-all duration-150 touch-manipulation min-h-[40px]"
                     >
                       <Settings className="h-4 w-4" />
                       <span className="font-medium">Preferences</span>
@@ -703,7 +699,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                   <DropdownMenuSeparator className="bg-border/50" />
                   <DropdownMenuItem
                     onClick={handleSignOut}
-                    className="text-destructive focus:text-destructive focus:bg-destructive/10 flex items-center gap-3 px-3 py-3 cursor-pointer rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                    className="text-destructive focus:text-destructive focus:bg-destructive/10 flex items-center gap-3 px-3 py-2.5 cursor-pointer rounded-md transition-all duration-150 touch-manipulation min-h-[40px]"
                   >
                     <LogOut className="h-4 w-4" />
                     <span className="font-medium">Sign Out</span>
@@ -715,22 +711,22 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-3 h-auto p-4 hover:bg-muted/50 rounded-xl transition-all duration-200 touch-manipulation min-h-[56px]"
+                  className="w-full justify-start gap-2.5 h-auto p-2.5 hover:bg-muted rounded-lg transition-all duration-150 touch-manipulation min-h-[46px]"
                 >
                   <div className="relative">
-                    <Avatar className="h-10 w-10 ring-2 ring-primary/20 transition-all duration-300 hover:ring-primary/40">
+                    <Avatar className="h-9 w-9 ring-2 ring-primary/20">
                       <AvatarImage src={profile?.profile_image_url || "/placeholder.svg"} />
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-sm font-bold">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
                         {userInitials}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-sidebar shadow-sm" />
+                    <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-sidebar shadow-sm" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="text-sm font-semibold text-sidebar-foreground">
+                    <p className="text-sm font-semibold text-sidebar-foreground leading-tight">
                       {profile ? `${profile.first_name} ${profile.last_name}` : "Loading..."}
                     </p>
-                    <p className="text-xs text-muted-foreground font-medium">
+                    <p className="text-xs text-muted-foreground">
                       {profile?.departments?.name || "No department"}
                     </p>
                     <p className="text-xs text-primary font-mono flex items-center gap-1">
@@ -738,19 +734,19 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                       {ghanaTime} (GMT)
                     </p>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="w-64 shadow-xl border-border/50 bg-background/95 backdrop-blur-xl"
+                className="w-64 shadow-lg border-border bg-background"
               >
                 <DropdownMenuLabel className="font-semibold">My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-border/50" />
                 <DropdownMenuItem asChild>
                   <Link
                     href="/dashboard/profile"
-                    className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted rounded-md transition-all duration-150 touch-manipulation min-h-[40px]"
                   >
                     <User className="h-4 w-4" />
                     <span className="font-medium">Profile Settings</span>
@@ -759,7 +755,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 <DropdownMenuItem asChild>
                   <Link
                     href="/dashboard/settings"
-                    className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted rounded-md transition-all duration-150 touch-manipulation min-h-[40px]"
                   >
                     <Settings className="h-4 w-4" />
                     <span className="font-medium">Preferences</span>
@@ -768,7 +764,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 <DropdownMenuSeparator className="bg-border/50" />
                 <DropdownMenuItem
                   onClick={handleSignOut}
-                  className="text-destructive focus:text-destructive focus:bg-destructive/10 flex items-center gap-3 px-3 py-3 cursor-pointer rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10 flex items-center gap-3 px-3 py-2.5 cursor-pointer rounded-md transition-all duration-150 touch-manipulation min-h-[40px]"
                 >
                   <LogOut className="h-4 w-4" />
                   <span className="font-medium">Sign Out</span>

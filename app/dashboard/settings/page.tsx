@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Settings2, MapPin, Users, Bell, Shield, Smartphone, Database, ToggleLeft } from "lucide-react"
+import { Settings2, MapPin, Users, Bell, Shield, Smartphone, Database, ToggleLeft, ShieldAlert } from "lucide-react"
 import Link from "next/link"
 
 export default async function SettingsPage() {
@@ -45,6 +45,14 @@ export default async function SettingsPage() {
       href: "/dashboard/settings/runtime-controls",
       roles: ["admin"],
       badge: "Live Controls",
+    },
+    {
+      title: "Weekly Device Sharing",
+      description: "Review shared-device detections, clear false positives, and reset sharing defaulters",
+      icon: ShieldAlert,
+      href: "/dashboard/weekly-device-sharing",
+      roles: ["admin"],
+      badge: "Security",
     },
     {
       title: "Location Management",

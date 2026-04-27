@@ -245,6 +245,7 @@ export function AttendanceRecorder({
   const [, setSystemClockTick] = useState(0)
   const autoCheckoutAttemptedRef = useRef(false)
   const autoCheckInAttemptedRef = useRef(false)
+  const [autoCheckInFailureCount, setAutoCheckInFailureCount] = useState(0)
 
   const [checkoutTimeReached, setCheckoutTimeReached] = useState(false)
   // remote checkout timer disabled (only normal checkouts allowed)
@@ -367,7 +368,12 @@ export function AttendanceRecorder({
     }
 
     const canCheckIn = canCheckInAtTime(now, userDept, userRole)
-    const canCheckOut = canCheckOutAtTime(now, userDept, userRole)
+    const attendanceTimeConfig = {
+      latenessReasonDeadline: runtimeFlags.latenessReasonDeadline,
+      checkoutCutoffTime: runtimeFlags.checkoutCutoffTime,
+      exemptPrivilegedRolesFromReason: runtimeFlags.exemptPrivilegedRolesFromReason,
+    }
+    const canCheckOut = canCheckOutAtTime(now, userDept, userRole, attendanceTimeConfig)
 
     if (!canCheckIn && !localTodayAttendance?.check_in_time) {
       setTimeRestrictionWarning({
@@ -377,7 +383,7 @@ export function AttendanceRecorder({
     } else if (!canCheckOut && localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
       setTimeRestrictionWarning({
         type: 'checkout',
-        message: `Check-out is only allowed before ${getCheckOutDeadline()}. Your department does not have exemptions for late check-outs.`
+        message: `Check-out is only allowed before ${getCheckOutDeadline(attendanceTimeConfig)}. Your department does not have exemptions for late check-outs.`
       })
     } else {
       setTimeRestrictionWarning(null)
@@ -472,6 +478,16 @@ export function AttendanceRecorder({
     }
   }
 
+  const handleManualCheckInSuccess = async () => {
+    setAutoCheckInFailureCount(0)
+    setShowLocationCodeDialog(false)
+    await fetchTodayAttendance()
+    setFlashMessage({
+      message: "Manual check-in recorded successfully.",
+      type: "success",
+    })
+  }
+
 
 
   // SMART LEAVE HANDLING: Disable check-in/check-out when user is on leave
@@ -481,6 +497,7 @@ export function AttendanceRecorder({
   // Default canCheckIn to true if not explicitly set, allowing staff to check in any time after midnight
   // MUST also verify user is within proximity range (matches checkout validation logic)
   const canCheckInButton = (initialCanCheckIn ?? true) && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave && locationValidation?.canCheckIn === true
+  const manualCheckInFallbackEnabled = !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0
   
   // CRITICAL: Checkout button should ONLY be enabled if:
   // 1. User has actually checked in today
@@ -1177,10 +1194,12 @@ export function AttendanceRecorder({
 
       // Check if check-in is after 9:00 AM (late arrival)
       const checkInTime = getSystemNow()
-      const checkInHour = checkInTime.getHours()
-      const checkInMinutes = checkInTime.getMinutes()
-      const isLateArrival = checkInHour > 9 || (checkInHour === 9 && checkInMinutes > 0)
-      const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role)
+      const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role, {
+        latenessReasonDeadline: runtimeFlags.latenessReasonDeadline,
+        exemptPrivilegedRolesFromReason: runtimeFlags.exemptPrivilegedRolesFromReason,
+      })
+      const [dlHour, dlMin] = (runtimeFlags.latenessReasonDeadline ?? "09:00").split(":").map(Number)
+      const isLateArrival = checkInTime.getHours() > dlHour || (checkInTime.getHours() === dlHour && checkInTime.getMinutes() >= dlMin)
 
       // Require lateness reason only on weekdays and for non‑security staff
       if (isLateArrival && latenessRequired) {
@@ -1801,6 +1820,7 @@ export function AttendanceRecorder({
   useEffect(() => {
     if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave) {
       autoCheckInAttemptedRef.current = false
+      setAutoCheckInFailureCount((prev) => (prev === 0 ? prev : 0))
       return
     }
 
@@ -1828,9 +1848,13 @@ export function AttendanceRecorder({
         return
       }
 
-      const isLateArrival = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0)
-      const latenessRequired = requiresLatenessReason(now, userProfile?.departments, userProfile?.role)
-      if (isLateArrival && latenessRequired) {
+      const latenessRequiredAuto = requiresLatenessReason(now, userProfile?.departments, userProfile?.role, {
+        latenessReasonDeadline: runtimeFlags.latenessReasonDeadline,
+        exemptPrivilegedRolesFromReason: runtimeFlags.exemptPrivilegedRolesFromReason,
+      })
+      const [dlHour2, dlMin2] = (runtimeFlags.latenessReasonDeadline ?? "09:00").split(":").map(Number)
+      const isLateArrival = now.getHours() > dlHour2 || (now.getHours() === dlHour2 && now.getMinutes() >= dlMin2)
+      if (isLateArrival && latenessRequiredAuto) {
         return
       }
 
@@ -1869,6 +1893,7 @@ export function AttendanceRecorder({
         setCheckingMessage("Automatic check-in...")
 
         await performCheckInAPI(locationData, validation.nearestLocation, "")
+        setAutoCheckInFailureCount(0)
 
         toast({
           title: "Automatic check-in recorded",
@@ -1877,7 +1902,15 @@ export function AttendanceRecorder({
       } catch (error) {
         console.warn("[v0] Automatic in-range check-in skipped:", error)
         autoCheckInAttemptedRef.current = false
+        setAutoCheckInFailureCount((prev) => prev + 1)
         setRecentCheckIn(false)
+        // Notify user immediately so they know to use manual check-in
+        toast({
+          title: "Automatic Check-In Failed",
+          description: "We couldn't check you in automatically. Switching to manual check-in — please use the button below.",
+          variant: "destructive",
+          duration: 8000,
+        })
       } finally {
         setIsCheckingIn(false)
         setCheckingMessage("")
@@ -2412,6 +2445,11 @@ export function AttendanceRecorder({
                     isCheckingOut={isLoading}
                     userDepartment={userProfile?.departments}
                     userRole={userProfile?.role}
+                    runtimeConfig={{
+                      latenessReasonDeadline: runtimeFlags.latenessReasonDeadline,
+                      checkoutCutoffTime: runtimeFlags.checkoutCutoffTime,
+                      exemptPrivilegedRolesFromReason: runtimeFlags.exemptPrivilegedRolesFromReason,
+                    }}
                   />
                 )
               })()
@@ -2481,6 +2519,34 @@ export function AttendanceRecorder({
                       </Button>
                     )}
                   </div>
+
+                  {manualCheckInFallbackEnabled && (
+                    <Alert className="border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/40">
+                      <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                      <AlertTitle className="text-red-800 dark:text-red-200 font-semibold text-base">
+                        Automatic check-in failed — Manual check-in required
+                      </AlertTitle>
+                      <AlertDescription className="text-red-700 dark:text-red-300 space-y-3 mt-2">
+                        <p className="text-sm">
+                          We were unable to check you in automatically. Please use the manual option below to record your attendance now.
+                        </p>
+                        <Button
+                          onClick={() => {
+                            setShowLocationCodeDialog(true)
+                          }}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white shadow-md"
+                          size="lg"
+                          disabled={isCheckingIn || isProcessing || isLoading}
+                        >
+                          <LogIn className="mr-2 h-5 w-5" />
+                          Check In Now (Manual)
+                        </Button>
+                        <p className="text-xs text-red-500 dark:text-red-400">
+                          Select your location from the list or enter the location code shown at your work site.
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </>
               )}
             </div>
@@ -2655,7 +2721,7 @@ export function AttendanceRecorder({
           onClose={() => setShowCodeEntry(false)}
           locations={realTimeLocations || []}
           userLocation={userLocation}
-          onCheckIn={handleCheckIn}
+          onCheckIn={handleManualCheckInSuccess}
           onCheckOut={handleCheckOut}
           canCheckIn={canCheckInButton}
           canCheckOut={canCheckOutButton}
@@ -2669,7 +2735,7 @@ export function AttendanceRecorder({
           onClose={() => setShowLocationCodeDialog(false)}
           locations={realTimeLocations || []}
           userLocation={userLocation}
-          onCheckIn={handleCheckIn}
+          onCheckIn={handleManualCheckInSuccess}
           onCheckOut={handleCheckOut}
           canCheckIn={canCheckInButton}
           canCheckOut={canCheckOutButton}

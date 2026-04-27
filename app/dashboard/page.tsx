@@ -304,7 +304,7 @@ export default async function DashboardPage() {
 
             {/* Quick Actions */}
             <div className="space-y-6">
-              <QuickActions />
+              <QuickActions userRole={profile?.role} />
 
               {/* Recent Activity */}
               <Card className="bg-gradient-to-br from-white/90 to-white/50 dark:from-slate-900/90 dark:to-slate-800/50 backdrop-blur-xl border-white/20 dark:border-slate-700/20 shadow-xl">

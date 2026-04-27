@@ -1,5 +1,12 @@
 export type DeptInfo = { code?: string | null; name?: string | null } | undefined | null
 
+/** Subset of RuntimeFlags relevant to time/reason enforcement */
+export type AttendanceTimeConfig = {
+  latenessReasonDeadline?: string   // "HH:MM" 24 h
+  checkoutCutoffTime?: string       // "HH:MM" 24 h
+  exemptPrivilegedRolesFromReason?: boolean
+}
+
 function normalizeRole(role?: string | null): string {
   return (role || "").toString().trim().toLowerCase().replace(/[\s-]+/g, "_")
 }
@@ -69,14 +76,26 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
  * - Security, Research, Operational, and Transport departments are exempt
  * - Admin, Department heads and regional managers are exempt
  */
-export function requiresLatenessReason(date: Date = new Date(), dept?: DeptInfo, role?: string | null): boolean {
+export function requiresLatenessReason(
+  date: Date = new Date(),
+  dept?: DeptInfo,
+  role?: string | null,
+  config?: AttendanceTimeConfig,
+): boolean {
   if (isWeekend(date)) return false
   // Only Security and Transport departments are exempt
   if (isSecurityDept(dept)) return false
   if (isTransportDept(dept)) return false
-  // Admin, department heads and regional managers are exempt
-  if (isExemptFromAttendanceReasons(role)) return false
-  return true
+  // Privileged-role exemption (admin toggle can disable this)
+  const exemptRoles = config?.exemptPrivilegedRolesFromReason !== false
+  if (exemptRoles && isExemptFromAttendanceReasons(role)) return false
+  // Check if current time is past the configured lateness deadline
+  const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
+  const [deadlineHour, deadlineMin] = deadlineStr.split(":").map(Number)
+  const hours = date.getHours()
+  const minutes = date.getMinutes()
+  const isPastDeadline = hours > deadlineHour || (hours === deadlineHour && minutes >= deadlineMin)
+  return isPastDeadline
 }
 
 /**
@@ -119,14 +138,20 @@ export function canCheckInAtTime(date: Date = new Date(), dept?: DeptInfo, role?
  * - Operational, Security, and Transport departments are exempt
  * - Regular staff: can only check out before 5:40 PM
  */
-export function canCheckOutAtTime(date: Date = new Date(), dept?: DeptInfo, role?: string | null): boolean {
+export function canCheckOutAtTime(
+  date: Date = new Date(),
+  dept?: DeptInfo,
+  role?: string | null,
+  config?: AttendanceTimeConfig,
+): boolean {
   // No restrictions on weekends
   if (isWeekend(date)) return true
   if (isExemptFromTimeRestrictions(dept, role)) return true
+  const cutoffStr = config?.checkoutCutoffTime ?? "17:40"
+  const [cutoffHour, cutoffMin] = cutoffStr.split(":").map(Number)
   const hours = date.getHours()
   const minutes = date.getMinutes()
-  // Allow check-out only before 5:40 PM (17:40)
-  return hours < 17 || (hours === 17 && minutes < 40)
+  return hours < cutoffHour || (hours === cutoffHour && minutes < cutoffMin)
 }
 
 export function canAutoCheckoutOutOfRange({
@@ -173,8 +198,12 @@ export function getCheckInDeadline(): string {
 /**
  * Get check-out deadline time (5:40 PM)
  */
-export function getCheckOutDeadline(): string {
-  return "5:40 PM"
+export function getCheckOutDeadline(config?: AttendanceTimeConfig): string {
+  const cutoffStr = config?.checkoutCutoffTime ?? "17:40"
+  const [h, m] = cutoffStr.split(":").map(Number)
+  const suffix = h >= 12 ? "PM" : "AM"
+  const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h
+  return `${displayHour}:${m.toString().padStart(2, "0")} ${suffix}`
 }
 
 // -----------------------------------------------------------------------------

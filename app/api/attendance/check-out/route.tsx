@@ -2,6 +2,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { validateCheckoutLocation, type LocationData } from "@/lib/geolocation"
 import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { parseRuntimeFlags } from "@/lib/runtime-flags"
 
 export async function POST(request: NextRequest) {
   try {
@@ -177,7 +178,11 @@ export async function POST(request: NextRequest) {
       departments: userProfile?.departments, 
       role: userProfile?.role 
     }
-    const canCheckOut = canCheckOutAtTime(now, timeRestrictCheckData?.departments, timeRestrictCheckData?.role)
+    const { data: sysSettings } = await supabase.from("system_settings").select("settings").maybeSingle()
+    const runtimeFlags = parseRuntimeFlags(sysSettings?.settings)
+    const canCheckOut = canCheckOutAtTime(now, timeRestrictCheckData?.departments, timeRestrictCheckData?.role, {
+      checkoutCutoffTime: runtimeFlags.checkoutCutoffTime,
+    })
     
     // determine bypass if remote checkout (either originally off-premises OR currently out-of-range)
     const isOffPremisesCheckedIn = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import DeviceViolationsClient from "@/components/admin/device-violations-client"
 
-export default async function DeviceViolationsPage() {
+const DeviceViolationsRoutePage = async () => {
   const supabase = await createClient()
 
   const {
@@ -27,3 +27,5 @@ export default async function DeviceViolationsPage() {
 
   return <DeviceViolationsClient userRole={profile.role} departmentId={profile.department_id} />
 }
+
+export default DeviceViolationsRoutePage

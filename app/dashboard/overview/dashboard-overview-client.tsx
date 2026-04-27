@@ -28,21 +28,23 @@ export function DashboardOverviewClient({
   pendingApprovals,
 }: DashboardOverviewClientProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
         {/* PWA Install notification - shows for 5 seconds */}
         <PWAInstallToast />
-        
-        <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard</h1>
-          <p className="text-lg text-muted-foreground font-medium">
-            Welcome back,{" "}
-            <span className="text-primary font-semibold">{profile?.first_name || user?.email?.split("@")[0]}</span>{" "}
-            {profile?.last_name || ""}
-          </p>
+
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/70 backdrop-blur px-6 py-5 shadow-sm">
+          <div className="space-y-1.5">
+            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard</h1>
+            <p className="text-base md:text-lg text-muted-foreground">
+              Welcome back, {" "}
+              <span className="text-primary font-semibold">{profile?.first_name || user?.email?.split("@")[0]}</span>{" "}
+              {profile?.last_name || ""}
+            </p>
+          </div>
         </div>
 
         {profile?.role === "admin" && pendingApprovals > 0 && (
-          <Alert className="border-primary/20 bg-primary/5 shadow-sm">
+          <Alert className="border-primary/30 bg-primary/5 shadow-sm rounded-xl">
             <AlertCircle className="h-5 w-5 text-primary" />
             <AlertDescription className="flex items-center justify-between">
               <span className="text-primary font-semibold text-base">
@@ -58,7 +60,7 @@ export function DashboardOverviewClient({
           </Alert>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <StatsCard
             title="Today's Status"
             value={todayAttendance ? "Checked In" : "Not Checked In"}
@@ -87,9 +89,9 @@ export function DashboardOverviewClient({
           />
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-5">
+        <div className="grid gap-4 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <QuickActions />
+            <QuickActions userRole={profile?.role} />
           </div>
 
           <div className="lg:col-span-3">
@@ -103,31 +105,31 @@ export function DashboardOverviewClient({
           </div>
         )}
 
-        <Card className="shadow-sm border-0 bg-gradient-to-br from-card to-card/50">
-          <CardHeader className="pb-6">
-            <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2">
+        <Card className="shadow-sm border border-slate-200/80 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/95">
+          <CardHeader className="pb-5">
+            <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2.5">
               <TrendingUp className="h-5 w-5 text-primary" />
               Performance Overview
             </CardTitle>
-            <CardDescription className="text-base">Your attendance statistics and trends</CardDescription>
+            <CardDescription className="text-sm">Your attendance statistics and trends</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-6 md:grid-cols-3">
-              <div className="text-center p-6 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/10">
-                <div className="text-3xl font-heading font-bold text-primary mb-2">{monthlyAttendance || 0}</div>
-                <div className="text-sm font-medium text-muted-foreground">Days This Month</div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="text-center p-5 rounded-xl border border-primary/20 bg-primary/5">
+                <div className="text-3xl font-heading font-bold text-primary mb-1.5">{monthlyAttendance || 0}</div>
+                <div className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Days This Month</div>
               </div>
-              <div className="text-center p-6 bg-gradient-to-br from-chart-2/5 to-chart-2/10 rounded-xl border border-chart-2/10">
-                <div className="text-3xl font-heading font-bold text-chart-2 mb-2">
+              <div className="text-center p-5 rounded-xl border border-emerald-200/70 dark:border-emerald-900/70 bg-emerald-50/70 dark:bg-emerald-950/20">
+                <div className="text-3xl font-heading font-bold text-emerald-700 dark:text-emerald-400 mb-1.5">
                   {monthlyAttendance ? Math.round((monthlyAttendance / new Date().getDate()) * 100) : 0}%
                 </div>
-                <div className="text-sm font-medium text-muted-foreground">Attendance Rate</div>
+                <div className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Attendance Rate</div>
               </div>
-              <div className="text-center p-6 bg-gradient-to-br from-chart-3/5 to-chart-3/10 rounded-xl border border-chart-3/10">
-                <div className="text-lg font-heading font-bold text-chart-3 mb-2">
+              <div className="text-center p-5 rounded-xl border border-indigo-200/70 dark:border-indigo-900/70 bg-indigo-50/70 dark:bg-indigo-950/20">
+                <div className="text-lg font-heading font-bold text-indigo-700 dark:text-indigo-400 mb-1.5">
                   {profile?.role === "admin" ? "Administrator" : profile?.role === "department_head" ? "Department Head" : "Staff"}
                 </div>
-                <div className="text-sm font-medium text-muted-foreground">Role</div>
+                <div className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Role</div>
               </div>
             </div>
           </CardContent>
