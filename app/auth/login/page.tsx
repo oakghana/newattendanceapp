@@ -156,12 +156,17 @@ export default function LoginPage() {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
         if (supabaseUrl) {
           try {
-            // a lightweight connectivity check — server will likely return 401 but we only care that it doesn't throw
-            await fetch(`${supabaseUrl}/auth/v1/token`, { method: 'GET', cache: 'no-store' })
-          } catch (netErr) {
-            showError('Unable to reach authentication service. Check network, VPN, or browser extensions and try again.', 'Network Error')
-            setIsLoading(false)
-            return
+            const preflightController = new AbortController()
+            const preflightTimeout = setTimeout(() => preflightController.abort(), 3000)
+            await fetch(`${supabaseUrl}/auth/v1/token`, { method: 'GET', cache: 'no-store', signal: preflightController.signal })
+            clearTimeout(preflightTimeout)
+          } catch (netErr: any) {
+            if (netErr?.name !== 'AbortError') {
+              showError('Unable to reach authentication service. Check network, VPN, or browser extensions and try again.', 'Network Error')
+              setIsLoading(false)
+              return
+            }
+            // AbortError = timeout, continue anyway — Supabase may still respond
           }
         }
       } catch (preflightErr) {
@@ -233,7 +238,7 @@ export default function LoginPage() {
         const approvalCheck = await checkUserApproval(data.user.id)
 
         if (!approvalCheck.approved) {
-          await logLoginActivity(data.user.id, "login_blocked_unapproved", false, "password")
+          logLoginActivity(data.user.id, "login_blocked_unapproved", false, "password")
           await supabase.auth.signOut()
           showWarning(approvalCheck.error || "Account not approved", "Account Approval Required")
           if (approvalCheck.error?.includes("pending admin approval")) {
@@ -242,7 +247,18 @@ export default function LoginPage() {
           return
         }
 
-        const runtimeFlags = await getRuntimeFlags()
+        // Run runtime flags and device check in parallel
+        const [runtimeFlags, deviceCheckResponse] = await Promise.all([
+          getRuntimeFlags(),
+          fetch("/api/auth/check-device-binding", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              device_id: getDeviceInfo().device_id,
+              device_info: getDeviceInfo(),
+            }),
+          }),
+        ])
 
         const mustChangePassword =
           runtimeFlags.passwordEnforcementEnabled &&
@@ -250,7 +266,7 @@ export default function LoginPage() {
             isPasswordChangeRequired(approvalCheck.passwordChangedAt))
 
         if (mustChangePassword) {
-          await logLoginActivity(data.user.id, "login_password_change_required", true, "password")
+          logLoginActivity(data.user.id, "login_password_change_required", true, "password")
           clearAttendanceCache()
           clearGeolocationCache()
           showWarning(getPasswordEnforcementMessage(), "Password Change Required")
@@ -260,20 +276,10 @@ export default function LoginPage() {
           return
         }
 
-        const deviceInfo = getDeviceInfo()
-        const deviceCheckResponse = await fetch("/api/auth/check-device-binding", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            device_id: deviceInfo.device_id,
-            device_info: deviceInfo,
-          }),
-        })
-
         const deviceCheck = await deviceCheckResponse.json()
 
         if (!deviceCheck.allowed) {
-          await logLoginActivity(data.user.id, "login_blocked_device_violation", false, "password")
+          logLoginActivity(data.user.id, "login_blocked_device_violation", false, "password")
           await supabase.auth.signOut()
           showError(
             deviceCheck.message || "This device is registered to another user. Your supervisor has been notified.",
@@ -302,8 +308,8 @@ export default function LoginPage() {
           }
         }
 
-        // Log successful login
-        await logLoginActivity(data.user.id, "login_success", true, "password")
+        // Fire-and-forget login log — don't await so it doesn't block redirect
+        logLoginActivity(data.user.id, "login_success", true, "password")
       }
 
       // Clear attendance and geolocation cache
