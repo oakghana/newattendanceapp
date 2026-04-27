@@ -1,7 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { validateCheckoutLocation, type LocationData } from "@/lib/geolocation"
-import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
 
 export async function POST(request: NextRequest) {
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     ] = await Promise.all([
       supabase
         .from("user_profiles")
-        .select("leave_status, leave_end_date")
+        .select("leave_status, leave_end_date, role, departments(code, name)")
         .eq("id", user.id)
         .maybeSingle(),
       supabase
@@ -188,8 +188,7 @@ export async function POST(request: NextRequest) {
     const isOffPremisesCheckedIn = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
     // Declare checkoutLocationData early so it can be referenced when determining time-rule bypasses
     let checkoutLocationData: any = null
-    const isOutOfRange = !checkoutLocationData
-    const bypassTimeRules = isOffPremisesCheckedIn || isOutOfRange
+    const bypassTimeRules = isOffPremisesCheckedIn
 
     if (!canCheckOut && !bypassTimeRules) {
       // allow overrides for eligible staff
@@ -508,8 +507,6 @@ export async function POST(request: NextRequest) {
     })
 
     // `checkoutLocationData` already declared above; assign as needed below
-    let usedAfterFivePmCrossLocationCheckout = false
-
     // Determine whether this attendance record was created from an approved off-premises request
     const isAttendanceOffPremises = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
 
@@ -519,11 +516,12 @@ export async function POST(request: NextRequest) {
         longitude,
         accuracy: 10,
       }
-      const currentTimeMinutes = now.getHours() * 60 + now.getMinutes()
-      const isAfterFivePm = currentTimeMinutes >= 17 * 60
 
-      // If the staff was checked-in via approved off-premises, skip strict geofence validation
-      if (!isAttendanceOffPremises) {
+      // Security and Transport departments bypass location range checks for checkout
+      const isSecOrTrans = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments)
+
+      // If the staff was checked-in via approved off-premises or is Security/Transport, skip strict geofence validation
+      if (!isAttendanceOffPremises && !isSecOrTrans) {
         const validation = validateCheckoutLocation(userLocation, qccLocations, deviceCheckOutRadius)
         const allowAutomaticOutOfRangeCheckout = Boolean(
           auto_checkout &&
@@ -536,23 +534,21 @@ export async function POST(request: NextRequest) {
               hoursWorked: workHours,
             }),
         )
-        const allowAfterFivePmCrossLocationCheckout = !validation.canCheckOut && isAfterFivePm
 
-        if (!validation.canCheckOut && !allowAutomaticOutOfRangeCheckout && !allowAfterFivePmCrossLocationCheckout) {
+        if (!validation.canCheckOut && workHours < 2) {
           return NextResponse.json(
             {
-              error: `You are currently out of range. Check-out requires being within range of your assigned QCC location. ${validation.message}`,
+              error: "Out-of-location check-out is available only after working at least 2 hours.",
             },
             { status: 400 },
           )
         }
 
-        if (allowAutomaticOutOfRangeCheckout) {
+        if (!validation.canCheckOut && allowAutomaticOutOfRangeCheckout) {
           console.log("[v0] Automatic out-of-range checkout allowed after 4 PM")
           checkoutLocationData = null
-        } else if (allowAfterFivePmCrossLocationCheckout) {
-          console.log("[v0] After 5:00 PM cross-location checkout allowed")
-          usedAfterFivePmCrossLocationCheckout = true
+        } else if (!validation.canCheckOut) {
+          console.log("[v0] Out-of-range checkout allowed after mandatory 2 hours")
           checkoutLocationData = null
         } else {
           checkoutLocationData = validation.nearestLocation
@@ -613,6 +609,8 @@ export async function POST(request: NextRequest) {
       userProfileData?.role,
       userProfileData?.departments,
     )
+    const isPrivilegedReasonExempt = isExemptFromAttendanceReasons(userProfileData?.role)
+    const requiresOutOfLocationReason = willBeRemoteCheckout && !isPrivilegedReasonExempt && !auto_checkout
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
@@ -658,6 +656,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (requiresOutOfLocationReason) {
+      if (!early_checkout_reason || String(early_checkout_reason).trim().length < 10) {
+        return NextResponse.json(
+          {
+            error: "A reason (minimum 10 characters) is required when checking out outside registered QCC locations.",
+            requiresOutOfLocationReason: true,
+          },
+          { status: 400 },
+        )
+      }
+    }
+
     const checkoutData: Record<string, any> = {
       check_out_time: checkOutTime.toISOString(),
       check_out_location_id: checkoutLocationData?.id || null,
@@ -665,16 +675,12 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
       check_out_method: auto_checkout
         ? "auto_out_of_range_after_4pm"
-        : usedAfterFivePmCrossLocationCheckout
-          ? "cross_location_after_5pm"
         : willBeRemoteCheckout
           ? "remote_offpremises"
           : (qr_code_used ? "qr_code" : "gps"),
       check_out_location_name: checkoutLocationData?.name || (auto_checkout
         ? "Auto Check-out (Out of Range after 4 PM)"
-        : usedAfterFivePmCrossLocationCheckout
-          ? "Cross-Location Check-out (After 5:00 PM)"
-        : (willBeRemoteCheckout ? "Off‑Premises (approved)" : "Unknown Location")),
+        : (willBeRemoteCheckout ? "Off‑Premises (reason provided)" : "Unknown Location")),
       // mark remote checkout if user was approved off‑premises and not within a QCC location
       is_remote_checkout: willBeRemoteCheckout || false,
     }

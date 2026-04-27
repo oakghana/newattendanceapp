@@ -437,29 +437,12 @@ export async function POST(request: NextRequest) {
               // ignore logging failure
             }
 
-            // allow override for exempt staff
+            // Security and Transport staff bypass location restrictions automatically
             const isSec2 = isSecurityDept(userProfile?.departments)
             const isOp2 = isOperationalDept(userProfile?.departments)
             const isTrans2 = isTransportDept(userProfile?.departments)
-            if (override_request && override_reason && (isSec2 || isOp2 || isTrans2)) {
-              await supabase.from("emergency_check_in_overrides").insert({
-                user_id: user.id,
-                check_in_time: checkInTime.toISOString(),
-                override_type: 'location_restriction',
-                reason: override_reason,
-                is_security_staff: isSec2,
-                is_operational_staff: isOp2,
-                is_transport_staff: isTrans2,
-              }).catch(() => {})
-              await supabase.from("staff_notifications").insert({
-                user_id: user.id,
-                title: "Emergency override used",
-                message: "An override was used to bypass location restriction during check-in.",
-                type: "info",
-                is_read: false,
-              }).catch(() => {})
-              overrideMeta = { type: 'location_restriction' }
-              // continue with check-in
+            if (isSec2 || isTrans2 || isOp2) {
+              // Exempt staff — no location restriction applied
             } else {
               return NextResponse.json({ error: "Your device appears to be outside the allowed proximity for the selected location. Please move closer or use the QR code option." }, { status: 400 })
             }
@@ -468,29 +451,12 @@ export async function POST(request: NextRequest) {
       } else {
         // If no location_id was provided, ensure the nearest location is within the allowed radius
         if (nearest && nearest.distance > deviceCheckInRadius + 500) {
-          // allow emergency override for exempt staff
+          // Security and Transport staff bypass location restrictions automatically
           const isSec3 = isSecurityDept(userProfile?.departments)
           const isOp3 = isOperationalDept(userProfile?.departments)
           const isTrans3 = isTransportDept(userProfile?.departments)
-          if (override_request && override_reason && (isSec3 || isOp3 || isTrans3)) {
-            await supabase.from("emergency_check_in_overrides").insert({
-              user_id: user.id,
-              check_in_time: checkInTime.toISOString(),
-              override_type: 'location_restriction',
-              reason: override_reason,
-              is_security_staff: isSec3,
-              is_operational_staff: isOp3,
-              is_transport_staff: isTrans3,
-            }).catch(() => {})
-            await supabase.from("staff_notifications").insert({
-              user_id: user.id,
-              title: "Emergency override used",
-              message: "An override was used to bypass location restriction during check-in.",
-              type: "info",
-              is_read: false,
-            }).catch(() => {})
-            overrideMeta = { type: 'location_restriction' }
-            // proceed normally
+          if (isSec3 || isTrans3 || isOp3) {
+            // Exempt staff — no location restriction applied
           } else {
             return NextResponse.json({ error: "You are too far from any registered QCC location to check in. Please move closer or use the QR code." }, { status: 400 })
           }
