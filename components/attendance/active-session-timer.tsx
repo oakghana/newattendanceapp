@@ -22,6 +22,7 @@ interface ActiveSessionTimerProps {
   userDepartment?: { code?: string | null; name?: string | null } | undefined | null
   userRole?: string | null
   runtimeConfig?: AttendanceTimeConfig
+  getNow?: () => Date
   // New: indicates the user was checked in via an approved off‑premises request
 }
 
@@ -38,8 +39,10 @@ export function ActiveSessionTimer({
   userDepartment,
   userRole,
   runtimeConfig,
+  getNow,
 }: ActiveSessionTimerProps) {
-  const [currentTime, setCurrentTime] = useState(new Date())
+  const resolveNow = getNow || (() => new Date())
+  const [currentTime, setCurrentTime] = useState(resolveNow())
   const [timeUntilCheckout, setTimeUntilCheckout] = useState<{
     hours: number
     minutes: number
@@ -49,7 +52,7 @@ export function ActiveSessionTimer({
 
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = new Date()
+      const now = resolveNow()
       setCurrentTime(now)
 
       const checkInDate = new Date(checkInTime)
@@ -67,12 +70,14 @@ export function ActiveSessionTimer({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [checkInTime, minimumWorkMinutes])
+  }, [checkInTime, minimumWorkMinutes, resolveNow])
 
   const checkInDate = new Date(checkInTime)
   const elapsedTime = Math.floor((currentTime.getTime() - checkInDate.getTime()) / (1000 * 60))
   const elapsedHours = Math.floor(elapsedTime / 60)
   const elapsedMinutes = elapsedTime % 60
+  const canCheckoutNow =
+    canCheckOut || canCheckOutAtTime(currentTime, userDepartment, userRole, runtimeConfig) || timeUntilCheckout.canCheckout
 
   return (
     <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/40 dark:to-emerald-900/40 dark:border-green-500/50">
@@ -90,7 +95,7 @@ export function ActiveSessionTimer({
               <h3 className="font-semibold text-lg text-foreground">Active Work Session</h3>
               <p className="text-sm text-muted-foreground">
                 Started {(() => {
-                  const now = new Date()
+                  const now = currentTime
                   const checkInDate = new Date(checkInTime)
                   const diffMs = now.getTime() - checkInDate.getTime()
                   const diffMins = Math.floor(diffMs / 60000)
@@ -146,20 +151,13 @@ export function ActiveSessionTimer({
             onClick={onCheckOut}
             // once the minimum work period has elapsed we allow checkout regardless of the 6pm deadline
             // allow checkout if location is valid or the user has met time requirements
-            disabled={
-              isCheckingOut ||
-              !(
-                canCheckOut ||
-                canCheckOutAtTime(new Date(), userDepartment, userRole, runtimeConfig) ||
-                timeUntilCheckout.canCheckout
-              )
-            }
+            disabled={isCheckingOut || !canCheckoutNow}
             variant="destructive"
             className="w-full transition-all duration-300 bg-red-600 hover:bg-red-700 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600"
             size="lg"
             title={
               // explain why button is disabled if still blocked by time restrictions
-              !(canCheckOut || canCheckOutAtTime(new Date(), userDepartment, userRole, runtimeConfig) || timeUntilCheckout.canCheckout)
+              !canCheckoutNow
                 ? `Check-out only allowed before ${getCheckOutDeadline(runtimeConfig)} or after minimum work period of ${minimumWorkMinutes} minutes or if in range`
                 : "Check out from your location"
             }

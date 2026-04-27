@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -133,24 +133,28 @@ export async function POST(request: NextRequest) {
         const isTrans = isTransportDept(userProfile?.departments)
         if (isSec || isOp || isTrans) {
           // log override and continue with check-in
-          await supabase.from("emergency_check_in_overrides").insert({
-            user_id: user.id,
-            check_in_time: new Date().toISOString(),
-            override_type: 'leave_override',
-            reason: override_reason,
-            is_security_staff: isSec,
-            is_operational_staff: isOp,
-            is_transport_staff: isTrans,
-          }).catch(() => {})
+          try {
+            await supabase.from("emergency_check_in_overrides").insert({
+              user_id: user.id,
+              check_in_time: new Date().toISOString(),
+              override_type: 'leave_override',
+              reason: override_reason,
+              is_security_staff: isSec,
+              is_operational_staff: isOp,
+              is_transport_staff: isTrans,
+            })
+          } catch {}
           overrideMeta = { type: 'leave_override' }
           // send notification to manager
-          await supabase.from("staff_notifications").insert({
-            user_id: user.id,
-            title: "Emergency override used",
-            message: "An override was used for leave restriction during check-in.",
-            type: "info",
-            is_read: false,
-          }).catch(() => {})
+          try {
+            await supabase.from("staff_notifications").insert({
+              user_id: user.id,
+              title: "Emergency override used",
+              message: "An override was used for leave restriction during check-in.",
+              type: "info",
+              is_read: false,
+            })
+          } catch {}
           // allow to proceed (do nothing here)
         } else {
           return NextResponse.json(
@@ -306,25 +310,26 @@ export async function POST(request: NextRequest) {
             },
           }
 
-          await supabase
-            .from("device_security_violations")
-            .insert({
-              device_id: device_info.device_id,
-              ip_address: ipAddress,
-              attempted_user_id: user.id,
-              bound_user_id: recentDeviceSession.user_id,
-              violation_type: "checkin_attempt",
-              device_info: {
-                ...device_info,
-                detection_method: "device_fingerprint",
-                previous_user_id: recentDeviceSession.user_id,
-                previous_ip: recentDeviceSession.ip_address,
-                time_since_last_use_minutes: timeSinceLastUse,
-              },
-            })
-            .catch((err) => {
-              console.warn("[v0] Could not persist check-in device sharing violation:", err)
-            })
+          try {
+            await supabase
+              .from("device_security_violations")
+              .insert({
+                device_id: device_info.device_id,
+                ip_address: ipAddress,
+                attempted_user_id: user.id,
+                bound_user_id: recentDeviceSession.user_id,
+                violation_type: "checkin_attempt",
+                device_info: {
+                  ...device_info,
+                  detection_method: "device_fingerprint",
+                  previous_user_id: recentDeviceSession.user_id,
+                  previous_ip: recentDeviceSession.ip_address,
+                  time_since_last_use_minutes: timeSinceLastUse,
+                },
+              })
+          } catch (err) {
+            console.warn("[v0] Could not persist check-in device sharing violation:", err)
+          }
         } else if (ipSharingSession) {
           const { data: ipSharerProfile } = await supabase
             .from("user_profiles")
@@ -348,25 +353,26 @@ export async function POST(request: NextRequest) {
             },
           }
 
-          await supabase
-            .from("device_security_violations")
-            .insert({
-              device_id: device_info.device_id,
-              ip_address: ipAddress,
-              attempted_user_id: user.id,
-              bound_user_id: ipSharingSession.user_id,
-              violation_type: "checkin_attempt",
-              device_info: {
-                ...device_info,
-                detection_method: "ip_address",
-                previous_user_id: ipSharingSession.user_id,
-                previous_device_id: ipSharingSession.device_id,
-                time_since_last_use_minutes: timeSinceLastUse,
-              },
-            })
-            .catch((err) => {
-              console.warn("[v0] Could not persist check-in IP sharing violation:", err)
-            })
+          try {
+            await supabase
+              .from("device_security_violations")
+              .insert({
+                device_id: device_info.device_id,
+                ip_address: ipAddress,
+                attempted_user_id: user.id,
+                bound_user_id: ipSharingSession.user_id,
+                violation_type: "checkin_attempt",
+                device_info: {
+                  ...device_info,
+                  detection_method: "ip_address",
+                  previous_user_id: ipSharingSession.user_id,
+                  previous_device_id: ipSharingSession.device_id,
+                  time_since_last_use_minutes: timeSinceLastUse,
+                },
+              })
+          } catch (err) {
+            console.warn("[v0] Could not persist check-in IP sharing violation:", err)
+          }
         }
       }
     } // close device_info?.device_id outer block
@@ -437,11 +443,12 @@ export async function POST(request: NextRequest) {
               // ignore logging failure
             }
 
-            // Security and Transport staff bypass location restrictions automatically
+            // Security, Transport, Operational AND privileged roles bypass location restrictions
             const isSec2 = isSecurityDept(userProfile?.departments)
             const isOp2 = isOperationalDept(userProfile?.departments)
             const isTrans2 = isTransportDept(userProfile?.departments)
-            if (isSec2 || isTrans2 || isOp2) {
+            const isPrivileged2 = isExemptFromAttendanceReasons(userProfile?.role)
+            if (isSec2 || isTrans2 || isOp2 || isPrivileged2) {
               // Exempt staff — no location restriction applied
             } else {
               return NextResponse.json({ error: "Your device appears to be outside the allowed proximity for the selected location. Please move closer or use the QR code option." }, { status: 400 })
@@ -451,11 +458,12 @@ export async function POST(request: NextRequest) {
       } else {
         // If no location_id was provided, ensure the nearest location is within the allowed radius
         if (nearest && nearest.distance > deviceCheckInRadius + 500) {
-          // Security and Transport staff bypass location restrictions automatically
+          // Security, Transport, Operational AND privileged roles bypass location restrictions
           const isSec3 = isSecurityDept(userProfile?.departments)
           const isOp3 = isOperationalDept(userProfile?.departments)
           const isTrans3 = isTransportDept(userProfile?.departments)
-          if (isSec3 || isTrans3 || isOp3) {
+          const isPrivileged3 = isExemptFromAttendanceReasons(userProfile?.role)
+          if (isSec3 || isTrans3 || isOp3 || isPrivileged3) {
             // Exempt staff — no location restriction applied
           } else {
             return NextResponse.json({ error: "You are too far from any registered QCC location to check in. Please move closer or use the QR code." }, { status: 400 })
@@ -668,24 +676,28 @@ export async function POST(request: NextRequest) {
       const isOp = isOperationalDept(userProfile?.departments)
       const isTrans = isTransportDept(userProfile?.departments)
       if (override_request && override_reason && (isSec || isOp || isTrans)) {
-        await supabase.from("emergency_check_in_overrides").insert({
-          user_id: user.id,
-          check_in_time: checkInTime.toISOString(),
-          override_type: 'time_restriction',
-          reason: override_reason,
-          is_security_staff: isSec,
-          is_operational_staff: isOp,
-          is_transport_staff: isTrans,
-        }).catch(() => {})
-        overrideMeta = { type: 'time_restriction' }
-        await supabase.from("staff_notifications").insert({
-          user_id: user.id,
-          title: "Emergency override used",
-          message: "An override was used to bypass time restriction during check-in.",
-          type: "info",
-          is_read: false,
-        }).catch(() => {})
-        // continue to normal check-in flow, but also inform front-end
+          try {
+            await supabase.from("emergency_check_in_overrides").insert({
+              user_id: user.id,
+              check_in_time: new Date().toISOString(),
+              override_type: 'leave_override',
+              reason: override_reason,
+              is_security_staff: isSec,
+              is_operational_staff: isOp,
+              is_transport_staff: isTrans,
+            })
+          } catch {}
+          overrideMeta = { type: 'leave_override' }
+          // send notification to manager
+          try {
+            await supabase.from("staff_notifications").insert({
+              user_id: user.id,
+              title: "Emergency override used",
+              message: "An override was used for leave restriction during check-in.",
+              type: "info",
+              is_read: false,
+            })
+          } catch {}
         // we can attach a flag later in response
       } else {
         return NextResponse.json({

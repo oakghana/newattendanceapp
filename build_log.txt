@@ -1,0 +1,167 @@
+Γû▓ Next.js 16.1.4 (Turbopack)
+- Environments: .env.local
+- Experiments (use with caution):
+  ┬╖ optimizePackageImports
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 70s
+  Skipping validation of types
+  Collecting page data using 11 workers ...
+[EmailService] SMTP credentials not configured
+[EmailService] SMTP credentials not configured
+[EmailService] SMTP credentials not configured
+[EmailService] SMTP credentials not configured
+[EmailService] SMTP credentials not configured
+  Generating static pages using 11 workers (0/122) ...
+  Generating static pages using 11 workers (30/122) 
+[EmailService] SMTP credentials not configured
+[EmailService] SMTP credentials not configured
+  Generating static pages using 11 workers (60/122) 
+  Generating static pages using 11 workers (91/122) 
+Γ£ô Generating static pages using 11 workers (122/122) in 10.8s
+  Finalizing page optimization ...
+
+Route (app)
+Γöî Γùï /
+Γö£ Γùï /_not-found
+Γö£ ╞Æ /admin/qr-generator
+Γö£ ╞Æ /api/admin/analytics
+Γö£ ╞Æ /api/admin/attendance-defaulters
+Γö£ ╞Æ /api/admin/audit-logs
+Γö£ ╞Æ /api/admin/audit-logs/export
+Γö£ ╞Æ /api/admin/backup
+Γö£ ╞Æ /api/admin/bulk-upload
+Γö£ ╞Æ /api/admin/bulk-upload/template
+Γö£ ╞Æ /api/admin/department-summaries
+Γö£ ╞Æ /api/admin/departments
+Γö£ ╞Æ /api/admin/device-radius-settings
+Γö£ ╞Æ /api/admin/device-violations
+Γö£ ╞Æ /api/admin/excuse-duty
+Γö£ ╞Æ /api/admin/hr-excuse-duty
+Γö£ ╞Æ /api/admin/locations
+Γö£ ╞Æ /api/admin/locations/[id]
+Γö£ ╞Æ /api/admin/notifications
+Γö£ ╞Æ /api/admin/reports
+Γö£ ╞Æ /api/admin/reports/attendance
+Γö£ ╞Æ /api/admin/reports/export
+Γö£ ╞Æ /api/admin/reset-password
+Γö£ ╞Æ /api/admin/schedules
+Γö£ ╞Æ /api/admin/security-diagnostics
+Γö£ ╞Æ /api/admin/send-warnings
+Γö£ ╞Æ /api/admin/staff
+Γö£ ╞Æ /api/admin/staff-activation
+Γö£ ╞Æ /api/admin/staff-attendance-details
+Γö£ ╞Æ /api/admin/staff/[id]
+Γö£ ╞Æ /api/admin/supabase-config
+Γö£ ╞Æ /api/admin/test-users
+Γö£ ╞Æ /api/admin/user-approvals
+Γö£ ╞Æ /api/admin/user-credentials
+Γö£ ╞Æ /api/admin/users
+Γö£ ╞Æ /api/admin/warnings-archive
+Γö£ ╞Æ /api/admin/weekly-device-sharing
+Γö£ ╞Æ /api/analytics/attendance-summary
+Γö£ ╞Æ /api/attendance/check-in
+Γö£ ╞Æ /api/attendance/check-in-outside-request
+Γö£ ╞Æ /api/attendance/check-out
+Γö£ ╞Æ /api/attendance/emergency-checkout
+Γö£ ╞Æ /api/attendance/excuse-duty
+Γö£ ╞Æ /api/attendance/fast-check-in
+Γö£ ╞Æ /api/attendance/leave-status
+Γö£ ╞Æ /api/attendance/locations
+Γö£ ╞Æ /api/attendance/offpremises/approve
+Γö£ ╞Æ /api/attendance/offpremises/approved-checkins
+Γö£ ╞Æ /api/attendance/offpremises/pending
+Γö£ ╞Æ /api/attendance/offpremises/revert
+Γö£ ╞Æ /api/attendance/offpremises/review-log
+Γö£ ╞Æ /api/attendance/personal
+Γö£ ╞Æ /api/attendance/personal-export
+Γö£ ╞Æ /api/attendance/qr-checkin
+Γö£ ╞Æ /api/attendance/qr-checkout
+Γö£ ╞Æ /api/attendance/user-location
+Γö£ ╞Æ /api/attendance/weekly-summary
+Γö£ ╞Æ /api/auth/change-password
+Γö£ ╞Æ /api/auth/check-device-binding
+Γö£ ╞Æ /api/auth/current-user
+Γö£ ╞Æ /api/auth/login-log
+Γö£ ╞Æ /api/auth/logout
+Γö£ ╞Æ /api/auth/lookup-staff
+Γö£ ╞Æ /api/auth/staff-request
+Γö£ ╞Æ /api/auth/validate-email
+Γö£ ╞Æ /api/cron/monthly-password-reset
+Γö£ ╞Æ /api/errors
+Γö£ ╞Æ /api/leave/activate
+Γö£ ╞Æ /api/leave/approve-notification
+Γö£ ╞Æ /api/leave/notifications
+Γö£ ╞Æ /api/leave/request
+Γö£ ╞Æ /api/leave/request-leave
+Γö£ ╞Æ /api/leave/status-transition
+Γö£ ╞Æ /api/locations/active
+Γö£ ╞Æ /api/locations/lookup
+Γö£ ╞Æ /api/logs
+Γö£ ╞Æ /api/migrate/document-url
+Γö£ ╞Æ /api/public/departments
+Γö£ ╞Æ /api/settings
+Γö£ ╞Æ /api/settings/backup
+Γö£ ╞Æ /api/settings/runtime
+Γö£ ╞Æ /api/staff/notifications
+Γö£ ╞Æ /api/staff/notifications/[id]
+Γö£ ╞Æ /api/staff/notifications/mark-all-read
+Γö£ ╞Æ /api/staff/warnings
+Γö£ ╞Æ /api/staff/warnings/[id]
+Γö£ ╞Æ /api/staff/warnings/mark-all-read
+Γö£ ╞Æ /api/system-time
+Γö£ ╞Æ /api/upload
+Γö£ Γùï /auth/login
+Γö£ Γùï /auth/pending-approval
+Γö£ Γùï /auth/signup
+Γö£ Γùï /auth/staff-request
+Γö£ Γùï /auth/verify-email
+Γö£ ╞Æ /dashboard
+Γö£ ╞Æ /dashboard/analytics
+Γö£ Γùï /dashboard/attendance
+Γö£ Γùï /dashboard/attendance-tracking
+Γö£ ╞Æ /dashboard/audit-logs
+Γö£ ╞Æ /dashboard/data-management
+Γö£ ╞Æ /dashboard/defaulters
+Γö£ ╞Æ /dashboard/department-summaries
+Γö£ ╞Æ /dashboard/device-violations
+Γö£ Γùï /dashboard/diagnostics
+Γö£ Γùï /dashboard/emergency-admin
+Γö£ Γùï /dashboard/excuse-duty
+Γö£ ╞Æ /dashboard/excuse-duty-review
+Γö£ ╞Æ /dashboard/help
+Γö£ ╞Æ /dashboard/hr-excuse-duty
+Γö£ ╞Æ /dashboard/instructor
+Γö£ ╞Æ /dashboard/leave-management
+Γö£ ╞Æ /dashboard/leave-notifications
+Γö£ ╞Æ /dashboard/locations
+Γö£ Γùï /dashboard/missed-checkouts
+Γö£ ╞Æ /dashboard/overview
+Γö£ ╞Æ /dashboard/profile
+Γö£ Γùï /dashboard/qr-events
+Γö£ ╞Æ /dashboard/reports
+Γö£ Γùï /dashboard/schedule
+Γö£ ╞Æ /dashboard/settings
+Γö£ Γùï /dashboard/settings/backup
+Γö£ ╞Æ /dashboard/settings/device-radius
+Γö£ ╞Æ /dashboard/settings/runtime-controls
+Γö£ ╞Æ /dashboard/staff
+Γö£ ╞Æ /dashboard/staff-activation
+Γö£ ╞Æ /dashboard/student
+Γö£ ╞Æ /dashboard/user-approvals
+Γö£ ╞Æ /dashboard/user-management
+Γö£ ╞Æ /dashboard/warnings-archive
+Γö£ ╞Æ /dashboard/weekly-device-sharing
+Γö£ Γùï /login-info
+Γö£ Γùï /offpremises-approvals
+Γö£ ╞Æ /offpremises-review
+Γö£ ╞Æ /scan
+Γö£ Γùï /test-duplicate-checkin
+Γöö Γùï /user-lookup
+
+
+╞Æ Proxy (Middleware)
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

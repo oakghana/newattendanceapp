@@ -1,4 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server"
+import { isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
+import { parseRuntimeFlags } from "@/lib/runtime-flags"
 import { type NextRequest, NextResponse } from "next/server"
 
 console.log("[v0] check-in-outside-request route module loaded")
@@ -12,19 +14,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log("[v0] Request body received:", { location: body.current_location?.name, userId: body.user_id })
     
-    const { current_location, device_info, user_id, reason, request_type, action, mode } = body
+    const {
+      current_location,
+      device_info,
+      user_id,
+      reason,
+      request_type,
+      action,
+      mode,
+      off_grid_hours_before_request,
+      off_grid_started_at,
+    } = body
 
     // Normalize request type: accept `request_type`, `action`, or `mode` (legacy)
     const normalizedRequestType = (request_type || action || mode || 'checkin').toString().toLowerCase()
-    // Since off-premises check-out is no longer supported, always treat as check-in
-    if (normalizedRequestType === 'checkout') {
-      console.warn('[v0] Received off-premises checkout request; rejecting')
-      return NextResponse.json(
-        { error: 'Off-premises check-out requests are disabled' },
-        { status: 400 }
-      )
-    }
-    const finalRequestType = 'checkin'
+    const finalRequestType = normalizedRequestType === 'checkout' ? 'checkout' : 'checkin'
 
     if (!current_location) {
       console.error("[v0] Missing current_location")
@@ -66,6 +70,80 @@ export async function POST(request: NextRequest) {
         { error: "User profile not found" },
         { status: 404 }
       )
+    }
+
+    const isPrivilegedExempt = isExemptFromAttendanceReasons(userProfile.role)
+
+    if (finalRequestType === 'checkout') {
+      const { data: sysSettings } = await supabase.from("system_settings").select("settings").maybeSingle()
+      const runtimeFlags = parseRuntimeFlags(sysSettings?.settings)
+
+      if (!runtimeFlags.offPremisesCheckoutEnabled && !isPrivilegedExempt) {
+        return NextResponse.json(
+          { error: 'Off-premises check-out requests are currently disabled by admin policy.' },
+          { status: 403 }
+        )
+      }
+
+      const today = new Date().toISOString().split('T')[0]
+      const { data: openAttendance, error: openAttendanceErr } = await supabase
+        .from('attendance_records')
+        .select('id, check_in_time, check_out_time')
+        .eq('user_id', user_id)
+        .gte('check_in_time', `${today}T00:00:00`)
+        .lte('check_in_time', `${today}T23:59:59`)
+        .is('check_out_time', null)
+        .order('check_in_time', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (openAttendanceErr) {
+        console.error('[v0] Failed to verify open attendance before off-premises checkout request:', openAttendanceErr)
+        return NextResponse.json(
+          { error: 'Failed to verify active attendance session' },
+          { status: 500 }
+        )
+      }
+
+      if (!openAttendance) {
+        return NextResponse.json(
+          { error: 'No active check-in found for today. Please check in first.' },
+          { status: 400 }
+        )
+      }
+
+      const hoursWorked = (Date.now() - new Date(openAttendance.check_in_time).getTime()) / (1000 * 60 * 60)
+      if (hoursWorked < 2 && !isPrivilegedExempt) {
+        return NextResponse.json(
+          { error: `Off-premises check-out request is available only after 2 hours of work. You have worked ${hoursWorked.toFixed(2)} hours.` },
+          { status: 400 }
+        )
+      }
+
+      if (!isPrivilegedExempt) {
+        const now = new Date()
+        const nowMinutes = now.getHours() * 60 + now.getMinutes()
+        const [startHour, startMinute] = (runtimeFlags.offPremisesCheckoutStartTime || '15:00').split(':').map(Number)
+        const [endHour, endMinute] = (runtimeFlags.offPremisesCheckoutEndTime || '23:59').split(':').map(Number)
+        const startMinutes = startHour * 60 + (startMinute || 0)
+        const endMinutes = endHour * 60 + (endMinute || 0)
+
+        if (nowMinutes < startMinutes || nowMinutes > endMinutes) {
+          return NextResponse.json(
+            {
+              error: `Off-premises check-out requests are allowed only between ${runtimeFlags.offPremisesCheckoutStartTime} and ${runtimeFlags.offPremisesCheckoutEndTime}.`,
+            },
+            { status: 400 }
+          )
+        }
+      }
+
+      if (!isPrivilegedExempt && (!reason || String(reason).trim().length < 10)) {
+        return NextResponse.json(
+          { error: 'A reason with at least 10 characters is required for off-premises check-out requests.' },
+          { status: 400 }
+        )
+      }
     }
 
     // Resolve approvers as follows:
@@ -151,9 +229,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Store the off-premises check-in request for manager approval
-    console.log("[v0] Inserting pending check-in:", {
+    console.log("[v0] Inserting pending off-premises request:", {
       user_id,
       location_name: current_location.name,
+      request_type: finalRequestType,
       status: "pending",
     })
 
@@ -184,7 +263,19 @@ export async function POST(request: NextRequest) {
       // continue — do not block creation on duplicate-check failure
     }
 
-    // Try inserting with `reason` column if it exists; fall back if DB doesn't have that column yet
+    const normalizedDeviceInfo =
+      device_info && typeof device_info === 'object'
+        ? device_info
+        : { raw: device_info }
+    const enrichedDeviceInfo = {
+      ...normalizedDeviceInfo,
+      off_grid_hours_before_request:
+        typeof off_grid_hours_before_request === 'number' ? off_grid_hours_before_request : null,
+      off_grid_started_at: off_grid_started_at || null,
+      submitted_request_type: finalRequestType,
+    }
+
+    // Try inserting with `reason` and `request_type` columns if they exist; fall back if DB doesn't have those columns yet
     let requestRecord: any = null
     try {
       const insertRes = await supabase
@@ -195,7 +286,7 @@ export async function POST(request: NextRequest) {
           latitude: current_location.latitude,
           longitude: current_location.longitude,
           accuracy: current_location.accuracy,
-          device_info: device_info,
+          device_info: enrichedDeviceInfo,
           request_type: finalRequestType,
           google_maps_name: current_location.display_name || current_location.name,
           reason: reason || null,
@@ -221,14 +312,14 @@ export async function POST(request: NextRequest) {
           latitude: current_location.latitude,
           longitude: current_location.longitude,
           accuracy: current_location.accuracy,
-          device_info: device_info,
+          device_info: enrichedDeviceInfo,
           google_maps_name: current_location.display_name || current_location.name,
           status: 'pending',
         }
 
         // only include reason/request_type if DB likely supports them
         if (!missingReason && reason) payload.reason = reason
-        if (!missingRequestType && request_type) payload.request_type = request_type
+        if (!missingRequestType) payload.request_type = finalRequestType
 
         const { data: retryRecord, error: retryError } = await supabase
           .from('pending_offpremises_checkins')
@@ -250,19 +341,25 @@ export async function POST(request: NextRequest) {
     console.log('[v0] Request stored successfully:', requestRecord.id)
 
     // Send notifications to managers
+    const isCheckoutRequest = finalRequestType === 'checkout'
     const managerNotifications = managers.map((manager: any) => ({
       recipient_id: manager.id,
-      type: "offpremises_checkin_request",
-      title: "Off-Premises Check-In Request",
-      message: `${userProfile.first_name} ${userProfile.last_name} is requesting to check-in from outside their assigned location: ${current_location.display_name || current_location.name}. Reason: ${reason || 'Not provided'}. Please review and approve or deny.`,
+      type: isCheckoutRequest ? "offpremises_checkout_request" : "offpremises_checkin_request",
+      title: isCheckoutRequest ? "Off-Premises Check-Out Request" : "Off-Premises Check-In Request",
+      message: isCheckoutRequest
+        ? `${userProfile.first_name} ${userProfile.last_name} is requesting to check out from outside registered QCC locations at ${current_location.display_name || current_location.name}. Reason: ${reason || 'Not provided'}. Please review this request.`
+        : `${userProfile.first_name} ${userProfile.last_name} is requesting to check in from outside their assigned location: ${current_location.display_name || current_location.name}. Reason: ${reason || 'Not provided'}. Please review and approve or deny.`,
       data: {
         request_id: requestRecord.id,
         staff_user_id: user_id,
+        request_type: finalRequestType,
         staff_name: `${userProfile.first_name} ${userProfile.last_name}`,
         location_name: current_location.name,
         google_maps_name: current_location.display_name || current_location.name,
         coordinates: `${current_location.latitude}, ${current_location.longitude}`,
         reason: reason || 'Not provided',
+        off_grid_hours_before_request:
+          typeof off_grid_hours_before_request === 'number' ? off_grid_hours_before_request : null,
       },
       is_read: false,
     }))
@@ -279,9 +376,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: "Your off-premises check-in request has been sent to your managers for approval",
+        message:
+          finalRequestType === 'checkout'
+            ? "Your off-premises check-out request has been sent to your department head, supervisor, and admin for approval"
+            : "Your off-premises check-in request has been sent to your managers for approval",
         request_id: requestRecord.id,
         pending_approval: true,
+        request_type: finalRequestType,
       },
       { status: 200 }
     )

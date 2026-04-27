@@ -508,7 +508,9 @@ export function AttendanceRecorder({
   
   // Default canCheckIn to true if not explicitly set, allowing staff to check in any time after midnight
   // MUST also verify user is within proximity range (matches checkout validation logic)
-  const canCheckInButton = (initialCanCheckIn ?? true) && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave && locationValidation?.canCheckIn === true
+  // Exempt users (Security/Transport/Operational depts + admin/dept-head/regional-manager roles) bypass location requirement
+  const isExemptUser = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isExemptFromAttendanceReasons(userProfile?.role)
+  const canCheckInButton = (initialCanCheckIn ?? true) && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave && (isExemptUser || locationValidation?.canCheckIn === true)
   const manualCheckInFallbackEnabled = !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0
   
   // CRITICAL: Checkout button should ONLY be enabled if:
@@ -619,6 +621,11 @@ export function AttendanceRecorder({
         throw new Error(errorMsg)
       }
 
+      clearAttendanceCache()
+      clearGeolocationCache()
+      clearFastLocationCache()
+      setUserLocation(null)
+      setLocationValidation(null)
       setSuccess("✓ Checked out successfully with QR code!")
       console.log("[v0] QR check-out successful")
 
@@ -953,8 +960,8 @@ export function AttendanceRecorder({
         accuracyWarning = `Your current GPS accuracy (${userLocation.accuracy.toFixed(0)}m) is moderate. For best results, ensure you have a clear view of the sky or move closer to your assigned location.`
       }
 
-      // Security, Transport and Operational staff have no location restrictions
-      const isExemptLocation = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments)
+      // Security, Transport, Operational departments AND privileged roles (admin, dept head, regional manager) have no location restrictions
+      const isExemptLocation = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isExemptFromAttendanceReasons(userProfile?.role)
       setLocationValidation({
         ...validation,
         canCheckIn: isExemptLocation ? true : validation.canCheckIn,
@@ -1135,8 +1142,47 @@ export function AttendanceRecorder({
     }
   }
 
+  const inferFailureReason = (message: string) => {
+    const lowered = (message || "").toLowerCase()
+    if (lowered.includes("within") && lowered.includes("location")) return "out_of_range"
+    if (lowered.includes("could not retrieve current location") || lowered.includes("gps")) return "location_unavailable"
+    if (lowered.includes("unauthorized") || lowered.includes("session expired")) return "auth_error"
+    if (lowered.includes("already checked in") || lowered.includes("duplicate")) return "duplicate_attempt"
+    if (lowered.includes("pending")) return "pending_request_exists"
+    if (lowered.includes("time") || lowered.includes("deadline")) return "time_restriction"
+    return "unknown"
+  }
+
+  const logCheckinFailure = async (params: {
+    attemptType: "manual_checkin" | "offpremises_checkin"
+    failureMessage: string
+    latitude?: number | null
+    longitude?: number | null
+    accuracy?: number | null
+    nearestLocationName?: string | null
+    nearestLocationDistanceM?: number | null
+  }) => {
+    try {
+      await fetch("/api/attendance/checkin-failure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...params,
+          failureReason: inferFailureReason(params.failureMessage),
+          deviceType: getDeviceInfo()?.device_type || null,
+          deviceInfo: getDeviceInfo(),
+        }),
+      })
+    } catch (logErr) {
+      console.warn("[v0] Failed to log check-in failure event:", logErr)
+    }
+  }
+
   const handleCheckIn = async () => {
     console.log("[v0] Check-in initiated")
+    let resolvedNearestLocation: any = null
+    let effectiveLocation: LocationData | null = userLocation
+    const checkInData: any = {}
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       toast({
@@ -1188,61 +1234,85 @@ export function AttendanceRecorder({
       const deviceInfo = getDeviceInfo()
       console.log("[v0] Device info:", deviceInfo)
 
-      let resolvedNearestLocation = null // Declare nearestLocation here
+      checkInData.device_info = deviceInfo
 
-      const checkInData: any = {
-        device_info: deviceInfo,
-      }
-
-      if (userLocation) {
-        checkInData.latitude = userLocation.latitude
-        checkInData.longitude = userLocation.longitude
-      } else {
-        // Attempt to get location if not available
-        const currentLocation = await getCurrentLocationData()
-        if (!currentLocation) {
-          throw new Error("Could not retrieve current location.")
-        }
-        checkInData.latitude = currentLocation.latitude
-        checkInData.longitude = currentLocation.longitude
-      }
-
-      // Find nearest location based on the possibly newly acquired userLocation
-      if (realTimeLocations && realTimeLocations.length > 0 && userLocation) {
-        const distances = realTimeLocations
-          .map((loc) => ({
-            location: loc,
-            distance: calculateDistance(userLocation.latitude, userLocation.longitude, loc.latitude, loc.longitude),
-          }))
-          .sort((a, b) => a.distance - b.distance)
-
-        // Use device-specific proximity radius: 400m for mobile/tablet, 700m for laptop, 2000m for desktop PC
-        let deviceProximityRadius = 400
-        if (deviceInfo.isMobile || deviceInfo.isTablet) {
-          deviceProximityRadius = 400
-        } else if (deviceInfo.isLaptop) {
-          deviceProximityRadius = 700
+      // Always attempt a fresh GPS reading, but keep the cached reading when the fresh one
+      // is significantly less accurate to avoid false out-of-range errors.
+      const currentLocation = await getCurrentLocationData()
+      if (currentLocation) {
+        if (
+          currentLocation.accuracy > 1500 &&
+          userLocation &&
+          userLocation.accuracy < currentLocation.accuracy
+        ) {
+          console.log("[v0] handleCheckIn: fresh GPS is less accurate than cached state - using cached userLocation", {
+            freshAccuracy: currentLocation.accuracy,
+            cachedAccuracy: userLocation.accuracy,
+          })
+          effectiveLocation = userLocation
         } else {
-          deviceProximityRadius = 2000 // Desktop PC
+          effectiveLocation = currentLocation
         }
-        const displayRadius = 50 // Trade secret - what we show to users
-        
+      }
+
+      if (!effectiveLocation) {
+        throw new Error("Could not retrieve current location.")
+      }
+
+      checkInData.latitude = effectiveLocation.latitude
+      checkInData.longitude = effectiveLocation.longitude
+
+      // Reuse the same shared validator that powers the live badge/button so the click action
+      // cannot disagree with the on-screen "Within Range" state.
+      if (realTimeLocations && realTimeLocations.length > 0) {
+        let checkInRadius: number | undefined
+        if (deviceRadiusSettings) {
+          if (deviceInfo.device_type === "mobile") {
+            checkInRadius = deviceRadiusSettings.mobile.checkIn
+          } else if (deviceInfo.device_type === "tablet") {
+            checkInRadius = deviceRadiusSettings.tablet.checkIn
+          } else if (deviceInfo.device_type === "laptop") {
+            checkInRadius = deviceRadiusSettings.laptop.checkIn
+          } else if (deviceInfo.device_type === "desktop") {
+            checkInRadius = deviceRadiusSettings.desktop.checkIn
+          }
+        }
+
+        const liveValidation = validateAttendanceLocation(
+          effectiveLocation,
+          realTimeLocations,
+          proximitySettings,
+          checkInRadius,
+        )
+
+        const sharedValidationAllowsCheckIn =
+          locationValidation?.canCheckIn === true && !!locationValidation?.nearestLocation
+
+        const effectiveValidation = sharedValidationAllowsCheckIn
+          ? {
+              ...liveValidation,
+              canCheckIn: true,
+              nearestLocation: locationValidation?.nearestLocation || liveValidation.nearestLocation,
+              distance: locationValidation?.distance ?? liveValidation.distance,
+              message: locationValidation?.message || liveValidation.message,
+            }
+          : liveValidation
+
         console.log("[v0] Check-in proximity validation:", {
-          nearestLocation: distances[0]?.location.name,
-          distance: distances[0]?.distance,
-          deviceProximityRadius,
-          deviceType: deviceInfo.device_type,
-          isLaptop: deviceInfo.isLaptop,
-          isWithinRange: distances.length > 0 && distances[0].distance <= deviceProximityRadius
+          liveNearestLocation: liveValidation.nearestLocation?.name,
+          liveDistance: liveValidation.distance,
+          liveCanCheckIn: liveValidation.canCheckIn,
+          sharedCanCheckIn: locationValidation?.canCheckIn,
+          sharedNearestLocation: locationValidation?.nearestLocation?.name,
+          sharedDistance: locationValidation?.distance,
+          usingSharedValidation: sharedValidationAllowsCheckIn,
         })
 
-        if (distances.length > 0 && distances[0].distance <= deviceProximityRadius) {
-          resolvedNearestLocation = distances[0].location
-          checkInData.location_id = resolvedNearestLocation.id // Update checkInData with resolved nearest location
+        if (effectiveValidation.canCheckIn && effectiveValidation.nearestLocation) {
+          resolvedNearestLocation = effectiveValidation.nearestLocation
+          checkInData.location_id = resolvedNearestLocation.id
         } else {
-          throw new Error(
-            `You must be within ${displayRadius}m of a valid location to check in.`,
-          )
+          throw new Error("You must be within 100m of a valid location to check in.")
         }
       } else {
         throw new Error("No valid locations found or location data is unavailable.")
@@ -1291,8 +1361,26 @@ export function AttendanceRecorder({
 
     } catch (error: any) {
       console.error("[v0] Check-in error:", error)
+      const errorMessage = error?.message || "Failed to check in. Please try again."
+      void logCheckinFailure({
+        attemptType: "manual_checkin",
+        failureMessage: errorMessage,
+        latitude: checkInData?.latitude ?? effectiveLocation?.latitude ?? null,
+        longitude: checkInData?.longitude ?? effectiveLocation?.longitude ?? null,
+        accuracy: effectiveLocation?.accuracy ?? null,
+        nearestLocationName: resolvedNearestLocation?.name ?? null,
+        nearestLocationDistanceM:
+          resolvedNearestLocation && effectiveLocation
+            ? calculateDistance(
+                effectiveLocation.latitude,
+                effectiveLocation.longitude,
+                resolvedNearestLocation.latitude,
+                resolvedNearestLocation.longitude,
+              )
+            : null,
+      })
       setFlashMessage({
-        message: error.message || "Failed to check in. Please try again.",
+        message: errorMessage,
         type: "error",
       })
 
@@ -1493,6 +1581,13 @@ export function AttendanceRecorder({
         error?.name === "AbortError"
           ? "Request timed out after 30 seconds. Please check your internet and try again."
           : (error.message || "Failed to send confirmation request. Please try again.")
+      void logCheckinFailure({
+        attemptType: "offpremises_checkin",
+        failureMessage: message,
+        latitude: pendingOffPremisesLocation?.latitude ?? null,
+        longitude: pendingOffPremisesLocation?.longitude ?? null,
+        accuracy: pendingOffPremisesLocation?.accuracy ?? null,
+      })
       setFlashMessage({
         message,
         type: "error",
@@ -1799,6 +1894,10 @@ export function AttendanceRecorder({
 
         setLocalTodayAttendance(result.data)
         clearAttendanceCache()
+        clearGeolocationCache()
+        clearFastLocationCache()
+        setUserLocation(null)
+        setLocationValidation(null)
 
         setRecentCheckOut(true)
         setTimeout(() => setRecentCheckOut(false), 3000)
@@ -1948,6 +2047,9 @@ export function AttendanceRecorder({
   ])
 
   useEffect(() => {
+    // Auto check-in is disabled by default; admin must enable it via runtime controls
+    if (!runtimeFlags.autoCheckInEnabled) return
+
     if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave) {
       autoCheckInAttemptedRef.current = false
       setAutoCheckInFailureCount((prev) => (prev === 0 ? prev : 0))
@@ -2016,7 +2118,7 @@ export function AttendanceRecorder({
 
         const validation = validateAttendanceLocation(locationData, realTimeLocations || [], checkInRadius)
 
-        const isExemptDeptUser = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments)
+        const isExemptDeptUser = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isExemptFromAttendanceReasons(userProfile?.role)
         if (!isExemptDeptUser && (!validation.canCheckIn || !validation.nearestLocation)) {
           return
         }
@@ -2076,6 +2178,7 @@ export function AttendanceRecorder({
       }
     }
   }, [
+    runtimeFlags.autoCheckInEnabled,
     localTodayAttendance?.check_in_time,
     hasPendingOffPremisesRequest,
     isOnLeave,
@@ -2725,7 +2828,7 @@ export function AttendanceRecorder({
                     <Button
                       onClick={handleCheckIn}
                       disabled={
-                        !locationValidation?.canCheckIn || isCheckingIn || isProcessing || recentCheckIn || isLoading || !canCheckInAtTime(getSystemNow(), userProfile?.departments, userProfile?.role) || hasPendingOffPremisesRequest
+                        !canCheckInButton || isCheckingIn || isProcessing || isLoading || !canCheckInAtTime(getSystemNow(), userProfile?.departments, userProfile?.role) || hasPendingOffPremisesRequest
                       }
                       className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                       size="lg"

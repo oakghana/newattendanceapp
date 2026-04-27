@@ -19,7 +19,9 @@ async function getAdminUser() {
     .eq("id", user.id)
     .single()
 
-  if (!profile || profile.role !== "admin") {
+  const normalizedRole = (profile?.role || "").toString().toLowerCase().trim()
+
+  if (!profile || normalizedRole !== "admin") {
     return {
       supabase,
       user: null,

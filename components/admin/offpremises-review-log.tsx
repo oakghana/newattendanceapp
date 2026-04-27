@@ -40,11 +40,12 @@ interface ApprovedRecord {
   actual_longitude: number
   on_official_duty_outside_premises: boolean
   check_in_type: string
-  device_info: string
+  device_info: any
   staff_name: string
   current_location_name: string
   google_maps_name: string
   reason?: string
+  request_type?: string
   approved_at: string
   latitude: number
   longitude: number
@@ -154,6 +155,7 @@ export function OffPremisesReviewLog() {
           latitude,
           longitude,
           reason,
+          request_type,
           created_at,
           approved_at,
           status,
@@ -303,10 +305,12 @@ export function OffPremisesReviewLog() {
         'Staff Name',
         'Email',
         'Department',
+        'Request Type',
         'Phone',
         'Location Name',
         'Google Maps Location',
         'Coordinates',
+        'Off-Grid Hours',
         'Reason',
         'Check-In Time',
         'Approved By',
@@ -317,10 +321,12 @@ export function OffPremisesReviewLog() {
           `"${record.user_profiles?.first_name} ${record.user_profiles?.last_name}"`,
           record.user_profiles?.email,
           record.user_profiles?.department_id || 'N/A',
+          record.request_type === 'checkout' ? 'Checkout' : 'Check-in',
           record.user_profiles?.phone || 'N/A',
           `"${record.current_location_name}"`,
           `"${record.google_maps_name || ''}"`,
           formatCoordinates(record.latitude, record.longitude),
+          `"${(record.device_info as any)?.off_grid_hours_before_request ?? 'N/A'}"`,
           `"${record.reason || 'Not provided'}"`,
           formatDate(record.approved_at || record.created_at),
           `"${record.approved_by?.first_name || ''} ${record.approved_by?.last_name || ''}"`,
@@ -538,8 +544,10 @@ export function OffPremisesReviewLog() {
                       <SortableHeader field="staff_name" label="Staff Name" />
                       <TableHead>Email</TableHead>
                       <TableHead>Department</TableHead>
+                      <TableHead>Type</TableHead>
                       <SortableHeader field="location" label="Location" />
                       <TableHead>Coordinates</TableHead>
+                      <TableHead>Off-Grid</TableHead>
                       <TableHead>Reason</TableHead>
                       <SortableHeader field="approval_time" label="Approval Time" />
                       <TableHead>Approved By</TableHead>
@@ -569,6 +577,11 @@ export function OffPremisesReviewLog() {
                             departments.find((d) => d.id === record.user_profiles?.department_id)?.name ||
                             'N/A'}
                         </TableCell>
+                        <TableCell className="text-sm">
+                          <Badge variant="outline">
+                            {record.request_type === 'checkout' ? 'Checkout' : 'Check-in'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="max-w-xs">
                           <div className="flex items-start gap-2">
                             <MapPin className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -588,6 +601,11 @@ export function OffPremisesReviewLog() {
                               {formatCoordinates(record.latitude, record.longitude)}
                             </span>
                           </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {typeof (record.device_info as any)?.off_grid_hours_before_request === 'number'
+                            ? `${(record.device_info as any).off_grid_hours_before_request} hrs`
+                            : 'N/A'}
                         </TableCell>
                         <TableCell className="text-sm max-w-xs">
                           <div className="flex items-start gap-2">

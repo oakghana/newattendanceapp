@@ -223,6 +223,13 @@ const navigationItems = [
     category: "admin",
   },
   {
+    title: "Check-In Failures",
+    href: "/dashboard/checkin-failures",
+    icon: AlertTriangle,
+    roles: ["admin", "regional_manager", "department_head", "it-admin"],
+    category: "admin",
+  },
+  {
     title: "Emergency Admin",
     href: "/dashboard/emergency-admin",
     icon: AlertTriangle,

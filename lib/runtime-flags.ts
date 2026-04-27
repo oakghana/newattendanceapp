@@ -1,5 +1,6 @@
 export type RuntimeFlags = {
   passwordEnforcementEnabled: boolean
+  autoCheckInEnabled: boolean
   autoCheckoutEnabled: boolean
   deviceSharingEnforcementEnabled: boolean
   /** Time after which a lateness reason is required on weekdays (24 h "HH:MM", default "09:00") */
@@ -8,15 +9,25 @@ export type RuntimeFlags = {
   checkoutCutoffTime: string
   /** When true, admin / regional-head / regional-manager / department-head are exempt from providing a lateness reason */
   exemptPrivilegedRolesFromReason: boolean
+  /** Enable or disable off-premises checkout requests for regular staff */
+  offPremisesCheckoutEnabled: boolean
+  /** Earliest time regular staff can submit off-premises checkout requests (24 h "HH:MM") */
+  offPremisesCheckoutStartTime: string
+  /** Latest time regular staff can submit off-premises checkout requests (24 h "HH:MM") */
+  offPremisesCheckoutEndTime: string
 }
 
 export const DEFAULT_RUNTIME_FLAGS: RuntimeFlags = {
   passwordEnforcementEnabled: false,
+  autoCheckInEnabled: false,
   autoCheckoutEnabled: false,
   deviceSharingEnforcementEnabled: true,
   latenessReasonDeadline: "09:00",
   checkoutCutoffTime: "17:40",
   exemptPrivilegedRolesFromReason: true,
+  offPremisesCheckoutEnabled: true,
+  offPremisesCheckoutStartTime: "15:00",
+  offPremisesCheckoutEndTime: "23:59",
 }
 
 export function parseRuntimeFlags(rawSettings: unknown): RuntimeFlags {
@@ -25,6 +36,10 @@ export function parseRuntimeFlags(rawSettings: unknown): RuntimeFlags {
   return {
     // Quarterly password enforcement is disabled — always returns false regardless of DB value
     passwordEnforcementEnabled: false,
+    autoCheckInEnabled:
+      typeof settings.auto_checkin_enabled === "boolean"
+        ? settings.auto_checkin_enabled
+        : DEFAULT_RUNTIME_FLAGS.autoCheckInEnabled,
     autoCheckoutEnabled:
       typeof settings.auto_checkout_enabled === "boolean"
         ? settings.auto_checkout_enabled
@@ -45,5 +60,17 @@ export function parseRuntimeFlags(rawSettings: unknown): RuntimeFlags {
       typeof settings.exempt_privileged_roles_from_reason === "boolean"
         ? settings.exempt_privileged_roles_from_reason
         : DEFAULT_RUNTIME_FLAGS.exemptPrivilegedRolesFromReason,
+    offPremisesCheckoutEnabled:
+      typeof settings.offpremises_checkout_enabled === "boolean"
+        ? settings.offpremises_checkout_enabled
+        : DEFAULT_RUNTIME_FLAGS.offPremisesCheckoutEnabled,
+    offPremisesCheckoutStartTime:
+      typeof settings.offpremises_checkout_start_time === "string" && /^\d{2}:\d{2}$/.test(settings.offpremises_checkout_start_time as string)
+        ? (settings.offpremises_checkout_start_time as string)
+        : DEFAULT_RUNTIME_FLAGS.offPremisesCheckoutStartTime,
+    offPremisesCheckoutEndTime:
+      typeof settings.offpremises_checkout_end_time === "string" && /^\d{2}:\d{2}$/.test(settings.offpremises_checkout_end_time as string)
+        ? (settings.offpremises_checkout_end_time as string)
+        : DEFAULT_RUNTIME_FLAGS.offPremisesCheckoutEndTime,
   }
 }

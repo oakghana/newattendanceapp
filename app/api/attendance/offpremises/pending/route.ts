@@ -71,8 +71,6 @@ export async function GET(request: NextRequest) {
             )
           `)
         .eq("user_id", user.id)
-        // exclude deprecated checkout requests
-        .neq("request_type", "checkout")
         .order("created_at", { ascending: false })
 
       // Apply status filter if not "all"
@@ -127,8 +125,6 @@ export async function GET(request: NextRequest) {
           assigned_location_id
         )
       `)
-      // don't return checkout requests
-      .neq("request_type", "checkout")
       .order("created_at", { ascending: false })
 
     // if non-admin manager, restrict to own department or assigned location

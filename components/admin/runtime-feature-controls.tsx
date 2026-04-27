@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, CheckCircle2, Loader2, Shield, Timer, Users, Clock, LogOut, UserCheck } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Loader2, Shield, Timer, Users, Clock, LogOut, UserCheck, MapPin } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { RuntimeFlags } from "@/lib/runtime-flags"
@@ -16,6 +16,7 @@ interface RuntimeFeatureControlsProps {
 
 export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: RuntimeFeatureControlsProps) {
   const [passwordEnforcementEnabled, setPasswordEnforcementEnabled] = useState(initialFlags.passwordEnforcementEnabled)
+  const [autoCheckInEnabled, setAutoCheckInEnabled] = useState(initialFlags.autoCheckInEnabled)
   const [autoCheckoutEnabled, setAutoCheckoutEnabled] = useState(initialFlags.autoCheckoutEnabled)
   const [deviceSharingEnforcementEnabled, setDeviceSharingEnforcementEnabled] = useState(
     initialFlags.deviceSharingEnforcementEnabled
@@ -23,6 +24,9 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
   const [latenessReasonDeadline, setLatenessReasonDeadline] = useState(initialFlags.latenessReasonDeadline)
   const [checkoutCutoffTime, setCheckoutCutoffTime] = useState(initialFlags.checkoutCutoffTime)
   const [exemptPrivilegedRolesFromReason, setExemptPrivilegedRolesFromReason] = useState(initialFlags.exemptPrivilegedRolesFromReason)
+  const [offPremisesCheckoutEnabled, setOffPremisesCheckoutEnabled] = useState(initialFlags.offPremisesCheckoutEnabled)
+  const [offPremisesCheckoutStartTime, setOffPremisesCheckoutStartTime] = useState(initialFlags.offPremisesCheckoutStartTime)
+  const [offPremisesCheckoutEndTime, setOffPremisesCheckoutEndTime] = useState(initialFlags.offPremisesCheckoutEndTime)
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -43,24 +47,18 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
             settings: {
               ...initialSystemSettings,
               password_enforcement_enabled: passwordEnforcementEnabled,
+              auto_checkin_enabled: autoCheckInEnabled,
               auto_checkout_enabled: autoCheckoutEnabled,
               device_sharing_enforcement_enabled: deviceSharingEnforcementEnabled,
+              lateness_reason_deadline: latenessReasonDeadline,
+              checkout_cutoff_time: checkoutCutoffTime,
+              exempt_privileged_roles_from_reason: exemptPrivilegedRolesFromReason,
+              offpremises_checkout_enabled: offPremisesCheckoutEnabled,
+              offpremises_checkout_start_time: offPremisesCheckoutStartTime,
+              offpremises_checkout_end_time: offPremisesCheckoutEndTime,
             },
           },
         }),
-            body: JSON.stringify({
-              systemSettings: {
-                settings: {
-                  ...initialSystemSettings,
-                  password_enforcement_enabled: passwordEnforcementEnabled,
-                  auto_checkout_enabled: autoCheckoutEnabled,
-                  device_sharing_enforcement_enabled: deviceSharingEnforcementEnabled,
-                  lateness_reason_deadline: latenessReasonDeadline,
-                  checkout_cutoff_time: checkoutCutoffTime,
-                  exempt_privileged_roles_from_reason: exemptPrivilegedRolesFromReason,
-                },
-              },
-            }),
       })
 
       const result = await response.json()
@@ -134,8 +132,39 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Timer className="h-5 w-5" />
-              Automatic Check-out
+              <UserCheck className="h-5 w-5" />
+              Automatic Check-In
+            </CardTitle>
+            <CardDescription>Allow staff to be automatically checked in when they are within range. Disabled by default — staff must check in manually.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Badge variant={autoCheckInEnabled ? "default" : "secondary"}>
+              {autoCheckInEnabled ? "Enabled" : "Disabled (Manual check-in required)"}
+            </Badge>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={autoCheckInEnabled ? "default" : "outline"}
+                onClick={() => setAutoCheckInEnabled(true)}
+              >
+                Enable
+              </Button>
+              <Button
+                type="button"
+                variant={autoCheckInEnabled ? "outline" : "default"}
+                onClick={() => setAutoCheckInEnabled(false)}
+              >
+                Disable
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Clock className="h-5 w-5" />
+              Automatic Check-Out
             </CardTitle>
             <CardDescription>Allow automatic out-of-range check-out after configured rules are met.</CardDescription>
           </CardHeader>
@@ -292,6 +321,79 @@ export function RuntimeFeatureControls({ initialFlags, initialSystemSettings }: 
                   Require from All
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className={offPremisesCheckoutEnabled ? "" : "border-amber-300 bg-amber-50/40 dark:bg-amber-950/20"}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MapPin className="h-5 w-5" />
+                Off-Premises Check-out Requests
+              </CardTitle>
+              <CardDescription>
+                Enable or disable off-premises check-out request flow for regular staff.
+                Exempt roles can still check out without being forced to provide a reason.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Badge variant={offPremisesCheckoutEnabled ? "default" : "secondary"}>
+                {offPremisesCheckoutEnabled ? "Enabled" : "Disabled"}
+              </Badge>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={offPremisesCheckoutEnabled ? "default" : "outline"}
+                  onClick={() => setOffPremisesCheckoutEnabled(true)}
+                >
+                  Enable
+                </Button>
+                <Button
+                  type="button"
+                  variant={offPremisesCheckoutEnabled ? "outline" : "default"}
+                  onClick={() => setOffPremisesCheckoutEnabled(false)}
+                >
+                  Disable
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Clock className="h-5 w-5" />
+                Off-Premises Check-out Window
+              </CardTitle>
+              <CardDescription>
+                Set the allowed hours for regular staff to request off-premises check-out.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="offprem-start">Start time (24 h)</Label>
+                  <Input
+                    id="offprem-start"
+                    type="time"
+                    value={offPremisesCheckoutStartTime}
+                    onChange={(e) => setOffPremisesCheckoutStartTime(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="offprem-end">End time (24 h)</Label>
+                  <Input
+                    id="offprem-end"
+                    type="time"
+                    value={offPremisesCheckoutEndTime}
+                    onChange={(e) => setOffPremisesCheckoutEndTime(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Active window: <span className="font-semibold">{offPremisesCheckoutStartTime}</span> to <span className="font-semibold">{offPremisesCheckoutEndTime}</span>
+              </p>
             </CardContent>
           </Card>
         </div>

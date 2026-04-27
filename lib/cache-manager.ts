@@ -4,10 +4,16 @@
  * Optimized for production with minimal logging
  */
 
+import { clearGeolocationCache } from "@/lib/geolocation"
+import { clearLocationCache as clearFastLocationCache } from "@/lib/geolocation-fast"
+
 const isDev = process.env.NODE_ENV === "development"
 
 export async function clearAppCache(): Promise<void> {
   try {
+    clearGeolocationCache()
+    clearFastLocationCache()
+
     // 1. Clear all localStorage
     localStorage.clear()
 

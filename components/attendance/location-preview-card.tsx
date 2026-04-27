@@ -5,10 +5,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MapPin, Clock, Navigation, CheckCircle, XCircle, RefreshCw } from "lucide-react"
-import { getCurrentLocation, calculateDistance } from "@/lib/geolocation"
+import { getCurrentLocation, calculateDistance, clearGeolocationCache } from "@/lib/geolocation"
 import { getDeviceInfo } from "@/lib/device-info"
 import { useDeviceRadiusSettings } from "@/hooks/use-device-radius-settings"
 import type { GeofenceLocation } from "@/types/geofence"
+import { clearLocationCache as clearFastLocationCache } from "@/lib/geolocation-fast"
 
 interface LocationPreviewCardProps {
   assignedLocation?: GeofenceLocation | null
@@ -33,6 +34,16 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
   }, [])
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      clearGeolocationCache()
+      clearFastLocationCache()
+      void loadLocation()
+    }, 30 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
     if (userLocation && locations.length > 0) {
       findNearestLocation()
     }
@@ -40,7 +51,7 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
 
   const loadLocation = async () => {
     try {
-      const location = await getCurrentLocation()
+      const location = await getCurrentLocation(false)
       setUserLocation(location)
       reverseGeocode(location.latitude, location.longitude)
     } catch (error) {
@@ -56,15 +67,15 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
     // This ensures the "Within Range"/"Out of Range" badge matches the Check Out button state
     let proximityRadius = 100 // Fallback default
     if (deviceRadiusSettings) {
-      if (deviceInfo.device_type === "mobile") {
-        proximityRadius = deviceRadiusSettings.mobile.checkOut
-      } else if (deviceInfo.device_type === "tablet") {
-        proximityRadius = deviceRadiusSettings.tablet.checkOut
-      } else if (deviceInfo.device_type === "laptop") {
-        proximityRadius = deviceRadiusSettings.laptop.checkOut
-      } else if (deviceInfo.device_type === "desktop") {
-        proximityRadius = deviceRadiusSettings.desktop.checkOut
+      const radiusByDevice = {
+        mobile: deviceRadiusSettings.mobile.checkOut,
+        tablet: deviceRadiusSettings.tablet.checkOut,
+        laptop: deviceRadiusSettings.laptop.checkOut,
+        desktop: deviceRadiusSettings.desktop.checkOut,
       }
+      proximityRadius =
+        radiusByDevice[(deviceInfo.device_type as keyof typeof radiusByDevice) || "desktop"] ??
+        deviceRadiusSettings.desktop.checkOut
     } else {
       // Fallback to defaults if settings not loaded yet
       if (deviceInfo.isMobile || deviceInfo.isTablet) {

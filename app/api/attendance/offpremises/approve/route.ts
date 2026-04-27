@@ -80,25 +80,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // new policy: off-premises check-out requests are deprecated and cannot be approved
-    if ((pendingRequest.request_type || 'checkin') === 'checkout') {
-      console.warn('[v0] Attempted to process deprecated checkout request', pendingRequest.id)
-      return NextResponse.json({ error: 'Off-premises check-out requests are no longer supported' }, { status: 400 })
-    }
-
     // Permission validation based on role
     if (approverProfile.role === "admin") {
       // Admins can approve all requests
       console.log("[v0] Admin approving request")
-    } else if (approverProfile.role === "department_head") {
+    } else if (
+      approverProfile.role === "department_head" &&
+      pendingRequest.user_profiles?.department_id !== approverProfile.department_id
+    ) {
       // Department heads can only approve requests from staff in their department
-      if (pendingRequest.user_profiles?.department_id !== approverProfile.department_id) {
-        console.error("[v0] Department head trying to approve outside their department")
-        return NextResponse.json(
-          { error: "You can only approve requests from staff in your department" },
-          { status: 403 }
-        )
-      }
+      console.error("[v0] Department head trying to approve outside their department")
+      return NextResponse.json(
+        { error: "You can only approve requests from staff in your department" },
+        { status: 403 }
+      )
     }
     // Regional managers can approve all in current setup since we don't have location filtering
 
