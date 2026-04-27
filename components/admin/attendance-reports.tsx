@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Download, CalendarIcon, Users, Clock, FileText, AlertTriangle, CheckCircle, FileSpreadsheet, MapPin, Loader2, Search, Eye, User, AlertCircle, BarChart3 } from "lucide-react"
+import { Download, CalendarIcon, Users, Clock, FileText, AlertTriangle, CheckCircle, FileSpreadsheet, MapPin, Loader2, Search, Eye, User, AlertCircle, BarChart3, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
 import {
   BarChart,
   Bar,
@@ -144,18 +144,6 @@ export function AttendanceReports() {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const supabase = createClient()
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-
-        if (userError || !user) {
-          setIsAuthenticated(false)
-          setExportError("Your session has expired. Please sign in again.")
-          return
-        }
-
         const res = await authenticatedFetch("/api/auth/current-user")
         const data = await res.json()
         if (res.ok && data.success && data.user) {
@@ -164,6 +152,22 @@ export function AttendanceReports() {
             setCurrentUserLocationId(data.user.assigned_location_id)
           }
           setIsAuthenticated(true)
+        } else if (res.status === 401) {
+          // Try a silent token refresh then retry once
+          const supabase = createClient()
+          await supabase.auth.refreshSession()
+          const retry = await authenticatedFetch("/api/auth/current-user")
+          const retryData = await retry.json()
+          if (retry.ok && retryData.success && retryData.user) {
+            setCurrentUserRole(retryData.user.role)
+            if (retryData.user.assigned_location_id) {
+              setCurrentUserLocationId(retryData.user.assigned_location_id)
+            }
+            setIsAuthenticated(true)
+          } else {
+            setIsAuthenticated(false)
+            setExportError("Your session has expired. Please sign in again.")
+          }
         } else {
           setIsAuthenticated(false)
           setExportError(data.error || "Your session has expired. Please sign in again.")
@@ -195,6 +199,19 @@ export function AttendanceReports() {
   const [searchQuery, setSearchQuery] = useState("")
   const [sortKey, setSortKey] = useState<string>("check_in_time")
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  const [colFilter, setColFilter] = useState({
+    employee: '',
+    department: '',
+    checkInLocation: '',
+    checkOutLocation: '',
+    status: 'all',
+    hoursMin: '',
+    hoursMax: '',
+  })
+
+  const setCol = (key: keyof typeof colFilter, val: string) =>
+    setColFilter((prev) => ({ ...prev, [key]: val }))
 
   const [page, setPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(50)
@@ -835,6 +852,42 @@ export function AttendanceReports() {
 
   const filteredRecords = useMemo(() => applyClientFilters(records), [records, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, searchQuery])
 
+  const columnFilteredRecords = useMemo(() => {
+    let r = filteredRecords
+    if (colFilter.employee.trim()) {
+      const q = colFilter.employee.trim().toLowerCase()
+      r = r.filter((rec) => {
+        const name = displayUserLabel(rec).toLowerCase()
+        const eid = (rec.user_profiles?.employee_id || '').toLowerCase()
+        return name.includes(q) || eid.includes(q)
+      })
+    }
+    if (colFilter.department.trim()) {
+      const q = colFilter.department.trim().toLowerCase()
+      r = r.filter((rec) => (rec.user_profiles?.departments?.name || '').toLowerCase().includes(q))
+    }
+    if (colFilter.checkInLocation.trim()) {
+      const q = colFilter.checkInLocation.trim().toLowerCase()
+      r = r.filter((rec) => getLocationLabel(rec, 'in').toLowerCase().includes(q))
+    }
+    if (colFilter.checkOutLocation.trim()) {
+      const q = colFilter.checkOutLocation.trim().toLowerCase()
+      r = r.filter((rec) => getLocationLabel(rec, 'out').toLowerCase().includes(q))
+    }
+    if (colFilter.status !== 'all') {
+      r = r.filter((rec) => rec.status === colFilter.status)
+    }
+    if (colFilter.hoursMin !== '') {
+      const min = parseFloat(colFilter.hoursMin)
+      if (!isNaN(min)) r = r.filter((rec) => (rec.work_hours || 0) >= min)
+    }
+    if (colFilter.hoursMax !== '') {
+      const max = parseFloat(colFilter.hoursMax)
+      if (!isNaN(max)) r = r.filter((rec) => (rec.work_hours || 0) <= max)
+    }
+    return r
+  }, [filteredRecords, colFilter])
+
   const presentCount = useMemo(() => records.filter((r) => r.status === "present" || r.check_in_time).length, [records])
 
   const setQuickDate = (preset: "today" | "week" | "month" | "quarter") => {
@@ -875,7 +928,7 @@ export function AttendanceReports() {
   }
 
   const sortedRecords = useMemo(() => {
-    const arr = [...filteredRecords]
+    const arr = [...columnFilteredRecords]
     arr.sort((a: any, b: any) => {
       const get = (r: any) => {
         switch (sortKey) {
@@ -908,7 +961,7 @@ export function AttendanceReports() {
       return 0
     })
     return arr
-  }, [filteredRecords, sortKey, sortDir])
+  }, [columnFilteredRecords, sortKey, sortDir])
 
   // Derived paged lists for Reasons tab (computed here to avoid inline IIFEs in JSX)
   const latenessList = reasonsRecords.filter((r) => r.lateness_reason)
@@ -1503,18 +1556,123 @@ export function AttendanceReports() {
                 <div className="hidden sm:block overflow-x-auto">
                   <Table className="min-w-full text-sm text-gray-800 dark:text-slate-200">
                     <TableHeader>
+                      {/* Sort row */}
                       <TableRow className="bg-gray-50 dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700">
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('check_in_time')}>Date</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('last_name')}>Employee</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('department')}>Department</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('check_in_time')}>Check In</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Check In Location</TableHead>
-                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('check_out_time')}>Check Out</TableHead>
-                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Check Out Location</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('work_hours')}>Hours</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('status')}>Status</TableHead>
-                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Comment</TableHead>
-                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Reason</TableHead>
+                        {([
+                          { key: 'check_in_time', label: 'Date' },
+                          { key: 'last_name', label: 'Employee' },
+                          { key: 'department', label: 'Department' },
+                          { key: 'check_in_time2', label: 'Check In' },
+                          { key: null, label: 'Check In Location' },
+                          { key: 'check_out_time', label: 'Check Out', hidden: true },
+                          { key: null, label: 'Check Out Location', hidden: true },
+                          { key: 'work_hours', label: 'Hours' },
+                          { key: 'status', label: 'Status' },
+                          { key: null, label: 'Comment', hidden: true },
+                          { key: null, label: 'Reason', hidden: true },
+                        ] as Array<{ key: string | null; label: string; hidden?: boolean }>).map(({ key, label, hidden }) => (
+                          <TableHead
+                            key={label}
+                            className={`font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm select-none whitespace-nowrap ${
+                              hidden ? 'hidden sm:table-cell' : ''
+                            } ${key ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700' : ''}`}
+                            onClick={() => key && toggleSort(key === 'check_in_time2' ? 'check_in_time' : key)}
+                          >
+                            <span className="flex items-center gap-1">
+                              {label}
+                              {key && (() => {
+                                const sk = key === 'check_in_time2' ? 'check_in_time' : key
+                                if (sortKey !== sk) return <ArrowUpDown className="h-3 w-3 text-gray-400" />
+                                return sortDir === 'asc'
+                                  ? <ArrowUp className="h-3 w-3 text-blue-500" />
+                                  : <ArrowDown className="h-3 w-3 text-blue-500" />
+                              })()}
+                            </span>
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                      {/* Inline filter row */}
+                      <TableRow className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700">
+                        {/* Date — no inline filter (use date pickers above) */}
+                        <TableHead className="py-1 px-2" />
+                        {/* Employee */}
+                        <TableHead className="py-1 px-2">
+                          <input
+                            value={colFilter.employee}
+                            onChange={(e) => setCol('employee', e.target.value)}
+                            placeholder="Filter name/ID"
+                            className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        </TableHead>
+                        {/* Department */}
+                        <TableHead className="py-1 px-2">
+                          <input
+                            value={colFilter.department}
+                            onChange={(e) => setCol('department', e.target.value)}
+                            placeholder="Filter dept"
+                            className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        </TableHead>
+                        {/* Check In — no inline filter */}
+                        <TableHead className="py-1 px-2" />
+                        {/* Check In Location */}
+                        <TableHead className="py-1 px-2">
+                          <input
+                            value={colFilter.checkInLocation}
+                            onChange={(e) => setCol('checkInLocation', e.target.value)}
+                            placeholder="Filter location"
+                            className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        </TableHead>
+                        {/* Check Out — no inline filter */}
+                        <TableHead className="hidden sm:table-cell py-1 px-2" />
+                        {/* Check Out Location */}
+                        <TableHead className="hidden sm:table-cell py-1 px-2">
+                          <input
+                            value={colFilter.checkOutLocation}
+                            onChange={(e) => setCol('checkOutLocation', e.target.value)}
+                            placeholder="Filter location"
+                            className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        </TableHead>
+                        {/* Hours min/max */}
+                        <TableHead className="py-1 px-2">
+                          <div className="flex gap-1">
+                            <input
+                              value={colFilter.hoursMin}
+                              onChange={(e) => setCol('hoursMin', e.target.value)}
+                              placeholder="≥"
+                              type="number"
+                              min="0"
+                              className="w-10 text-xs border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <input
+                              value={colFilter.hoursMax}
+                              onChange={(e) => setCol('hoursMax', e.target.value)}
+                              placeholder="≤"
+                              type="number"
+                              min="0"
+                              className="w-10 text-xs border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                            />
+                          </div>
+                        </TableHead>
+                        {/* Status */}
+                        <TableHead className="py-1 px-2">
+                          <select
+                            value={colFilter.status}
+                            onChange={(e) => setCol('status', e.target.value)}
+                            className="w-full text-xs border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                          >
+                            <option value="all">All</option>
+                            <option value="present">Present</option>
+                            <option value="late">Late</option>
+                            <option value="absent">Absent</option>
+                            <option value="on_leave">On Leave</option>
+                          </select>
+                        </TableHead>
+                        {/* Comment + Reason — no inline filters */}
+                        <TableHead className="hidden sm:table-cell py-1 px-2" />
+                        <TableHead className="hidden sm:table-cell py-1 px-2" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>

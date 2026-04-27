@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
+import { Input } from "@/components/ui/input"
 import {
   BarChart,
   Bar,
@@ -36,6 +37,10 @@ import {
   BarChart3,
   PieChartIcon,
   LineChartIcon,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Search,
 } from "lucide-react"
 
 interface AnalyticsData {
@@ -76,6 +81,65 @@ export function AnalyticsDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [timeRange, setTimeRange] = useState("30d")
   const [activeTab, setActiveTab] = useState("overview")
+
+  // Department table sort + filter
+  const [deptSearch, setDeptSearch] = useState("")
+  const [deptSortKey, setDeptSortKey] = useState<"name" | "attendance" | "employees" | "avgHours">("attendance")
+  const [deptSortDir, setDeptSortDir] = useState<"asc" | "desc">("desc")
+
+  // Location table sort + filter
+  const [locSearch, setLocSearch] = useState("")
+  const [locSortKey, setLocSortKey] = useState<"name" | "checkins" | "utilization" | "peakHours">("checkins")
+  const [locSortDir, setLocSortDir] = useState<"asc" | "desc">("desc")
+
+  const toggleDeptSort = (key: typeof deptSortKey) => {
+    if (deptSortKey === key) setDeptSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    else { setDeptSortKey(key); setDeptSortDir("asc") }
+  }
+
+  const toggleLocSort = (key: typeof locSortKey) => {
+    if (locSortKey === key) setLocSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    else { setLocSortKey(key); setLocSortDir("asc") }
+  }
+
+  const sortIcon = (active: boolean, dir: "asc" | "desc") => {
+    if (!active) return <ArrowUpDown className="h-3 w-3 text-gray-400 inline ml-1" />
+    return dir === "asc"
+      ? <ArrowUp className="h-3 w-3 text-blue-500 inline ml-1" />
+      : <ArrowDown className="h-3 w-3 text-blue-500 inline ml-1" />
+  }
+
+  const filteredDepts = useMemo(() => {
+    if (!data) return []
+    let rows = [...data.departmentStats]
+    if (deptSearch.trim()) {
+      const q = deptSearch.trim().toLowerCase()
+      rows = rows.filter((d) => d.name.toLowerCase().includes(q))
+    }
+    rows.sort((a, b) => {
+      let va: any = a[deptSortKey]
+      let vb: any = b[deptSortKey]
+      if (typeof va === "string") return deptSortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va)
+      return deptSortDir === "asc" ? va - vb : vb - va
+    })
+    return rows
+  }, [data, deptSearch, deptSortKey, deptSortDir])
+
+  const filteredLocs = useMemo(() => {
+    if (!data) return []
+    let rows = [...data.locationStats]
+    if (locSearch.trim()) {
+      const q = locSearch.trim().toLowerCase()
+      rows = rows.filter((l) => l.name.toLowerCase().includes(q))
+    }
+    rows.sort((a, b) => {
+      let va: any = a[locSortKey]
+      let vb: any = b[locSortKey]
+      if (typeof va === "string") return locSortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va)
+      return locSortDir === "asc" ? va - vb : vb - va
+    })
+    return rows
+  }, [data, locSearch, locSortKey, locSortDir])
 
   useEffect(() => {
     fetchAnalytics()
@@ -370,25 +434,62 @@ export function AnalyticsDashboard() {
                 <CardDescription>Detailed metrics by department</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {data.departmentStats.map((dept, index) => (
-                    <div key={dept.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                        />
-                        <div>
-                          <div className="font-medium">{dept.name}</div>
-                          <div className="text-sm text-muted-foreground">{dept.employees} employees</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-medium">{dept.attendance}%</div>
-                        <div className="text-sm text-muted-foreground">{dept.avgHours}h avg</div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="mb-3 relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                  <Input
+                    value={deptSearch}
+                    onChange={(e) => setDeptSearch(e.target.value)}
+                    placeholder="Filter departments…"
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        {([
+                          { key: "name", label: "Department" },
+                          { key: "employees", label: "Staff" },
+                          { key: "attendance", label: "Attendance %" },
+                          { key: "avgHours", label: "Avg Hours" },
+                        ] as const).map(({ key, label }) => (
+                          <th
+                            key={key}
+                            className="py-2 px-3 text-left font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-50 whitespace-nowrap"
+                            onClick={() => toggleDeptSort(key)}
+                          >
+                            {label}
+                            {sortIcon(deptSortKey === key, deptSortDir)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDepts.map((dept, index) => (
+                        <tr key={dept.name} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                              <span className="font-medium">{dept.name}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-600">{dept.employees}</td>
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              <Progress value={dept.attendance} className="h-1.5 w-16" />
+                              <span className={`font-medium ${dept.attendance >= 85 ? "text-emerald-600" : dept.attendance >= 70 ? "text-amber-600" : "text-red-600"}`}>
+                                {dept.attendance}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-600">{dept.avgHours}h</td>
+                        </tr>
+                      ))}
+                      {filteredDepts.length === 0 && (
+                        <tr><td colSpan={4} className="py-6 text-center text-gray-400 text-sm">No departments match your filter</td></tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
@@ -396,38 +497,70 @@ export function AnalyticsDashboard() {
         </TabsContent>
 
         <TabsContent value="locations" className="space-y-6">
-          <div className="grid gap-6">
-            {data.locationStats.map((location) => (
-              <Card key={location.name} className="shadow-sm border-0 bg-white">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <MapPin className="h-5 w-5 text-primary" />
-                      {location.name}
-                    </span>
-                    <Badge variant="secondary">{location.peakHours}</Badge>
-                  </CardTitle>
-                  <CardDescription>Location utilization and check-in statistics</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-primary">{location.checkins}</div>
-                      <div className="text-sm text-muted-foreground">Total Check-ins</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">{location.utilization}%</div>
-                      <div className="text-sm text-muted-foreground">Utilization Rate</div>
-                    </div>
-                    <div className="text-center">
-                      <Progress value={location.utilization} className="mt-2" />
-                      <div className="text-sm text-muted-foreground mt-1">Capacity Usage</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card className="shadow-sm border-0 bg-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-primary" />Location Statistics</CardTitle>
+              <CardDescription>Check-in counts and utilization by location</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-3 relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                <Input
+                  value={locSearch}
+                  onChange={(e) => setLocSearch(e.target.value)}
+                  placeholder="Filter locations…"
+                  className="pl-8 h-8 text-sm"
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      {([
+                        { key: "name", label: "Location" },
+                        { key: "checkins", label: "Check-ins" },
+                        { key: "utilization", label: "Utilization %" },
+                        { key: "peakHours", label: "Peak Hours" },
+                      ] as const).map(({ key, label }) => (
+                        <th
+                          key={key}
+                          className="py-2 px-3 text-left font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-50 whitespace-nowrap"
+                          onClick={() => toggleLocSort(key)}
+                        >
+                          {label}
+                          {sortIcon(locSortKey === key, locSortDir)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLocs.map((location) => (
+                      <tr key={location.name} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 px-3 font-medium flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-primary flex-shrink-0" />{location.name}
+                        </td>
+                        <td className="py-2.5 px-3 text-gray-700 font-semibold">{location.checkins}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <Progress value={location.utilization} className="h-1.5 w-20" />
+                            <span className={`font-medium ${location.utilization >= 80 ? "text-emerald-600" : location.utilization >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                              {location.utilization}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <Badge variant="secondary" className="text-xs">{location.peakHours}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredLocs.length === 0 && (
+                      <tr><td colSpan={4} className="py-6 text-center text-gray-400 text-sm">No locations match your filter</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
