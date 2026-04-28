@@ -33,18 +33,18 @@ export default function VerifyEmailPage() {
               </div>
             </div>
             <div>
-              <CardTitle className="text-2xl font-bold text-primary">Registration Complete!</CardTitle>
+              <CardTitle className="text-2xl font-bold text-primary">Registration Complete! 🎉</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Your account has been created successfully
+                Akwaaba! Your account has been created successfully
               </CardDescription>
             </div>
           </CardHeader>
           <CardContent className="text-center space-y-4">
             <p className="text-sm text-muted-foreground">
-              Email verification is no longer required. Your account is ready and awaiting admin approval.
+              Email verification is no longer required. Your account is now waiting for admin approval.
             </p>
             <p className="text-sm text-muted-foreground">
-              You will be redirected to the login page automatically, or you can click below.
+              You will be redirected to login shortly, or you can continue now.
             </p>
             <div className="pt-4">
               <Button asChild className="w-full bg-gradient-to-r from-green-600 to-orange-600">

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,10 +20,46 @@ export async function POST(request: NextRequest) {
     const end_date = formData.get("end_date") as string
     const reason = formData.get("reason") as string
     const leave_type = formData.get("leave_type") as string
+    const leave_year_period = (formData.get("leave_year_period") as string) || "2026/2027"
     const document = formData.get("document") as File | null
 
     if (!start_date || !end_date || !reason) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    const requestedDays = computeLeaveDays(start_date, end_date)
+    if (requestedDays <= 0) {
+      return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
+    }
+
+    const returnToWorkDate = computeReturnToWorkDate(end_date)
+
+    // Enforce entitlement policy (if policy table exists).
+    try {
+      const { data: policyRows, error: policyError } = await supabase
+        .from("leave_policy_catalog")
+        .select("entitlement_days, is_enabled")
+        .eq("leave_year_period", leave_year_period)
+        .eq("leave_type_key", String(leave_type || "").toLowerCase())
+        .limit(1)
+
+      if (!policyError && policyRows && policyRows.length > 0) {
+        const policy = policyRows[0] as any
+        if (!policy.is_enabled) {
+          return NextResponse.json({ error: "Selected leave type is currently disabled by policy." }, { status: 400 })
+        }
+
+        if (requestedDays > Number(policy.entitlement_days || 0)) {
+          return NextResponse.json(
+            {
+              error: `Requested ${requestedDays} day(s) exceeds entitlement of ${policy.entitlement_days} for this leave type.`,
+            },
+            { status: 400 },
+          )
+        }
+      }
+    } catch {
+      // Continue gracefully if policy table is not migrated yet.
     }
 
     let document_url = null
@@ -94,6 +131,7 @@ export async function POST(request: NextRequest) {
       end_date,
       reason,
       leave_type,
+      leave_year_period,
       status: shouldAutoApprove ? "approved" : "pending",
       approved_by: shouldAutoApprove ? user.id : null,
       approved_at: shouldAutoApprove ? new Date().toISOString() : null,
@@ -114,13 +152,16 @@ export async function POST(request: NextRequest) {
 
     if (requestError) {
       const msg = (requestError && requestError.message) || String(requestError)
-      const isMissingColumn = /Could not find the .*column.*leave_type/i.test(msg) || /column "leave_type" does not exist/i.test(msg)
+      const isMissingColumn =
+        /Could not find the .*column/i.test(msg) ||
+        /column ".*" does not exist/i.test(msg)
 
       if (isMissingColumn) {
-        console.warn("leave_type column missing in DB schema; retrying without leave_type and advising migration")
-        // remove the leave_type and retry
+        console.warn("leave_type/leave_year_period columns missing in DB schema; retrying without optional columns and advising migration")
+        // remove optional columns and retry
         const altPayload = { ...payload }
         delete altPayload.leave_type
+        delete altPayload.leave_year_period
         try {
           const res2 = await supabase.from("leave_requests").insert(altPayload).select().single()
           leaveRequest = res2.data
@@ -181,6 +222,24 @@ export async function POST(request: NextRequest) {
         if (leaveStatusError) {
           console.error("Failed to populate leave_status for auto-approved request:", leaveStatusError)
         }
+
+        const today = new Date().toISOString().split("T")[0]
+        const effectiveStatus = today >= start_date && today <= end_date ? "on_leave" : "active"
+
+        const { error: profileUpdateError } = await supabase
+          .from("user_profiles")
+          .update({
+            leave_status: effectiveStatus,
+            leave_start_date: start_date,
+            leave_end_date: end_date,
+            leave_reason: reason,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id)
+
+        if (profileUpdateError) {
+          console.error("Failed updating user_profiles leave fields for auto-approved request:", profileUpdateError)
+        }
       } catch (e) {
         console.error("Error populating leave_status for auto-approved request:", e)
       }
@@ -189,6 +248,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         message: "Leave request submitted successfully",
+        requestedDays,
+        entitlementPeriod: leave_year_period,
+        returnToWorkDate,
         leaveRequest,
       },
       { status: 201 }

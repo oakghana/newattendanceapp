@@ -582,9 +582,9 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2 slide-up">
-              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">QCC ATTENDANCE</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">QCC ATTENDANCE APP👋</CardTitle>
               <CardDescription className="text-xs sm:text-sm text-muted-foreground">
-                Sign in with your Staff Number, Email or use OTP
+                Akwaaba! Sign in with your Staff Number, Email or use OTP to get started.
               </CardDescription>
             </div>
           </CardHeader>
@@ -595,13 +595,13 @@ export default function LoginPage() {
                   value="password"
                   className="text-sm sm:text-base transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
                 >
-                  Staff Login
+                  🔐 Staff Login
                 </TabsTrigger>
                 <TabsTrigger
                   value="otp"
                   className="text-sm sm:text-base transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
                 >
-                  OTP Login
+                  📱 OTP Login
                 </TabsTrigger>
               </TabsList>
 
@@ -609,12 +609,12 @@ export default function LoginPage() {
                 <form onSubmit={handleLogin} className="space-y-5 sm:space-y-6 stagger-children">
                   <div className="space-y-2">
                     <Label htmlFor="identifier" className="text-sm font-medium text-foreground">
-                      Staff Number or Email
+                      Staff Number or Email Address
                     </Label>
                     <Input
                       id="identifier"
                       type="text"
-                      placeholder="Enter your email"
+                      placeholder="Your staff number or email"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       required
@@ -624,7 +624,7 @@ export default function LoginPage() {
                       inputMode="email"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      7-digit staff number or email address
+                      Use your 7-digit staff number or your work email — either works! 😊
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -664,7 +664,7 @@ export default function LoginPage() {
                     className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Signing in..." : "Sign In"}
+                    {isLoading ? "Please wait..." : "Sign In 🚀"}
                   </Button>
                 </form>
               </TabsContent>
@@ -685,14 +685,14 @@ export default function LoginPage() {
                         required
                         className="h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced"
                       />
-                      <p className="text-xs text-muted-foreground">OTP will be sent to your registered email address</p>
+                      <p className="text-xs text-muted-foreground">We'll send a one-time code to your registered work email. Check your inbox! 📬</p>
                     </div>
                     <Button
                       type="submit"
                       className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
                       disabled={isLoading}
                     >
-                      {isLoading ? "Sending OTP..." : "Send OTP Code"}
+                      {isLoading ? "Sending..." : "Send OTP Code 📲"}
                     </Button>
                   </form>
                 ) : (
@@ -732,7 +732,7 @@ export default function LoginPage() {
                         </InputOTP>
                       </div>
                       <p className="text-xs text-muted-foreground text-center">
-                        Enter the 6-digit code sent to {otpEmail}
+                        Enter the 6-digit code we sent to {otpEmail}. Check spam too if you don't see it! 🔍
                       </p>
                     </div>
                     <Button
@@ -740,7 +740,7 @@ export default function LoginPage() {
                       className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
                       disabled={isLoading || otp.length !== 6}
                     >
-                      {isLoading ? "Verifying..." : "Verify OTP"}
+                      {isLoading ? "Verifying..." : "Verify & Sign In ✅"}
                     </Button>
                     <div className="flex gap-2">
                       <Button
@@ -771,12 +771,12 @@ export default function LoginPage() {
             </Tabs>
 
             <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">Don't have an account?</p>
+              <p className="text-sm text-muted-foreground">No account yet? Contact your IT Manager or Regional IT Head to get set up. 🙏</p>
             </div>
 
           <div className="mt-6 text-center border-t border-border pt-6">
-            <p className="text-sm font-medium text-foreground">Quality Control Company Limited</p>
-            <p className="text-xs text-muted-foreground mt-1">Intranet Portal - Powered by IT Department</p>
+            <p className="text-sm font-medium text-foreground">Quality Control Company Limited 🇬🇭</p>
+            <p className="text-xs text-muted-foreground mt-1">Intranet Portal — Built & managed by your IT Department with ❤️</p>
             <p className="text-xs text-muted-foreground mt-2 font-mono text-center">V.2.0-28-04-26</p>
           </div>
           </CardContent>

@@ -34,9 +34,9 @@ export function DashboardOverviewClient({
 
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/70 backdrop-blur px-6 py-5 shadow-sm">
           <div className="space-y-1.5">
-            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard</h1>
+            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard 🇬🇭</h1>
             <p className="text-base md:text-lg text-muted-foreground">
-              Welcome back, {" "}
+              Akwaaba, {" "}
               <span className="text-primary font-semibold">{profile?.first_name || user?.email?.split("@")[0]}</span>{" "}
               {profile?.last_name || ""}
             </p>
@@ -48,7 +48,7 @@ export function DashboardOverviewClient({
             <AlertCircle className="h-5 w-5 text-primary" />
             <AlertDescription className="flex items-center justify-between">
               <span className="text-primary font-semibold text-base">
-                {pendingApprovals} user{pendingApprovals > 1 ? "s" : ""} awaiting approval
+                {pendingApprovals} user{pendingApprovals > 1 ? "s" : ""} waiting for approval
               </span>
               <Button asChild size="sm" className="ml-4 shadow-sm hover:shadow-md transition-shadow">
                 <Link href="/dashboard/user-approvals">
@@ -62,12 +62,12 @@ export function DashboardOverviewClient({
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <StatsCard
-            title="Today's Status"
+            title="Today's Attendance"
             value={todayAttendance ? "Checked In" : "Not Checked In"}
             description={
               todayAttendance
                 ? `At ${new Date(todayAttendance.check_in_time).toLocaleTimeString()}`
-                : "Click to check in"
+                : "Ready for check-in"
             }
             icon={Clock}
             variant={todayAttendance ? "success" : "default"}
@@ -76,7 +76,7 @@ export function DashboardOverviewClient({
           <StatsCard
             title="This Month"
             value={monthlyAttendance || 0}
-            description="Days attended"
+            description="Attendance days"
             icon={Calendar}
             trend={{ value: 5, isPositive: true }}
           />
@@ -109,9 +109,9 @@ export function DashboardOverviewClient({
           <CardHeader className="pb-5">
             <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2.5">
               <TrendingUp className="h-5 w-5 text-primary" />
-              Performance Overview
+              Performance Snapshot
             </CardTitle>
-            <CardDescription className="text-sm">Your attendance statistics and trends</CardDescription>
+            <CardDescription className="text-sm">Simple view of your attendance progress</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">

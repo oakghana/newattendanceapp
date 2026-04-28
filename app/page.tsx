@@ -56,9 +56,9 @@ export default function HomePage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="text-center space-y-4">
         <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
-        <h1 className="text-2xl font-bold text-slate-900">QCC Electronic Attendance</h1>
+        <h1 className="text-2xl font-bold text-slate-900">QCC ATTENDANCE APP👋</h1>
         <p className="text-slate-600">
-          {error ? `Error: ${error}` : isChecking ? 'Checking authentication...' : 'Redirecting...'}
+          {error ? `Error: ${error}` : isChecking ? 'Checking your account, please wait...' : 'Redirecting you now...'}
         </p>
       </div>
     </div>

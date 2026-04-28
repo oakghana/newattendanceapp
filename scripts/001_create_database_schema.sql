@@ -176,9 +176,9 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_user_profiles_employee_id ON public.user_profiles(employee_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_department ON public.user_profiles(department_id);
--- Fixed immutable function error by using date_trunc instead of DATE function
-CREATE INDEX IF NOT EXISTS idx_attendance_records_user_date ON public.attendance_records(user_id, date_trunc('day', check_in_time));
-CREATE INDEX IF NOT EXISTS idx_attendance_records_date ON public.attendance_records(date_trunc('day', check_in_time));
+-- Avoid non-immutable functional indexes on timestamptz; keep range queries fast with plain indexes.
+CREATE INDEX IF NOT EXISTS idx_attendance_records_user_check_in_time ON public.attendance_records(user_id, check_in_time);
+CREATE INDEX IF NOT EXISTS idx_attendance_records_check_in_time ON public.attendance_records(check_in_time);
 CREATE INDEX IF NOT EXISTS idx_device_sessions_user ON public.device_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_qr_event_scans_event ON public.qr_event_scans(qr_event_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_action ON public.audit_logs(user_id, action);

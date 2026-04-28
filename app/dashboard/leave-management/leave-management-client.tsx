@@ -40,6 +40,8 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
 import { LeaveNotificationsClient } from "@/components/leave/leave-notifications-client"
+import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { useToast } from "@/hooks/use-toast"
 
 interface LeaveRequest {
   id: string
@@ -69,12 +71,20 @@ interface LeaveManagementClientProps {
   initialManagerNotifications: LeaveNotification[]
 }
 
+interface LeaveTypeOption {
+  leaveTypeKey: string
+  leaveTypeLabel: string
+  entitlementDays: number
+  leaveYearPeriod: string
+}
+
 export function LeaveManagementClient({
   userRole,
   userDepartment,
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementClientProps) {
+  const { toast } = useToast()
   const allowedRequestRoles = [
     "staff",
     "nsp",
@@ -98,9 +108,49 @@ export function LeaveManagementClient({
     leave_type: "annual",
     reason: "",
   })
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
+  const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
 
+  const showUnderReviewToast = () => {
+    toast({
+      title: "Under Review",
+      description:
+        "This leave module is still under review and will be commissioned by management soon. Thanks for your patience.",
+    })
+  }
+
+  useEffect(() => {
+    const loadLeavePolicy = async () => {
+      try {
+        const response = await fetch("/api/leave/policy", { cache: "no-store" })
+        const result = await response.json()
+        if (!response.ok) return
+
+        setActivePeriod(result.activePeriod || "2026/2027")
+        const options = (result.leaveTypes || []) as LeaveTypeOption[]
+        setLeaveTypes(options)
+
+        if (options.length > 0) {
+          const exists = options.some((opt) => opt.leaveTypeKey === formData.leave_type)
+          if (!exists) {
+            setFormData((prev) => ({ ...prev, leave_type: options[0].leaveTypeKey }))
+          }
+        }
+      } catch {
+        // Keep fallback options when policy endpoint is unavailable.
+      }
+    }
+
+    void loadLeavePolicy()
+  }, [])
+
   const handleSubmitLeave = async () => {
+    if (userRole !== "admin") {
+      showUnderReviewToast()
+      return
+    }
+
     if (!formData.start_date || !formData.end_date || !formData.reason) {
       alert("Please fill in all required fields")
       return
@@ -108,6 +158,15 @@ export function LeaveManagementClient({
 
     if (new Date(formData.start_date) >= new Date(formData.end_date)) {
       alert("End date must be after start date")
+      return
+    }
+
+    const requestedDays = computeLeaveDays(formData.start_date, formData.end_date)
+    const selectedType = leaveTypes.find((type) => type.leaveTypeKey === formData.leave_type)
+    if (selectedType && requestedDays > selectedType.entitlementDays) {
+      alert(
+        `Requested ${requestedDays} day(s) exceeds ${selectedType.entitlementDays} day entitlement for ${selectedType.leaveTypeLabel}.`,
+      )
       return
     }
 
@@ -119,6 +178,7 @@ export function LeaveManagementClient({
       formDataToSend.append("end_date", formData.end_date)
       formDataToSend.append("reason", formData.reason)
       formDataToSend.append("leave_type", formData.leave_type)
+      formDataToSend.append("leave_year_period", activePeriod)
       
       if (uploadedFile) {
         formDataToSend.append("document", uploadedFile)
@@ -130,9 +190,12 @@ export function LeaveManagementClient({
       })
 
       if (response.ok) {
+        const successData = await response.json()
+        const returnToWork = successData?.returnToWorkDate || computeReturnToWorkDate(formData.end_date)
         setFormData({ start_date: "", end_date: "", leave_type: "annual", reason: "" })
         setNewLeaveOpen(false)
         setUploadedFile(null)
+        alert(`Leave request submitted. Expected return-to-work date: ${returnToWork}`)
         // Refresh the page to get updated data
         window.location.reload()
       } else {
@@ -148,6 +211,11 @@ export function LeaveManagementClient({
   }
 
   const handleApprove = async (notificationId: string) => {
+    if (userRole !== "admin") {
+      showUnderReviewToast()
+      return
+    }
+
     setProcessingId(notificationId)
     try {
       const response = await fetch("/api/leave/notifications", {
@@ -171,6 +239,11 @@ export function LeaveManagementClient({
   }
 
   const handleDismiss = async (notificationId: string, reason: string) => {
+    if (userRole !== "admin") {
+      showUnderReviewToast()
+      return
+    }
+
     setProcessingId(notificationId)
     try {
       const response = await fetch("/api/leave/notifications", {
@@ -239,14 +312,15 @@ export function LeaveManagementClient({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="annual">Annual Leave</SelectItem>
-                          <SelectItem value="sick">Sick Leave</SelectItem>
-                          <SelectItem value="maternity">Maternity Leave</SelectItem>
-                          <SelectItem value="paternity">Paternity Leave</SelectItem>
-                          <SelectItem value="unpaid">Unpaid Leave</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          {leaveTypes.length === 0 && <SelectItem value="annual">Annual Leave (30 days)</SelectItem>}
+                          {leaveTypes.map((type) => (
+                            <SelectItem key={type.leaveTypeKey} value={type.leaveTypeKey}>
+                              {type.leaveTypeLabel} ({type.entitlementDays} days)
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-muted-foreground mt-1">Active Leave Period: {activePeriod}</p>
                     </div>
 
                     <div>

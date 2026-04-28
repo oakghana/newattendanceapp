@@ -21,12 +21,44 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Calendar, Loader2 } from "lucide-react"
+import { useEffect } from "react"
+import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+
+interface LeaveTypeOption {
+  leaveTypeKey: string
+  leaveTypeLabel: string
+  entitlementDays: number
+  leaveYearPeriod: string
+}
 
 export function RequestLeaveButton() {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [formData, setFormData] = useState({ start_date: "", end_date: "", leave_type: "annual", reason: "" })
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
+  const [activePeriod, setActivePeriod] = useState("2026/2027")
+
+  useEffect(() => {
+    const loadLeavePolicy = async () => {
+      try {
+        const response = await fetch("/api/leave/policy", { cache: "no-store" })
+        const result = await response.json()
+        if (!response.ok) return
+
+        setActivePeriod(result.activePeriod || "2026/2027")
+        const options = (result.leaveTypes || []) as LeaveTypeOption[]
+        setLeaveTypes(options)
+        if (options.length > 0 && !options.some((opt) => opt.leaveTypeKey === formData.leave_type)) {
+          setFormData((prev) => ({ ...prev, leave_type: options[0].leaveTypeKey }))
+        }
+      } catch {
+        // Keep fallback defaults when policy endpoint is unavailable.
+      }
+    }
+
+    void loadLeavePolicy()
+  }, [])
 
   const submit = async () => {
     if (!formData.start_date || !formData.end_date || !formData.reason) {
@@ -38,6 +70,15 @@ export function RequestLeaveButton() {
       return
     }
 
+    const requestedDays = computeLeaveDays(formData.start_date, formData.end_date)
+    const selectedType = leaveTypes.find((type) => type.leaveTypeKey === formData.leave_type)
+    if (selectedType && requestedDays > selectedType.entitlementDays) {
+      alert(
+        `Requested ${requestedDays} day(s) exceeds ${selectedType.entitlementDays} day entitlement for ${selectedType.leaveTypeLabel}.`,
+      )
+      return
+    }
+
     setSubmitting(true)
     try {
       const m = new FormData()
@@ -45,13 +86,17 @@ export function RequestLeaveButton() {
       m.append("end_date", formData.end_date)
       m.append("reason", formData.reason)
       m.append("leave_type", formData.leave_type)
+      m.append("leave_year_period", activePeriod)
       if (uploadedFile) m.append("document", uploadedFile)
 
       const resp = await fetch("/api/leave/request-leave", { method: "POST", body: m })
       if (resp.ok) {
+        const data = await resp.json()
+        const returnToWork = data?.returnToWorkDate || computeReturnToWorkDate(formData.end_date)
         setFormData({ start_date: "", end_date: "", leave_type: "annual", reason: "" })
         setUploadedFile(null)
         setOpen(false)
+        alert(`Leave request submitted. Expected return-to-work date: ${returnToWork}`)
         // optional: trigger refresh if needed
         // location.reload()
       } else {
@@ -88,14 +133,15 @@ export function RequestLeaveButton() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="annual">Annual Leave</SelectItem>
-                <SelectItem value="sick">Sick Leave</SelectItem>
-                <SelectItem value="maternity">Maternity Leave</SelectItem>
-                <SelectItem value="paternity">Paternity Leave</SelectItem>
-                <SelectItem value="unpaid">Unpaid Leave</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                {leaveTypes.length === 0 && <SelectItem value="annual">Annual Leave (30 days)</SelectItem>}
+                {leaveTypes.map((type) => (
+                  <SelectItem key={type.leaveTypeKey} value={type.leaveTypeKey}>
+                    {type.leaveTypeLabel} ({type.entitlementDays} days)
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground mt-1">Active Leave Period: {activePeriod}</p>
           </div>
 
           <div>

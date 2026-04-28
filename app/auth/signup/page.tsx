@@ -25,25 +25,25 @@ export default function SignupPage() {
             </div>
             <div>
               <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                QCC ELECTRONIC ATTENDANCE APP
+                QCC Electronic Attendance 🇬🇭
               </CardTitle>
-              <CardDescription className="text-muted-foreground mt-2">Account Registration Disabled</CardDescription>
+              <CardDescription className="text-muted-foreground mt-2">Account Registration Info</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <Alert className="border-secondary/50 bg-secondary/10">
               <AlertDescription className="text-center">
-                <strong>Self-registration is no longer available.</strong>
+                <strong>👋 Hey there! Self-registration is closed.</strong>
                 <br />
-                Please contact the IT Manager or Your Regional IT Head to have an account created for you.
+                To get your account, simply contact your IT Manager or Regional IT Head — they'll sort you out quickly!
                 <br />
-               Application Powered and managed by the IT Department.
+                📞 The IT Department is here to help you get started.
               </AlertDescription>
             </Alert>
 
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
-                Already have an account?{" "}
+                Already have an account? 🙌{" "}
                 <Link
                   href="/auth/login"
                   className="font-semibold text-secondary hover:text-secondary/80 underline underline-offset-4 transition-colors"

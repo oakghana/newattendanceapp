@@ -13,21 +13,21 @@ export function QuickActions({ userRole }: QuickActionsProps) {
   const actions = [
     {
       title: "Check In/Out",
-      description: "Record your daily attendance with location verification",
+      description: "Mark attendance quickly with secure location check",
       href: "/dashboard/attendance",
       icon: Clock,
       tag: "Daily",
     },
     {
-      title: "Leave Notification",
-      description: "Submit a leave notification for approval by your manager",
+      title: "Leave Hub",
+      description: "Apply for leave and track updates from your manager",
       href: "/dashboard/leave-management",
       icon: Calendar,
       tag: "Request",
     },
     {
       title: "View Schedule",
-      description: "Check upcoming events and important dates",
+      description: "See upcoming shifts, events, and important dates",
       href: "/dashboard/schedule",
       icon: Calendar,
       tag: "Plan",
@@ -63,9 +63,9 @@ export function QuickActions({ userRole }: QuickActionsProps) {
           <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
             <Zap className="h-4.5 w-4.5 text-primary" />
           </div>
-          Quick Actions
+          Quick Actions ⚡
         </CardTitle>
-        <CardDescription className="text-sm text-slate-600 dark:text-slate-400">Access your most-used tools</CardDescription>
+        <CardDescription className="text-sm text-slate-600 dark:text-slate-400">Your everyday tools, all in one place</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {allActions.map((action) => {

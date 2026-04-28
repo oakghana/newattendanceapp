@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Card } from "@/components/ui/card"
 import { Calendar, AlertCircle, CheckCircle2, Clock, Upload, FileText } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useEffect } from "react"
 
 interface LeaveRequestDialogProps {
   open: boolean
@@ -21,12 +22,13 @@ export interface LeaveRequestData {
   startDate: Date
   endDate: Date
   reason: string
-  leaveType: "sick" | "vacation" | "personal" | "other"
+  leaveType: string
+  leaveYearPeriod?: string
   documentFile?: File
   isDirectSubmit?: boolean
 }
 
-const LEAVE_TYPES = [
+const DEFAULT_LEAVE_TYPES = [
   { value: "sick", label: "Sick Leave", color: "bg-red-50 border-red-200" },
   { value: "vacation", label: "Vacation/Annual Leave", color: "bg-blue-50 border-blue-200" },
   { value: "personal", label: "Personal Leave", color: "bg-purple-50 border-purple-200" },
@@ -36,14 +38,43 @@ const LEAVE_TYPES = [
 export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedLeave, onSubmit }: LeaveRequestDialogProps) {
   const [step, setStep] = useState<"type" | "dates" | "reason" | "document" | "confirm">(hasApprovedLeave ? "type" : "type")
   const [loading, setLoading] = useState(false)
+  const [leaveTypeOptions, setLeaveTypeOptions] = useState(DEFAULT_LEAVE_TYPES)
+  const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [formData, setFormData] = useState<LeaveRequestData>({
     startDate: new Date(),
     endDate: new Date(),
     reason: "",
-    leaveType: "vacation",
+    leaveType: "annual",
     isDirectSubmit: hasApprovedLeave,
   })
+
+  useEffect(() => {
+    const loadPolicy = async () => {
+      try {
+        const response = await fetch("/api/leave/policy", { cache: "no-store" })
+        const result = await response.json()
+        if (!response.ok) return
+
+        setActivePeriod(result.activePeriod || "2026/2027")
+        const opts = (result.leaveTypes || []).map((t: any) => ({
+          value: t.leaveTypeKey,
+          label: `${t.leaveTypeLabel} (${t.entitlementDays} days)`,
+          color: "bg-blue-50 border-blue-200",
+        }))
+        if (opts.length > 0) {
+          setLeaveTypeOptions(opts)
+          setFormData((prev) => ({ ...prev, leaveType: opts[0].value, leaveYearPeriod: result.activePeriod }))
+        }
+      } catch {
+        // Keep default leave type options if policy endpoint fails.
+      }
+    }
+
+    if (open) {
+      void loadPolicy()
+    }
+  }, [open])
 
   const handleSubmit = async () => {
     setLoading(true)
@@ -66,7 +97,8 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
       startDate: new Date(),
       endDate: new Date(),
       reason: "",
-      leaveType: "vacation",
+      leaveType: leaveTypeOptions[0]?.value || "annual",
+      leaveYearPeriod: activePeriod,
       isDirectSubmit: hasApprovedLeave,
     })
     setUploadedFile(null)
@@ -106,7 +138,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
           {step === "type" && (
             <div className="space-y-3">
               <label className="text-sm font-semibold">Leave Type</label>
-              {LEAVE_TYPES.map((type) => (
+              {leaveTypeOptions.map((type) => (
                 <button
                   key={type.value}
                   onClick={() => {
@@ -205,7 +237,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                 <CardContent className="pt-6 space-y-3">
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Leave Type:</span>
-                    <span className="font-medium">{LEAVE_TYPES.find((t) => t.value === formData.leaveType)?.label}</span>
+                    <span className="font-medium">{leaveTypeOptions.find((t) => t.value === formData.leaveType)?.label}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Duration:</span>

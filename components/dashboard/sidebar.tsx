@@ -68,14 +68,14 @@ interface SidebarProps {
 
 const navigationItems = [
   {
-    title: "Dashboard",
+    title: "Home Dashboard",
     href: "/dashboard/overview",
     icon: Home,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff"],
     category: "main",
   },
   {
-    title: "Attendance",
+    title: "Attendance Check",
     href: "/dashboard/attendance",
     icon: Clock,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff"],
@@ -97,8 +97,15 @@ const navigationItems = [
     category: "main",
   },
   {
-    title: "Leave Management",
+    title: "Leave Hub",
     href: "/dashboard/leave-management",
+    icon: Calendar,
+    roles: ["admin", "regional_manager", "department_head", "staff", "it-admin", "nsp", "intern"],
+    category: "admin",
+  },
+  {
+    title: "Leave Plan 2026/2027",
+    href: "/dashboard/leave-planning",
     icon: Calendar,
     roles: ["admin", "regional_manager", "department_head", "staff", "it-admin", "nsp", "intern"],
     category: "admin",
@@ -118,14 +125,14 @@ const navigationItems = [
     category: "main",
   },
   {
-    title: "Reports",
+    title: "Reports & Trends",
     href: "/dashboard/reports",
     icon: BarChart3,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff"],
     category: "main",
   },
   {
-    title: "Help",
+    title: "Help Center",
     href: "/dashboard/help",
     icon: HelpCircle,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff"],

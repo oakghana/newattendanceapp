@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { LeaveManagementClient } from "./leave-management-client"
+import { LeaveManagementModuleClient } from "./leave-management-module-client"
 
 export default async function LeaveManagementPage() {
   const supabase = await createClient()
@@ -15,7 +15,7 @@ export default async function LeaveManagementPage() {
   // Get user profile
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, department_id")
+    .select("role, department_id, departments(name, code)")
     .eq("id", user.id)
     .single()
 
@@ -58,9 +58,11 @@ export default async function LeaveManagementPage() {
   }
 
   return (
-    <LeaveManagementClient
+    <LeaveManagementModuleClient
       userRole={profile.role}
       userDepartment={profile.department_id}
+      userDepartmentName={(profile as any)?.departments?.name || null}
+      userDepartmentCode={(profile as any)?.departments?.code || null}
       initialStaffRequests={staffRequests}
       initialManagerNotifications={managerNotifications}
     />

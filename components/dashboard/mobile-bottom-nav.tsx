@@ -20,7 +20,7 @@ interface MobileBottomNavProps {
 
 const staffNavItems: NavItem[] = [
   { href: "/dashboard/overview", icon: Home, label: "Home" },
-  { href: "/dashboard/attendance", icon: Clock, label: "Attend" },
+  { href: "/dashboard/attendance", icon: Clock, label: "Attendance" },
   { href: "/dashboard/excuse-duty", icon: FileText, label: "Excuse" },
   { href: "/dashboard/reports", icon: BarChart3, label: "Reports" },
   { href: "/dashboard/profile", icon: Settings, label: "Profile" },
@@ -28,7 +28,7 @@ const staffNavItems: NavItem[] = [
 
 const approvalsNavItems: NavItem[] = [
   { href: "/dashboard/overview", icon: Home, label: "Home" },
-  { href: "/dashboard/attendance", icon: Clock, label: "Attend" },
+  { href: "/dashboard/attendance", icon: Clock, label: "Attendance" },
   { href: "/offpremises-approvals", icon: UserCheck, label: "Approve" },
   { href: "/dashboard/reports", icon: BarChart3, label: "Reports" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
@@ -36,7 +36,7 @@ const approvalsNavItems: NavItem[] = [
 
 const adminNavItems: NavItem[] = [
   { href: "/dashboard/overview", icon: Home, label: "Home" },
-  { href: "/dashboard/attendance", icon: Clock, label: "Attend" },
+  { href: "/dashboard/attendance", icon: Clock, label: "Attendance" },
   { href: "/offpremises-approvals", icon: UserCheck, label: "Approve" },
   { href: "/dashboard/staff", icon: Users, label: "Staff" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },

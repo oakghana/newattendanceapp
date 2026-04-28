@@ -149,7 +149,7 @@ export default async function DashboardPage() {
                     </div>
                     <div>
                       <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-600 dark:from-white dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                        Welcome back
+                        Akwaaba, welcome back 👋
                       </h1>
                       <p className="text-xl text-slate-600 dark:text-slate-300 font-medium">
                         {profile?.first_name || user?.email?.split("@")[0]} {profile?.last_name || ""}
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
                   <span className="text-amber-800 dark:text-amber-200 font-semibold text-lg">
                     {pendingApprovals} user{pendingApprovals > 1 ? "s" : ""} awaiting approval
                   </span>
-                  <p className="text-amber-700 dark:text-amber-300 mt-1">Review and activate new user accounts</p>
+                  <p className="text-amber-700 dark:text-amber-300 mt-1">Please review and activate new user accounts</p>
                 </div>
                 <Button asChild size="lg" className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-lg hover:shadow-xl transition-all duration-300">
                   <Link href="/dashboard/user-approvals">
@@ -216,12 +216,12 @@ export default async function DashboardPage() {
           {/* Key Metrics Grid */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <StatsCard
-              title="Today's Status"
+              title="Today's Attendance"
               value={todayAttendance ? "Checked In" : "Not Checked In"}
               description={
                 todayAttendance
                   ? `At ${new Date(todayAttendance.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-                  : "Ready to check in"
+                  : "Ready for check-in"
               }
               icon={todayAttendance ? CheckCircle2 : Clock}
               variant={todayAttendance ? "success" : "default"}
@@ -264,9 +264,9 @@ export default async function DashboardPage() {
               <CardHeader className="pb-6">
                 <CardTitle className="text-2xl font-bold flex items-center gap-3">
                   <BarChart3 className="h-7 w-7 text-blue-600" />
-                  Monthly Progress
+                  Monthly Progress 📈
                 </CardTitle>
-                <CardDescription className="text-lg">Track your attendance performance this month</CardDescription>
+                <CardDescription className="text-lg">Track your attendance performance for this month</CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
                 <div className="space-y-4">
@@ -311,7 +311,7 @@ export default async function DashboardPage() {
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg font-bold flex items-center gap-2">
                     <Activity className="h-5 w-5 text-green-600" />
-                    Recent Activity
+                    Recent Activity 🔔
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -354,7 +354,7 @@ export default async function DashboardPage() {
                   {!todayAttendance && !leaveRequests.length && !notifications.length && (
                     <div className="text-center py-8">
                       <Activity className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-                      <p className="text-slate-600 dark:text-slate-400">No recent activity</p>
+                      <p className="text-slate-600 dark:text-slate-400">No recent activity yet</p>
                     </div>
                   )}
                 </CardContent>
@@ -369,9 +369,9 @@ export default async function DashboardPage() {
               <CardHeader className="pb-6">
                 <CardTitle className="text-xl font-bold flex items-center gap-3">
                   <Calendar className="h-6 w-6 text-orange-600" />
-                  Leave Management
+                  Leave Hub
                 </CardTitle>
-                <CardDescription className="text-lg">Manage your leave requests and notifications</CardDescription>
+                <CardDescription className="text-lg">Apply for leave and follow your updates</CardDescription>
               </CardHeader>
               <CardContent>
                 {profile?.role !== "staff" ? (
@@ -395,9 +395,9 @@ export default async function DashboardPage() {
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-950/50 dark:to-blue-900/50 rounded-full flex items-center justify-center mx-auto mb-6 border border-blue-200/50 dark:border-blue-800/50">
                       <Calendar className="h-10 w-10 text-blue-600" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Leave Requests</h3>
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">My Leave Requests</h3>
                     <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-sm mx-auto">
-                      Submit leave requests for approval by your manager
+                      Submit your leave request for manager approval
                     </p>
                     <div className="flex items-center justify-center">
                       <RequestLeaveButtonWrapper />

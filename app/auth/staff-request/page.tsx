@@ -88,9 +88,9 @@ export default function StaffRequestPage() {
       <div className="w-full max-w-md">
         <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-gray-900">Staff Registration Request</CardTitle>
+            <CardTitle className="text-2xl font-bold text-gray-900">Staff Registration Request 👋</CardTitle>
             <CardDescription className="text-gray-600">
-              Submit your information to request access to the QCC Attendance System
+              Please fill this form to request access to the attendance app
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -205,7 +205,7 @@ export default function StaffRequestPage() {
                 className="w-full bg-gradient-to-r from-green-600 to-orange-600 hover:from-green-700 hover:to-orange-700"
                 disabled={isLoading}
               >
-                {isLoading ? "Submitting Request..." : "Submit Registration Request"}
+                {isLoading ? "Submitting Request..." : "Submit Request ✅"}
               </Button>
             </form>
 

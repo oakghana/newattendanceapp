@@ -163,7 +163,8 @@ export function LeaveNotificationsClient() {
       if (profile?.role === "staff") {
         query = query.eq("user_id", user.id)
       } else if (profile?.role === "department_head") {
-        // Department heads see requests from their department
+        // Department heads see requests from their department.
+        // Step 1: resolve the department_id for this HOD.
         const deptRes = await supabase
           .from("user_profiles")
           .select("department_id")
@@ -174,7 +175,24 @@ export function LeaveNotificationsClient() {
         const deptProfile = deptRes?.data
 
         if (deptProfile?.department_id) {
-          query = query.eq("user.user_profiles.department_id", deptProfile.department_id)
+          // Step 2: get all staff user IDs in that department, then filter leave_requests.
+          // Filtering directly on the embedded join alias (e.g. "user.department_id")
+          // triggers PGRST108 when PostgREST cannot resolve it, so we use .in() instead.
+          const { data: deptUsers, error: deptUsersErr } = await supabase
+            .from("user_profiles")
+            .select("id")
+            .eq("department_id", deptProfile.department_id)
+
+          if (deptUsersErr) console.warn("deptUsers fetch error:", serialize(deptUsersErr))
+
+          const deptUserIds = (deptUsers || []).map((u: { id: string }) => u.id)
+          if (deptUserIds.length > 0) {
+            query = query.in("user_id", deptUserIds)
+          } else {
+            // No staff in this department — return empty result
+            setNotifications([])
+            return
+          }
         }
       }
 

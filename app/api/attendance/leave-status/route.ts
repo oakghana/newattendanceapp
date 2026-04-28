@@ -196,7 +196,23 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch leave status" }, { status: 500 })
       }
 
-      return NextResponse.json({ success: true, data })
+      const today = new Date().toISOString().split("T")[0]
+      const withinLeaveWindow =
+        !!data?.leave_start_date &&
+        !!data?.leave_end_date &&
+        today >= data.leave_start_date &&
+        today <= data.leave_end_date
+
+      const effectiveLeaveStatus = withinLeaveWindow && data.leave_status !== "active" ? data.leave_status : "active"
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...data,
+          leave_status: effectiveLeaveStatus,
+          is_within_leave_window: withinLeaveWindow,
+        },
+      })
     } catch (queryError: any) {
       // Handle query-level errors gracefully
       if (queryError?.code === "42703" || queryError?.message?.includes("does not exist")) {

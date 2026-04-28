@@ -27,10 +27,10 @@ export default function PendingApprovalPage() {
             </div>
             <div>
               <CardTitle className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                Account Pending Approval
+                Account Received! Awaiting Approval ⏳
               </CardTitle>
               <CardDescription className="text-muted-foreground mt-2">
-                Your registration is complete and awaiting admin approval
+                Your registration is complete — just sit tight while admin activates your account
               </CardDescription>
             </div>
           </CardHeader>
@@ -49,23 +49,23 @@ export default function PendingApprovalPage() {
               <Alert className="border-green-200 bg-green-50">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800 font-medium">
-                  ✓ Account created successfully
-                  <br />✓ Email verification skipped
-                  <br />⏳ Awaiting admin approval
+                  ✅ Account created successfully!
+                  <br />✅ Email verified — you're good!
+                  <br />⏳ Admin will activate you shortly
                 </AlertDescription>
               </Alert>
 
               <div className="space-y-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2 justify-center">
                   <Shield className="h-4 w-4 text-blue-600" />
-                  <span>Your account is secure and ready for activation</span>
+                  <span>Your account is safe and secure 🔒</span>
                 </div>
                 <div className="flex items-center gap-2 justify-center">
                   <Mail className="h-4 w-4 text-green-600" />
-                  <span>You will receive an email notification once approved</span>
+                  <span>You'll get an email once you're activated 📬</span>
                 </div>
-                <p>An administrator will review and activate your account within 24-48 hours.</p>
-                <p className="text-xs">If you need immediate access, please contact the IT Department.</p>
+                <p>Your admin will review and activate your account within 24–48 hours. Medaase for your patience! 🙏</p>
+                <p className="text-xs">Need it sooner? Reach out directly to the IT Department.</p>
               </div>
             </div>
 
