@@ -515,6 +515,10 @@ export function AttendanceRecorder({
     !localTodayAttendance?.check_in_time &&
     !isOnLeave &&
     locationValidation?.canCheckIn === true
+  // On first load, keep both check-in choices visible until range state is resolved.
+  const isResolvingCheckInRange = locationValidation === null
+  const showRegularCheckInButton = isResolvingCheckInRange || locationValidation?.canCheckIn === true
+  const showOffPremisesCheckInButton = isResolvingCheckInRange || locationValidation?.canCheckIn === false
   const manualCheckInFallbackEnabled = !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0
   
   // CRITICAL: Checkout button should ONLY be enabled if:
@@ -2825,8 +2829,8 @@ export function AttendanceRecorder({
               {!localTodayAttendance?.check_in_time && (
                 <>
                   <div className="grid grid-cols-1 gap-3">
-                    {/* Regular Check In Button - only when within range (or validation not yet loaded) */}
-                    {locationValidation?.canCheckIn !== false && (
+                    {/* While location is resolving, show both options; once resolved, keep only the valid one. */}
+                    {showRegularCheckInButton && (
                     <Button
                       onClick={handleCheckIn}
                       disabled={
@@ -2853,11 +2857,10 @@ export function AttendanceRecorder({
                     </Button>
                     )}
                     
-                    {/* Check In Outside Premises Button - only when explicitly out of range */}
-                    {locationValidation?.canCheckIn === false && (
+                    {showOffPremisesCheckInButton && (
                       <Button
                         onClick={handleCheckInOutsidePremises}
-                        disabled={isCheckingIn || isProcessing || hasPendingOffPremisesRequest}
+                        disabled={isCheckingIn || isProcessing || hasPendingOffPremisesRequest || isResolvingCheckInRange}
                         variant="outline"
                         className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950"
                         size="lg"
@@ -2870,7 +2873,7 @@ export function AttendanceRecorder({
                         ) : (
                           <>
                             <MapPin className="mr-2 h-5 w-5" />
-                            Check In Outside Premises
+                            {isResolvingCheckInRange ? "Checking location..." : "Check In Outside Premises"}
                           </>
                         )}
                       </Button>
