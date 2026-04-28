@@ -20,6 +20,10 @@ export default function AttendancePage() {
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [locations, setLocations] = useState<any[]>([])
+  const [previewRangeStatus, setPreviewRangeStatus] = useState<{ resolved: boolean; inRange: boolean | null }>({
+    resolved: false,
+    inRange: null,
+  })
 
   useEffect(() => {
     let isMounted = true
@@ -185,8 +189,18 @@ export default function AttendancePage() {
           </TabsList>
 
           <TabsContent value="today" className="space-y-6 mt-8">
-            <LocationPreviewCard assignedLocation={assignedLocation} locations={locations} />
-            <AttendanceRecorder todayAttendance={todayAttendance} userLeaveStatus={userProfile?.leave_status} />
+            <LocationPreviewCard
+              assignedLocation={assignedLocation}
+              locations={locations}
+              rangeMode={isCheckedIn ? "checkout" : "checkin"}
+              onRangeStatusChange={setPreviewRangeStatus}
+            />
+            <AttendanceRecorder
+              todayAttendance={todayAttendance}
+              userLeaveStatus={userProfile?.leave_status}
+              previewRangeResolved={previewRangeStatus.resolved}
+              previewInRange={previewRangeStatus.inRange}
+            />
           </TabsContent>
 
           <TabsContent value="history" className="space-y-6 mt-8">

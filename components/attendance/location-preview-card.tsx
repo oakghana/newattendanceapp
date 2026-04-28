@@ -14,9 +14,16 @@ import { clearLocationCache as clearFastLocationCache } from "@/lib/geolocation-
 interface LocationPreviewCardProps {
   assignedLocation?: GeofenceLocation | null
   locations?: GeofenceLocation[]
+  rangeMode?: "checkin" | "checkout"
+  onRangeStatusChange?: (status: { resolved: boolean; inRange: boolean | null }) => void
 }
 
-export function LocationPreviewCard({ assignedLocation, locations = [] }: LocationPreviewCardProps) {
+export function LocationPreviewCard({
+  assignedLocation,
+  locations = [],
+  rangeMode = "checkin",
+  onRangeStatusChange,
+}: LocationPreviewCardProps) {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(
     null,
   )
@@ -46,8 +53,10 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
   useEffect(() => {
     if (userLocation && locations.length > 0) {
       findNearestLocation()
+    } else {
+      onRangeStatusChange?.({ resolved: false, inRange: null })
     }
-  }, [userLocation, locations, deviceRadiusSettings])
+  }, [userLocation, locations, deviceRadiusSettings, onRangeStatusChange, rangeMode])
 
   const loadLocation = async () => {
     try {
@@ -63,27 +72,27 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
     if (!userLocation || locations.length === 0) return
 
     const deviceInfo = getDeviceInfo()
-    // Use admin-configured device radius settings for CHECKOUT (not check-in)
-    // This ensures the "Within Range"/"Out of Range" badge matches the Check Out button state
+    // Use admin-configured radius based on current mode so badge matches active action.
     let proximityRadius = 100 // Fallback default
     if (deviceRadiusSettings) {
       const radiusByDevice = {
-        mobile: deviceRadiusSettings.mobile.checkOut,
-        tablet: deviceRadiusSettings.tablet.checkOut,
-        laptop: deviceRadiusSettings.laptop.checkOut,
-        desktop: deviceRadiusSettings.desktop.checkOut,
+        mobile: rangeMode === "checkin" ? deviceRadiusSettings.mobile.checkIn : deviceRadiusSettings.mobile.checkOut,
+        tablet: rangeMode === "checkin" ? deviceRadiusSettings.tablet.checkIn : deviceRadiusSettings.tablet.checkOut,
+        laptop: rangeMode === "checkin" ? deviceRadiusSettings.laptop.checkIn : deviceRadiusSettings.laptop.checkOut,
+        desktop: rangeMode === "checkin" ? deviceRadiusSettings.desktop.checkIn : deviceRadiusSettings.desktop.checkOut,
       }
       proximityRadius =
         radiusByDevice[(deviceInfo.device_type as keyof typeof radiusByDevice) || "desktop"] ??
-        deviceRadiusSettings.desktop.checkOut
+        (rangeMode === "checkin" ? deviceRadiusSettings.desktop.checkIn : deviceRadiusSettings.desktop.checkOut)
     } else {
       // Fallback to defaults if settings not loaded yet
-      if (deviceInfo.isMobile || deviceInfo.isTablet) {
+      const isMobileLike = deviceInfo.isMobile || deviceInfo.isTablet
+      if (isMobileLike) {
         proximityRadius = 400
       } else if (deviceInfo.isLaptop) {
-        proximityRadius = 500
+        proximityRadius = rangeMode === "checkin" ? 700 : 500
       } else {
-        proximityRadius = 1000 // Desktop checkout radius
+        proximityRadius = rangeMode === "checkin" ? 2000 : 1000
       }
     }
 
@@ -99,6 +108,9 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
       const nearest = distancesArray[0]
       nearest.isInRange = nearest.distance <= proximityRadius
       setNearestLocation(nearest)
+      onRangeStatusChange?.({ resolved: true, inRange: nearest.isInRange })
+    } else {
+      onRangeStatusChange?.({ resolved: false, inRange: null })
     }
   }
 

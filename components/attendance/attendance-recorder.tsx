@@ -105,6 +105,8 @@ interface AttendanceRecorderProps {
   locations?: GeofenceLocation[]
   canCheckIn?: boolean
   canCheckOut?: boolean
+  previewRangeResolved?: boolean
+  previewInRange?: boolean | null
   className?: string
   userLeaveStatus?: "active" | "pending" | "rejected" | null
 }
@@ -136,6 +138,8 @@ export function AttendanceRecorder({
   locations: propLocations,
   canCheckIn: initialCanCheckIn,
   canCheckOut: initialCanCheckOut,
+  previewRangeResolved = false,
+  previewInRange = null,
   className,
   userLeaveStatus,
 }: AttendanceRecorderProps) {
@@ -514,11 +518,15 @@ export function AttendanceRecorder({
     !recentCheckIn &&
     !localTodayAttendance?.check_in_time &&
     !isOnLeave &&
-    locationValidation?.canCheckIn === true
+    (locationValidation?.canCheckIn === true ||
+      (locationValidation === null && previewRangeResolved && previewInRange === true))
+  const effectiveCanCheckIn =
+    locationValidation?.canCheckIn ??
+    (previewRangeResolved && typeof previewInRange === "boolean" ? previewInRange : undefined)
   // On first load, keep both check-in choices visible until range state is resolved.
-  const isResolvingCheckInRange = locationValidation === null
-  const showRegularCheckInButton = isResolvingCheckInRange || locationValidation?.canCheckIn === true
-  const showOffPremisesCheckInButton = isResolvingCheckInRange || locationValidation?.canCheckIn === false
+  const isResolvingCheckInRange = typeof effectiveCanCheckIn !== "boolean"
+  const showRegularCheckInButton = isResolvingCheckInRange || effectiveCanCheckIn === true
+  const showOffPremisesCheckInButton = isResolvingCheckInRange || effectiveCanCheckIn === false
   const manualCheckInFallbackEnabled = !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0
   
   // CRITICAL: Checkout button should ONLY be enabled if:
