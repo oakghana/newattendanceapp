@@ -1331,7 +1331,16 @@ export function AttendanceRecorder({
           throw new Error("You must be within 100m of a valid location to check in.")
         }
       } else {
-        throw new Error("No valid locations found or location data is unavailable.")
+        const sharedValidationAllowsCheckIn =
+          locationValidation?.canCheckIn === true && !!locationValidation?.nearestLocation
+
+        if (sharedValidationAllowsCheckIn) {
+          resolvedNearestLocation = locationValidation.nearestLocation
+          checkInData.location_id = resolvedNearestLocation.id
+          console.warn("[v0] realTimeLocations unavailable in handleCheckIn; using shared validation fallback")
+        } else {
+          throw new Error("Location list is still loading or unavailable. Please tap Refresh Attendance Status and try again.")
+        }
       }
 
       // Check if check-in is after 9:00 AM (late arrival)
@@ -1469,12 +1478,37 @@ export function AttendanceRecorder({
 
       // Check auth FIRST before any slow network calls
       const supabase = createClient()
-      let { data: { user: currentUser } } = await supabase.auth.getUser()
-      if (!currentUser?.id) {
-        // Try refreshing the session once
-        const { data: refreshData } = await supabase.auth.refreshSession()
-        currentUser = refreshData?.user ?? null
+      let currentUser: any = null
+
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        currentUser = user
+      } catch (getUserError) {
+        console.warn("[v0] getUser() failed during off-premises check-in:", getUserError)
       }
+
+      if (!currentUser?.id) {
+        try {
+          const {
+            data: { user: refreshedUser },
+            error: refreshError,
+          } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            console.warn("[v0] refreshSession() returned error during off-premises check-in:", refreshError)
+          }
+          currentUser = refreshedUser ?? null
+        } catch (refreshError) {
+          console.warn("[v0] refreshSession() threw during off-premises check-in:", refreshError)
+        }
+      }
+
+      // Fallback to already loaded profile id when auth helpers are temporarily inconsistent.
+      if (!currentUser?.id && userProfile?.id) {
+        currentUser = { id: userProfile.id }
+      }
+
       if (!currentUser?.id) {
         throw new Error("Session expired. Please refresh the page and log in again.")
       }
@@ -2420,13 +2454,37 @@ export function AttendanceRecorder({
     try {
       // Check auth FIRST before any slow network calls
       const supabase = createClient()
-      let {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser()
-      if (!currentUser?.id) {
-        const { data: refreshData } = await supabase.auth.refreshSession()
-        currentUser = refreshData?.user ?? null
+      let currentUser: any = null
+
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        currentUser = user
+      } catch (getUserError) {
+        console.warn("[v0] getUser() failed during off-premises check-out:", getUserError)
       }
+
+      if (!currentUser?.id) {
+        try {
+          const {
+            data: { user: refreshedUser },
+            error: refreshError,
+          } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            console.warn("[v0] refreshSession() returned error during off-premises check-out:", refreshError)
+          }
+          currentUser = refreshedUser ?? null
+        } catch (refreshError) {
+          console.warn("[v0] refreshSession() threw during off-premises check-out:", refreshError)
+        }
+      }
+
+      // Fallback to already loaded profile id when auth helpers are temporarily inconsistent.
+      if (!currentUser?.id && userProfile?.id) {
+        currentUser = { id: userProfile.id }
+      }
+
       if (!currentUser?.id) {
         throw new Error("Session expired. Please refresh the page and log in again.")
       }
