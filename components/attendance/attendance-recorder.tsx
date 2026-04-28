@@ -2394,121 +2394,144 @@ export function AttendanceRecorder({
     setShowEarlyCheckoutDialog(false)
     setEarlyCheckoutReason("")
     setEarlyCheckoutProvedBy("")
-
-      const handleOffPremisesCheckoutConfirm = async () => {
-        if (!pendingOffPremisesCheckoutData) return
-        const trimmedReason = offPremisesCheckoutReason.trim()
-        if (trimmedReason.length < 10) {
-          toast({
-            title: "Reason Required",
-            description: "Please provide a reason of at least 10 characters for checking out off-premises.",
-            variant: "destructive",
-          })
-          return
-        }
-        setShowOffPremisesCheckoutDialog(false)
-        setIsLoading(true)
-        const { location } = pendingOffPremisesCheckoutData
-        setPendingOffPremisesCheckoutData(null)
-        try {
-          // Check auth FIRST before any slow network calls
-          const supabase = createClient()
-          let { data: { user: currentUser } } = await supabase.auth.getUser()
-          if (!currentUser?.id) {
-            const { data: refreshData } = await supabase.auth.refreshSession()
-            currentUser = refreshData?.user ?? null
-          }
-          if (!currentUser?.id) {
-            throw new Error("Session expired. Please refresh the page and log in again.")
-          }
-
-          let locationName = "Unknown Location"
-          let locationDisplayName = ""
-          try {
-            const geoResult = await Promise.race([
-              reverseGeocode(location.latitude, location.longitude),
-              new Promise<null>((_, reject) => setTimeout(() => reject(new Error("geocode timeout")), 8000)),
-            ])
-            if (geoResult) {
-              locationName = (geoResult as any).address || (geoResult as any).display_name || "Unknown Location"
-              locationDisplayName = (geoResult as any).display_name || locationName
-            } else {
-              locationName = `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
-              locationDisplayName = locationName
-            }
-          } catch {
-            locationName = `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
-            locationDisplayName = locationName
-          }
-
-          const offGridHoursBeforeRequest = offGridSince
-            ? Number(((getSystemNow().getTime() - offGridSince.getTime()) / (1000 * 60 * 60)).toFixed(2))
-            : null
-
-          const payload = {
-            current_location: {
-              latitude: location.latitude,
-              longitude: location.longitude,
-              accuracy: location.accuracy,
-              name: locationName,
-              display_name: locationDisplayName,
-            },
-            device_info: getDeviceInfo(),
-            user_id: currentUser.id,
-            reason: trimmedReason,
-            request_type: "checkout",
-            off_grid_hours_before_request: offGridHoursBeforeRequest,
-            off_grid_started_at: offGridSince ? offGridSince.toISOString() : null,
-          }
-
-          const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 30_000)
-
-          const response = await fetch("/api/attendance/check-in-outside-request", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            signal: controller.signal,
-          }).finally(() => {
-            clearTimeout(timeoutId)
-          })
-
-          const result = await response.json()
-          if (!response.ok) {
-            throw new Error(result.error || "Failed to submit off-premises checkout request")
-          }
-
-          setFlashMessage({
-            message: "Off-premises check-out request sent. Your department head/supervisor has been notified.",
-            type: "success",
-          })
-
-          toast({
-            title: "Request Sent",
-            description: "Your off-premises check-out request is pending approval by your supervisors.",
-            className: "border-emerald-400 bg-emerald-50 text-emerald-900",
-          })
-
-          setHasPendingOffPremisesRequest(true)
-          setTimeout(() => {
-            fetchTodayAttendance()
-          }, 1500)
-        } catch (error) {
-          console.error("[v0] Off-premises checkout error:", error)
-          const message =
-            (error as any)?.name === "AbortError"
-              ? "Request timed out after 30 seconds. Please check your internet and try again."
-              : (error instanceof Error ? error.message : "Failed to check out. Please try again.")
-          setFlashMessage({
-            message,
-            type: "error",
-          })
-        } finally {
-          setOffPremisesCheckoutReason("")
-        }
-      }
     setPendingCheckoutData(null)
     setIsLoading(false)
+  }
+
+  const handleOffPremisesCheckoutConfirm = async () => {
+    if (!pendingOffPremisesCheckoutData) return
+    const trimmedReason = offPremisesCheckoutReason.trim()
+    if (trimmedReason.length < 10) {
+      toast({
+        title: "Reason Required",
+        description: "Please provide a reason of at least 10 characters for checking out off-premises.",
+        variant: "destructive",
+      })
+      return
+    }
+    setShowOffPremisesCheckoutDialog(false)
+    setIsLoading(true)
+    const { location } = pendingOffPremisesCheckoutData
+    setPendingOffPremisesCheckoutData(null)
+
+    try {
+      // Check auth FIRST before any slow network calls
+      const supabase = createClient()
+      let {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser()
+      if (!currentUser?.id) {
+        const { data: refreshData } = await supabase.auth.refreshSession()
+        currentUser = refreshData?.user ?? null
+      }
+      if (!currentUser?.id) {
+        throw new Error("Session expired. Please refresh the page and log in again.")
+      }
+
+      let locationName = "Unknown Location"
+      let locationDisplayName = ""
+      try {
+        const geoResult = await Promise.race([
+          reverseGeocode(location.latitude, location.longitude),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("geocode timeout")), 8000)),
+        ])
+        if (geoResult) {
+          locationName = (geoResult as any).address || (geoResult as any).display_name || "Unknown Location"
+          locationDisplayName = (geoResult as any).display_name || locationName
+        } else {
+          locationName = `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+          locationDisplayName = locationName
+        }
+      } catch {
+        locationName = `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+        locationDisplayName = locationName
+      }
+
+      const offGridHoursBeforeRequest = offGridSince
+        ? Number(((getSystemNow().getTime() - offGridSince.getTime()) / (1000 * 60 * 60)).toFixed(2))
+        : null
+
+      const payload = {
+        current_location: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracy: location.accuracy,
+          name: locationName,
+          display_name: locationDisplayName,
+        },
+        device_info: getDeviceInfo(),
+        user_id: currentUser.id,
+        reason: trimmedReason,
+        request_type: "checkout",
+        off_grid_hours_before_request: offGridHoursBeforeRequest,
+        off_grid_started_at: offGridSince ? offGridSince.toISOString() : null,
+      }
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30_000)
+
+      const response = await fetch("/api/attendance/check-in-outside-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      }).finally(() => {
+        clearTimeout(timeoutId)
+      })
+
+      let result: any = {}
+      let rawBody: string | null = null
+      try {
+        rawBody = await response.text()
+        try {
+          result = rawBody ? JSON.parse(rawBody) : {}
+        } catch {
+          // Non-JSON response can happen on proxy/dev errors; keep raw text for diagnostics.
+        }
+      } catch {
+        // If body read fails, we still surface HTTP status below.
+      }
+
+      if (!response.ok) {
+        const errMsg = result?.error || result?.message || rawBody || `HTTP ${response.status}`
+        throw new Error(errMsg)
+      }
+
+      if (result && (result.success === false || !result.request_id)) {
+        throw new Error(result.error || result.message || "Request was not successful")
+      }
+
+      setFlashMessage({
+        message: "Off-premises check-out request sent. Your department head/supervisor has been notified.",
+        type: "success",
+      })
+
+      toast({
+        title: "Request Sent",
+        description: "Your off-premises check-out request is pending approval by your supervisors.",
+        className: "border-emerald-400 bg-emerald-50 text-emerald-900",
+      })
+
+      setHasPendingOffPremisesRequest(true)
+      setTimeout(() => {
+        fetchTodayAttendance()
+      }, 1500)
+    } catch (error) {
+      console.error("[v0] Off-premises checkout error:", error)
+      const message =
+        (error as any)?.name === "AbortError"
+          ? "Request timed out after 30 seconds. Please check your internet and try again."
+          : error instanceof Error
+            ? error.message
+            : "Failed to check out. Please try again."
+      setFlashMessage({
+        message,
+        type: "error",
+      })
+    } finally {
+      setOffPremisesCheckoutReason("")
+      setIsLoading(false)
+    }
   }
   const handleLatenessConfirm = async () => {
     const trimmedReason = latenessReason.trim()

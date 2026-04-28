@@ -10,7 +10,7 @@ export interface DeviceInfo {
   isLaptop?: boolean
 }
 
-const DEVICE_ID_STORAGE_KEY = "qcc_device_fingerprint_v2"
+const DEVICE_ID_STORAGE_KEY = "qcc_device_fingerprint_v3"
 
 function hashString(input: string): string {
   // FNV-1a 32-bit hash (fast, deterministic, browser-safe)
@@ -22,24 +22,10 @@ function hashString(input: string): string {
   return hash.toString(16).padStart(8, "0")
 }
 
-function getBrowserFamily(userAgent: string): string {
-  if (/edg\//i.test(userAgent)) return "Edge"
-  if (/opr\//i.test(userAgent) || /opera/i.test(userAgent)) return "Opera"
-  if (/firefox/i.test(userAgent)) return "Firefox"
-  if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) return "Safari"
-  if (/chrome\//i.test(userAgent)) return "Chrome"
-  return "Unknown"
-}
-
 function buildStableFingerprintSource(): string {
-  const ua = navigator.userAgent || ""
-  const uaData = (navigator as any).userAgentData
-  const brands = Array.isArray(uaData?.brands)
-    ? uaData.brands.map((b: any) => `${b.brand}:${b.version}`).join(",")
-    : ""
-
+  // Keep fingerprint browser-agnostic so the same physical device remains the same
+  // identity across Chrome/Edge/Firefox for the same staff account.
   return [
-    getBrowserFamily(ua),
     navigator.platform || "",
     navigator.language || "",
     navigator.languages?.join(",") || "",
