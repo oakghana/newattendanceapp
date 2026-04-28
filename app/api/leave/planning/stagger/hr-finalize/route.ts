@@ -46,9 +46,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
+    const role = String(profile.role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
+
     const isHr =
-      profile.role === "admin" ||
-      (profile.role === "department_head" &&
+      role === "admin" ||
+      role === "hr" ||
+      (role === "department_head" &&
         isHrDepartment((profile as any)?.departments?.name, (profile as any)?.departments?.code))
 
     if (!isHr) {

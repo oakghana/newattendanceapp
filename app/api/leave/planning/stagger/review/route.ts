@@ -52,7 +52,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    if (!["regional_manager", "department_head"].includes(profile.role)) {
+    const role = String(profile.role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
+
+    if (!["regional_manager", "department_head"].includes(role)) {
       return NextResponse.json({ error: "Only managers can review stagger requests." }, { status: 403 })
     }
 

@@ -18,11 +18,13 @@ export type LeavePlanStatus =
 export type LeavePlanReviewDecision = "pending" | "approved" | "recommend_change" | "rejected"
 
 export function isStaffRole(role: string | null | undefined): boolean {
-  return ["staff", "it-admin", "nsp", "intern"].includes((role || "").toLowerCase())
+  const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  return ["staff", "it_admin", "nsp", "intern"].includes(normalized)
 }
 
 export function isManagerRole(role: string | null | undefined): boolean {
-  return ["regional_manager", "department_head"].includes((role || "").toLowerCase())
+  const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  return ["regional_manager", "department_head"].includes(normalized)
 }
 
 export function isHrDepartment(departmentName?: string | null, departmentCode?: string | null): boolean {

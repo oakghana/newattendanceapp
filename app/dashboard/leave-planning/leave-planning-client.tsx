@@ -53,6 +53,7 @@ async function readAsDataUrl(file: File): Promise<string> {
 
 export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const { toast } = useToast()
+  const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
@@ -92,9 +93,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrUploadedSignatureDataUrl, setHrUploadedSignatureDataUrl] = useState<string | null>(null)
   const [hrDrawnSignatureDataUrl, setHrDrawnSignatureDataUrl] = useState<string | null>(null)
 
-  const staff = isStaffRole(profile.role)
-  const manager = isManagerRole(profile.role) && !isHrDepartment(profile.departmentName, profile.departmentCode)
-  const hr = profile.role === "admin" || (profile.role === "department_head" && isHrDepartment(profile.departmentName, profile.departmentCode))
+  const staff = isStaffRole(normalizedRole)
+  const manager = isManagerRole(normalizedRole) && !isHrDepartment(profile.departmentName, profile.departmentCode)
+  const hr =
+    normalizedRole === "admin" ||
+    normalizedRole === "hr" ||
+    (normalizedRole === "department_head" && isHrDepartment(profile.departmentName, profile.departmentCode))
+  const hasModuleAccess = staff || manager || hr
 
   const showUnderReviewToast = () => {
     toast({
@@ -596,6 +601,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       {warning && profile.role === "admin" && (
         <Alert>
           <AlertDescription>{warning}</AlertDescription>
+        </Alert>
+      )}
+
+      {!hasModuleAccess && (
+        <Alert>
+          <AlertDescription>
+            Your account role is not mapped to a leave planning view yet. Please contact IT/Admin to assign a supported role.
+          </AlertDescription>
         </Alert>
       )}
 

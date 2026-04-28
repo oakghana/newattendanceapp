@@ -73,10 +73,13 @@ export async function GET() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String(profile.role || "").toLowerCase()
+    const role = String(profile.role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
-    const isHr = role === "admin" || (role === "department_head" && isHrDepartment(departmentName, departmentCode))
+    const isHr = role === "admin" || role === "hr" || (role === "department_head" && isHrDepartment(departmentName, departmentCode))
 
     if (isStaffRole(role)) {
       const { data, error } = await supabase
