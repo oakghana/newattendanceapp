@@ -145,7 +145,7 @@ export function LeaveNotificationsClient() {
         .from("leave_requests")
         .select(`
           *,
-          user:user_profiles!leave_requests_user_id_fkey (
+          user:user_profiles!user_id (
             first_name,
             last_name,
             employee_id,
@@ -153,7 +153,7 @@ export function LeaveNotificationsClient() {
               name
             )
           ),
-          approver:user_profiles!leave_requests_approved_by_fkey (
+          approver:user_profiles!approved_by (
             first_name,
             last_name
           )

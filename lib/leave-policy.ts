@@ -44,6 +44,7 @@ export function computeLeaveDays(startDate: string, endDate: string): number {
 
 export function computeReturnToWorkDate(endDate: string): string {
   const date = new Date(endDate)
+  if (Number.isNaN(date.getTime())) return "N/A"
   date.setDate(date.getDate() + 1)
   return date.toISOString().split("T")[0]
 }

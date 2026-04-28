@@ -99,7 +99,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     normalizedRole === "admin" ||
     normalizedRole === "hr" ||
     (normalizedRole === "department_head" && isHrDepartment(profile.departmentName, profile.departmentCode))
-  const hasModuleAccess = staff || manager || hr
+  const canSelfApply = staff || normalizedRole === "admin" || normalizedRole === "regional_manager" || normalizedRole === "department_head"
+  const hasModuleAccess = canSelfApply || staff || manager || hr
 
   const showUnderReviewToast = () => {
     toast({
@@ -173,11 +174,6 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [])
 
   const submitPlan = async () => {
-    if (profile.role !== "admin") {
-      showUnderReviewToast()
-      return
-    }
-
     if (yearPeriod !== "2026/2027") {
       setError("Only 2026/2027 leave period is active for submissions right now.")
       return
@@ -294,11 +290,6 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }
 
   const submitStagger = async () => {
-    if (profile.role !== "admin") {
-      showUnderReviewToast()
-      return
-    }
-
     setLoading(true)
     setError(null)
     try {
@@ -493,10 +484,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     </div>
   )
 
-  const requestRows = data?.requests || []
+  const requestRows = data?.myRequests || (staff ? data?.requests : []) || []
   const reviewRows = data?.reviews || []
   const hrRows = data?.requests || []
-  const staggerRows = data?.staggerRequests || []
+  const staggerRows = data?.myStaggerRequests || (staff ? data?.staggerRequests : []) || []
   const staggerReviewRows = data?.staggerReviews || []
   const selectedType = leaveTypes.find((t) => t.leaveTypeKey === leaveType)
   const requestedDays = computeLeaveDays(startDate, endDate)
@@ -612,14 +603,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
         </Alert>
       )}
 
-      <Tabs defaultValue={staff ? "staff" : manager ? "manager" : "hr"} className="space-y-4">
+      <Tabs defaultValue={canSelfApply ? "staff" : manager ? "manager" : "hr"} className="space-y-4">
         <TabsList>
-          {staff && <TabsTrigger value="staff">My Leave</TabsTrigger>}
+          {canSelfApply && <TabsTrigger value="staff">My Leave</TabsTrigger>}
           {manager && <TabsTrigger value="manager">Review Requests</TabsTrigger>}
           {hr && <TabsTrigger value="hr">HR Approval</TabsTrigger>}
         </TabsList>
 
-        {staff && (
+        {canSelfApply && (
           <TabsContent value="staff" className="space-y-4">
             <Card>
               <CardHeader>
@@ -1053,8 +1044,28 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <div className="space-y-2">
                     <Label>Official Response Letter</Label>
                     <Textarea value={hrLetter} onChange={(e) => setHrLetter(e.target.value)} placeholder="Write your official response here, or use the template button below per request" />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        onClick={() =>
+                          setHrLetter(
+                            buildFormalResponse(
+                              "[Staff Full Name]",
+                              "[Start Date]",
+                              "[End Date]",
+                              hrAction === "approve",
+                              false,
+                            ),
+                          )
+                        }
+                      >
+                        Generate Template Letter
+                      </Button>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Click "Use Template" on any request below to auto-fill a formal letter. You can edit it before finalizing.
+                      Click "Generate Template Letter" to pre-fill a formal letter, then edit as needed. Or click "Use Template" on any request below to auto-fill with that request's details.
                     </p>
                   </div>
                 </div>

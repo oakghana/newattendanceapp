@@ -189,10 +189,25 @@ export async function GET() {
         throw staggerError
       }
 
+      // Also fetch this user's own leave plan requests (they can apply for themselves too)
+      const { data: myRequests } = await supabase
+        .from("leave_plan_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+
+      const { data: myStaggerRequests } = await supabase
+        .from("leave_plan_stagger_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+
       return NextResponse.json({
         mode: "manager",
         reviews: data || [],
         staggerReviews: staggerReviews || [],
+        myRequests: myRequests || [],
+        myStaggerRequests: myStaggerRequests || [],
       })
     }
 
@@ -288,10 +303,25 @@ export async function GET() {
         throw staggerError
       }
 
+      // Also fetch this admin/HR user's own leave plan requests
+      const { data: myRequests } = await supabase
+        .from("leave_plan_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+
+      const { data: myStaggerRequests } = await supabase
+        .from("leave_plan_stagger_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+
       return NextResponse.json({
         mode: "hr",
         requests: data || [],
         staggerRequests: stagger || [],
+        myRequests: myRequests || [],
+        myStaggerRequests: myStaggerRequests || [],
       })
     }
 
@@ -333,9 +363,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String(profile.role || "").toLowerCase()
-    if (!isStaffRole(role)) {
-      return NextResponse.json({ error: "Only staff can submit leave plans." }, { status: 403 })
+    const role = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+    const canSelfApply = isStaffRole(role) || ["admin", "regional_manager", "department_head"].includes(role)
+    if (!canSelfApply) {
+      return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
     }
 
     const body = await request.json()

@@ -44,6 +44,7 @@ import {
   Bell,
   AlertTriangle,
   CheckCircle2,
+  Banknote,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -129,6 +130,13 @@ const navigationItems = [
     href: "/dashboard/reports",
     icon: BarChart3,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff"],
+    category: "main",
+  },
+  {
+    title: "Loan Application",
+    href: "/dashboard/loan-app",
+    icon: Banknote,
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "nsp", "intern"],
     category: "main",
   },
   {
