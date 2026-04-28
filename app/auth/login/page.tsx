@@ -595,13 +595,13 @@ export default function LoginPage() {
                   value="password"
                   className="text-sm sm:text-base transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
                 >
-                  🔐 Staff Login
+                  Staff Login
                 </TabsTrigger>
                 <TabsTrigger
                   value="otp"
                   className="text-sm sm:text-base transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
                 >
-                  📱 OTP Login
+                  OTP Login
                 </TabsTrigger>
               </TabsList>
 
@@ -624,7 +624,7 @@ export default function LoginPage() {
                       inputMode="email"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Use your 7-digit staff number or your work email — either works! 😊
+                      Use your 7-digit staff number or your work email — either works!
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -664,7 +664,7 @@ export default function LoginPage() {
                     className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Please wait..." : "Sign In 🚀"}
+                    {isLoading ? "Please wait..." : "Sign In"}
                   </Button>
                 </form>
               </TabsContent>
@@ -740,7 +740,7 @@ export default function LoginPage() {
                       className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
                       disabled={isLoading || otp.length !== 6}
                     >
-                      {isLoading ? "Verifying..." : "Verify & Sign In ✅"}
+                      {isLoading ? "Verifying..." : "Verify & Sign In"}
                     </Button>
                     <div className="flex gap-2">
                       <Button
@@ -771,11 +771,11 @@ export default function LoginPage() {
             </Tabs>
 
             <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">No account yet? Contact your IT Manager or Regional IT Head to get set up. 🙏</p>
+              <p className="text-sm text-muted-foreground">No account yet? Contact your IT Manager or Regional IT Head to get set up.</p>
             </div>
 
           <div className="mt-6 text-center border-t border-border pt-6">
-            <p className="text-sm font-medium text-foreground">Quality Control Company Limited 🇬🇭</p>
+            <p className="text-sm font-medium text-foreground">Quality Control Company Limited</p>
             <p className="text-xs text-muted-foreground mt-1">Intranet Portal — Built & managed by your IT Department with ❤️</p>
             <p className="text-xs text-muted-foreground mt-2 font-mono text-center">V.2.0-28-04-26</p>
           </div>
