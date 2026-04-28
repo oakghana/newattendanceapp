@@ -2,6 +2,17 @@ import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 
+const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
+  "sick",
+  "maternity",
+  "paternity",
+  "study_with_pay",
+  "study_without_pay",
+  "casual",
+  "compassionate",
+  "special_unpaid",
+])
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -32,6 +43,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
 
+    const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
+
+    if (NON_ANNUAL_REQUIRES_APPROVED_ANNUAL.has(leaveTypeKey)) {
+      try {
+        const { data: annualApproval, error: annualError } = await supabase
+          .from("leave_requests")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("leave_year_period", leave_year_period)
+          .eq("leave_type", "annual")
+          .eq("status", "approved")
+          .limit(1)
+          .maybeSingle()
+
+        if (!annualError && !annualApproval) {
+          return NextResponse.json(
+            {
+              error:
+                "Annual leave must be approved first before applying for this leave type under current policy.",
+            },
+            { status: 400 },
+          )
+        }
+      } catch {
+        // Graceful fallback for legacy schemas without leave_type/leave_year_period columns.
+      }
+    }
+
     const returnToWorkDate = computeReturnToWorkDate(end_date)
 
     // Enforce entitlement policy (if policy table exists).
@@ -40,7 +79,7 @@ export async function POST(request: NextRequest) {
         .from("leave_policy_catalog")
         .select("entitlement_days, is_enabled")
         .eq("leave_year_period", leave_year_period)
-        .eq("leave_type_key", String(leave_type || "").toLowerCase())
+        .eq("leave_type_key", leaveTypeKey)
         .limit(1)
 
       if (!policyError && policyRows && policyRows.length > 0) {
@@ -130,7 +169,7 @@ export async function POST(request: NextRequest) {
       start_date,
       end_date,
       reason,
-      leave_type,
+      leave_type: leaveTypeKey,
       leave_year_period,
       status: shouldAutoApprove ? "approved" : "pending",
       approved_by: shouldAutoApprove ? user.id : null,

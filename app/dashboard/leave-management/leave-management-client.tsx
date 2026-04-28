@@ -146,8 +146,8 @@ export function LeaveManagementClient({
   }, [])
 
   const handleSubmitLeave = async () => {
-    if (userRole !== "admin") {
-      showUnderReviewToast()
+    if (!allowedRequestRoles.includes(userRole || "")) {
+      toast({ title: "Access Restricted", description: "Your role is not allowed to submit leave requests." })
       return
     }
 
@@ -271,6 +271,16 @@ export function LeaveManagementClient({
   const pendingRequests = staffRequests.filter((r) => r.status === "pending")
   const approvedRequests = staffRequests.filter((r) => r.status === "approved")
   const pendingNotifications = managerNotifications.filter((n) => n.status === "pending")
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it-admin"].includes(userRole || "")
+  const hasApprovedAnnualLeave = staffRequests.some(
+    (r) => r.status === "approved" && String(r.leave_type || "").toLowerCase() === "annual",
+  )
+  const otherLeaveTypes = leaveTypes.filter((t) => t.leaveTypeKey !== "annual")
+
+  const openLeaveRequest = (leaveTypeKey: string) => {
+    setFormData((prev) => ({ ...prev, leave_type: leaveTypeKey }))
+    setNewLeaveOpen(true)
+  }
 
   return (
     <div className="space-y-8">
@@ -314,13 +324,22 @@ export function LeaveManagementClient({
                         <SelectContent>
                           {leaveTypes.length === 0 && <SelectItem value="annual">Annual Leave (30 days)</SelectItem>}
                           {leaveTypes.map((type) => (
-                            <SelectItem key={type.leaveTypeKey} value={type.leaveTypeKey}>
+                            <SelectItem
+                              key={type.leaveTypeKey}
+                              value={type.leaveTypeKey}
+                              disabled={type.leaveTypeKey !== "annual" && !hasApprovedAnnualLeave}
+                            >
                               {type.leaveTypeLabel} ({type.entitlementDays} days)
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground mt-1">Active Leave Period: {activePeriod}</p>
+                      {!hasApprovedAnnualLeave && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Other leave types unlock after annual leave is approved.
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -435,7 +454,7 @@ export function LeaveManagementClient({
           </div>
         </div>
 
-        {["staff"].includes(userRole || "") && (
+        {canUseStaffLeaveHub && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="border-amber-200 bg-amber-50">
               <CardHeader className="pb-3">
@@ -475,6 +494,43 @@ export function LeaveManagementClient({
           </div>
         )}
 
+        {canUseStaffLeaveHub && (
+          <Card className="border-blue-200 bg-blue-50/60">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Other Leave Applications (COCOBOD Policy)</CardTitle>
+              <CardDescription>
+                Apply for casual, compassionate, sick, maternity, paternity, study, or special leave after annual leave approval.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!hasApprovedAnnualLeave ? (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Annual leave must be approved first before you can apply for other leave types.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {otherLeaveTypes.map((type) => (
+                    <Button
+                      key={type.leaveTypeKey}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openLeaveRequest(type.leaveTypeKey)}
+                    >
+                      {type.leaveTypeLabel}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                COCOBOD policy note: final leave approval depends on management discretion, operational needs, and any applicable CBA updates.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {["admin", "regional_manager", "department_head"].includes(userRole || "") && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="border-amber-200 bg-amber-50">
@@ -491,9 +547,9 @@ export function LeaveManagementClient({
           </div>
         )}
 
-        <Tabs defaultValue={["staff"].includes(userRole || "") ? "my-requests" : "pending-approvals"} className="space-y-6">
+        <Tabs defaultValue={canUseStaffLeaveHub ? "my-requests" : "pending-approvals"} className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
-            {["staff"].includes(userRole || "") ? (
+            {canUseStaffLeaveHub ? (
               <>
                 <TabsTrigger value="my-requests">My Requests ({staffRequests.length})</TabsTrigger>
                 <TabsTrigger value="approved">Approved ({approvedRequests.length})</TabsTrigger>
@@ -506,7 +562,7 @@ export function LeaveManagementClient({
             )}
           </TabsList>
 
-          {["staff"].includes(userRole || "") && (
+          {canUseStaffLeaveHub && (
             <>
               <TabsContent value="my-requests" className="space-y-4">
                 {staffRequests.length === 0 ? (

@@ -14,10 +14,14 @@ export interface LeavePolicyPayload {
 
 export const DEFAULT_LEAVE_TYPES: LeaveTypePolicy[] = [
   { leaveTypeKey: "annual", leaveTypeLabel: "Annual Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "sick", leaveTypeLabel: "Sick Leave", entitlementDays: 14, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "maternity", leaveTypeLabel: "Maternity Leave", entitlementDays: 90, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "paternity", leaveTypeLabel: "Paternity Leave", entitlementDays: 14, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "unpaid", leaveTypeLabel: "Unpaid Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "sick", leaveTypeLabel: "Sick Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "maternity", leaveTypeLabel: "Maternity Leave", entitlementDays: 84, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "paternity", leaveTypeLabel: "Paternity Leave", entitlementDays: 5, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "study_with_pay", leaveTypeLabel: "Study Leave (With Pay)", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "study_without_pay", leaveTypeLabel: "Study Leave (Without Pay)", entitlementDays: 180, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "casual", leaveTypeLabel: "Casual Leave", entitlementDays: 10, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "compassionate", leaveTypeLabel: "Compassionate Leave", entitlementDays: 7, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "special_unpaid", leaveTypeLabel: "Special / Leave Without Pay", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
 ]
 
 export function getLeaveYearPeriods(baseYear = 2026, years = 10) {
