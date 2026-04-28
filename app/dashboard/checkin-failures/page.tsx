@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { CheckinFailuresClient } from "@/components/admin/checkin-failures-client"
 
-const ALLOWED_ROLES = ["admin", "regional_manager", "department_head", "it-admin"]
+const ALLOWED_ROLES = ["admin"]
 
 export default async function CheckinFailuresPage() {
   const supabase = await createClient()

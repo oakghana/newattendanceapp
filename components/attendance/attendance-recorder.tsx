@@ -596,11 +596,12 @@ export function AttendanceRecorder({
       }, 5000)
     } catch (error: any) {
       console.error("[v0] QR check-in error:", error)
-      setError(error.message || "Failed to check in with QR code")
+      const errorMessage = error?.message || "Failed to check in with QR code"
+      setError(errorMessage)
 
       toast({
         title: "Check-in Failed",
-        description: error.message || "Failed to check in with QR code",
+        description: errorMessage,
         variant: "destructive",
         duration: 8000,
       })
@@ -653,11 +654,12 @@ export function AttendanceRecorder({
       }, 5000)
     } catch (error: any) {
       console.error("[v0] QR check-out error:", error)
-      setError(error.message || "Failed to check out with QR code")
+      const errorMessage = error?.message || "Failed to check out with QR code"
+      setError(errorMessage)
 
       toast({
         title: "Check-out Failed",
-        description: error.message || "Failed to check out with QR code",
+        description: errorMessage,
         variant: "destructive",
         duration: 8000,
       })
@@ -1437,8 +1439,9 @@ export function AttendanceRecorder({
       setCheckingMessage("")
     } catch (error: any) {
       console.error("[v0] Error preparing off-premises request:", error)
+      const errorMessage = error?.message || "Failed to prepare off-premises request. Please try again."
       setFlashMessage({
-        message: error.message || "Failed to prepare off-premises request. Please try again.",
+        message: errorMessage,
         type: "error",
       })
       setIsCheckingIn(false)
@@ -1594,7 +1597,7 @@ export function AttendanceRecorder({
       const message =
         error?.name === "AbortError"
           ? "Request timed out after 30 seconds. Please check your internet and try again."
-          : (error.message || "Failed to send confirmation request. Please try again.")
+          : (error?.message || "Failed to send confirmation request. Please try again.")
       void logCheckinFailure({
         attemptType: "offpremises_checkin",
         failureMessage: message,

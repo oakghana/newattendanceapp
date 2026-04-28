@@ -10,7 +10,7 @@ type FailureRow = {
   new_values: any
 }
 
-const ALLOWED_ROLES = new Set(["admin", "regional_manager", "department_head", "it-admin"])
+const ALLOWED_ROLES = new Set(["admin"])
 const FAILURE_ACTIONS = ["check_in_failed", "offpremises_checkin_failed"]
 
 export async function GET(request: NextRequest) {

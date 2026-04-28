@@ -226,7 +226,7 @@ const navigationItems = [
     title: "Check-In Failures",
     href: "/dashboard/checkin-failures",
     icon: AlertTriangle,
-    roles: ["admin", "regional_manager", "department_head", "it-admin"],
+    roles: ["admin"],
     category: "admin",
   },
   {
