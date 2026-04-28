@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
+import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -443,32 +443,12 @@ export async function POST(request: NextRequest) {
               // ignore logging failure
             }
 
-            // Security, Transport, Operational AND privileged roles bypass location restrictions
-            const isSec2 = isSecurityDept(userProfile?.departments)
-            const isOp2 = isOperationalDept(userProfile?.departments)
-            const isTrans2 = isTransportDept(userProfile?.departments)
-            const isPrivileged2 = isExemptFromAttendanceReasons(userProfile?.role)
-            if (isSec2 || isTrans2 || isOp2 || isPrivileged2) {
-              // Exempt staff — no location restriction applied
-            } else {
-              return NextResponse.json({ error: "Your device appears to be outside the allowed proximity for the selected location. Please move closer or use the QR code option." }, { status: 400 })
-            }
+            return NextResponse.json({ error: "Your device appears to be outside the allowed proximity for the selected location. Please move closer or use the QR code option." }, { status: 400 })
           }
         }
-      } else {
+      } else if (nearest && nearest.distance > deviceCheckInRadius + 500) {
         // If no location_id was provided, ensure the nearest location is within the allowed radius
-        if (nearest && nearest.distance > deviceCheckInRadius + 500) {
-          // Security, Transport, Operational AND privileged roles bypass location restrictions
-          const isSec3 = isSecurityDept(userProfile?.departments)
-          const isOp3 = isOperationalDept(userProfile?.departments)
-          const isTrans3 = isTransportDept(userProfile?.departments)
-          const isPrivileged3 = isExemptFromAttendanceReasons(userProfile?.role)
-          if (isSec3 || isTrans3 || isOp3 || isPrivileged3) {
-            // Exempt staff — no location restriction applied
-          } else {
-            return NextResponse.json({ error: "You are too far from any registered QCC location to check in. Please move closer or use the QR code." }, { status: 400 })
-          }
-        }
+        return NextResponse.json({ error: "You are too far from any registered QCC location to check in. Please move closer or use the QR code." }, { status: 400 })
       }
 
       // Check for suspicious location changes (potential cached location spoofing)

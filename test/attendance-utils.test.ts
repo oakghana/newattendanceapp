@@ -55,6 +55,13 @@ describe("attendance-utils", () => {
     expect(requiresEarlyCheckoutReason(saturday, true)).toBe(false)
   })
 
+  it("does not require lateness or early-checkout reason for operational category", () => {
+    const weekday = new Date("2026-02-12T10:30:00Z")
+
+    expect(requiresLatenessReason(weekday, { code: "operational" })).toBe(false)
+    expect(requiresEarlyCheckoutReason(weekday, true, undefined, { code: "operational" })).toBe(false)
+  })
+
   it("allows automatic out-of-range checkout from 4 PM only after 7 hours", () => {
     const eligibleTime = new Date("2026-02-12T16:05:00")
 

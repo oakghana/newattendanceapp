@@ -508,9 +508,13 @@ export function AttendanceRecorder({
   
   // Default canCheckIn to true if not explicitly set, allowing staff to check in any time after midnight
   // MUST also verify user is within proximity range (matches checkout validation logic)
-  // Exempt users (Security/Transport/Operational depts + admin/dept-head/regional-manager roles) bypass location requirement
-  const isExemptUser = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isExemptFromAttendanceReasons(userProfile?.role)
-  const canCheckInButton = (initialCanCheckIn ?? true) && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave && (isExemptUser || locationValidation?.canCheckIn === true)
+  // Out-of-range users must use the off-premises flow regardless of role/department.
+  const canCheckInButton =
+    (initialCanCheckIn ?? true) &&
+    !recentCheckIn &&
+    !localTodayAttendance?.check_in_time &&
+    !isOnLeave &&
+    locationValidation?.canCheckIn === true
   const manualCheckInFallbackEnabled = !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0
   
   // CRITICAL: Checkout button should ONLY be enabled if:
@@ -960,15 +964,13 @@ export function AttendanceRecorder({
         accuracyWarning = `Your current GPS accuracy (${userLocation.accuracy.toFixed(0)}m) is moderate. For best results, ensure you have a clear view of the sky or move closer to your assigned location.`
       }
 
-      // Security, Transport, Operational departments AND privileged roles (admin, dept head, regional manager) have no location restrictions
-      const isExemptLocation = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isExemptFromAttendanceReasons(userProfile?.role)
       setLocationValidation({
         ...validation,
-        canCheckIn: isExemptLocation ? true : validation.canCheckIn,
-        canCheckOut: isExemptLocation ? true : checkoutValidation.canCheckOut,
+        canCheckIn: validation.canCheckIn,
+        canCheckOut: checkoutValidation.canCheckOut,
         allLocations: locationDistances,
-        criticalAccuracyIssue: isExemptLocation ? false : criticalAccuracyIssue,
-        accuracyWarning: isExemptLocation ? "" : accuracyWarning,
+        criticalAccuracyIssue,
+        accuracyWarning,
       })
     }
   }, [userLocation, realTimeLocations, proximitySettings, windowsCapabilities, deviceRadiusSettings, userProfile])

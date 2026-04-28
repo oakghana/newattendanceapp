@@ -83,8 +83,9 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
-  // Only Security and Transport departments are exempt
+  // Security, Operational, and Transport departments are exempt
   if (isSecurityDept(dept)) return false
+  if (isOperationalDept(dept)) return false
   if (isTransportDept(dept)) return false
   // Privileged-role exemption (admin toggle can disable this)
   const exemptRoles = config?.exemptPrivilegedRolesFromReason !== false
@@ -94,8 +95,7 @@ export function requiresLatenessReason(
   const [deadlineHour, deadlineMin] = deadlineStr.split(":").map(Number)
   const hours = date.getHours()
   const minutes = date.getMinutes()
-  const isPastDeadline = hours > deadlineHour || (hours === deadlineHour && minutes >= deadlineMin)
-  return isPastDeadline
+  return hours > deadlineHour || (hours === deadlineHour && minutes >= deadlineMin)
 }
 
 /**
@@ -107,8 +107,9 @@ export function requiresLatenessReason(
 export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null, dept?: DeptInfo): boolean {
   if (!locationRequires) return false
   if (isWeekend(date)) return false
-  // Only Security and Transport departments are exempt
+  // Security, Operational, and Transport departments are exempt
   if (isSecurityDept(dept)) return false
+  if (isOperationalDept(dept)) return false
   if (isTransportDept(dept)) return false
   // Admin, department heads and regional managers are exempt
   if (isExemptFromAttendanceReasons(role)) return false
