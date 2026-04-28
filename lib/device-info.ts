@@ -25,6 +25,11 @@ function hashString(input: string): string {
 function buildStableFingerprintSource(): string {
   // Keep fingerprint browser-agnostic so the same physical device remains the same
   // identity across Chrome/Edge/Firefox for the same staff account.
+  const uaData = (navigator as any).userAgentData
+  const brands = uaData && Array.isArray(uaData.brands)
+    ? uaData.brands.map((b: any) => `${b.brand}:${b.version}`).join(",")
+    : ""
+  
   return [
     navigator.platform || "",
     navigator.language || "",
