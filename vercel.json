@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/force-failed-checkout",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/monthly-password-reset",
       "schedule": "0 23 28-31 3,6,9,12 *"
     }
