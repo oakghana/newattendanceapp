@@ -2553,13 +2553,6 @@ export function AttendanceRecorder({
         return
       }
 
-      if (trimmedReason.length < 10) {
-        setFlashMessage({
-          message: "Early checkout reason must be at least 10 characters long. Please provide more details.",
-          type: "error",
-        })
-        return
-      }
     }
 
     const prover = earlyCheckoutProvedBy.trim()
@@ -2593,14 +2586,6 @@ export function AttendanceRecorder({
   const handleOffPremisesCheckoutConfirm = async () => {
     if (!pendingOffPremisesCheckoutData) return
     const trimmedReason = offPremisesCheckoutReason.trim()
-    if (trimmedReason.length < 10) {
-      toast({
-        title: "Reason Required",
-        description: "Please provide a reason of at least 10 characters for checking out off-premises.",
-        variant: "destructive",
-      })
-      return
-    }
     setShowOffPremisesCheckoutDialog(false)
     setIsLoading(true)
     const { location } = pendingOffPremisesCheckoutData
@@ -2767,14 +2752,6 @@ export function AttendanceRecorder({
       return
     }
     
-    if (trimmedReason.length < 10) {
-      setFlashMessage({
-        message: "Lateness reason must be at least 10 characters long. Please provide more details.",
-        type: "error",
-      })
-      return
-    }
-
     const latenessProver = latenessProvedBy.trim()
 
     setShowLatenessDialog(false)
@@ -3199,8 +3176,8 @@ export function AttendanceRecorder({
                   className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   maxLength={500}
                 />
-                <p className={`text-xs ${offPremisesReason.length < 10 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                  {offPremisesReason.length}/500 characters (minimum 10 required)
+                <p className="text-xs text-muted-foreground">
+                  {offPremisesReason.length}/500 characters
                 </p>
               </div>
 
@@ -3220,7 +3197,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleSendOffPremisesRequest}
                   className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  disabled={isCheckingIn || offPremisesReason.trim().length < 10}
+                  disabled={isCheckingIn || offPremisesReason.trim().length === 0}
                 >
                   {isCheckingIn ? (
                     <>
@@ -3275,8 +3252,8 @@ export function AttendanceRecorder({
                   className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   maxLength={500}
                 />
-                <p className={`text-xs ${offPremisesCheckoutReason.length < 10 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                  {offPremisesCheckoutReason.length}/500 characters (minimum 10 required)
+                <p className="text-xs text-muted-foreground">
+                  {offPremisesCheckoutReason.length}/500 characters
                 </p>
               </div>
 
@@ -3296,7 +3273,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleOffPremisesCheckoutConfirm}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
-                  disabled={isLoading || offPremisesCheckoutReason.trim().length < 10}
+                  disabled={isLoading || offPremisesCheckoutReason.trim().length === 0}
                 >
                   {isLoading ? (
                     <>
@@ -3487,8 +3464,8 @@ export function AttendanceRecorder({
                   className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   maxLength={500}
                 />
-                <p className={`text-xs ${earlyCheckoutReasonRequired && earlyCheckoutReason.length < 10 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                  {earlyCheckoutReason.length}/500 characters {earlyCheckoutReasonRequired ? '(minimum 10 required)' : '(optional)'}
+                <p className="text-xs text-muted-foreground">
+                  {earlyCheckoutReason.length}/500 characters {earlyCheckoutReasonRequired ? '(required)' : '(optional)'}
                 </p>
               </div>
 
@@ -3504,7 +3481,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleEarlyCheckoutConfirm}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
-                  disabled={isLoading || (earlyCheckoutReasonRequired && earlyCheckoutReason.trim().length < 10)}
+                  disabled={isLoading || (earlyCheckoutReasonRequired && earlyCheckoutReason.trim().length === 0)}
                 >
                   {isLoading ? (
                     <>
@@ -3552,8 +3529,8 @@ export function AttendanceRecorder({
                   className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   maxLength={500}
                 />
-                <p className={`text-xs ${latenessReason.length < 10 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                  {latenessReason.length}/500 characters (minimum 10 required)
+                <p className="text-xs text-muted-foreground">
+                  {latenessReason.length}/500 characters
                 </p>
               </div>
 
@@ -3569,7 +3546,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleLatenessConfirm}
                   className="flex-1 bg-orange-600 hover:bg-orange-700"
-                  disabled={isCheckingIn || latenessReason.trim().length < 10}
+                  disabled={isCheckingIn || latenessReason.trim().length === 0}
                 >
                   {isCheckingIn ? (
                     <>

@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
     const { latitude, longitude, location_id, emergency_reason } = body
 
     // Validate emergency reason is provided
-    if (!emergency_reason || emergency_reason.trim().length < 10) {
+    if (!emergency_reason || emergency_reason.trim().length === 0) {
       return NextResponse.json({
-        error: "Emergency reason is required and must be at least 10 characters long"
+        error: "Emergency reason is required"
       }, { status: 400 })
     }
 

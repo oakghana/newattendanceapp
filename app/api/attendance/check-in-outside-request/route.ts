@@ -138,9 +138,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!isPrivilegedExempt && (!reason || String(reason).trim().length < 10)) {
+      if (!isPrivilegedExempt && (!reason || String(reason).trim().length === 0)) {
         return NextResponse.json(
-          { error: 'A reason with at least 10 characters is required for off-premises check-out requests.' },
+          { error: 'A reason is required for off-premises check-out requests.' },
           { status: 400 }
         )
       }

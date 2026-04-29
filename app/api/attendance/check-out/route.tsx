@@ -657,10 +657,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (requiresOutOfLocationReason) {
-      if (!early_checkout_reason || String(early_checkout_reason).trim().length < 10) {
+      if (!early_checkout_reason || String(early_checkout_reason).trim().length === 0) {
         return NextResponse.json(
           {
-            error: "A reason (minimum 10 characters) is required when checking out outside registered QCC locations.",
+            error: "A reason is required when checking out outside registered QCC locations.",
             requiresOutOfLocationReason: true,
           },
           { status: 400 },
