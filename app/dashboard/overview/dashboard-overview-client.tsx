@@ -28,14 +28,14 @@ export function DashboardOverviewClient({
   pendingApprovals,
 }: DashboardOverviewClientProps) {
   return (
-    <div className="space-y-7">
+    <div className="space-y-4 sm:space-y-5 md:space-y-6 lg:space-y-7">
         {/* PWA Install notification - shows for 5 seconds */}
         <PWAInstallToast />
 
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/70 backdrop-blur px-6 py-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/70 backdrop-blur px-4 py-4 sm:px-5 sm:py-5 md:px-6 md:py-6 shadow-sm">
           <div className="space-y-1.5">
-            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard 🇬🇭</h1>
-            <p className="text-base md:text-lg text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight text-balance">Dashboard 🇬🇭</h1>
+            <p className="text-sm sm:text-base md:text-lg text-muted-foreground">
               Akwaaba, {" "}
               <span className="text-primary font-semibold">{profile?.first_name || user?.email?.split("@")[0]}</span>{" "}
               {profile?.last_name || ""}
@@ -45,12 +45,12 @@ export function DashboardOverviewClient({
 
         {profile?.role === "admin" && pendingApprovals > 0 && (
           <Alert className="border-primary/30 bg-primary/5 shadow-sm rounded-xl">
-            <AlertCircle className="h-5 w-5 text-primary" />
-            <AlertDescription className="flex items-center justify-between">
-              <span className="text-primary font-semibold text-base">
+            <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+            <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ml-2">
+              <span className="text-sm sm:text-base text-primary font-semibold">
                 {pendingApprovals} user{pendingApprovals > 1 ? "s" : ""} waiting for approval
               </span>
-              <Button asChild size="sm" className="ml-4 shadow-sm hover:shadow-md transition-shadow">
+              <Button asChild size="sm" className="shadow-sm hover:shadow-md transition-shadow w-full sm:w-auto">
                 <Link href="/dashboard/user-approvals">
                   <UserCheck className="h-4 w-4 mr-2" />
                   Review Now
@@ -60,7 +60,7 @@ export function DashboardOverviewClient({
           </Alert>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 auto-rows-max">
           <StatsCard
             title="Today's Attendance"
             value={todayAttendance ? "Checked In" : "Not Checked In"}
@@ -89,12 +89,12 @@ export function DashboardOverviewClient({
           />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-5">
-          <div className="lg:col-span-2">
+        <div className="grid gap-4 sm:gap-5 lg:gap-6 grid-cols-1 lg:grid-cols-5">
+          <div className="lg:col-span-2 min-w-0">
             <QuickActions userRole={profile?.role} />
           </div>
 
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 min-w-0">
             <LeaveNotificationsCard />
           </div>
         </div>

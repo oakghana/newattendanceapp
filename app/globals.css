@@ -279,3 +279,137 @@
     width: 0%;
   }
 }
+
+/* Mobile-First Responsive Optimizations */
+
+/* Safe area support for notched devices (iPhone, Android) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
+  main {
+    padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Touch-friendly target sizes (minimum 44×44px) */
+button,
+[role="button"],
+a,
+input[type="checkbox"],
+input[type="radio"],
+select {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Improved readability on mobile with better line heights */
+@layer base {
+  @media (max-width: 640px) {
+    body {
+      font-size: 16px; /* Prevents zoom on iOS input focus */
+    }
+    
+    h1 {
+      @apply text-2xl;
+    }
+    
+    h2 {
+      @apply text-xl;
+    }
+    
+    h3 {
+      @apply text-lg;
+    }
+    
+    p {
+      @apply leading-relaxed;
+    }
+  }
+}
+
+/* Responsive container queries for flexible components */
+@supports (container-type: inline-size) {
+  .responsive-container {
+    container-type: inline-size;
+  }
+  
+  @container (max-width: 640px) {
+    .responsive-container > * {
+      @apply flex-col;
+    }
+  }
+}
+
+/* Smooth scrolling for better feel on mobile */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Optimize tap highlight and selection */
+@media (hover: none) {
+  button:active,
+  a:active,
+  [role="button"]:active {
+    opacity: 0.8;
+  }
+}
+
+/* Better table responsiveness on mobile */
+@media (max-width: 768px) {
+  table {
+    @apply text-sm;
+  }
+  
+  th,
+  td {
+    @apply px-2 py-2;
+  }
+}
+
+/* Improved form input sizes for mobile */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-muted-foreground;
+  }
+}
+
+/* Responsive spacing scales */
+@layer components {
+  .responsive-px {
+    @apply px-3 sm:px-4 md:px-6 lg:px-8;
+  }
+  
+  .responsive-py {
+    @apply py-3 sm:py-4 md:py-6 lg:py-8;
+  }
+  
+  .responsive-gap {
+    @apply gap-3 sm:gap-4 md:gap-6 lg:gap-8;
+  }
+  
+  /* Mobile-optimized card styling */
+  .card-responsive {
+    @apply rounded-lg border border-border bg-card p-4 sm:p-6 shadow-sm hover:shadow-md transition-shadow;
+  }
+  
+  /* Mobile-optimized text */
+  .text-responsive {
+    @apply text-base sm:text-lg md:text-xl;
+  }
+  
+  /* Grid that collapses on mobile */
+  .grid-responsive {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4;
+  }
+}
