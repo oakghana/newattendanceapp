@@ -442,6 +442,67 @@ export async function GET() {
       if (res?.error) throw res.error
     }
 
+    // Build a name lookup map for all staff who appear in any inbox list
+    const allInboxRows: any[] = [
+      ...(hodRes.data || []),
+      ...(loanOfficeRes.data || []),
+      ...(accountsRes.data || []),
+      ...(accountsSignedRes.data || []),
+      ...(committeeRes.data || []),
+      ...(hrRes.data || []),
+      ...(directorRes.data || []),
+      ...(directorGoodFdRes.data || []),
+      ...(allLoansRes.data || []),
+      ...(myRes.data || []),
+    ]
+    const uniqueUserIds = Array.from(new Set(allInboxRows.map((r: any) => r.user_id).filter(Boolean))) as string[]
+    let staffNameMap: Map<string, string> = new Map()
+    if (uniqueUserIds.length > 0) {
+      const { data: staffProfiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name")
+        .in("id", uniqueUserIds)
+      for (const sp of staffProfiles || []) {
+        staffNameMap.set(sp.id, `${sp.first_name || ""} ${sp.last_name || ""}`.trim() || "—")
+      }
+    }
+    const attachName = (rows: any[]) =>
+      rows.map((r: any) => ({ ...r, staff_full_name: staffNameMap.get(r.user_id) || null }))
+
+    // Build HOD info map for HR and Director queue rows
+    const hrAndDirectorRows: any[] = [
+      ...(hrRes.data || []),
+      ...(directorRes.data || []),
+      ...(directorGoodFdRes.data || []),
+    ]
+    const uniqueHodReviewerIds = Array.from(
+      new Set(hrAndDirectorRows.map((r: any) => r.hod_reviewer_id).filter(Boolean)),
+    ) as string[]
+    let hodInfoMap: Map<string, { name: string; rank: string; location: string }> = new Map()
+    if (uniqueHodReviewerIds.length > 0) {
+      const { data: hodProfiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, geofence_locations!assigned_location_id(name)")
+        .in("id", uniqueHodReviewerIds)
+      for (const hp of hodProfiles || []) {
+        hodInfoMap.set(hp.id, {
+          name: `${hp.first_name || ""} ${hp.last_name || ""}`.trim() || "—",
+          rank: hp.position || "—",
+          location: (hp as any)?.geofence_locations?.name || "—",
+        })
+      }
+    }
+    const attachHodInfo = (rows: any[]) =>
+      rows.map((r: any) => {
+        const hod = r.hod_reviewer_id ? hodInfoMap.get(r.hod_reviewer_id) : null
+        return {
+          ...r,
+          hod_name: hod?.name || null,
+          hod_rank: hod?.rank || null,
+          hod_location: hod?.location || null,
+        }
+      })
+
     // Group timelines by loan_request_id
     const timelinesMap: Record<string, any[]> = {}
     for (const entry of (timelinesRes.data || [])) {
@@ -474,19 +535,19 @@ export async function GET() {
       role,
       permissions,
       loanTypes: typesRes.data || [],
-      myRequests: myRes.data || [],
+      myRequests: attachName(myRes.data || []),
       myTimelines,
-      myTasks: myTasksRes.data || [],
+      myTasks: attachName(myTasksRes.data || []),
       inbox: {
-        hod: hodRes.data || [],
-        loanOffice: loanOfficeRes.data || [],
-        accounts: accountsRes.data || [],
-        accountsSigned: accountsSignedRes.data || [],
-        committee: committeeRes.data || [],
-        hrOffice: hrRes.data || [],
-        directorHr: directorRes.data || [],
-        directorGoodFd: directorGoodFdRes.data || [],
-        allLoans: allLoansRes.data || [],
+        hod: attachName(hodRes.data || []),
+        loanOffice: attachName(loanOfficeRes.data || []),
+        accounts: attachName(accountsRes.data || []),
+        accountsSigned: attachName(accountsSignedRes.data || []),
+        committee: attachName(committeeRes.data || []),
+        hrOffice: attachHodInfo(attachName(hrRes.data || [])),
+        directorHr: attachHodInfo(attachName(directorRes.data || [])),
+        directorGoodFd: attachHodInfo(attachName(directorGoodFdRes.data || [])),
+        allLoans: attachName(allLoansRes.data || []),
       },
     })
   } catch (error: any) {

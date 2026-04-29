@@ -343,9 +343,6 @@ export async function PUT(request: NextRequest) {
     if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
 
     const role = normalizeRole((profile as any).role)
-    if (role !== "admin") {
-      return NextResponse.json({ error: "Only admin can save edited loan requests during current testing phase." }, { status: 403 })
-    }
 
     if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
       return loanSubmissionClosedResponse()
@@ -353,11 +350,17 @@ export async function PUT(request: NextRequest) {
 
     const { data: existing, error: existingError } = await admin
       .from("loan_requests")
-      .select("id, user_id, status, loan_type_key, supporting_document_url")
+      .select("id, user_id, status, loan_type_key, supporting_document_url, staff_rank")
       .eq("id", id)
       .single()
 
     if (existingError || !existing) return NextResponse.json({ error: "Request not found" }, { status: 404 })
+
+    // Only the request owner or admin can edit
+    if (existing.user_id !== user.id && role !== "admin") {
+      return NextResponse.json({ error: "You can only edit your own loan requests." }, { status: 403 })
+    }
+
     if (!requestIsEditable(existing.status)) {
       return NextResponse.json({ error: "Request can no longer be edited at this stage" }, { status: 400 })
     }

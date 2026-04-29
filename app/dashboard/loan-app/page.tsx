@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
-import { CheckCircle2, Clock, Download, FileText, Loader2, Wallet } from "lucide-react"
+import { CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, Wallet } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -46,6 +48,7 @@ type LoanRequest = {
   corporate_email: string | null
   staff_number: string | null
   staff_rank: string | null
+  staff_full_name?: string | null
   staff_location_id?: string | null
   staff_location_name?: string | null
   staff_location_address?: string | null
@@ -65,6 +68,10 @@ type LoanRequest = {
   director_signature_text: string | null
   director_decision_at: string | null
   supporting_document_url: string | null
+  hod_reviewer_id?: string | null
+  hod_name?: string | null
+  hod_rank?: string | null
+  hod_location?: string | null
   created_at: string
   submitted_at: string
   updated_at?: string
@@ -330,22 +337,97 @@ function normalizeRoleValue(value?: string | null) {
     .replace(/[\s-]+/g, "_")
 }
 
-function buildDirectorAutoMemoDraft(row: LoanRequest) {
+function amountToWords(amount: number): string {
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+  if (amount === 0) return "Zero"
+  if (amount < 0) return "Minus " + amountToWords(-amount)
+  let words = ""
+  const n = Math.floor(amount)
+  if (n >= 1000000) { words += amountToWords(Math.floor(n / 1000000)) + " Million "; }
+  if (n % 1000000 >= 1000) { words += amountToWords(Math.floor((n % 1000000) / 1000)) + " Thousand "; }
+  const rem = n % 1000
+  if (rem >= 100) { words += ones[Math.floor(rem / 100)] + " Hundred "; }
+  const r2 = rem % 100
+  if (r2 >= 20) { words += tens[Math.floor(r2 / 10)] + (r2 % 10 ? " " + ones[r2 % 10] : "") + " "; }
+  else if (r2 > 0) { words += ones[r2] + " "; }
+  return words.trim()
+}
+
+function fmtMemoMonth(dateStr: string | null | undefined): string {
+  if (!dateStr) return "TBD"
+  const d = new Date(dateStr + (dateStr.length === 7 ? "-01" : ""))
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString("en-GH", { month: "long", year: "numeric" })
+}
+
+function deriveMemoRef(requestNumber: string | null | undefined): string {
+  if (!requestNumber) return "QCC/HRD/SWL/V.2/—"
+  const parts = requestNumber.split("-")
+  const seq = parts[parts.length - 1] || "—"
+  return `QCC/HRD/SWL/V.2/${seq}`
+}
+
+function buildDirectorAutoMemoDraft(
+  row: LoanRequest,
+  entry?: { hodName?: string; hodLocation?: string; memoRef?: string },
+) {
+  const amount = row.fixed_amount || row.requested_amount || 0
+  const amtNum = Number(amount)
+  const amtFormatted = amtNum.toLocaleString("en-GH", { minimumFractionDigits: 2 })
+  const amtWords = amountToWords(amtNum)
+  const loanLabel = row.loan_type_label || row.loan_type_key || "Loan"
+  const staffName = (row.staff_full_name || "").toUpperCase()
+  const staffNo = row.staff_number || "—"
+  const staffRank = (row.staff_rank || "").toUpperCase()
+  const hodName = (entry?.hodName || row.hod_name || "THE REGIONAL MANAGER").toUpperCase()
+  const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || "—"
+  const memoRef = entry?.memoRef || deriveMemoRef(row.request_number)
+  const today = new Date().toISOString().slice(0, 10)
+  const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
+  const disbursementMonth = fmtMemoMonth(row.disbursement_date)
+  const submittedDate = row.submitted_at ? row.submitted_at.slice(0, 10) : row.created_at.slice(0, 10)
+  const months = row.recovery_months || "—"
+
   return [
-    "QUALITY CONTROL COMPANY LIMITED",
+    "QUALITY CONTROL COMPANY LTD. (COCOBOD)",
     "HUMAN RESOURCES DEPARTMENT",
+    "P.O Box M14",
+    "Accra Ghana",
     "",
-    `Reference: ${row.request_number}`,
-    `Date: ${new Date().toISOString().slice(0, 10)}`,
+    `Our Ref No: ${memoRef}${" ".repeat(Math.max(4, 40 - memoRef.length))}Date: ${today}`,
+    "Your Ref No: ________________________",
     "",
-    `Subject: Loan Approval Notice - ${row.loan_type_label}`,
+    `${staffName} (S/No.: ${staffNo})`,
+    `${staffRank}`,
     "",
-    `Approved Amount: GHc ${fmtAmount(row.fixed_amount || row.requested_amount)}`,
-    `Disbursement Date: ${row.disbursement_date || "TBD"}`,
-    `Recovery Start Date: ${row.recovery_start_date || "TBD"}`,
-    `Recovery Months: ${row.recovery_months || "TBD"}`,
+    `THRO'   ${hodName}`,
+    `        QUALITY CONTROL COMPANY LIMITED`,
+    `        ${hodLocation}`,
     "",
-    "Please contact HR/Accounts for processing and disbursement instructions.",
+    `RE: APPLICATION FOR ${loanLabel.toUpperCase()}`,
+    "",
+    `We refer to your loan application dated ${submittedDate} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loanLabel} of ${amtWords} Ghana Cedis (GHc${amtFormatted}).`,
+    "",
+    `The loan would be recovered in ${months} Equal Monthly Instalment from your salary effective, ${recoveryMonth}.`,
+    "",
+    `By a copy of this letter, the Accounts Manager is been advised to release the said amount to you effective, ${disbursementMonth}.`,
+    "",
+    "You can count on our co-operation.",
+    "",
+    "",
+    "OHENEBA BOAMAH",
+    "DEPUTY DIRECTOR HUMAN RESOURCE",
+    "FOR: MANAGING DIRECTOR",
+    "",
+    "cc:  Managing Director",
+    "     Deputy Managing Director",
+    "     Deputy Director Finance",
+    "     Deputy Director Human Resource",
+    "     Audit Manager",
+    "     Registry Unit",
+    "     Records Unit",
   ].join("\n")
 }
 
@@ -390,11 +472,30 @@ export default function LoanAppPage() {
   const [loanOfficeNotes, setLoanOfficeNotes] = useState<Record<string, string>>({})
   const [fdInputs, setFdInputs] = useState<Record<string, { score: string; note: string }>>({})
   const [committeeNotes, setCommitteeNotes] = useState<Record<string, string>>({})
-  const [hrInputs, setHrInputs] = useState<Record<string, { disbursement: string; recovery: string; months: string; note: string }>>({})
+  const [hrInputs, setHrInputs] = useState<Record<string, { disbursement: string; recovery: string; months: string; note: string; hodName: string; hodLocation: string; memoRef: string }>>({})
 
   const [directorDecision, setDirectorDecision] = useState<"approve" | "reject">("approve")
   const [directorLetter, setDirectorLetter] = useState("")
   const [memoPreviewLoanId, setMemoPreviewLoanId] = useState<string | null>(null)
+
+  // ── Action modal state ──────────────────────────────────────────────
+  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director"
+  const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
+  const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
+  const [modalNote, setModalNote] = useState("")
+  const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
+  const [modalFdScore, setModalFdScore] = useState("")
+  const [modalFdNote, setModalFdNote] = useState("")
+  const [modalDisbursement, setModalDisbursement] = useState("")
+  const [modalRecovery, setModalRecovery] = useState("")
+  const [modalMonths, setModalMonths] = useState("")
+  const [modalHodName, setModalHodName] = useState("")
+  const [modalHodLocation, setModalHodLocation] = useState("")
+  const [modalMemoRef, setModalMemoRef] = useState("")
+  const [modalMemoText, setModalMemoText] = useState("")
+  const [modalSignatureText, setModalSignatureText] = useState("")
+  const [modalSignatureDataUrl, setModalSignatureDataUrl] = useState<string | null>(null)
+  const [modalSignatureMode, setModalSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
   const [signatureMode, setSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
   const [signatureText, setSignatureText] = useState("")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
@@ -426,32 +527,40 @@ export default function LoanAppPage() {
   const [loanOfficeSort, setLoanOfficeSort] = useState<"newest" | "oldest">("newest")
   const [loanOfficePage, setLoanOfficePage] = useState(1)
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
-  const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("good-fd")
+  const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
+  const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
 
   const [accountsSearch, setAccountsSearch] = useState("")
   const [accountsStatus, setAccountsStatus] = useState("all")
   const [accountsSort, setAccountsSort] = useState<"newest" | "oldest">("newest")
   const [accountsPage, setAccountsPage] = useState(1)
+  const [accountsViewMode, setAccountsViewMode] = useState<"table" | "card">("table")
 
   const [committeeSearch, setCommitteeSearch] = useState("")
   const [committeeStatus, setCommitteeStatus] = useState("all")
   const [committeeSort, setCommitteeSort] = useState<"newest" | "oldest">("newest")
   const [committeePage, setCommitteePage] = useState(1)
+  const [committeeViewMode, setCommitteeViewMode] = useState<"table" | "card">("table")
 
   const [hrSearch, setHrSearch] = useState("")
   const [hrStatus, setHrStatus] = useState("all")
   const [hrSort, setHrSort] = useState<"newest" | "oldest">("newest")
   const [hrPage, setHrPage] = useState(1)
+  const [hrViewMode, setHrViewMode] = useState<"table" | "card">("table")
 
   const [directorSearch, setDirectorSearch] = useState("")
   const [directorStatus, setDirectorStatus] = useState("all")
   const [directorSort, setDirectorSort] = useState<"newest" | "oldest">("newest")
   const [directorPage, setDirectorPage] = useState(1)
+  const [directorViewMode, setDirectorViewMode] = useState<"table" | "card">("table")
+
+  const [hodViewMode, setHodViewMode] = useState<"table" | "card">("table")
 
   const [tasksSearch, setTasksSearch] = useState("")
   const [tasksStatus, setTasksStatus] = useState("all")
   const [tasksSort, setTasksSort] = useState<"newest" | "oldest">("newest")
   const [tasksPage, setTasksPage] = useState(1)
+  const [tasksViewMode, setTasksViewMode] = useState<"table" | "card">("table")
   const [allSearch, setAllSearch] = useState("")
   const [allStatus, setAllStatus] = useState("all")
   const [allSort, setAllSort] = useState<"newest" | "oldest">("newest")
@@ -548,8 +657,11 @@ export default function LoanAppPage() {
     const isPoorFd = (row: LoanRequest) => row.fd_good === false || row.status === "rejected_fd" || (typeof row.fd_score === "number" && row.fd_score < 39)
     const isGoodFdNotPushed = (row: LoanRequest) =>
       isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
+    const isPending = (row: LoanRequest) =>
+      row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status)
 
     return {
+      pending: loanOfficeRowsForSelectedType.filter((row) => isPending(row)),
       "good-fd": loanOfficeRowsForSelectedType.filter((row) => isGoodFd(row)),
       "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
       "good-fd-not-pushed": loanOfficeRowsForSelectedType.filter((row) => isGoodFdNotPushed(row)),
@@ -998,7 +1110,91 @@ export default function LoanAppPage() {
     window.open(result.path, "_blank", "noopener,noreferrer")
   }
 
-  const deleteLoanRequestById = async (id: string) => {
+  const openActionModal = (row: LoanRequest, actionType: ActionType) => {
+        setModalNote("")
+        setModalDecision("approve")
+        setModalFdScore("")
+        setModalFdNote("")
+        setModalDisbursement("")
+        setModalRecovery("")
+        setModalMonths("")
+        setModalHodName("")
+        setModalHodLocation("")
+        setModalMemoRef("")
+        setModalMemoText("")
+        setModalSignatureText("")
+        setModalSignatureDataUrl(null)
+        setModalSignatureMode("typed")
+        if (actionType === "accounts") {
+          const fd = fdInputs[row.id]
+          setModalFdScore(fd?.score || "")
+          setModalFdNote(fd?.note || "")
+        }
+        if (actionType === "hr_terms") {
+          const entry = hrInputs[row.id]
+          setModalDisbursement(entry?.disbursement || "")
+          setModalRecovery(entry?.recovery || "")
+          setModalMonths(entry?.months || "")
+          setModalNote(entry?.note || "")
+          setModalHodName(entry?.hodName || row.hod_name || "")
+          setModalHodLocation(entry?.hodLocation || row.hod_location || row.staff_location_name || "")
+          setModalMemoRef(entry?.memoRef || deriveMemoRef(row.request_number))
+        }
+        if (actionType === "director") {
+          const entry = hrInputs[row.id]
+          const draft = buildDirectorAutoMemoDraft(row, entry)
+          setModalMemoText(draft)
+          setModalSignatureText(signatureText)
+          setModalSignatureDataUrl(signatureDataUrl)
+          setModalSignatureMode(signatureMode)
+          setModalDecision(directorDecision)
+          setMemoReviewModal({ open: true, row })
+          return
+        }
+        setActionModal({ open: true, row, actionType })
+      }
+
+      const generateMemoPdf = (row: LoanRequest, memoText: string, sigText: string) => {
+        const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+        const margin = 20
+        const pageWidth = doc.internal.pageSize.getWidth()
+        const usableWidth = pageWidth - margin * 2
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(13)
+        doc.setTextColor(0, 100, 0)
+        doc.text("QUALITY CONTROL COMPANY LTD. (COCOBOD)", pageWidth / 2, 25, { align: "center" })
+        doc.setFontSize(11)
+        doc.text("HUMAN RESOURCES DEPARTMENT", pageWidth / 2, 32, { align: "center" })
+        doc.setTextColor(0, 0, 0)
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(9)
+        doc.text("P.O Box M14, Accra Ghana", pageWidth - margin, 25, { align: "right" })
+        doc.line(margin, 37, pageWidth - margin, 37)
+        const lines = memoText.split("\n")
+        let y = 44
+        for (const line of lines) {
+          if (y > 260) { doc.addPage(); y = 20 }
+          if (line.startsWith("RE:") || line.startsWith("THRO'") || line.startsWith("QUALITY CONTROL")) {
+            doc.setFont("helvetica", "bold")
+          } else {
+            doc.setFont("helvetica", "normal")
+          }
+          const wrapped = doc.splitTextToSize(line, usableWidth)
+          doc.text(wrapped, margin, y)
+          y += wrapped.length * 5.5
+        }
+        if (sigText) {
+          y += 5
+          doc.setFont("helvetica", "bold")
+          doc.text(sigText, margin, y)
+          doc.setFont("helvetica", "normal")
+          doc.text("DEPUTY DIRECTOR HUMAN RESOURCE", margin, y + 6)
+          doc.text("FOR: MANAGING DIRECTOR", margin, y + 12)
+        }
+        doc.save(`${row.request_number || "memo"}-director-approval.pdf`)
+      }
+
+      const deleteLoanRequestById = async (id: string) => {
     if (!isAdmin) {
       toast({ title: "Forbidden", description: "Only admin can delete selected loan requests.", variant: "destructive" })
       return
@@ -1072,7 +1268,7 @@ export default function LoanAppPage() {
         <CardHeader className="bg-gradient-to-r from-purple-950 via-purple-900 to-purple-800 text-white">
           <CardTitle className="text-3xl tracking-tight">QCC Loan Application Hub</CardTitle>
           <CardDescription className="text-purple-200 text-base">
-            Currency-smart workflow for staff welfare loans. Chale, your loan moves stage by stage with full visibility.
+            QCC Staff Welfare Loan Portal
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4 bg-gradient-to-br from-purple-50 via-indigo-50 to-violet-50">
@@ -1182,6 +1378,7 @@ export default function LoanAppPage() {
                     <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
                     <Badge className={STATUS_COLORS[row.status] || ""}>{statusText(row.status)}</Badge>
                   </div>
+                  {row.staff_full_name && <div className="text-sm font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div className="text-sm text-muted-foreground">Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
                   <div className="text-xs text-muted-foreground">Current handler: <strong>{stageOwner(row.status)}</strong></div>
                   <div className="flex flex-wrap gap-1">
@@ -1216,7 +1413,7 @@ export default function LoanAppPage() {
                   )}
                   <div className="flex gap-2 flex-wrap">
                     {["pending_hod", "hod_rejected"].includes(row.status) && (
-                      <Button variant="outline" size="sm" onClick={() => beginEdit(row)} disabled>
+                      <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
                         View / Edit
                       </Button>
                     )}
@@ -1285,7 +1482,11 @@ export default function LoanAppPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  <Button variant={hodViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setHodViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
+                  <Button variant={hodViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setHodViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
+                </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredHod, "hod-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -1317,15 +1518,49 @@ export default function LoanAppPage() {
               </CardContent>
             </Card>
           )}
-          {pagedHod.map((row) => (
+          {hodViewMode === "table" && filteredHod.length > 0 && (
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-purple-950/10">
+                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Rank</TableHead>
+                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
+                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      {p?.hod && <TableHead className="whitespace-nowrap">Action</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedHod.map((row) => (
+                      <TableRow key={row.id} className="align-top">
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                        <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                        <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        {p?.hod && (
+                          <TableCell>
+                            <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+          {hodViewMode === "card" && pagedHod.map((row) => (
             <StageCard key={row.id} row={row}>
-              <Textarea placeholder="HOD note" value={hodNotes[row.id] || ""} onChange={(e) => setHodNotes((s) => ({ ...s, [row.id]: e.target.value }))} rows={2} />
-              {p?.hod && (
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => runAction({ action: "hod_decision", id: row.id, decision: "approve", note: hodNotes[row.id] || null })}>Approve</Button>
-                  <Button size="sm" variant="destructive" onClick={() => runAction({ action: "hod_decision", id: row.id, decision: "reject", note: hodNotes[row.id] || null })}>Reject</Button>
-                </div>
-              )}
+              {p?.hod && <Button size="sm" onClick={() => openActionModal(row, "hod")}>Review &amp; Decide</Button>}
             </StageCard>
           ))}
           <div className="flex items-center justify-end gap-2">
@@ -1345,7 +1580,25 @@ export default function LoanAppPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant={loanOfficeViewMode === "table" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setLoanOfficeViewMode("table")}
+                    className="gap-1"
+                  >
+                    <LayoutList className="h-4 w-4" /> Table
+                  </Button>
+                  <Button
+                    variant={loanOfficeViewMode === "card" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setLoanOfficeViewMode("card")}
+                    className="gap-1"
+                  >
+                    <LayoutGrid className="h-4 w-4" /> Cards
+                  </Button>
+                </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredLoanOfficeStageRows, "loan-office-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -1406,6 +1659,9 @@ export default function LoanAppPage() {
 
               <Tabs value={loanOfficeStageTab} onValueChange={setLoanOfficeStageTab} className="space-y-2">
                 <TabsList className="flex w-full flex-wrap gap-2 h-auto bg-transparent p-0">
+                  <TabsTrigger value="pending" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                    Pending FD ({loanOfficeStageBuckets["pending"].length})
+                  </TabsTrigger>
                   <TabsTrigger value="good-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
                     Good FD ({loanOfficeStageBuckets["good-fd"].length})
                   </TabsTrigger>
@@ -1432,22 +1688,79 @@ export default function LoanAppPage() {
               </CardContent>
             </Card>
           )}
-          {pagedLoanOfficeStage.map((row) => (
+
+          {loanOfficeViewMode === "table" && filteredLoanOfficeStageRows.length > 0 && (
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-purple-950/10">
+                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Rank</TableHead>
+                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
+                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      <TableHead className="whitespace-nowrap">Reason</TableHead>
+                      {p?.loanOffice && <TableHead className="whitespace-nowrap">Action</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedLoanOfficeStage.map((row) => (
+                      <TableRow key={row.id} className="align-top">
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                        <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                        <TableCell>
+                          <Badge className={`text-[10px] whitespace-nowrap ${row.status === "hod_approved" ? "bg-green-700" : "bg-purple-700"} text-white`}>
+                            {statusText(row.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs max-w-[200px] truncate" title={row.reason || ""}>{row.reason || "—"}</TableCell>
+                        {p?.loanOffice && (
+                          <TableCell className="whitespace-nowrap">
+                            {row.status === "hod_approved" ? (
+                              <div className="flex flex-col gap-1 min-w-[160px]">
+                                <Textarea
+                                  placeholder="Note"
+                                  value={loanOfficeNotes[row.id] || ""}
+                                  onChange={(e) => setLoanOfficeNotes((s) => ({ ...s, [row.id]: e.target.value }))}
+                                  rows={1}
+                                  className="text-xs"
+                                />
+                                <Button
+                                  size="sm"
+                                  className="text-xs"
+                                  onClick={() => runAction({ action: "loan_office_forward", id: row.id, note: loanOfficeNotes[row.id] || null })}
+                                >
+                                  Forward
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">{statusText(row.status)}</span>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {loanOfficeViewMode === "card" && pagedLoanOfficeStage.map((row) => (
             <StageCard key={row.id} row={row}>
-              {row.status === "hod_approved" ? (
-                <>
-                  <Textarea placeholder="Loan office note" value={loanOfficeNotes[row.id] || ""} onChange={(e) => setLoanOfficeNotes((s) => ({ ...s, [row.id]: e.target.value }))} rows={2} />
-                  {p?.loanOffice && (
-                    <Button size="sm" onClick={() => runAction({ action: "loan_office_forward", id: row.id, note: loanOfficeNotes[row.id] || null })}>
-                      Forward Based on Workflow
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  Queue state managed at <strong>{statusText(row.status)}</strong>. Loan Office forward action is available when status is Pending Loan Office (HOD Approved).
-                </div>
-              )}
+              {row.status === "hod_approved" && p?.loanOffice
+                ? <Button size="sm" onClick={() => openActionModal(row, "loan_office")}>Review &amp; Forward</Button>
+                : <div className="text-xs text-muted-foreground">Status: <strong>{statusText(row.status)}</strong></div>
+              }
             </StageCard>
           ))}
 
@@ -1708,6 +2021,10 @@ export default function LoanAppPage() {
               <CardDescription>Set disbursement and recovery terms before forwarding to Director HR.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="flex items-center gap-1 pb-1">
+                <Button variant={hrViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setHrViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
+                <Button variant={hrViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setHrViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <Input value={hrSearch} onChange={(e) => setHrSearch(e.target.value)} placeholder="Search requests" />
                 <Select value={hrStatus} onValueChange={setHrStatus}>
@@ -1731,30 +2048,61 @@ export default function LoanAppPage() {
             </CardContent>
           </Card>
 
-          {pagedHr.map((row) => {
-            const entry = hrInputs[row.id] || { disbursement: "", recovery: "", months: "", note: "" }
-            return (
-              <StageCard key={row.id} row={row}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <Input placeholder="Disbursement date (YYYY-MM-DD)" value={entry.disbursement} onChange={(e) => setHrInputs((s) => ({ ...s, [row.id]: { ...entry, disbursement: e.target.value } }))} />
-                  <Input placeholder="Recovery start (YYYY-MM-DD)" value={entry.recovery} onChange={(e) => setHrInputs((s) => ({ ...s, [row.id]: { ...entry, recovery: e.target.value } }))} />
-                  <Input placeholder="Recovery months" type="number" value={entry.months} onChange={(e) => setHrInputs((s) => ({ ...s, [row.id]: { ...entry, months: e.target.value } }))} />
-                  <Input placeholder="HR note" value={entry.note} onChange={(e) => setHrInputs((s) => ({ ...s, [row.id]: { ...entry, note: e.target.value } }))} />
-                </div>
-                {p?.hrOffice && (
-                  <Button size="sm" onClick={() => runAction({ action: "hr_set_terms", id: row.id, disbursement_date: entry.disbursement, recovery_start_date: entry.recovery, recovery_months: Number(entry.months || 0), note: entry.note || null })}>
-                    Set Terms and Forward to Director HR
-                  </Button>
-                )}
-              </StageCard>
-            )
-          })}
-
           {filteredHr.length === 0 && (
             <Card>
               <CardContent className="pt-4 text-sm text-muted-foreground">No requests are currently awaiting HR terms setup.</CardContent>
             </Card>
           )}
+
+          {hrViewMode === "table" && filteredHr.length > 0 && (
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-purple-950/10">
+                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Rank</TableHead>
+                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
+                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                      <TableHead className="whitespace-nowrap">FD Score</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      {p?.hrOffice && <TableHead className="whitespace-nowrap">Terms &amp; Action</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedHr.map((row) => {
+                      const entry = hrInputs[row.id] || { disbursement: "", recovery: "", months: "", note: "" }
+                      return (
+                        <TableRow key={row.id} className="align-top">
+                          <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+                          <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                          <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
+                          <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                          {p?.hrOffice && (
+                            <TableCell>
+                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "hr_terms")}>Set Terms</Button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {hrViewMode === "card" && pagedHr.map((row) => (
+            <StageCard key={row.id} row={row}>
+              {p?.hrOffice && <Button size="sm" onClick={() => openActionModal(row, "hr_terms")}>Set Terms</Button>}
+            </StageCard>
+          ))}
 
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setHrPage((n) => Math.max(1, n - 1))} disabled={hrPage <= 1}>Prev</Button>
@@ -1771,7 +2119,11 @@ export default function LoanAppPage() {
               <CardDescription>All requests pushed from Loan Office for FD scoring are listed here.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  <Button variant={accountsViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setAccountsViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
+                  <Button variant={accountsViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setAccountsViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
+                </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredAccounts, "accounts-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -1797,24 +2149,57 @@ export default function LoanAppPage() {
             </CardContent>
           </Card>
 
-          {pagedAccounts.map((row) => {
-            const fd = fdInputs[row.id] || { score: "", note: "" }
-            return (
-              <StageCard key={row.id} row={row}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <Input placeholder="FD score" type="number" value={fd.score} onChange={(e) => setFdInputs((s) => ({ ...s, [row.id]: { ...fd, score: e.target.value } }))} />
-                  <Input placeholder="Accounts note" value={fd.note} onChange={(e) => setFdInputs((s) => ({ ...s, [row.id]: { ...fd, note: e.target.value } }))} />
-                </div>
-                {p?.accounts && (
-                  <Button size="sm" onClick={() => runAction({ action: "accounts_fd_update", id: row.id, fd_score: Number(fd.score || 0), note: fd.note || null })}>
-                    Update FD and Continue
-                  </Button>
-                )}
-              </StageCard>
-            )
-          })}
-
           {filteredAccounts.length === 0 && <p className="text-sm text-muted-foreground">No requests currently in Accounts queue.</p>}
+
+          {accountsViewMode === "table" && filteredAccounts.length > 0 && (
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-purple-950/10">
+                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Rank</TableHead>
+                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
+                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      {p?.accounts && <TableHead className="whitespace-nowrap">FD Action</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedAccounts.map((row) => {
+                      const fd = fdInputs[row.id] || { score: "", note: "" }
+                      return (
+                        <TableRow key={row.id} className="align-top">
+                          <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+                          <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                          <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                          <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                          {p?.accounts && (
+                            <TableCell>
+                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {accountsViewMode === "card" && pagedAccounts.map((row) => (
+            <StageCard key={row.id} row={row}>
+              {p?.accounts && <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>}
+            </StageCard>
+          ))}
 
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setAccountsPage((n) => Math.max(1, n - 1))} disabled={accountsPage <= 1}>Prev</Button>
@@ -1834,10 +2219,19 @@ export default function LoanAppPage() {
                 </Button>
               </div>
               {(data?.inbox.accountsSigned || []).map((row) => (
-                <div key={row.id} className="border rounded p-3 text-sm">
+                <div key={row.id} className="border rounded p-3 text-sm space-y-1">
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
-                  <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
-                  <div>Status: {statusText(row.status)}</div>
+                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name} {row.staff_number ? `(${row.staff_number})` : ""}</div>}
+                  <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Disbursement: {row.disbursement_date || "TBD"} | Recovery: {row.recovery_start_date || "TBD"} ({row.recovery_months || "?"} months)</div>
+                  <div>Status: <strong>{statusText(row.status)}</strong></div>
+                  <div className="flex gap-2 flex-wrap pt-1">
+                    <Button variant="outline" size="sm" onClick={() => generateMemoPdf(row, row.director_letter || buildDirectorAutoMemoDraft(row, hrInputs[row.id]), row.director_signature_text || "")}>
+                      <Download className="h-4 w-4 mr-1" /> Download Approval Letter
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>
+                      <FileText className="h-4 w-4 mr-1" /> Secure Memo PDF
+                    </Button>
+                  </div>
                 </div>
               ))}
               {(data?.inbox.accountsSigned || []).length === 0 && <p className="text-sm text-muted-foreground">No approved records yet.</p>}
@@ -1855,7 +2249,11 @@ export default function LoanAppPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  <Button variant={committeeViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setCommitteeViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
+                  <Button variant={committeeViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setCommitteeViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
+                </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredCommittee, "committee-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -1887,15 +2285,52 @@ export default function LoanAppPage() {
               </CardContent>
             </Card>
           )}
-          {pagedCommittee.map((row) => (
+          {committeeViewMode === "table" && filteredCommittee.length > 0 && (
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-purple-950/10">
+                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Rank</TableHead>
+                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
+                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                      <TableHead className="whitespace-nowrap">FD Score</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      {p?.committee && <TableHead className="whitespace-nowrap">Action</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedCommittee.map((row) => (
+                      <TableRow key={row.id} className="align-top">
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                        <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
+                        <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        {p?.committee && (
+                          <TableCell>
+                            <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "committee")}>Review &amp; Vote</Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {committeeViewMode === "card" && pagedCommittee.map((row) => (
             <StageCard key={row.id} row={row}>
-              <Textarea placeholder="Committee note" value={committeeNotes[row.id] || ""} onChange={(e) => setCommitteeNotes((s) => ({ ...s, [row.id]: e.target.value }))} rows={2} />
-              {p?.committee && (
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => runAction({ action: "committee_decision", id: row.id, decision: "approve", note: committeeNotes[row.id] || null })}>Approve</Button>
-                  <Button size="sm" variant="destructive" onClick={() => runAction({ action: "committee_decision", id: row.id, decision: "reject", note: committeeNotes[row.id] || null })}>Reject</Button>
-                </div>
-              )}
+              {p?.committee && <Button size="sm" onClick={() => openActionModal(row, "committee")}>Review &amp; Vote</Button>}
             </StageCard>
           ))}
           <div className="flex items-center justify-end gap-2">
@@ -1919,8 +2354,9 @@ export default function LoanAppPage() {
               {(data?.inbox?.directorGoodFd || []).map((row) => (
                 <div key={`good-fd-${row.id}`} className="rounded border p-2 text-sm">
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
+                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div>FD: {row.fd_score ?? "N/A"} | Status: {statusText(row.status)}</div>
-                  <div>Staff: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
+                  <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                 </div>
               ))}
               {(data?.inbox?.directorGoodFd || []).length === 0 && <p className="text-sm text-muted-foreground">No FD-cleared requests available.</p>}
@@ -1935,7 +2371,11 @@ export default function LoanAppPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3" onCopy={preventCopy} onCut={preventCopy} onContextMenu={preventCopy}>
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  <Button variant={directorViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setDirectorViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
+                  <Button variant={directorViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setDirectorViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
+                </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredDirector, "director-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
               <Select value={signatureMode} onValueChange={(v: "typed" | "draw" | "upload") => setSignatureMode(v)}>
@@ -2012,32 +2452,64 @@ export default function LoanAppPage() {
             </CardContent>
           </Card>
 
-          {pagedDirector.map((row) => (
+          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">No requests currently awaiting Director HR decision.</p>}
+
+          {directorViewMode === "table" && filteredDirector.length > 0 && (
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-purple-950/10">
+                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                      <TableHead className="whitespace-nowrap">Rank</TableHead>
+                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
+                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                      <TableHead className="whitespace-nowrap">FD Score</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                      {p?.directorHr && <TableHead className="whitespace-nowrap">Action</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedDirector.map((row) => (
+                      <TableRow key={row.id} className="align-top">
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                        <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
+                        <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        {p?.directorHr && (
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <Button size="sm" className="text-xs whitespace-nowrap bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
+                              {row.status === "approved_director" && <Button variant="outline" size="sm" className="text-xs whitespace-nowrap" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>}
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {directorViewMode === "card" && pagedDirector.map((row) => (
             <StageCard key={row.id} row={row}>
               {p?.directorHr && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setDirectorLetter(buildDirectorAutoMemoDraft(row))
-                    setMemoPreviewLoanId(row.request_number)
-                  }}
-                >
-                  Load Auto Memo Draft
-                </Button>
-              )}
-              {p?.directorHr && (
-                <Button size="sm" onClick={() => runAction({ action: "director_finalize", id: row.id, decision: directorDecision, signature_mode: signatureMode, signature_text: signatureMode === "typed" ? signatureText : null, signature_data_url: signatureMode === "draw" ? signatureDataUrl : null, director_letter: directorLetter, note: "Director HR final decision" })}>
-                  Finalize Decision
-                </Button>
+                <Button size="sm" className="bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
               )}
               {row.status === "approved_director" && (
-                <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Secure Memo PDF</Button>
+                <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>
               )}
             </StageCard>
           ))}
-
-          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">No requests currently awaiting Director HR decision.</p>}
 
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setDirectorPage((n) => Math.max(1, n - 1))} disabled={directorPage <= 1}>Prev</Button>
@@ -2053,6 +2525,10 @@ export default function LoanAppPage() {
               <CardDescription>All requests where you acted or are assigned as an approver.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="flex items-center gap-1 pb-1">
+                <Button variant={tasksViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setTasksViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
+                <Button variant={tasksViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setTasksViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <Input
                   value={tasksSearch}
@@ -2080,20 +2556,56 @@ export default function LoanAppPage() {
                 </div>
               </div>
 
-              {pagedMyTasks.map((row) => (
+              {filteredMyTasks.length === 0 && <p className="text-sm text-muted-foreground">No assigned/processed tasks found.</p>}
+
+              {tasksViewMode === "table" && filteredMyTasks.length > 0 && (
+                <div className="overflow-x-auto rounded border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-purple-950/10">
+                        <TableHead className="whitespace-nowrap">Request No.</TableHead>
+                        <TableHead className="whitespace-nowrap">Staff Name</TableHead>
+                        <TableHead className="whitespace-nowrap">Staff No.</TableHead>
+                        <TableHead className="whitespace-nowrap">Rank</TableHead>
+                        <TableHead className="whitespace-nowrap">Loan Type</TableHead>
+                        <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                        <TableHead className="whitespace-nowrap">Status</TableHead>
+                        <TableHead className="whitespace-nowrap">Location</TableHead>
+                        <TableHead className="whitespace-nowrap">Updated</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pagedMyTasks.map((row) => (
+                        <TableRow key={`my-task-${row.id}`}>
+                          <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
+                          <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                          <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                          <TableCell><Badge className={`text-[10px] whitespace-nowrap ${STATUS_COLORS[row.status] || "bg-gray-500"} text-white`}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{row.staff_location_name || "—"}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{fmtDate(row.updated_at || row.created_at)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {tasksViewMode === "card" && pagedMyTasks.map((row) => (
                 <div key={`my-task-${row.id}`} className="rounded border p-3 text-sm space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
                     <Badge className={STATUS_COLORS[row.status] || ""}>{statusText(row.status)}</Badge>
                   </div>
+                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
                   <div className="text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
                 </div>
               ))}
-
-              {filteredMyTasks.length === 0 && <p className="text-sm text-muted-foreground">No assigned/processed tasks found.</p>}
 
               <div className="flex items-center justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setTasksPage((n) => Math.max(1, n - 1))} disabled={tasksPage <= 1}>Prev</Button>
@@ -2172,6 +2684,7 @@ export default function LoanAppPage() {
                     </div>
                   )}
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
+                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div>{row.staff_rank || "N/A"} | Staff No: {row.staff_number || "N/A"}</div>
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div className="text-muted-foreground">Address: {row.staff_location_address || "N/A"}</div>
@@ -2193,6 +2706,272 @@ export default function LoanAppPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+      {/* ── Action Modal ────────────────────────────────────────────── */}
+      <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {actionModal.actionType === "hod" && "HOD Review & Decision"}
+              {actionModal.actionType === "loan_office" && "Loan Office Review & Forward"}
+              {actionModal.actionType === "accounts" && "Set FD Score"}
+              {actionModal.actionType === "committee" && "Committee Decision"}
+              {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Director HR"}
+            </DialogTitle>
+            {actionModal.row && (
+              <DialogDescription>
+                <span className="font-semibold">{actionModal.row.request_number}</span> — {actionModal.row.loan_type_label} | {actionModal.row.staff_full_name || actionModal.row.staff_number || "Staff"}
+                {actionModal.row.staff_rank ? ` | ${actionModal.row.staff_rank}` : ""}
+                {" | GHc "}{fmtAmount(actionModal.row.fixed_amount || actionModal.row.requested_amount)}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            {/* HOD */}
+            {actionModal.actionType === "hod" && (
+              <>
+                <Label>Decision</Label>
+                <Select value={modalDecision} onValueChange={(v: "approve" | "reject") => setModalDecision(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approve">Approve</SelectItem>
+                    <SelectItem value="reject">Reject</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Label>Note (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="HOD review note" rows={3} />
+              </>
+            )}
+            {/* Loan Office */}
+            {actionModal.actionType === "loan_office" && (
+              <>
+                <Label>Note (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Loan office note before forwarding" rows={3} />
+              </>
+            )}
+            {/* Accounts FD */}
+            {actionModal.actionType === "accounts" && (
+              <>
+                <Label>FD Score</Label>
+                <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" />
+                <Label>Accounts Note (optional)</Label>
+                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Accounts note" rows={2} />
+              </>
+            )}
+            {/* Committee */}
+            {actionModal.actionType === "committee" && (
+              <>
+                <Label>Decision</Label>
+                <Select value={modalDecision} onValueChange={(v: "approve" | "reject") => setModalDecision(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approve">Approve</SelectItem>
+                    <SelectItem value="reject">Reject</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Label>Note (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Committee decision note" rows={3} />
+              </>
+            )}
+            {/* HR Terms */}
+            {actionModal.actionType === "hr_terms" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Disbursement Date</Label>
+                    <Input value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} placeholder="YYYY-MM-DD" />
+                  </div>
+                  <div>
+                    <Label>Recovery Start Date</Label>
+                    <Input value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} placeholder="YYYY-MM-DD" />
+                  </div>
+                  <div>
+                    <Label>Recovery Months</Label>
+                    <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" />
+                  </div>
+                  <div>
+                    <Label>Memo Ref No.</Label>
+                    <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="QCC/HRD/SWL/V.2/..." />
+                  </div>
+                </div>
+                <Label>HOD / Regional Manager Name</Label>
+                <Input value={modalHodName} onChange={(e) => setModalHodName(e.target.value)} placeholder="e.g. THE REGIONAL MANAGER" />
+                <Label>HOD Location (Station)</Label>
+                <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Breman Asikuma" />
+                <Label>HR Note (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="HR note" rows={2} />
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Cancel</Button>
+            {actionModal.actionType === "hod" && actionModal.row && (
+              <>
+                <Button variant={modalDecision === "reject" ? "destructive" : "default"} onClick={() => {
+                  runAction({ action: "hod_decision", id: actionModal.row!.id, decision: modalDecision, note: modalNote || null })
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}>
+                  {modalDecision === "approve" ? "Approve" : "Reject"}
+                </Button>
+              </>
+            )}
+            {actionModal.actionType === "loan_office" && actionModal.row && (
+              <Button onClick={() => {
+                runAction({ action: "loan_office_forward", id: actionModal.row!.id, note: modalNote || null })
+                setActionModal((s) => ({ ...s, open: false }))
+              }}>Forward to Accounts</Button>
+            )}
+            {actionModal.actionType === "accounts" && actionModal.row && (
+              <Button onClick={() => {
+                runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null })
+                setActionModal((s) => ({ ...s, open: false }))
+              }}>Save FD Score</Button>
+            )}
+            {actionModal.actionType === "committee" && actionModal.row && (
+              <Button variant={modalDecision === "reject" ? "destructive" : "default"} onClick={() => {
+                runAction({ action: "committee_decision", id: actionModal.row!.id, decision: modalDecision, note: modalNote || null })
+                setActionModal((s) => ({ ...s, open: false }))
+              }}>
+                {modalDecision === "approve" ? "Approve" : "Reject"}
+              </Button>
+            )}
+            {actionModal.actionType === "hr_terms" && actionModal.row && (
+              <>
+                <Button variant="outline" onClick={() => {
+                  setMemoReviewModal({ open: true, row: { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null, hod_name: modalHodName, hod_location: modalHodLocation } })
+                  const draft = buildDirectorAutoMemoDraft({ ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null }, { hodName: modalHodName, hodLocation: modalHodLocation, memoRef: modalMemoRef })
+                  setModalMemoText(draft)
+                }}>Preview Memo</Button>
+                <Button onClick={() => {
+                  setHrInputs((s) => ({ ...s, [actionModal.row!.id]: { disbursement: modalDisbursement, recovery: modalRecovery, months: modalMonths, note: modalNote, hodName: modalHodName, hodLocation: modalHodLocation, memoRef: modalMemoRef } }))
+                  runAction({ action: "hr_set_terms", id: actionModal.row!.id, disbursement_date: modalDisbursement, recovery_start_date: modalRecovery, recovery_months: Number(modalMonths || 0), note: modalNote || null })
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}>Set Terms &amp; Forward to Director HR</Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Memo Review Modal (Director HR + HR Terms Preview) ──────── */}
+      <Dialog open={memoReviewModal.open} onOpenChange={(o) => setMemoReviewModal((s) => ({ ...s, open: o }))}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Memo Review — Director HR Final Approval</DialogTitle>
+            <DialogDescription>
+              Review and edit the memo below before signing and approving. This letter will be sent to the staff member, Accounts, and Loan Office upon approval.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Styled letterhead preview */}
+          <div className="border rounded-lg bg-white p-6 space-y-3 print:p-10" id="memo-preview-content">
+            <div className="text-center">
+              <div className="text-green-800 font-bold text-lg">QUALITY CONTROL COMPANY LTD. (COCOBOD)</div>
+              <div className="text-green-700 font-semibold text-sm">HUMAN RESOURCES DEPARTMENT</div>
+            </div>
+            <div className="text-right text-xs text-muted-foreground">P.O Box M14, Accra Ghana</div>
+            <hr />
+            <Textarea
+              value={modalMemoText}
+              onChange={(e) => setModalMemoText(e.target.value)}
+              rows={28}
+              className="font-mono text-xs leading-relaxed w-full resize-y"
+              placeholder="Memo text will appear here..."
+            />
+            {(modalSignatureMode === "typed" && modalSignatureText) && (
+              <div className="mt-4">
+                <div className="font-bold italic text-lg border-b pb-1 w-48">{modalSignatureText}</div>
+                <div className="text-sm font-semibold mt-1">DEPUTY DIRECTOR HUMAN RESOURCE</div>
+                <div className="text-sm">FOR: MANAGING DIRECTOR</div>
+              </div>
+            )}
+            {(modalSignatureMode !== "typed" && modalSignatureDataUrl) && (
+              <div className="mt-4">
+                <img src={modalSignatureDataUrl} alt="Director signature" className="max-h-20 border-b pb-1" draggable={false} />
+                <div className="text-sm font-semibold mt-1">DEPUTY DIRECTOR HUMAN RESOURCE</div>
+                <div className="text-sm">FOR: MANAGING DIRECTOR</div>
+              </div>
+            )}
+          </div>
+
+          {/* Signature setup inside memo review modal */}
+          {memoReviewModal.row && (
+            <div className="space-y-2 border rounded p-4">
+              <Label className="font-semibold">Director Signature</Label>
+              <Select value={modalSignatureMode} onValueChange={(v: "typed" | "draw" | "upload") => setModalSignatureMode(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="typed">Type name</SelectItem>
+                  <SelectItem value="draw">Draw signature</SelectItem>
+                  <SelectItem value="upload">Upload image</SelectItem>
+                </SelectContent>
+              </Select>
+              {modalSignatureMode === "typed" && (
+                <Input value={modalSignatureText} onChange={(e) => setModalSignatureText(e.target.value)} placeholder="Director full name (e.g. OHENEBA BOAMAH)" />
+              )}
+              {modalSignatureMode === "upload" && (
+                <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = (ev) => setModalSignatureDataUrl(ev.target?.result as string)
+                  reader.readAsDataURL(file)
+                }} />
+              )}
+              {modalSignatureMode === "draw" && (
+                <SignaturePad value={modalSignatureDataUrl} onChange={setModalSignatureDataUrl} />
+              )}
+              <div className="pt-2">
+                <Label className="font-semibold">Final Decision</Label>
+                <Select value={modalDecision} onValueChange={(v: "approve" | "reject") => setModalDecision(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approve">Approve</SelectItem>
+                    <SelectItem value="reject">Reject</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}>Close</Button>
+            {memoReviewModal.row && (
+              <Button variant="outline" onClick={() => {
+                if (memoReviewModal.row) generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText)
+              }}>
+                <Download className="h-4 w-4 mr-1" /> Download PDF
+              </Button>
+            )}
+            {memoReviewModal.row && memoReviewModal.row.status === "awaiting_director_hr" && (
+              <Button
+                variant={modalDecision === "reject" ? "destructive" : "default"}
+                className="bg-green-700 hover:bg-green-800 text-white"
+                onClick={() => {
+                  const sigText = modalSignatureMode === "typed" ? modalSignatureText : null
+                  const sigUrl = modalSignatureMode !== "typed" ? modalSignatureDataUrl : null
+                  runAction({
+                    action: "director_finalize",
+                    id: memoReviewModal.row!.id,
+                    decision: modalDecision,
+                    signature_mode: modalSignatureMode,
+                    signature_text: sigText,
+                    signature_data_url: sigUrl,
+                    director_letter: modalMemoText,
+                    note: "Director HR final decision via memo review",
+                  })
+                  setMemoReviewModal((s) => ({ ...s, open: false }))
+                }}
+              >
+                {modalDecision === "approve" ? "✓ Approve & Send Letter" : "✗ Reject Request"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       </Tabs>
     </div>
   )
@@ -2228,6 +3007,13 @@ function StageCard({ row, children }: { row: LoanRequest; children: React.ReactN
             </span>
           )}
         </CardDescription>
+        {row.staff_full_name && (
+          <div className="mt-1 text-sm font-semibold text-purple-900 flex items-center gap-1">
+            <span className="text-purple-500">👤</span> {row.staff_full_name}
+            {row.staff_number ? <span className="font-normal text-muted-foreground ml-1">({row.staff_number})</span> : null}
+            {row.staff_rank ? <span className="font-normal text-muted-foreground ml-1">— {row.staff_rank}</span> : null}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
         {row.reason ? <p className="text-sm">{row.reason}</p> : <p className="text-sm text-muted-foreground">No reason added by staff.</p>}
