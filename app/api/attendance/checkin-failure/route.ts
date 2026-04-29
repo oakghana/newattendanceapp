@@ -1,7 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
-const ALLOWED_ATTEMPT_TYPES = new Set(["manual_checkin", "offpremises_checkin"])
+const ALLOWED_ATTEMPT_TYPES = new Set([
+  "manual_checkin",
+  "offpremises_checkin",
+  "manual_checkout",
+  "offpremises_checkout",
+  "qr_checkout",
+  "auto_checkout",
+])
+
+const ACTION_BY_ATTEMPT_TYPE: Record<string, string> = {
+  manual_checkin: "check_in_failed",
+  offpremises_checkin: "offpremises_checkin_failed",
+  manual_checkout: "check_out_failed",
+  offpremises_checkout: "offpremises_checkout_failed",
+  qr_checkout: "qr_check_out_failed",
+  auto_checkout: "auto_checkout_failed",
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     await supabase.from("audit_logs").insert({
       user_id: user.id,
-      action: attemptType === "offpremises_checkin" ? "offpremises_checkin_failed" : "check_in_failed",
+      action: ACTION_BY_ATTEMPT_TYPE[attemptType] || "check_in_failed",
       table_name: "attendance_records",
       record_id: null,
       new_values: payload,

@@ -21,7 +21,14 @@ type FailureRecord = {
   role: string
   department_id: string | null
   department_name: string
-  attempt_type: "manual_checkin" | "offpremises_checkin" | string
+  attempt_type:
+    | "manual_checkin"
+    | "offpremises_checkin"
+    | "manual_checkout"
+    | "offpremises_checkout"
+    | "qr_checkout"
+    | "auto_checkout"
+    | string
   failure_reason: string
   failure_message: string
   nearest_location_name: string
@@ -63,8 +70,29 @@ export function CheckinFailuresClient() {
     return d.toISOString().split("T")[0]
   })
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0])
-  const [typeFilter, setTypeFilter] = useState<"all" | "manual" | "offpremises">("all")
+  const [typeFilter, setTypeFilter] = useState<
+    "all" | "manual" | "offpremises" | "checkin" | "checkout" | "qr_checkout" | "auto_checkout"
+  >("all")
   const [reasonFilter, setReasonFilter] = useState("")
+
+  const formatAttemptType = (attemptType: string) => {
+    switch (attemptType) {
+      case "manual_checkin":
+        return "Manual Check-In"
+      case "offpremises_checkin":
+        return "Off-Premises Check-In"
+      case "manual_checkout":
+        return "Manual Check-Out"
+      case "offpremises_checkout":
+        return "Off-Premises Check-Out"
+      case "qr_checkout":
+        return "QR Check-Out"
+      case "auto_checkout":
+        return "Auto Check-Out"
+      default:
+        return attemptType.replace(/_/g, " ")
+    }
+  }
 
   const fetchData = useCallback(async () => {
     try {
@@ -89,7 +117,7 @@ export function CheckinFailuresClient() {
       const result = await response.json()
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || "Failed to load failed check-in attempts")
+        throw new Error(result.error || "Failed to load failed attendance attempts")
       }
 
       const payload = result.data
@@ -99,8 +127,8 @@ export function CheckinFailuresClient() {
       setTotalAttempts(payload.summary?.totalAttempts || 0)
       setUniqueUsers(payload.summary?.uniqueUsers || 0)
     } catch (err) {
-      console.error("[v0] Failed loading check-in failures:", err)
-      setError(err instanceof Error ? err.message : "Failed to load failed check-in attempts")
+      console.error("[v0] Failed loading attendance failures:", err)
+      setError(err instanceof Error ? err.message : "Failed to load failed attendance attempts")
     } finally {
       setLoading(false)
     }
@@ -167,13 +195,13 @@ export function CheckinFailuresClient() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `checkin-failures-${startDate}-to-${endDate}.xlsx`
+      a.download = `attendance-failures-${startDate}-to-${endDate}.xlsx`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch (err) {
-      console.error("[v0] Failed exporting check-in failures:", err)
+      console.error("[v0] Failed exporting attendance failures:", err)
       setError("Failed to export Excel")
     }
   }, [endDate, records, startDate, summaryReasons, summaryUsers])
@@ -182,9 +210,9 @@ export function CheckinFailuresClient() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">Failed Check-In Monitor</h1>
+          <h1 className="text-2xl font-bold">Failed Attendance Attempts</h1>
           <p className="text-sm text-muted-foreground">
-            Track users struggling to check in, including location, department, reason, and retry frequency.
+            Track failed check-ins and check-outs, including location, department, reason, and retry frequency.
           </p>
         </div>
 
@@ -250,8 +278,12 @@ export function CheckinFailuresClient() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="manual">Manual Check-In</SelectItem>
-                  <SelectItem value="offpremises">Off-Premises Request</SelectItem>
+                  <SelectItem value="checkin">All Check-In Failures</SelectItem>
+                  <SelectItem value="checkout">All Check-Out Failures</SelectItem>
+                  <SelectItem value="manual">Manual (Check-In/Out)</SelectItem>
+                  <SelectItem value="offpremises">Off-Premises (Check-In/Out)</SelectItem>
+                  <SelectItem value="qr_checkout">QR Check-Out</SelectItem>
+                  <SelectItem value="auto_checkout">Auto Check-Out</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -355,7 +387,7 @@ export function CheckinFailuresClient() {
                     <TableCell>{row.department_name}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">
-                        {row.attempt_type === "offpremises_checkin" ? "Off-premises" : "Manual"}
+                        {formatAttemptType(row.attempt_type)}
                       </Badge>
                     </TableCell>
                     <TableCell className="capitalize">{row.failure_reason.replace(/_/g, " ")}</TableCell>

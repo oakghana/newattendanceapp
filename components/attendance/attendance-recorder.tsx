@@ -672,6 +672,13 @@ export function AttendanceRecorder({
     } catch (error: any) {
       console.error("[v0] QR check-out error:", error)
       const errorMessage = error?.message || "Failed to check out with QR code"
+      void logAttendanceFailure({
+        attemptType: "qr_checkout",
+        failureMessage: errorMessage,
+        latitude: qrData?.userLatitude ?? null,
+        longitude: qrData?.userLongitude ?? null,
+        accuracy: null,
+      })
       setError(errorMessage)
 
       toast({
@@ -1186,8 +1193,14 @@ export function AttendanceRecorder({
     return "unknown"
   }
 
-  const logCheckinFailure = async (params: {
-    attemptType: "manual_checkin" | "offpremises_checkin"
+  const logAttendanceFailure = async (params: {
+    attemptType:
+      | "manual_checkin"
+      | "offpremises_checkin"
+      | "manual_checkout"
+      | "offpremises_checkout"
+      | "qr_checkout"
+      | "auto_checkout"
     failureMessage: string
     latitude?: number | null
     longitude?: number | null
@@ -1207,7 +1220,7 @@ export function AttendanceRecorder({
         }),
       })
     } catch (logErr) {
-      console.warn("[v0] Failed to log check-in failure event:", logErr)
+      console.warn("[v0] Failed to log attendance failure event:", logErr)
     }
   }
 
@@ -1406,7 +1419,7 @@ export function AttendanceRecorder({
     } catch (error: any) {
       console.error("[v0] Check-in error:", error)
       const errorMessage = error?.message || "Failed to check in. Please try again."
-      void logCheckinFailure({
+      void logAttendanceFailure({
         attemptType: "manual_checkin",
         failureMessage: errorMessage,
         latitude: checkInData?.latitude ?? effectiveLocation?.latitude ?? null,
@@ -1651,7 +1664,7 @@ export function AttendanceRecorder({
         error?.name === "AbortError"
           ? "Request timed out after 30 seconds. Please check your internet and try again."
           : (error?.message || "Failed to send confirmation request. Please try again.")
-      void logCheckinFailure({
+      void logAttendanceFailure({
         attemptType: "offpremises_checkin",
         failureMessage: message,
         latitude: pendingOffPremisesLocation?.latitude ?? null,
@@ -1697,6 +1710,8 @@ export function AttendanceRecorder({
 
     // Determine if the user started in an approved remote/off‑premises 
     setIsLoading(true)
+    let checkoutLocationForFailure: LocationData | null = null
+    let checkoutNearestLocationForFailure: any = null
     try {
       // OPTIMIZATION: Fetch location data ONCE and reuse everywhere
       let locationData = await getCurrentLocationData()
@@ -1704,6 +1719,7 @@ export function AttendanceRecorder({
         setIsLoading(false)
         return
       }
+      checkoutLocationForFailure = locationData
 
       // If the fresh GPS reading has significantly worse accuracy than our cached
       // userLocation state (which already powered the "Within Range" badge), prefer
@@ -1975,6 +1991,7 @@ export function AttendanceRecorder({
           nearestLocation = locationDistances[0]?.location
         }
       }
+      checkoutNearestLocationForFailure = nearestLocation
 
       // SMART LOGIC: If checkout time PASSED, no location rule, early-reason not required, user is Security, or user has worked >= 9 hours — skip modal and checkout immediately
       // This is the "one-tap" optimization - no unnecessary modal delays
@@ -1996,8 +2013,26 @@ export function AttendanceRecorder({
       setIsLoading(false)
     } catch (error) {
       setIsLoading(false)
+      const message = error instanceof Error ? error.message : "Checkout failed. Please try again."
+      void logAttendanceFailure({
+        attemptType: "manual_checkout",
+        failureMessage: message,
+        latitude: checkoutLocationForFailure?.latitude ?? null,
+        longitude: checkoutLocationForFailure?.longitude ?? null,
+        accuracy: checkoutLocationForFailure?.accuracy ?? null,
+        nearestLocationName: checkoutNearestLocationForFailure?.name ?? null,
+        nearestLocationDistanceM:
+          checkoutNearestLocationForFailure && checkoutLocationForFailure
+            ? calculateDistance(
+                checkoutLocationForFailure.latitude,
+                checkoutLocationForFailure.longitude,
+                checkoutNearestLocationForFailure.latitude,
+                checkoutNearestLocationForFailure.longitude,
+              )
+            : null,
+      })
       setFlashMessage({
-        message: error instanceof Error ? error.message : "Checkout failed. Please try again.",
+        message,
         type: "error",
       })
     }
@@ -2096,6 +2131,24 @@ export function AttendanceRecorder({
       }
     } catch (err) {
       console.error("[v0] Checkout error:", err)
+      const message = err instanceof Error ? err.message : "Checkout failed. Please try again."
+      void logAttendanceFailure({
+        attemptType: autoCheckout ? "auto_checkout" : "manual_checkout",
+        failureMessage: message,
+        latitude: locationData?.latitude ?? null,
+        longitude: locationData?.longitude ?? null,
+        accuracy: locationData?.accuracy ?? null,
+        nearestLocationName: nearestLocation?.name ?? null,
+        nearestLocationDistanceM:
+          nearestLocation && locationData
+            ? calculateDistance(
+                locationData.latitude,
+                locationData.longitude,
+                nearestLocation.latitude,
+                nearestLocation.longitude,
+              )
+            : null,
+      })
       throw err
     } finally {
       setIsLoading(false)
@@ -2687,6 +2740,13 @@ export function AttendanceRecorder({
           : error instanceof Error
             ? error.message
             : "Failed to check out. Please try again."
+      void logAttendanceFailure({
+        attemptType: "offpremises_checkout",
+        failureMessage: message,
+        latitude: location?.latitude ?? null,
+        longitude: location?.longitude ?? null,
+        accuracy: location?.accuracy ?? null,
+      })
       setFlashMessage({
         message,
         type: "error",

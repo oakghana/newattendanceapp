@@ -11,7 +11,14 @@ type FailureRow = {
 }
 
 const ALLOWED_ROLES = new Set(["admin"])
-const FAILURE_ACTIONS = ["check_in_failed", "offpremises_checkin_failed"]
+const FAILURE_ACTIONS = [
+  "check_in_failed",
+  "offpremises_checkin_failed",
+  "check_out_failed",
+  "offpremises_checkout_failed",
+  "qr_check_out_failed",
+  "auto_checkout_failed",
+]
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,8 +60,12 @@ export async function GET(request: NextRequest) {
 
     if (startDate) query = query.gte("created_at", `${startDate}T00:00:00`)
     if (endDate) query = query.lte("created_at", `${endDate}T23:59:59`)
-    if (typeFilter === "manual") query = query.eq("action", "check_in_failed")
-    if (typeFilter === "offpremises") query = query.eq("action", "offpremises_checkin_failed")
+    if (typeFilter === "manual") query = query.in("action", ["check_in_failed", "check_out_failed"])
+    if (typeFilter === "offpremises") query = query.in("action", ["offpremises_checkin_failed", "offpremises_checkout_failed"])
+    if (typeFilter === "checkin") query = query.in("action", ["check_in_failed", "offpremises_checkin_failed"])
+    if (typeFilter === "checkout") query = query.in("action", ["check_out_failed", "offpremises_checkout_failed", "qr_check_out_failed", "auto_checkout_failed"])
+    if (typeFilter === "qr_checkout") query = query.eq("action", "qr_check_out_failed")
+    if (typeFilter === "auto_checkout") query = query.eq("action", "auto_checkout_failed")
 
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -95,7 +106,19 @@ export async function GET(request: NextRequest) {
           department_id: userProfile?.department_id || null,
           department_name:
             userProfile?.departments?.name || details?.user_profile_snapshot?.department_name || "Unassigned",
-          attempt_type: details?.attempt_type || (row.action === "offpremises_checkin_failed" ? "offpremises_checkin" : "manual_checkin"),
+          attempt_type:
+            details?.attempt_type ||
+            (row.action === "offpremises_checkin_failed"
+              ? "offpremises_checkin"
+              : row.action === "offpremises_checkout_failed"
+                ? "offpremises_checkout"
+                : row.action === "check_out_failed"
+                  ? "manual_checkout"
+                  : row.action === "qr_check_out_failed"
+                    ? "qr_checkout"
+                    : row.action === "auto_checkout_failed"
+                      ? "auto_checkout"
+                      : "manual_checkin"),
           failure_reason: details?.failure_reason || "unknown",
           failure_message: details?.failure_message || "",
           nearest_location_name: details?.nearest_location_name || "Unknown",
