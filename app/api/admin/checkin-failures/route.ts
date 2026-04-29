@@ -21,6 +21,58 @@ const FAILURE_ACTIONS = [
   "force_checkout_after_failed_attempts",
 ]
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+    if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+    if (!profile || !ALLOWED_ROLES.has(profile.role))
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+
+    const body = await request.json()
+    const { ids, clearAll, startDate, endDate } = body as {
+      ids?: string[]
+      clearAll?: boolean
+      startDate?: string
+      endDate?: string
+    }
+
+    if (clearAll) {
+      // Delete all failure audit_log rows (optionally within date range)
+      let q = supabase.from("audit_logs").delete().in("action", FAILURE_ACTIONS)
+      if (startDate) q = q.gte("created_at", `${startDate}T00:00:00`)
+      if (endDate) q = q.lte("created_at", `${endDate}T23:59:59`)
+      const { error } = await q
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ success: true, message: "All matching failure records cleared." })
+    }
+
+    if (ids && ids.length > 0) {
+      const { error } = await supabase
+        .from("audit_logs")
+        .delete()
+        .in("id", ids)
+        .in("action", FAILURE_ACTIONS)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ success: true, message: `${ids.length} record(s) deleted.` })
+    }
+
+    return NextResponse.json({ error: "No ids or clearAll flag provided." }, { status: 400 })
+  } catch (err) {
+    console.error("[checkin-failures DELETE]", err)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
