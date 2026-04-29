@@ -64,8 +64,8 @@ export const MobileBottomNav = memo(function MobileBottomNav({ profile }: Mobile
   }, [profile?.role])
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-background/95 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl safe-area-bottom">
-      <div className="mx-auto grid h-[4.5rem] max-w-2xl grid-cols-5 items-center gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-background/95 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+      <div className="mx-auto grid h-auto max-w-2xl grid-cols-5 items-center gap-0.5 px-1 py-2 sm:gap-1 sm:px-2 sm:py-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         {items.map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href ||
@@ -77,7 +77,7 @@ export const MobileBottomNav = memo(function MobileBottomNav({ profile }: Mobile
               href={item.href}
               prefetch={true}
               className={cn(
-                "relative flex h-full min-w-0 flex-col items-center justify-center rounded-2xl px-2 py-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
+                "relative flex min-h-[56px] min-w-0 flex-col items-center justify-center rounded-xl px-1 py-3 sm:px-2 sm:py-3 transition-all duration-200 touch-manipulation active:scale-[0.95] sm:active:scale-[0.98]",
                 isActive
                   ? "bg-primary/10 text-primary shadow-sm"
                   : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
@@ -86,18 +86,18 @@ export const MobileBottomNav = memo(function MobileBottomNav({ profile }: Mobile
             >
               <Icon
                 className={cn(
-                  "mb-1 h-5 w-5 transition-transform duration-200",
+                  "mb-1 h-5 w-5 sm:h-6 sm:w-6 transition-transform duration-200 flex-shrink-0",
                   isActive && "scale-110"
                 )}
               />
               <span className={cn(
-                "max-w-full truncate text-[11px] font-medium leading-none",
+                "max-w-full truncate text-[10px] sm:text-[11px] font-medium leading-tight",
                 isActive && "font-semibold"
               )}>
                 {item.label}
               </span>
               {isActive && (
-                <div className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-primary" />
+                <div className="absolute inset-x-2 sm:inset-x-3 top-0 h-0.5 rounded-full bg-primary" />
               )}
             </Link>
           )

@@ -6,13 +6,13 @@ import "jspdf-autotable"
 
 export const dynamic = "force-dynamic"
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
-    const timeoutPromise = new Promise((_, reject) => {
+    const timeoutPromise = new Promise<Response>((_, reject) => {
       setTimeout(() => reject(new Error("Export timeout")), 60000) // 60 second timeout
     })
 
-    const exportPromise = async () => {
+    const exportPromise = async (): Promise<Response> => {
       const { supabase, user, authError } = await createClientAndGetUser()
 
       if (authError || !user) {
