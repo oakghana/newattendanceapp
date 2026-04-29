@@ -179,6 +179,10 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
   const handleReject = async () => {
     if (!selectedNotifId) return
 
+    if (!rejectionReason.trim()) {
+      return
+    }
+
     setProcessingId(selectedNotifId)
     try {
       const response = await fetch("/api/leave/notifications", {
@@ -187,6 +191,7 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
         body: JSON.stringify({
           action: "reject",
           notificationId: selectedNotifId,
+          reason: rejectionReason.trim(),
         }),
       })
 
@@ -404,6 +409,57 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
             </div>
           </Tabs>
         )}
+
+      <Dialog
+        open={showRejectDialog}
+        onOpenChange={(open) => {
+          setShowRejectDialog(open)
+          if (!open) {
+            setSelectedNotifId(null)
+            setRejectionReason("")
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Leave Request</DialogTitle>
+            <DialogDescription>
+              Provide a clear reason so the staff member can correct and resubmit if needed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Enter rejection reason"
+              rows={4}
+            />
+            {!rejectionReason.trim() ? (
+              <p className="text-xs text-amber-700">Rejection reason is required.</p>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRejectDialog(false)
+                setSelectedNotifId(null)
+                setRejectionReason("")
+              }}
+              disabled={!!processingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleReject()}
+              disabled={!!processingId || !rejectionReason.trim()}
+            >
+              {processingId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reject Request"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

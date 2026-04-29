@@ -102,9 +102,6 @@ export async function POST(request: NextRequest) {
     }
 
     const role = normalizeRole((profile as any).role)
-    if (role !== "admin") {
-      return NextResponse.json({ error: "Only admin can submit loan requests during current testing phase." }, { status: 403 })
-    }
 
     if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
       return loanSubmissionClosedResponse()

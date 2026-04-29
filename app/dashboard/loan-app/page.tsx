@@ -15,8 +15,6 @@ import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
 
 type LoanType = {
   loan_key: string
@@ -307,7 +305,13 @@ function downloadCsv(rows: LoanRequest[], fileName: string) {
   URL.revokeObjectURL(url)
 }
 
-function downloadPdf(rows: LoanRequest[], fileName: string, title: string) {
+async function downloadPdf(rows: LoanRequest[], fileName: string, title: string) {
+  const [{ jsPDF }, autoTableMod] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ])
+  const autoTable = autoTableMod.default
+
   const doc = new jsPDF({ orientation: "landscape" })
   doc.setFontSize(14)
   doc.text(title, 14, 15)
@@ -2058,7 +2062,7 @@ export default function LoanAppPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex justify-end">
-                <Button variant="outline" onClick={() => downloadPdf(data?.inbox.accountsSigned || [], "approved-loans-accounts.pdf", "Approved Loans for Accounts Records") }>
+                <Button variant="outline" onClick={() => void downloadPdf(data?.inbox.accountsSigned || [], "approved-loans-accounts.pdf", "Approved Loans for Accounts Records") }>
                   <Download className="h-4 w-4 mr-1" /> Download Approved Loans
                 </Button>
               </div>
