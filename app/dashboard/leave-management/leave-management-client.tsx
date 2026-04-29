@@ -191,22 +191,22 @@ export function LeaveManagementClient({
       )}
 
       <Tabs defaultValue={canUseStaffLeaveHub ? "my-requests" : "pending-approvals"} className="space-y-6">
-        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-sm">
+        <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
           {canUseStaffLeaveHub ? (
             <>
-              <TabsTrigger value="my-requests" className="rounded-xl px-4 py-2 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+              <TabsTrigger value="my-requests" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
                 My Requests ({staffRequests.length})
               </TabsTrigger>
-              <TabsTrigger value="approved" className="rounded-xl px-4 py-2 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+              <TabsTrigger value="approved" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
                 Approved ({approvedRequests.length})
               </TabsTrigger>
             </>
           ) : (
             <>
-              <TabsTrigger value="pending-approvals" className="rounded-xl px-4 py-2 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+              <TabsTrigger value="pending-approvals" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=inactive]:text-amber-700">
                 Pending ({pendingNotifications.length})
               </TabsTrigger>
-              <TabsTrigger value="history" className="rounded-xl px-4 py-2 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+              <TabsTrigger value="history" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
                 History
               </TabsTrigger>
             </>

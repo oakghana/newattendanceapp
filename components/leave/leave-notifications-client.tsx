@@ -12,18 +12,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Calendar,
   Loader2,
@@ -31,11 +20,11 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Users,
   Bell,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { LeaveNotificationCard, type LeaveNotification } from "@/components/leave/leave-notification-card"
+import { LeaveRequestDialog, type LeaveRequestData } from "@/components/leave/leave-request-dialog"
 
 export function LeaveNotificationsClient() {
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -46,53 +35,25 @@ export function LeaveNotificationsClient() {
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [selectedNotifId, setSelectedNotifId] = useState<string | null>(null)
   const [newLeaveOpen, setNewLeaveOpen] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [formData, setFormData] = useState({
-    start_date: "",
-    end_date: "",
-    leave_type: "annual",
-    reason: "",
-  })
   const supabase = createClient()
 
   const allowedRequestRoles = ["staff", "nsp", "intern", "it-admin", "regional_manager"]
 
-  const submitNewLeave = async () => {
-    if (!formData.start_date || !formData.end_date || !formData.reason) {
-      alert("Please fill in all required fields")
-      return
+  const handleLeaveSubmit = async (data: LeaveRequestData) => {
+    const m = new FormData()
+    m.append('start_date', data.startDate.toISOString().split('T')[0])
+    m.append('end_date', data.endDate.toISOString().split('T')[0])
+    m.append('reason', data.reason)
+    m.append('leave_type', data.leaveType)
+    if (data.documentFile) m.append('document', data.documentFile)
+    if (data.isHalfDay) m.append('is_half_day', 'true')
+    if (data.halfDayPeriod) m.append('half_day_period', data.halfDayPeriod)
+    const resp = await fetch('/api/leave/request-leave', { method: 'POST', body: m })
+    if (!resp.ok) {
+      const err = await resp.json()
+      throw new Error(err.error || 'Failed to submit leave request')
     }
-    if (new Date(formData.start_date) >= new Date(formData.end_date)) {
-      alert("End date must be after start date")
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const m = new FormData()
-      m.append('start_date', formData.start_date)
-      m.append('end_date', formData.end_date)
-      m.append('reason', formData.reason)
-      m.append('leave_type', formData.leave_type)
-      if (uploadedFile) m.append('document', uploadedFile)
-
-      const resp = await fetch('/api/leave/request-leave', { method: 'POST', body: m })
-      if (resp.ok) {
-        setFormData({ start_date: '', end_date: '', leave_type: 'annual', reason: '' })
-        setUploadedFile(null)
-        setNewLeaveOpen(false)
-        await fetchNotifications()
-      } else {
-        const err = await resp.json()
-        alert(err.error || 'Failed to submit leave request')
-      }
-    } catch (e) {
-      console.error('Error submitting leave:', e)
-      alert('Failed to submit leave request')
-    } finally {
-      setSubmitting(false)
-    }
+    await fetchNotifications()
   }
 
   useEffect(() => {
@@ -302,242 +263,32 @@ export function LeaveNotificationsClient() {
 
   if (loading) {
     return (
-      <>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-        {canRequestLeave(userRole) && (
-          <div className="flex items-center justify-end mt-2">
-            <Dialog open={newLeaveOpen} onOpenChange={setNewLeaveOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Request Leave
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Request Leave</DialogTitle>
-                  <DialogDescription>Submit a new leave request for approval by your manager</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="leave_type">Leave Type</Label>
-                    <Select value={formData.leave_type} onValueChange={(value) => setFormData({ ...formData, leave_type: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="annual">Annual Leave</SelectItem>
-                        <SelectItem value="sick">Sick Leave</SelectItem>
-                        <SelectItem value="maternity">Maternity Leave</SelectItem>
-                        <SelectItem value="paternity">Paternity Leave</SelectItem>
-                        <SelectItem value="unpaid">Unpaid Leave</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="start_date">Start Date</Label>
-                    <Input id="start_date" type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="end_date">End Date</Label>
-                    <Input id="end_date" type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="reason">Reason</Label>
-                    <Textarea id="reason" placeholder="Provide a reason for your leave request..." value={formData.reason} onChange={(e) => setFormData({ ...formData, reason: e.target.value })} rows={4} />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="document">Attachment (Optional)</Label>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Input id="document" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) {
-                            if (file.size > 5 * 1024 * 1024) {
-                              alert("File size must be less than 5MB")
-                              return
-                            }
-                            setUploadedFile(file)
-                          }
-                        }} className="hidden" />
-                        <Button type="button" variant="outline" onClick={() => document.getElementById("document")?.click()} className="w-full gap-2">
-                          Upload Document
-                        </Button>
-                      </div>
-                      {uploadedFile && (
-                        <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                          <span className="text-sm text-muted-foreground flex-1 truncate">{uploadedFile.name}</span>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setUploadedFile(null)} className="h-6 w-6 p-0">X</Button>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">Upload supporting documents (Max 5MB)</p>
-                    </div>
-                  </div>
-
-                  <Button onClick={async () => {
-                    if (!formData.start_date || !formData.end_date || !formData.reason) {
-                      alert("Please fill in all required fields")
-                      return
-                    }
-                    if (new Date(formData.start_date) >= new Date(formData.end_date)) {
-                      alert("End date must be after start date")
-                      return
-                    }
-                    setSubmitting(true)
-                    try {
-                      const m = new FormData()
-                      m.append('start_date', formData.start_date)
-                      m.append('end_date', formData.end_date)
-                      m.append('reason', formData.reason)
-                      m.append('leave_type', formData.leave_type)
-                      if (uploadedFile) m.append('document', uploadedFile)
-
-                      const resp = await fetch('/api/leave/request-leave', { method: 'POST', body: m })
-                      if (resp.ok) {
-                        setFormData({ start_date: '', end_date: '', leave_type: 'annual', reason: '' })
-                        setUploadedFile(null)
-                        setNewLeaveOpen(false)
-                        await fetchNotifications()
-                      } else {
-                        const err = await resp.json()
-                        alert(err.error || 'Failed to submit leave request')
-                      }
-                    } catch (e) {
-                      console.error('Error submitting leave:', e)
-                      alert('Failed to submit leave request')
-                    } finally {
-                      setSubmitting(false)
-                    }
-                  }} disabled={submitting} className="w-full gap-2">
-                    {submitting ? (<Loader2 className="h-4 w-4 animate-spin" />) : 'Submit Request'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        )}
-      </>
+      <div className="flex items-center justify-center h-32">
+        <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+      </div>
     )
   }
 
   return (
-      <div className="space-y-8">
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Bell className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-heading font-bold text-foreground tracking-tight">
-              Leave Notifications
-            </h1>
-            <p className="text-base sm:text-lg text-muted-foreground font-medium">
-              Manage leave requests and notifications
-            </p>
-          </div>
-              {allowedRequestRoles.includes(userRole || "") && (
-                <div className="ml-auto">
-                  <Dialog open={newLeaveOpen} onOpenChange={setNewLeaveOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="gap-2">
-                        <Calendar className="h-4 w-4" />
-                        Request Leave
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Request Leave</DialogTitle>
-                        <DialogDescription>Submit a new leave request for approval by your manager</DialogDescription>
-                      </DialogHeader>
-
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="leave_type">Leave Type</Label>
-                          <Select value={formData.leave_type} onValueChange={(value) => setFormData({ ...formData, leave_type: value })}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="annual">Annual Leave</SelectItem>
-                              <SelectItem value="sick">Sick Leave</SelectItem>
-                              <SelectItem value="maternity">Maternity Leave</SelectItem>
-                              <SelectItem value="paternity">Paternity Leave</SelectItem>
-                              <SelectItem value="unpaid">Unpaid Leave</SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div>
-                          <Label htmlFor="start_date">Start Date</Label>
-                          <Input id="start_date" type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="end_date">End Date</Label>
-                          <Input id="end_date" type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="reason">Reason</Label>
-                          <Textarea id="reason" placeholder="Provide a reason for your leave request..." value={formData.reason} onChange={(e) => setFormData({ ...formData, reason: e.target.value })} rows={4} />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="document">Attachment (Optional)</Label>
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <Input id="document" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (file) {
-                                  if (file.size > 5 * 1024 * 1024) {
-                                    alert("File size must be less than 5MB")
-                                    return
-                                  }
-                                  setUploadedFile(file)
-                                }
-                              }} className="hidden" />
-                              <Button type="button" variant="outline" onClick={() => document.getElementById("document")?.click()} className="w-full gap-2">Upload Document</Button>
-                            </div>
-                            {uploadedFile && (
-                              <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                                <span className="text-sm text-muted-foreground flex-1 truncate">{uploadedFile.name}</span>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setUploadedFile(null)} className="h-6 w-6 p-0">X</Button>
-                              </div>
-                            )}
-                            <p className="text-xs text-muted-foreground">Upload supporting documents (Max 5MB)</p>
-                          </div>
-                        </div>
-
-                        <Button onClick={submitNewLeave} disabled={submitting} className="w-full gap-2">
-                          {submitting ? (<Loader2 className="h-4 w-4 animate-spin" />) : 'Submit Request'}
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              )}
-            {canRequestLeave(userRole) && (
-              <div className="ml-auto">
-                <Dialog open={newLeaveOpen} onOpenChange={setNewLeaveOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Request Leave
-                    </Button>
-                  </DialogTrigger>
-                </Dialog>
-              </div>
-            )}
+    <div className="space-y-6">
+      {/* Single Request Leave button — only for eligible roles */}
+      {allowedRequestRoles.includes(userRole || "") && (
+        <div className="flex justify-end">
+          <Button
+            onClick={() => setNewLeaveOpen(true)}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 shadow-sm"
+          >
+            <Calendar className="h-4 w-4" />
+            Request Leave
+          </Button>
+          <LeaveRequestDialog
+            open={newLeaveOpen}
+            onOpenChange={setNewLeaveOpen}
+            staffName="Staff Member"
+            onSubmit={handleLeaveSubmit}
+          />
         </div>
-      </div>
+      )}
 
       {userRole !== "staff" && pendingCount > 0 && (
         <Alert className="border-primary/20 bg-primary/5 shadow-sm">
@@ -585,18 +336,30 @@ export function LeaveNotificationsClient() {
         </Card>
       </div>
 
-      <Tabs defaultValue="all" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 h-12 p-1 bg-muted/50 rounded-xl">
-          <TabsTrigger value="all" className="font-semibold">
+      <Tabs defaultValue="all" className="space-y-4">
+        <TabsList className="flex h-auto w-full gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1.5 shadow-sm">
+          <TabsTrigger
+            value="all"
+            className="flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-800 data-[state=active]:text-white data-[state=inactive]:text-slate-600"
+          >
             All ({notifications.length})
           </TabsTrigger>
-          <TabsTrigger value="pending" className="font-semibold">
+          <TabsTrigger
+            value="pending"
+            className="flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition-all data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=inactive]:text-amber-700"
+          >
             Pending ({pendingCount})
           </TabsTrigger>
-          <TabsTrigger value="approved" className="font-semibold">
+          <TabsTrigger
+            value="approved"
+            className="flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700"
+          >
             Approved ({approvedCount})
           </TabsTrigger>
-          <TabsTrigger value="rejected" className="font-semibold">
+          <TabsTrigger
+            value="rejected"
+            className="flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition-all data-[state=active]:bg-red-500 data-[state=active]:text-white data-[state=inactive]:text-red-600"
+          >
             Rejected ({rejectedCount})
           </TabsTrigger>
         </TabsList>
