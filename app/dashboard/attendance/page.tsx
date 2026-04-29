@@ -129,7 +129,7 @@ export default function AttendancePage() {
   const isCheckedIn = !!todayAttendance && !todayAttendance.check_out_time
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 sm:space-y-6 md:space-y-8">
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" asChild className="gap-2 hover:bg-primary/5">
           <Link href="/dashboard">
@@ -140,24 +140,26 @@ export default function AttendancePage() {
         </Button>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Clock className="h-6 w-6 text-primary" />
+      <div className="space-y-4 sm:space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="p-2 bg-primary/10 rounded-lg flex-shrink-0">
+              <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             </div>
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-heading font-bold text-foreground tracking-tight">Attendance</h1>
-              <p className="text-base sm:text-lg text-muted-foreground font-medium mt-1">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight break-words">Attendance</h1>
+              <p className="text-sm sm:text-base md:text-lg text-muted-foreground font-medium mt-1">
                 Record your daily attendance and view your history at QCC locations
               </p>
             </div>
           </div>
-          <StaffStatusBadge
-            isCheckedIn={isCheckedIn}
-            isOnLeave={isOnLeave}
-            leaveStatus={userProfile?.leave_status as "active" | "pending" | "approved" | "rejected" | "on_leave" | "sick_leave" | null}
-          />
+          <div className="flex-shrink-0">
+            <StaffStatusBadge
+              isCheckedIn={isCheckedIn}
+              isOnLeave={isOnLeave}
+              leaveStatus={userProfile?.leave_status as "active" | "pending" | "approved" | "rejected" | "on_leave" | "sick_leave" | null}
+            />
+          </div>
         </div>
 
         {userProfile?.leave_status && userProfile.leave_status !== "active" && (
@@ -170,25 +172,27 @@ export default function AttendancePage() {
           />
         )}
 
-        <Tabs defaultValue="today" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl">
+        <Tabs defaultValue="today" className="space-y-4 sm:space-y-5 md:space-y-6">
+          <TabsList className="grid w-full grid-cols-2 h-10 sm:h-12 p-1 bg-muted/50 rounded-lg sm:rounded-xl">
             <TabsTrigger
               value="today"
-              className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+              className="flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md sm:rounded-lg"
             >
               <Clock className="h-4 w-4" />
-              Today's Attendance
+              <span className="hidden xs:inline">Today&apos;s</span>
+              <span className="inline xs:hidden">Today</span>
             </TabsTrigger>
             <TabsTrigger
               value="history"
-              className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+              className="flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md sm:rounded-lg"
             >
               <History className="h-4 w-4" />
-              Attendance History
+              <span className="hidden xs:inline">History</span>
+              <span className="inline xs:hidden">Log</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="today" className="space-y-6 mt-8">
+          <TabsContent value="today" className="space-y-4 sm:space-y-5 md:space-y-6 mt-4 sm:mt-6 md:mt-8">
             <LocationPreviewCard
               assignedLocation={assignedLocation}
               locations={locations}
@@ -203,7 +207,7 @@ export default function AttendancePage() {
             />
           </TabsContent>
 
-          <TabsContent value="history" className="space-y-6 mt-8">
+          <TabsContent value="history" className="space-y-4 sm:space-y-5 md:space-y-6 mt-4 sm:mt-6 md:mt-8">
             <PersonalAttendanceHistory />
           </TabsContent>
         </Tabs>

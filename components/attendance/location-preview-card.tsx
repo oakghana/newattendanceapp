@@ -201,40 +201,40 @@ export function LocationPreviewCard({
   return (
     <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/40 dark:to-cyan-950/40 overflow-hidden">
       <CardContent className="p-0">
-        <div className="flex flex-col md:flex-row">
+        <div className="flex flex-col lg:flex-row">
           {/* Left Section - Current Location */}
-          <div className="flex-1 p-6 border-b md:border-b-0 md:border-r border-blue-200 dark:border-blue-800">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="h-10 w-10 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center">
-                  <MapPin className="h-5 w-5 text-white" />
+          <div className="flex-1 p-4 sm:p-5 md:p-6 border-b lg:border-b-0 lg:border-r border-blue-200 dark:border-blue-800">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center flex-shrink-0">
+                  <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-blue-900 dark:text-blue-100">Your Current Location</h3>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">Live GPS tracking</p>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-semibold text-blue-900 dark:text-blue-100 truncate">Your Location</h3>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">Live GPS</p>
                 </div>
               </div>
-              <Button size="sm" variant="ghost" onClick={handleRefresh} disabled={isRefreshing} className="h-8 w-8 p-0">
+              <Button size="sm" variant="ghost" onClick={handleRefresh} disabled={isRefreshing} className="h-8 w-8 p-0 flex-shrink-0">
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3">
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Detected Area</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-relaxed">{detectedArea || "Loading..."}</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 leading-relaxed">{detectedArea || "Loading..."}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-2.5 sm:p-3">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">GPS Accuracy</p>
-                  <p className="font-semibold text-gray-900 dark:text-gray-100">{Math.round(userLocation.accuracy)}m</p>
+                  <p className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">{Math.round(userLocation.accuracy)}m</p>
                 </div>
-                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3">
+                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-2.5 sm:p-3">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Status</p>
                   <Badge
                     variant="outline"
-                    className="bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30"
+                    className="bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30 text-xs"
                   >
                     Active
                   </Badge>
@@ -243,30 +243,30 @@ export function LocationPreviewCard({
 
               <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3">
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Coordinates</p>
-                <p className="text-sm font-mono text-gray-900 dark:text-gray-100">{userLocation.latitude.toFixed(6)}°, {userLocation.longitude.toFixed(6)}°</p>
+                <p className="text-xs sm:text-sm font-mono text-gray-900 dark:text-gray-100 break-all">{userLocation.latitude.toFixed(6)}°, {userLocation.longitude.toFixed(6)}°</p>
               </div>
             </div>
           </div>
 
           {/* Right Section - Assigned Location & Nearest Location */}
-          <div className="flex-1 p-6 space-y-4">
+          <div className="flex-1 p-4 sm:p-5 md:p-6 space-y-3 sm:space-y-4">
             {/* Assigned Location */}
             {assignedLocation && (
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Your Assigned Location</h4>
+                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                  <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <h4 className="text-xs sm:text-sm font-semibold text-blue-900 dark:text-blue-100 truncate">Your Assigned Location</h4>
                 </div>
-                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-4 space-y-2">
-                  <p className="font-semibold text-gray-900 dark:text-gray-100">{assignedLocation.name}</p>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div>
+                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3 sm:p-4 space-y-2">
+                  <p className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{assignedLocation.name}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm">
+                    <div className="flex-1">
                       <span className="text-gray-600 dark:text-gray-400">Check-In: </span>
                       <span className="font-semibold text-blue-700 dark:text-blue-300">
                         {assignedLocation.check_in_start_time || "07:00"}
                       </span>
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <span className="text-gray-600 dark:text-gray-400">Check-Out: </span>
                       <span className="font-semibold text-blue-700 dark:text-blue-300">
                         {assignedLocation.check_out_end_time || "17:00"}
@@ -280,22 +280,22 @@ export function LocationPreviewCard({
             {/* Nearest Location */}
             {nearestLocation && (
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Navigation className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Nearest QCC Location</h4>
+                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                  <Navigation className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <h4 className="text-xs sm:text-sm font-semibold text-blue-900 dark:text-blue-100 truncate">Nearest Location</h4>
                 </div>
-                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">{nearestLocation.location.name}</p>
+                <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{nearestLocation.location.name}</p>
                     {nearestLocation.isInRange ? (
-                      <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30 flex items-center gap-1">
+                      <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30 flex items-center gap-1 text-xs flex-shrink-0">
                         <CheckCircle className="h-3 w-3" />
-                        Within Range
+                        <span className="hidden sm:inline">Range</span>
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30 flex items-center gap-1">
+                      <Badge variant="outline" className="bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30 flex items-center gap-1 text-xs flex-shrink-0">
                         <XCircle className="h-3 w-3" />
-                        Out of Range
+                        <span className="hidden sm:inline">Out</span>
                       </Badge>
                     )}
                   </div>
