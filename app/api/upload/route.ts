@@ -4,6 +4,17 @@ import { createClient } from "@/lib/supabase/server"
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        {
+          error: "File upload storage is not configured.",
+          code: "BLOB_NOT_CONFIGURED",
+          message: "Set BLOB_READ_WRITE_TOKEN in environment variables to enable uploads.",
+        },
+        { status: 503 },
+      )
+    }
+
     // Verify user is authenticated
     const supabase = await createClient()
     const {
@@ -42,6 +53,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: blob.url })
   } catch (error: any) {
     console.error("[v0] Upload error:", error)
-    return NextResponse.json({ error: error.message || "Upload failed" }, { status: 500 })
+    const message = String(error?.message || "Upload failed")
+    if (message.toLowerCase().includes("blob_read_write_token") || message.toLowerCase().includes("no token")) {
+      return NextResponse.json(
+        {
+          error: "File upload storage is not configured.",
+          code: "BLOB_NOT_CONFIGURED",
+          message: "Set BLOB_READ_WRITE_TOKEN in environment variables to enable uploads.",
+        },
+        { status: 503 },
+      )
+    }
+    return NextResponse.json({ error: message || "Upload failed" }, { status: 500 })
   }
 }
