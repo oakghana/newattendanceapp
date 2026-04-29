@@ -523,6 +523,7 @@ export async function POST(request: NextRequest) {
       // If the staff was checked-in via approved off-premises or is Security/Transport, skip strict geofence validation
       if (!isAttendanceOffPremises && !isSecOrTrans) {
         const validation = validateCheckoutLocation(userLocation, qccLocations, deviceCheckOutRadius)
+        const withinStandardRange = typeof validation.distance === "number" && validation.distance <= 100
         const allowAutomaticOutOfRangeCheckout = Boolean(
           auto_checkout &&
             canAutoCheckoutOutOfRange({
@@ -535,7 +536,15 @@ export async function POST(request: NextRequest) {
             }),
         )
 
-        if (!validation.canCheckOut && workHours < 2) {
+        if (!validation.canCheckOut && withinStandardRange) {
+          console.log("[v0] Checkout override: within <=100m treated as in-range", {
+            distance: validation.distance,
+            nearestLocation: validation.nearestLocation?.name,
+          })
+          checkoutLocationData = validation.nearestLocation
+        } else
+
+        if (!validation.canCheckOut && !withinStandardRange && workHours < 2) {
           return NextResponse.json(
             {
               error: "Out-of-location check-out is available only after working at least 2 hours.",
@@ -544,13 +553,13 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        if (!validation.canCheckOut && allowAutomaticOutOfRangeCheckout) {
+        if (!validation.canCheckOut && !withinStandardRange && allowAutomaticOutOfRangeCheckout) {
           console.log("[v0] Automatic out-of-range checkout allowed after 4 PM")
           checkoutLocationData = null
-        } else if (!validation.canCheckOut) {
+        } else if (!validation.canCheckOut && !withinStandardRange) {
           console.log("[v0] Out-of-range checkout allowed after mandatory 2 hours")
           checkoutLocationData = null
-        } else {
+        } else if (!checkoutLocationData) {
           checkoutLocationData = validation.nearestLocation
         }
       } else {

@@ -148,10 +148,10 @@ export function OffPremisesRequestModal({
           </DialogDescription>
         </DialogHeader>
         {request.request_type === 'checkout' && (
-          <Alert className="mt-2 border-yellow-200 bg-yellow-50">
-            <AlertTitle>Checkout Requests Disabled</AlertTitle>
+          <Alert className="mt-2 border-blue-200 bg-blue-50">
+            <AlertTitle>Checkout Request Review</AlertTitle>
             <AlertDescription>
-              Off‑premises check‑out requests are no longer supported. Users must return to a registered location to check out normally. This request will not be processed automatically; please ignore or reject it.
+              This is an off-premises check-out request. If approved, the user will be checked out remotely and the original request coordinates/time will be recorded on attendance.
             </AlertDescription>
           </Alert>
         )}
@@ -288,7 +288,7 @@ export function OffPremisesRequestModal({
           <Button
             variant="outline"
             onClick={onClose}
-            disabled={isApproving || request.request_type === 'checkout'}
+            disabled={isApproving}
             className="w-full sm:w-auto"
           >
             Cancel
@@ -296,7 +296,7 @@ export function OffPremisesRequestModal({
           <Button
             variant="destructive"
             onClick={() => handleApprove(false)}
-            disabled={isApproving || request.request_type === 'checkout'}
+            disabled={isApproving}
             className="gap-2 w-full sm:w-auto"
           >
             {isApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
@@ -304,7 +304,7 @@ export function OffPremisesRequestModal({
           </Button>
           <Button
             onClick={() => handleApprove(true)}
-            disabled={isApproving || request.request_type === 'checkout'}
+            disabled={isApproving}
             className="bg-green-600 hover:bg-green-700 gap-2 w-full sm:w-auto"
           >
             {isApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}

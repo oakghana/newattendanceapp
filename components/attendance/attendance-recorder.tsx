@@ -1812,6 +1812,16 @@ export function AttendanceRecorder({
         }
       }
 
+      // Enforce business rule: any user within 100m ("less than 101") is in-range.
+      // This prevents unnecessary off-premises reason prompts for near-boundary readings.
+      if (!checkoutValidation.canCheckOut && typeof checkoutValidation.distance === "number" && checkoutValidation.distance <= 100) {
+        checkoutValidation = {
+          ...checkoutValidation,
+          canCheckOut: true,
+          message: "Allowed within standard 100m range",
+        } as any
+      }
+
       // Check if early checkout is needed
       const now = getSystemNow()
       const checkoutHour = now.getHours()
