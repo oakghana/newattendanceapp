@@ -1,9 +1,11 @@
 "use client"
 
-import { CalendarRange, LayoutPanelTop } from "lucide-react"
+import { BarChart3, CalendarRange, LayoutPanelTop } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
+import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
+import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 
 interface LeaveManagementModuleClientProps {
   userRole: string
@@ -32,6 +34,9 @@ export function LeaveManagementModuleClient({
           <TabsTrigger value="leave-planning" className="gap-2 rounded-2xl px-5 py-3 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
             <CalendarRange className="h-4 w-4" /> Leave Planning
           </TabsTrigger>
+          <TabsTrigger value="insights" className="gap-2 rounded-2xl px-5 py-3 data-[state=active]:bg-cyan-700 data-[state=active]:text-white">
+            <BarChart3 className="h-4 w-4" /> Balance & Calendar
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="leave-management" className="space-y-6">
@@ -51,6 +56,13 @@ export function LeaveManagementModuleClient({
               departmentCode: userDepartmentCode,
             }}
           />
+        </TabsContent>
+
+        <TabsContent value="insights" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-2">
+            <LeaveBalanceWidget />
+            <TeamCalendarView />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
