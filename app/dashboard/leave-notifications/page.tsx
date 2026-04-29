@@ -19,5 +19,9 @@ export default async function LeaveNotificationsManagementPage() {
     .eq("id", user.id)
     .single()
 
-  return <LeaveNotificationsClient userRole={profile?.role || null} />
+  return (
+    <div className="leave-theme">
+      <LeaveNotificationsClient userRole={profile?.role || null} />
+    </div>
+  )
 }

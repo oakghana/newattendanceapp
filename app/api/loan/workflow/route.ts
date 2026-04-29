@@ -10,6 +10,179 @@ import {
   normalizeRole,
 } from "@/lib/loan-workflow"
 
+const HOD_AUTO_ADVANCE_DAYS = 3
+const POST_LOAN_OFFICE_DELAY_DAYS = 5
+
+async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
+  if (!userIds.length) return
+  await admin.from("staff_notifications").insert(
+    userIds.map((uid) => ({ user_id: uid, title, message, type, data, is_read: false })),
+  )
+}
+
+async function autoAdvanceStaleHodRequests(admin: any) {
+  const cutoff = new Date(Date.now() - HOD_AUTO_ADVANCE_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const { data: stale, error } = await admin
+    .from("loan_requests")
+    .select("id, user_id, request_number, submitted_at")
+    .eq("status", "pending_hod")
+    .lte("submitted_at", cutoff)
+
+  if (error || !stale || stale.length === 0) return
+
+  const ids = stale.map((r: any) => r.id)
+  const nowIso = new Date().toISOString()
+
+  await admin
+    .from("loan_requests")
+    .update({
+      status: "hod_approved",
+      hod_review_note: `Auto-approved after ${HOD_AUTO_ADVANCE_DAYS} days with no HOD action.`,
+      hod_decision_at: nowIso,
+      updated_at: nowIso,
+    })
+    .in("id", ids)
+
+  await admin.from("loan_request_timeline").insert(
+    stale.map((row: any) => ({
+      loan_request_id: row.id,
+      actor_id: null,
+      actor_role: "system",
+      action_key: "hod_auto_approved",
+      from_status: "pending_hod",
+      to_status: "hod_approved",
+      note: `Auto-approved after ${HOD_AUTO_ADVANCE_DAYS} days with no HOD action.`,
+      metadata: { sla_days: HOD_AUTO_ADVANCE_DAYS },
+      created_at: nowIso,
+    })),
+  )
+
+  const { data: loanOfficeUsers } = await admin
+    .from("user_profiles")
+    .select("id")
+    .in("role", ["loan_officer", "hr_officer", "admin", "director_hr", "hr_director"])
+    .eq("is_active", true)
+
+  const loanOfficeIds = (loanOfficeUsers || []).map((u: any) => u.id)
+  await Promise.all(
+    stale.map((row: any) =>
+      Promise.all([
+        notifyUsers(
+          admin,
+          [row.user_id],
+          "Loan Request Auto-Advanced",
+          `Your request ${row.request_number} was automatically advanced to Loan Office after ${HOD_AUTO_ADVANCE_DAYS} days without HOD action.`,
+          "loan_hod_auto_approved",
+          { request_id: row.id },
+        ),
+        notifyUsers(
+          admin,
+          loanOfficeIds,
+          "Loan Request Auto-Advanced to Loan Office",
+          `Request ${row.request_number} has been auto-approved at HOD stage and is ready for Loan Office processing.`,
+          "loan_hod_auto_approved_queue",
+          { request_id: row.id },
+        ),
+      ]),
+    ),
+  )
+}
+
+function stageOwnerForDelay(row: any) {
+  const status = String(row.status || "")
+  if (status === "sent_to_accounts") {
+    return { ownerId: row.accounts_reviewer_id || null, ownerRole: "accounts", stage: "Accounts FD" }
+  }
+  if (status === "awaiting_committee") {
+    return { ownerId: row.committee_reviewer_id || null, ownerRole: "committee", stage: "Committee" }
+  }
+  if (status === "awaiting_hr_terms") {
+    return { ownerId: row.hr_officer_id || null, ownerRole: "hr_office", stage: "HR Terms" }
+  }
+  if (status === "awaiting_director_hr") {
+    return { ownerId: row.director_hr_id || null, ownerRole: "director_hr", stage: "Director HR" }
+  }
+  return { ownerId: null, ownerRole: "unknown", stage: status || "Unknown" }
+}
+
+async function broadcastDelayedPostLoanOfficeRequests(admin: any) {
+  const cutoffIso = new Date(Date.now() - POST_LOAN_OFFICE_DELAY_DAYS * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: staleRows, error } = await admin
+    .from("loan_requests")
+    .select("id, request_number, status, updated_at, accounts_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id")
+    .in("status", ["sent_to_accounts", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr"])
+    .lte("updated_at", cutoffIso)
+
+  if (error || !staleRows || staleRows.length === 0) return
+
+  const staleIds = staleRows.map((r: any) => r.id)
+  const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: recentBroadcasts } = await admin
+    .from("loan_request_timeline")
+    .select("loan_request_id, from_status")
+    .eq("action_key", "process_delay_broadcast")
+    .in("loan_request_id", staleIds)
+    .gte("created_at", recentCutoff)
+
+  const broadcastedKeys = new Set(
+    (recentBroadcasts || []).map((b: any) => `${b.loan_request_id}:${String(b.from_status || "")}`),
+  )
+
+  const ownerIds = Array.from(
+    new Set(
+      staleRows
+        .map((r: any) => stageOwnerForDelay(r).ownerId)
+        .filter(Boolean),
+    ),
+  ) as string[]
+
+  const { data: owners } = ownerIds.length
+    ? await admin.from("user_profiles").select("id, first_name, last_name, role").in("id", ownerIds)
+    : ({ data: [] } as any)
+
+  const ownerMap = new Map((owners || []).map((o: any) => [o.id, `${o.first_name || ""} ${o.last_name || ""}`.trim() || o.role || "Unknown"]))
+
+  const { data: allUsers } = await admin.from("user_profiles").select("id").eq("is_active", true)
+  const allUserIds = (allUsers || []).map((u: any) => u.id)
+  if (!allUserIds.length) return
+
+  const nowIso = new Date().toISOString()
+  for (const row of staleRows) {
+    const key = `${row.id}:${String(row.status || "")}`
+    if (broadcastedKeys.has(key)) continue
+
+    const owner = stageOwnerForDelay(row)
+    const ownerName = owner.ownerId ? ownerMap.get(owner.ownerId) || "Assigned user" : "Unassigned"
+    const message = `Delay broadcast: ${row.request_number} has stayed at ${owner.stage} for more than ${POST_LOAN_OFFICE_DELAY_DAYS} days. Responsible: ${ownerName}.`
+
+    await notifyUsers(
+      admin,
+      allUserIds,
+      "Loan Process Delay Broadcast",
+      message,
+      "loan_process_delay_broadcast",
+      { request_id: row.id, status: row.status, owner_id: owner.ownerId },
+    )
+
+    await admin.from("loan_request_timeline").insert({
+      loan_request_id: row.id,
+      actor_id: null,
+      actor_role: "system",
+      action_key: "process_delay_broadcast",
+      from_status: row.status,
+      to_status: row.status,
+      note: message,
+      metadata: {
+        days_stuck: POST_LOAN_OFFICE_DELAY_DAYS,
+        owner_id: owner.ownerId,
+        owner_role: owner.ownerRole,
+      },
+      created_at: nowIso,
+    })
+  }
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -26,7 +199,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, departments(name, code)")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -38,10 +211,10 @@ export async function GET() {
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
 
-    const [typesRes, myRes] = await Promise.all([
+    const [typesRes, myRes, myHodLinkRes] = await Promise.all([
       admin
         .from("loan_types")
-        .select("loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, fixed_amount, sort_order")
+        .select("loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, fixed_amount, max_amount, sort_order")
         .eq("is_active", true)
         .order("sort_order", { ascending: true }),
       admin
@@ -49,7 +222,26 @@ export async function GET() {
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false }),
+      admin
+        .from("loan_hod_linkages")
+        .select("hod_user_id")
+        .eq("staff_user_id", user.id)
+        .limit(1)
+        .maybeSingle(),
     ])
+
+    let linkedHodName: string | null = null
+    if (myHodLinkRes.data?.hod_user_id) {
+      const { data: hodProfile } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name, position")
+        .eq("id", myHodLinkRes.data.hod_user_id)
+        .maybeSingle()
+      if (hodProfile) {
+        const name = `${hodProfile.first_name || ""} ${hodProfile.last_name || ""}`.trim()
+        linkedHodName = hodProfile.position ? `${name} (${hodProfile.position})` : name || null
+      }
+    }
 
     if (typesRes.error && isSchemaIssue(typesRes.error)) {
       const viewAllTabs =
@@ -71,6 +263,7 @@ export async function GET() {
             committee: [],
             hrOffice: [],
             directorHr: [],
+            directorGoodFd: [],
             allLoans: [],
           },
           permissions: {
@@ -90,6 +283,9 @@ export async function GET() {
     if (typesRes.error) throw typesRes.error
     if (myRes.error) throw myRes.error
 
+    await autoAdvanceStaleHodRequests(admin)
+    await broadcastDelayedPostLoanOfficeRequests(admin)
+
     // viewAllTabs: admin, loan_officer (HR Loan Office), director_hr see all tabs
     const viewAllTabs =
       role === "admin" || role === "loan_officer" || role === "director_hr" || role === "hr_director"
@@ -104,16 +300,48 @@ export async function GET() {
       viewAllTabs,
     }
 
-    // HOD query: dept_head sees own dept; admin / regional_manager / viewAllTabs see all
-    let hodQuery = admin
-      .from("loan_requests")
-      .select("*")
-      .eq("status", "pending_hod")
-      .order("created_at", { ascending: false })
+    // HOD query: linked HODs can review linked staff requests; first approval is enough to move forward.
+    const hodPromise: Promise<any> = (async () => {
+      if (!(permissions.hod || viewAllTabs)) return { data: [], error: null }
+      if (viewAllTabs || !["department_head", "regional_manager"].includes(role)) {
+        return admin
+          .from("loan_requests")
+          .select("*")
+          .eq("status", "pending_hod")
+          .order("created_at", { ascending: false })
+      }
 
-    if (role === "department_head" && (profile as any).department_id) {
-      hodQuery = hodQuery.eq("department_id", (profile as any).department_id)
-    }
+      const [directRes, linkageRes] = await Promise.all([
+        admin
+          .from("loan_requests")
+          .select("*")
+          .eq("status", "pending_hod")
+          .eq("hod_reviewer_id", user.id)
+          .order("created_at", { ascending: false }),
+        admin.from("loan_hod_linkages").select("staff_user_id").eq("hod_user_id", user.id),
+      ])
+
+      if (directRes.error) return { data: null, error: directRes.error }
+      if (linkageRes.error) return { data: null, error: linkageRes.error }
+
+      const linkedStaffIds = Array.from(new Set((linkageRes.data || []).map((r: any) => r.staff_user_id).filter(Boolean)))
+      let linkedData: any[] = []
+      if (linkedStaffIds.length > 0) {
+        const linkedRes = await admin
+          .from("loan_requests")
+          .select("*")
+          .eq("status", "pending_hod")
+          .in("user_id", linkedStaffIds)
+          .order("created_at", { ascending: false })
+        if (linkedRes.error) return { data: null, error: linkedRes.error }
+        linkedData = linkedRes.data || []
+      }
+
+      const combined = [...(directRes.data || []), ...linkedData]
+      const unique = Array.from(new Map(combined.map((r: any) => [r.id, r])).values())
+      unique.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      return { data: unique, error: null }
+    })()
 
     const showHod = permissions.hod || viewAllTabs
     const showLoanOffice = permissions.loanOffice || viewAllTabs
@@ -133,8 +361,8 @@ export async function GET() {
 
     const myRequestIds = (myRes.data || []).map((r: any) => r.id)
 
-    const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, allLoansRes, timelinesRes] = await Promise.all([
-      showHod ? hodQuery : Promise.resolve({ data: [], error: null } as any),
+    const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes] = await Promise.all([
+      hodPromise,
       showLoanOffice
         ? admin.from("loan_requests").select("*").eq("status", "hod_approved").order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
@@ -151,15 +379,37 @@ export async function GET() {
       showDirectorHr
         ? admin.from("loan_requests").select("*").eq("status", "awaiting_director_hr").order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
+      showDirectorHr
+        ? admin
+            .from("loan_requests")
+            .select("*")
+            .eq("fd_good", true)
+            .in("status", ["awaiting_hr_terms", "awaiting_director_hr"])
+            .order("updated_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null } as any),
       viewAllTabs
         ? admin.from("loan_requests").select("*").order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       myRequestIds.length > 0
         ? admin.from("loan_request_timeline").select("*").in("loan_request_id", myRequestIds).order("created_at", { ascending: true })
         : Promise.resolve({ data: [], error: null } as any),
+      admin
+        .from("loan_requests")
+        .select("*")
+        .or(
+          [
+            `hod_reviewer_id.eq.${user.id}`,
+            `loan_office_reviewer_id.eq.${user.id}`,
+            `accounts_reviewer_id.eq.${user.id}`,
+            `committee_reviewer_id.eq.${user.id}`,
+            `hr_officer_id.eq.${user.id}`,
+            `director_hr_id.eq.${user.id}`,
+          ].join(","),
+        )
+        .order("updated_at", { ascending: false }),
     ])
 
-    const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, allLoansRes, timelinesRes]
+    const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes]
     const schemaError = responses.find((r: any) => r?.error && isSchemaIssue(r.error))
     if (schemaError) {
       return NextResponse.json(
@@ -180,6 +430,7 @@ export async function GET() {
             committee: [],
             hrOffice: [],
             directorHr: [],
+            directorGoodFd: [],
             allLoans: [],
           },
         },
@@ -213,13 +464,19 @@ export async function GET() {
         role: (profile as any).role,
         position: (profile as any).position,
         departmentId: (profile as any).department_id,
+        assignedLocationId: (profile as any).assigned_location_id,
         departmentName: (profile as any)?.departments?.name || null,
+        assignedLocationName: (profile as any)?.geofence_locations?.name || null,
+        assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
+        assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
+        linkedHodName,
       },
       role,
       permissions,
       loanTypes: typesRes.data || [],
       myRequests: myRes.data || [],
       myTimelines,
+      myTasks: myTasksRes.data || [],
       inbox: {
         hod: hodRes.data || [],
         loanOffice: loanOfficeRes.data || [],
@@ -228,6 +485,7 @@ export async function GET() {
         committee: committeeRes.data || [],
         hrOffice: hrRes.data || [],
         directorHr: directorRes.data || [],
+        directorGoodFd: directorGoodFdRes.data || [],
         allLoans: allLoansRes.data || [],
       },
     })

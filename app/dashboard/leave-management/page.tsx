@@ -58,13 +58,15 @@ export default async function LeaveManagementPage() {
   }
 
   return (
-    <LeaveManagementModuleClient
-      userRole={profile.role}
-      userDepartment={profile.department_id}
-      userDepartmentName={(profile as any)?.departments?.name || null}
-      userDepartmentCode={(profile as any)?.departments?.code || null}
-      initialStaffRequests={staffRequests}
-      initialManagerNotifications={managerNotifications}
-    />
+    <div className="leave-theme">
+      <LeaveManagementModuleClient
+        userRole={profile.role}
+        userDepartment={profile.department_id}
+        userDepartmentName={(profile as any)?.departments?.name || null}
+        userDepartmentCode={(profile as any)?.departments?.code || null}
+        initialStaffRequests={staffRequests}
+        initialManagerNotifications={managerNotifications}
+      />
+    </div>
   )
 }

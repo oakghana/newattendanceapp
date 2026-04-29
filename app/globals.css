@@ -219,6 +219,57 @@
   animation: slide-out-to-bottom 0.2s ease-out;
 }
 
+/* Module-specific theming */
+@keyframes loan-dev-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.loan-dev-note {
+  background: #3b0764;
+  color: #e9d5ff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #7e22ce;
+  animation: loan-dev-blink 1.4s ease-in-out infinite;
+}
+
+.loan-theme button:not(.bg-destructive):not([class*="destructive"]) {
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 60%, #7c3aed 100%) !important;
+  color: #ede9fe !important;
+  border-color: #7c3aed !important;
+}
+
+.loan-theme button:hover:not(.bg-destructive):not([class*="destructive"]) {
+  filter: brightness(1.15);
+}
+
+.loan-theme [role="tab"] {
+  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 55%, #8b5cf6 100%) !important;
+  color: #ede9fe !important;
+  border-color: #c4b5fd !important;
+}
+
+.loan-theme [role="tab"][data-state="active"] {
+  background: linear-gradient(135deg, #3b0764 0%, #4c1d95 55%, #6d28d9 100%) !important;
+  color: #ffffff !important;
+  border-color: #a78bfa !important;
+}
+
+.leave-theme button:not(.bg-destructive):not([class*="destructive"]) {
+  background: linear-gradient(135deg, #fb923c 0%, #fdba74 52%, #93c5fd 100%) !important;
+  color: #0f172a !important;
+  border-color: #bae6fd !important;
+}
+
+.leave-theme button:hover:not(.bg-destructive):not([class*="destructive"]) {
+  filter: saturate(1.06);
+}
+
 /* PWA Install Toast countdown animation */
 @keyframes shrink {
   from {

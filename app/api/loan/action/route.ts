@@ -30,6 +30,26 @@ async function timeline(admin: any, payload: any) {
   await admin.from("loan_request_timeline").insert(payload)
 }
 
+function buildAutoMemo(req: any) {
+  return [
+    "QUALITY CONTROL COMPANY LIMITED",
+    "HUMAN RESOURCES DEPARTMENT",
+    "",
+    `Reference: ${req.request_number}`,
+    `Date: ${new Date().toISOString().slice(0, 10)}`,
+    "",
+    `Subject: Loan Approval Notice - ${req.loan_type_label}`,
+    "",
+    "Your loan request has been approved.",
+    `Approved Amount: GHc ${Number(req.fixed_amount || req.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    `Disbursement Date: ${req.disbursement_date || "TBD"}`,
+    `Recovery Start Date: ${req.recovery_start_date || "TBD"}`,
+    `Recovery Months: ${req.recovery_months || "TBD"}`,
+    "",
+    "Please contact HR/Accounts for processing and disbursement instructions.",
+  ].join("\n")
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -72,6 +92,21 @@ export async function POST(request: NextRequest) {
     if (action === "hod_decision") {
       if (!canDoHodReview(role)) return NextResponse.json({ error: "Only HOD/manager/admin can review" }, { status: 403 })
       if (req.status !== "pending_hod") return NextResponse.json({ error: "Request is not pending HOD review" }, { status: 400 })
+
+      if (role !== "admin") {
+        const directlyAssigned = req.hod_reviewer_id === user.id
+        const { data: linkRow } = await admin
+          .from("loan_hod_linkages")
+          .select("id")
+          .eq("staff_user_id", req.user_id)
+          .eq("hod_user_id", user.id)
+          .maybeSingle()
+        const isLinkedHod = Boolean((linkRow as any)?.id)
+
+        if (!directlyAssigned && !isLinkedHod) {
+          return NextResponse.json({ error: "You are not linked to review this staff request." }, { status: 403 })
+        }
+      }
 
       const decision = body.decision === "reject" ? "reject" : "approve"
       toStatus = decision === "approve" ? "hod_approved" : "hod_rejected"
@@ -156,8 +191,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "fd_score is required" }, { status: 400 })
       }
 
-      const fdGood = fdScore > GOOD_FD_THRESHOLD
+      const fdGood = fdScore >= GOOD_FD_THRESHOLD
       const isCarLoan = Boolean(req.committee_required)
+
+      if (!fdGood && !note) {
+        return NextResponse.json({ error: `Provide Accounts response note for FD below ${GOOD_FD_THRESHOLD}.` }, { status: 400 })
+      }
 
       update.accounts_reviewer_id = user.id
       update.fd_score = fdScore
@@ -188,12 +227,27 @@ export async function POST(request: NextRequest) {
         await notifyUsers(
           admin,
           [req.user_id],
-          "Loan Request Not Cleared by FD",
-          `Your request ${req.request_number} did not meet the required FD threshold (> ${GOOD_FD_THRESHOLD}).`,
+          "Loan Request Auto-Rejected by FD Threshold",
+          `Your request ${req.request_number} was automatically rejected because FD score ${fdScore} is below ${GOOD_FD_THRESHOLD}.`,
           "loan_fd_rejected",
           { request_id: req.id, fd_score: fdScore },
         )
       }
+
+      const { data: loanOfficeUsers } = await admin
+        .from("user_profiles")
+        .select("id")
+        .in("role", ["loan_officer", "hr_officer", "admin"])
+        .eq("is_active", true)
+
+      await notifyUsers(
+        admin,
+        (loanOfficeUsers || []).map((u: any) => u.id),
+        "Accounts FD Response Received",
+        `Request ${req.request_number}: FD score ${fdScore}. Decision: ${fdGood ? "cleared" : "below threshold"}.${note ? ` Note: ${note}` : ""}`,
+        "loan_accounts_fd_feedback",
+        { request_id: req.id, fd_score: fdScore, fd_good: fdGood, note },
+      )
 
       if (toStatus === "awaiting_committee") {
         const { data: committeeUsers } = await admin
@@ -308,7 +362,8 @@ export async function POST(request: NextRequest) {
       update.director_signature_mode = signatureMode
       update.director_signature_text = signatureText
       update.director_signature_data_url = signatureDataUrl
-      update.director_letter = directorLetter
+      const autoMemo = decision === "approve" ? buildAutoMemo(req) : null
+      update.director_letter = directorLetter || autoMemo
       update.director_note = note
       update.director_decision_at = new Date().toISOString()
 
@@ -320,7 +375,7 @@ export async function POST(request: NextRequest) {
           ? `Your request ${req.request_number} is fully approved. Disbursement: ${req.disbursement_date || "TBD"}; Recovery starts: ${req.recovery_start_date || "TBD"}; Duration: ${req.recovery_months || "TBD"} months.`
           : `Your request ${req.request_number} was declined by Director HR.${note ? ` Reason: ${note}` : ""}`,
         decision === "approve" ? "loan_final_approved" : "loan_final_rejected",
-        { request_id: req.id },
+        { request_id: req.id, auto_memo: decision === "approve" ? (directorLetter || autoMemo) : null },
       )
 
       if (decision === "approve") {

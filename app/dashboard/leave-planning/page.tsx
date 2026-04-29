@@ -22,12 +22,14 @@ export default async function LeavePlanningPage() {
   }
 
   return (
-    <LeavePlanningClient
-      profile={{
-        role: profile.role,
-        departmentName: (profile as any)?.departments?.name || null,
-        departmentCode: (profile as any)?.departments?.code || null,
-      }}
-    />
+    <div className="leave-theme">
+      <LeavePlanningClient
+        profile={{
+          role: profile.role,
+          departmentName: (profile as any)?.departments?.name || null,
+          departmentCode: (profile as any)?.departments?.code || null,
+        }}
+      />
+    </div>
   )
 }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { isSchemaIssue, requestIsEditable } from "@/lib/loan-workflow"
+import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-workflow"
 
-const LOAN_REQUEST_SUBMISSION_ENABLED = false
+const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
 function loanSubmissionClosedResponse() {
   return NextResponse.json(
@@ -25,6 +25,11 @@ function requiresProofAttachment(loanTypeKey: string): boolean {
   return key.includes("funeral") || key.includes("insurance")
 }
 
+function isInsuranceOrFuneralLoan(loanTypeKey: string): boolean {
+  const key = String(loanTypeKey || "").toLowerCase()
+  return key.includes("funeral") || key.includes("insurance")
+}
+
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
   const key = String(loanTypeKey || "").toLowerCase()
   const rank = String(staffRank || "").toLowerCase()
@@ -35,6 +40,11 @@ function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boo
   if (key.includes("_manager")) return isManagerOrAbove
   if (key.includes("_senior")) return isSeniorOrAbove
   return true
+}
+
+function shouldRetryWithoutLocationColumns(error: any): boolean {
+  const msg = String(error?.message || "").toLowerCase()
+  return msg.includes("staff_location_id") || msg.includes("staff_location_name") || msg.includes("staff_district_name") || msg.includes("staff_location_address")
 }
 
 async function addTimeline(admin: any, loanRequestId: string, actorId: string, actorRole: string, actionKey: string, fromStatus: string | null, toStatus: string | null, note?: string | null) {
@@ -74,10 +84,6 @@ export async function POST(request: NextRequest) {
 
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
-      return loanSubmissionClosedResponse()
-    }
-
     const body = await request.json()
     const { loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
 
@@ -87,12 +93,21 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id")
       .eq("id", user.id)
       .single()
 
     if (profileError || !profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    const role = normalizeRole((profile as any).role)
+    if (role !== "admin") {
+      return NextResponse.json({ error: "Only admin can submit loan requests during current testing phase." }, { status: 403 })
+    }
+
+    if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
+      return loanSubmissionClosedResponse()
     }
 
     const { data: loanType, error: typeError } = await admin
@@ -106,11 +121,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
     }
 
-    if (!isQualifiedForLoan(loanType.loan_key, (profile as any).position)) {
+    if (!isQualifiedForLoan(loanType.loan_key, (profile as any).position) && role !== "admin") {
       return NextResponse.json(
         { error: "You are not qualified for this loan type based on current rank." },
         { status: 403 },
       )
+    }
+
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const { data: activeLeaveRows, error: leaveError } = await admin
+      .from("leave_requests")
+      .select("id, status, start_date, end_date")
+      .eq("user_id", user.id)
+      .in("status", ["approved", "hr_approved", "active", "on_leave"])
+      .lte("start_date", todayIso)
+      .gte("end_date", todayIso)
+
+    if (!leaveError && (activeLeaveRows || []).length > 0) {
+      if (!isInsuranceOrFuneralLoan(loanType.loan_key)) {
+        return NextResponse.json(
+          {
+            error:
+              "You are currently on leave. Only insurance or funeral loans are allowed while on leave. For other loan types, submit a reason for HOD pre-approval first.",
+          },
+          { status: 403 },
+        )
+      }
+
+      if (!String(reason || "").trim()) {
+        return NextResponse.json(
+          {
+            error:
+              "Reason is required for leave-period loan requests so HOD can review and approve properly.",
+          },
+          { status: 400 },
+        )
+      }
     }
 
     if (requiresProofAttachment(loanType.loan_key) && !supporting_document_url) {
@@ -122,6 +168,72 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    let locationSnapshot: any = {
+      staff_location_id: (profile as any).assigned_location_id || null,
+      staff_location_name: null,
+      staff_location_address: null,
+      staff_district_name: null,
+    }
+
+    if ((profile as any).assigned_location_id) {
+      const { data: locationRow } = await admin
+        .from("geofence_locations")
+        .select("id, name, address, districts(name)")
+        .eq("id", (profile as any).assigned_location_id)
+        .maybeSingle()
+
+      locationSnapshot = {
+        staff_location_id: (profile as any).assigned_location_id,
+        staff_location_name: (locationRow as any)?.name || null,
+        staff_location_address: (locationRow as any)?.address || null,
+        staff_district_name: (locationRow as any)?.districts?.name || null,
+      }
+    }
+
+    const assignedHodIds: string[] = []
+
+    const { data: linkageRows } = await admin
+      .from("loan_hod_linkages")
+      .select("hod_user_id")
+      .eq("staff_user_id", user.id)
+      .limit(20)
+
+    for (const row of linkageRows || []) {
+      const hodId = (row as any)?.hod_user_id
+      if (hodId && !assignedHodIds.includes(hodId)) assignedHodIds.push(hodId)
+    }
+
+    if (assignedHodIds.length === 0 && (profile as any).assigned_location_id) {
+      const { data: locationHods } = await admin
+        .from("user_profiles")
+        .select("id, role")
+        .eq("assigned_location_id", (profile as any).assigned_location_id)
+        .in("role", ["regional_manager", "department_head"])
+        .eq("is_active", true)
+        .limit(20)
+
+      for (const hod of locationHods || []) {
+        const id = (hod as any)?.id
+        if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
+      }
+    }
+
+    if (assignedHodIds.length === 0 && (profile as any).department_id) {
+      const { data: deptHods } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", (profile as any).department_id)
+        .eq("role", "department_head")
+        .eq("is_active", true)
+        .limit(20)
+      for (const hod of deptHods || []) {
+        const id = (hod as any)?.id
+        if (id && !assignedHodIds.includes(id)) assignedHodIds.push(id)
+      }
+    }
+
+    const assignedHodId = assignedHodIds[0] || null
+
     const payload = {
       request_number: genRequestNumber(),
       user_id: user.id,
@@ -129,6 +241,7 @@ export async function POST(request: NextRequest) {
       corporate_email: (profile as any).email || user.email || null,
       staff_number: (profile as any).employee_id || null,
       staff_rank: (profile as any).position || null,
+      ...locationSnapshot,
       loan_type_key: loanType.loan_key,
       loan_type_label: loanType.loan_label,
       fixed_amount: (loanType as any).fixed_amount || null,
@@ -138,10 +251,24 @@ export async function POST(request: NextRequest) {
       committee_required: Boolean(loanType.requires_committee),
       requires_fd_check: loanType.requires_fd_check !== false,
       status: "pending_hod",
+      hod_reviewer_id: assignedHodId,
       submitted_at: new Date().toISOString(),
     }
 
-    const { data: inserted, error: insertError } = await admin.from("loan_requests").insert(payload).select("*").single()
+    let { data: inserted, error: insertError } = await admin.from("loan_requests").insert(payload).select("*").single()
+
+    if (insertError && isSchemaIssue(insertError) && shouldRetryWithoutLocationColumns(insertError)) {
+      const fallbackPayload = {
+        ...payload,
+        staff_location_id: undefined,
+        staff_location_name: undefined,
+        staff_location_address: undefined,
+        staff_district_name: undefined,
+      }
+      const retry = await admin.from("loan_requests").insert(fallbackPayload).select("*").single()
+      inserted = retry.data as any
+      insertError = retry.error as any
+    }
 
     if (insertError) {
       if (isSchemaIssue(insertError)) {
@@ -158,18 +285,18 @@ export async function POST(request: NextRequest) {
 
     await addTimeline(admin, inserted.id, user.id, String((profile as any).role || "staff"), "staff_submit", null, "pending_hod", reason)
 
-    const { data: hods } = await admin
+    const { data: admins } = await admin
       .from("user_profiles")
       .select("id")
-      .in("role", ["department_head", "regional_manager", "admin"])
+      .eq("role", "admin")
       .eq("is_active", true)
 
-    const recipients = (hods || []).map((r: any) => r.id)
+    const recipients = Array.from(new Set([...assignedHodIds, ...(admins || []).map((r: any) => r.id)].filter(Boolean))) as string[]
     await notifyUsers(
       admin,
       recipients,
       "New Loan Request Pending HOD Review",
-      `${(profile as any).first_name} ${(profile as any).last_name} submitted ${loanType.loan_label}.`,
+      `${(profile as any).first_name} ${(profile as any).last_name} submitted ${loanType.loan_label}.${assignedHodId ? " Assigned to your HOD queue." : ""}`,
       "loan_hod_pending",
       { request_id: inserted.id, request_number: inserted.request_number },
     )
@@ -202,14 +329,27 @@ export async function PUT(request: NextRequest) {
 
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
-      return loanSubmissionClosedResponse()
-    }
-
     const body = await request.json()
     const { id, loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
+
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+
+    const role = normalizeRole((profile as any).role)
+    if (role !== "admin") {
+      return NextResponse.json({ error: "Only admin can save edited loan requests during current testing phase." }, { status: 403 })
+    }
+
+    if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
+      return loanSubmissionClosedResponse()
+    }
 
     const { data: existing, error: existingError } = await admin
       .from("loan_requests")
@@ -218,7 +358,6 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (existingError || !existing) return NextResponse.json({ error: "Request not found" }, { status: 404 })
-    if (existing.user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!requestIsEditable(existing.status)) {
       return NextResponse.json({ error: "Request can no longer be edited at this stage" }, { status: 400 })
     }
@@ -241,7 +380,7 @@ export async function PUT(request: NextRequest) {
         .single()
 
       if (loanType) {
-        if (!isQualifiedForLoan(loanType.loan_key, (existing as any).staff_rank)) {
+        if (!isQualifiedForLoan(loanType.loan_key, (existing as any).staff_rank) && role !== "admin") {
           return NextResponse.json(
             { error: "You are not qualified for this loan type based on current rank." },
             { status: 403 },
@@ -286,10 +425,6 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
-      return loanSubmissionClosedResponse()
-    }
-
     const supabase = await createClient()
     const admin = await createAdminClient()
 
@@ -300,8 +435,32 @@ export async function DELETE(request: NextRequest) {
 
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+
+    const role = normalizeRole((profile as any).role)
+
     const body = await request.json()
+    const deleteAll = Boolean(body?.all)
     const id = String(body?.id || "")
+
+    if (deleteAll) {
+      if (role !== "admin") return NextResponse.json({ error: "Only admin can delete all loan requests" }, { status: 403 })
+
+      const { error: clearTimelineError } = await admin.from("loan_request_timeline").delete().neq("id", "")
+      if (clearTimelineError) throw clearTimelineError
+
+      const { error: clearRequestsError } = await admin.from("loan_requests").delete().neq("id", "")
+      if (clearRequestsError) throw clearRequestsError
+
+      return NextResponse.json({ success: true, cleared: true })
+    }
+
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
 
     const { data: existing, error: existingError } = await admin
@@ -311,8 +470,8 @@ export async function DELETE(request: NextRequest) {
       .single()
 
     if (existingError || !existing) return NextResponse.json({ error: "Request not found" }, { status: 404 })
-    if (existing.user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (!requestIsEditable(existing.status)) {
+    if (role !== "admin" && existing.user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (role !== "admin" && !requestIsEditable(existing.status)) {
       return NextResponse.json({ error: "Request can no longer be deleted at this stage" }, { status: 400 })
     }
 

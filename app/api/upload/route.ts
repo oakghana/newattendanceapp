@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Upload to Vercel Blob with user-specific path
-    const filename = `leave-documents/${user.id}/${Date.now()}-${file.name}`
+    const folder = (formData.get("folder") as string | null)?.replace(/[^a-zA-Z0-9_-]/g, "") || "documents"
+    const filename = `${folder}/${user.id}/${Date.now()}-${file.name}`
     const blob = await put(filename, file, {
       access: "public",
       addRandomSuffix: false,
