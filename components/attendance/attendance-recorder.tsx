@@ -534,17 +534,22 @@ export function AttendanceRecorder({
   // 2. User is within the proximity range (location validation passes)
   // 3. Haven't checked out yet
   // This prevents users from checking out when out of range
+  // CHECKOUT BUTTON RULES:
+  // 1. Must have checked in and not yet checked out.
+  // 2. The 2-hour minimum applies to EVERYONE — even users who are within range.
+  //    This stops in-range users from checking out immediately after arrival.
+  // 3. Once 2 hours are met, the button is enabled regardless of location so that
+  //    both in-range (direct checkout) and out-of-range (off-premises dialog) users
+  //    can proceed through the same button.
+  // 4. Users who checked in via an approved off-premises request may check out at
+  //    any time (they already have supervisor approval for remote work).
   const canCheckOutButton =
     (initialCanCheckOut ?? true) &&
     !recentCheckOut &&
-    !!localTodayAttendance?.check_in_time && // Must have a check-in record
+    !!localTodayAttendance?.check_in_time &&
     !localTodayAttendance?.check_out_time &&
     !isOnLeave &&
-    // Allow checkout when either location validation passes, the session was started
-    // as an off‑premises request, or the minimum two‑hour duration has been reached.
-    (locationValidation?.canCheckOut === true ||
-      localTodayAttendance?.on_official_duty_outside_premises === true ||
-      checkoutTimeReached)
+    (checkoutTimeReached || localTodayAttendance?.on_official_duty_outside_premises === true)
 
   const handleQRScanSuccess = async (qrData: QRCodeData) => {
     console.log("[v0] QR scan successful, mode:", qrScanMode)
@@ -1804,49 +1809,57 @@ export function AttendanceRecorder({
           // Privileged roles (admin/dept head/regional manager) check out without requiring reason
           console.log("[v0] Privileged role out-of-range checkout - proceeding without reason")
         } else {
-          const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
-          const [opStartH, opStartM] = (runtimeFlags.offPremisesCheckoutStartTime ?? "15:00").split(":").map(Number)
-          const [opEndH, opEndM] = (runtimeFlags.offPremisesCheckoutEndTime ?? "23:59").split(":").map(Number)
-          const opStartMins = opStartH * 60 + opStartM
-          const opEndMins = opEndH * 60 + opEndM
-          const isWithinOffPremisesWindow = currentTimeMinutes >= opStartMins && currentTimeMinutes <= opEndMins
+            // If the continuous UI location validator says the user IS within range,
+            // trust it over a momentary GPS snapshot that may have drifted by a few
+            // metres.  Do NOT redirect on-premises users to the off-premises flow.
+            const uiSaysInRange = locationValidation?.canCheckOut === true
+            if (uiSaysInRange) {
+              console.log("[v0] GPS drift detected: UI validator confirms in-range; skipping off-premises redirect")
+              // fall through to regular checkout path below
+            } else {
+              const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
+              const [opStartH, opStartM] = (runtimeFlags.offPremisesCheckoutStartTime ?? "15:00").split(":").map(Number)
+              const [opEndH, opEndM] = (runtimeFlags.offPremisesCheckoutEndTime ?? "23:59").split(":").map(Number)
+              const opStartMins = opStartH * 60 + opStartM
+              const opEndMins = opEndH * 60 + opEndM
+              const isWithinOffPremisesWindow = currentTimeMinutes >= opStartMins && currentTimeMinutes <= opEndMins
 
-          if (!offPremisesEnabled) {
-            setFlashMessage({
-              message: "Off-premises check-out is currently disabled by the administrator. Please return to a registered QCC location to check out.",
-              type: "error",
-            })
-            setIsLoading(false)
-            return
-          } else if (!isWithinOffPremisesWindow) {
-            const windowStart = runtimeFlags.offPremisesCheckoutStartTime ?? "15:00"
-            const windowEnd = runtimeFlags.offPremisesCheckoutEndTime ?? "23:59"
-            setFlashMessage({
-              message: `Off-premises check-out is only allowed between ${windowStart} and ${windowEnd}. Please return to a registered QCC location or wait until ${windowStart}.`,
-              type: "error",
-            })
-            setIsLoading(false)
-            return
-          } else {
-            // Show off-premises checkout dialog to collect reason
-            // Find nearest location for context
-            const effectiveCheckOutRadius2 = checkOutRadius ?? proximitySettings.checkInProximityRange
-            let nearestLocForDialog = null
-            if (realTimeLocations && realTimeLocations.length > 0) {
-              const locationDistances2 = realTimeLocations
-                .map((loc) => ({
-                  location: loc,
-                  distance: calculateDistance(locationData.latitude, locationData.longitude, loc.latitude, loc.longitude),
-                }))
-                .sort((a, b) => a.distance - b.distance)
-              nearestLocForDialog = locationDistances2[0]?.location ?? null
+              if (!offPremisesEnabled) {
+                setFlashMessage({
+                  message: "Off-premises check-out is currently disabled by the administrator. Please return to a registered QCC location to check out.",
+                  type: "error",
+                })
+                setIsLoading(false)
+                return
+              } else if (!isWithinOffPremisesWindow) {
+                const windowStart = runtimeFlags.offPremisesCheckoutStartTime ?? "15:00"
+                const windowEnd = runtimeFlags.offPremisesCheckoutEndTime ?? "23:59"
+                setFlashMessage({
+                  message: `Off-premises check-out is only allowed between ${windowStart} and ${windowEnd}. Please return to a registered QCC location or wait until ${windowStart}.`,
+                  type: "error",
+                })
+                setIsLoading(false)
+                return
+              } else {
+                // Show off-premises checkout dialog to collect reason
+                const effectiveCheckOutRadius2 = checkOutRadius ?? proximitySettings.checkInProximityRange
+                let nearestLocForDialog = null
+                if (realTimeLocations && realTimeLocations.length > 0) {
+                  const locationDistances2 = realTimeLocations
+                    .map((loc) => ({
+                      location: loc,
+                      distance: calculateDistance(locationData.latitude, locationData.longitude, loc.latitude, loc.longitude),
+                    }))
+                    .sort((a, b) => a.distance - b.distance)
+                  nearestLocForDialog = locationDistances2[0]?.location ?? null
+                }
+                setPendingOffPremisesCheckoutData({ location: locationData, nearestLocation: nearestLocForDialog })
+                setOffPremisesCheckoutReason("")
+                setShowOffPremisesCheckoutDialog(true)
+                setIsLoading(false)
+                return
+              }
             }
-            setPendingOffPremisesCheckoutData({ location: locationData, nearestLocation: nearestLocForDialog })
-            setOffPremisesCheckoutReason("")
-            setShowOffPremisesCheckoutDialog(true)
-            setIsLoading(false)
-            return
-          }
         }
       }
 
