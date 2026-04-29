@@ -209,7 +209,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       setUploadedSignatureDataUrl(null)
       setDrawnSignatureDataUrl(null)
       await loadPlanningData()
-      alert(`Request submitted. Expected return-to-work date: ${computeReturnToWorkDate(endDate)}`)
+      toast({
+        title: "Request submitted",
+        description: `Expected return-to-work date: ${computeReturnToWorkDate(endDate)}`,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit leave planning request")
     } finally {

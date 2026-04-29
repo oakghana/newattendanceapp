@@ -85,10 +85,19 @@ export function LeaveManagementClient({
       })
 
       if (response.ok) {
+        toast({ title: "Leave approved", description: "Refreshing the view with latest status." })
         window.location.reload()
+      } else {
+        const result = await response.json().catch(() => ({}))
+        throw new Error(result?.error || "Failed to approve leave request")
       }
     } catch (error) {
       console.error("Error approving leave:", error)
+      toast({
+        title: "Approval failed",
+        description: error instanceof Error ? error.message : "Could not approve leave request.",
+        variant: "destructive",
+      })
     } finally {
       setProcessingId(null)
     }
@@ -113,11 +122,20 @@ export function LeaveManagementClient({
       })
 
       if (response.ok) {
+        toast({ title: "Request dismissed", description: "Refreshing the view with latest status." })
         window.location.reload()
         setDismissalReason("")
+      } else {
+        const result = await response.json().catch(() => ({}))
+        throw new Error(result?.error || "Failed to dismiss leave request")
       }
     } catch (error) {
       console.error("Error dismissing leave:", error)
+      toast({
+        title: "Dismissal failed",
+        description: error instanceof Error ? error.message : "Could not dismiss leave request.",
+        variant: "destructive",
+      })
     } finally {
       setProcessingId(null)
     }
