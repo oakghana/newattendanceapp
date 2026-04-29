@@ -98,15 +98,8 @@ const navigationItems = [
     category: "main",
   },
   {
-    title: "Leave Hub",
+    title: "Leave Hub & Planning",
     href: "/dashboard/leave-management",
-    icon: Calendar,
-    roles: ["admin", "regional_manager", "department_head", "staff", "it-admin", "nsp", "intern"],
-    category: "admin",
-  },
-  {
-    title: "Leave Plan 2026/2027",
-    href: "/dashboard/leave-planning",
     icon: Calendar,
     roles: ["admin", "regional_manager", "department_head", "staff", "it-admin", "nsp", "intern"],
     category: "admin",
@@ -122,7 +115,7 @@ const navigationItems = [
     title: "Schedule",
     href: "/dashboard/schedule",
     icon: Clock,
-    roles: ["admin", "regional_manager", "department_head"],
+    roles: ["admin"],
     category: "main",
   },
   {

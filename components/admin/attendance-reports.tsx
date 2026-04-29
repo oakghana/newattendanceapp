@@ -102,6 +102,28 @@ interface District {
   name: string
 }
 
+interface OffPremisesRequestRecord {
+  id: string
+  user_id?: string
+  reason?: string
+  request_type?: string
+  status?: string
+  created_at: string
+  approved_at?: string
+  current_location_name?: string
+  google_maps_name?: string
+  rejection_reason?: string
+  user_profiles?: {
+    first_name?: string
+    last_name?: string
+    email?: string
+    employee_id?: string
+    departments?: {
+      name?: string
+    }
+  }
+}
+
 const COLORS = ["#4B8B3B", "#8B5CF6", "#6b7280", "#f97316", "#ea580c"]
 
 const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -220,8 +242,11 @@ export function AttendanceReports() {
   const reasonsPageSize = 20
   const [earlyPage, setEarlyPage] = useState<number>(1)
   const earlyPageSize = 20
+  const [offPremisesPage, setOffPremisesPage] = useState<number>(1)
+  const offPremisesPageSize = 12
   const [activeTab, setActiveTab] = useState<string>("details")
   const [reasonsRecords, setReasonsRecords] = useState<AttendanceRecord[]>([])
+  const [offPremisesReasonRecords, setOffPremisesReasonRecords] = useState<OffPremisesRequestRecord[]>([])
   const [reasonsLoading, setReasonsLoading] = useState<boolean>(false)
 
   const visibleColumnCount = 9
@@ -390,6 +415,25 @@ export function AttendanceReports() {
         }
 
         setReasonsRecords(fetchedRecords)
+
+        // Fetch off-premises request reasons (checkout requests) so they appear in Reasons tab.
+        try {
+          const offPremisesRes = await authenticatedFetch("/api/attendance/offpremises/pending?status=all")
+          const offPremisesJson = await offPremisesRes.json()
+          if (offPremisesRes.ok) {
+            const requests: OffPremisesRequestRecord[] = offPremisesJson.requests || []
+            const checkoutWithReason = requests.filter((req) => {
+              const type = String(req.request_type || "").toLowerCase()
+              return type === "checkout" && Boolean(req.reason && String(req.reason).trim().length > 0)
+            })
+            setOffPremisesReasonRecords(checkoutWithReason)
+          } else {
+            setOffPremisesReasonRecords([])
+          }
+        } catch (offPremisesErr) {
+          console.error("Failed to fetch off-premises reasons:", offPremisesErr)
+          setOffPremisesReasonRecords([])
+        }
       } else {
         console.error("Failed to fetch reasons:", json.error)
       }
@@ -971,6 +1015,10 @@ export function AttendanceReports() {
   const earlyList = reasonsRecords.filter((r) => r.early_checkout_reason)
   const earlyStart = (earlyPage - 1) * earlyPageSize
   const earlyPageItems = earlyList.slice(earlyStart, earlyStart + earlyPageSize)
+
+  const offPremisesList = offPremisesReasonRecords
+  const offPremisesStart = (offPremisesPage - 1) * offPremisesPageSize
+  const offPremisesPageItems = offPremisesList.slice(offPremisesStart, offPremisesStart + offPremisesPageSize)
 
   return (
     <div className={compactMode ? "space-y-2 text-sm" : "space-y-4"}>
@@ -1802,246 +1850,374 @@ export function AttendanceReports() {
               </div>
             </TabsContent>
 
-            <TabsContent value="reasons" className="px-8 py-8">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
+            <TabsContent value="reasons" className="px-0 py-0">
+              {/* ── Hero Banner ──────────────────────────────────────────── */}
+              <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-8 py-8">
+                <div className="pointer-events-none absolute inset-0 opacity-10"
+                     style={{ backgroundImage: "radial-gradient(circle at 30% 50%, #f97316 0%, transparent 55%), radial-gradient(circle at 75% 20%, #3b82f6 0%, transparent 55%)" }} />
+                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Attendance Reasons</h3>
-                    <p className="text-gray-600 mt-1">Review lateness and early checkout explanations</p>
-                  </div>
-                  <Badge variant="secondary" className="px-4 py-2">
-                      {reasonsRecords.filter(r => r.lateness_reason || r.early_checkout_reason).length} Records with Reasons
-                  </Badge>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-orange-500" />
-                        Lateness Reasons
-                        <Badge className="ml-auto bg-orange-100 text-orange-700 border-orange-200">{latenessList.length}</Badge>
-                      </CardTitle>
-                      <CardDescription>Staff explanations for arriving after 9:00 AM</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {latenessPageItems.map((record) => {
-                          const staffName = displayUserLabel(record)
-                          const empId = record.user_profiles?.employee_id
-                          const dept = record.user_profiles?.departments?.name
-                          const initials = staffName
-                            .split(' ')
-                            .filter((w: string) => w.length > 0 && !w.startsWith('(') && w !== 'Staff' && w !== 'at')
-                            .slice(0, 2)
-                            .map((w: string) => w[0].toUpperCase())
-                            .join('') || '?'
-                          return (
-                            <div key={record.id} className="rounded-lg border border-orange-200 bg-orange-50 overflow-hidden">
-                              {/* Staff identity header */}
-                              <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-orange-100">
-                                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-sm">
-                                  {initials}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-base font-bold text-gray-900 leading-tight truncate">{staffName}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5">
-                                    {empId ? <span className="font-medium text-gray-700">ID: {empId}</span> : null}
-                                    {empId && dept ? <span className="mx-1 text-gray-300">·</span> : null}
-                                    {dept ? <span>{dept}</span> : null}
-                                    {!empId && !dept ? <span className="italic text-gray-400">No profile on file</span> : null}
-                                  </p>
-                                </div>
-                                {dept && (
-                                  <Badge variant="secondary" className="flex-shrink-0 text-xs bg-orange-100 text-orange-800 border-orange-200">
-                                    {dept}
-                                  </Badge>
-                                )}
-                              </div>
-                              {/* Check-in time + location */}
-                              <div className="px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 bg-orange-50">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3 text-orange-400" />
-                                  {new Date(record.check_in_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                                  {' — '}
-                                  <span className="font-semibold text-orange-700">{new Date(record.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                </span>
-                                <span className="flex items-center gap-1 max-w-[180px] truncate" title={getLocationLabel(record, 'in')}>
-                                  <MapPin className="h-3 w-3 text-orange-400 flex-shrink-0" />
-                                  {getLocationLabel(record, 'in')}
-                                </span>
-                              </div>
-                              {/* Reason */}
-                              <div className="px-4 py-3">
-                                <p className="text-xs font-semibold text-orange-500 uppercase tracking-wide mb-1">Reason for Lateness</p>
-                                <p className="text-sm text-gray-800 leading-relaxed">{record.lateness_reason}</p>
-                                {record.lateness_proved_by && (
-                                  <div className="mt-2 pt-2 border-t border-orange-200 flex items-center gap-1.5">
-                                    <span className="text-xs font-semibold text-green-600">✓ Verified by:</span>
-                                    <span className="text-xs text-green-700 font-medium">{record.lateness_proved_by}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                        {latenessList.length === 0 && (
-                          <div className="text-center py-8">
-                            <Clock className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                            <p className="text-gray-400 text-sm">No lateness reasons recorded</p>
-                          </div>
-                        )}
-
-                        {/* Lateness pagination controls */}
-                        {reasonsRecords.filter(r => r.lateness_reason).length > reasonsPageSize && (
-                          <div className="flex items-center justify-between mt-4">
-                            <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="sm" onClick={() => setReasonsPage(1)} disabled={reasonsPage === 1}>First</Button>
-                              <Button variant="ghost" size="sm" onClick={() => setReasonsPage((p) => Math.max(1, p - 1))} disabled={reasonsPage === 1}>Prev</Button>
-                              <span className="text-sm text-gray-600">Page {reasonsPage} of {Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize))}</span>
-                              <Button variant="ghost" size="sm" onClick={() => setReasonsPage((p) => p + 1)} disabled={reasonsPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize))}>Next</Button>
-                              <Button variant="ghost" size="sm" onClick={() => setReasonsPage(Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize)))} disabled={reasonsPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize))}>Last</Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <AlertCircle className="h-5 w-5 text-blue-500" />
-                        Early Checkout Reasons
-                        <Badge className="ml-auto bg-blue-100 text-blue-700 border-blue-200">{earlyList.length}</Badge>
-                      </CardTitle>
-                      <CardDescription>Staff explanations for leaving before standard hours</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {earlyPageItems.map((record) => {
-                          const staffName = displayUserLabel(record)
-                          const empId = record.user_profiles?.employee_id
-                          const dept = record.user_profiles?.departments?.name
-                          const initials = staffName
-                            .split(' ')
-                            .filter((w: string) => w.length > 0 && !w.startsWith('(') && w !== 'Staff' && w !== 'at')
-                            .slice(0, 2)
-                            .map((w: string) => w[0].toUpperCase())
-                            .join('') || '?'
-                          return (
-                            <div key={record.id} className="rounded-lg border border-blue-200 bg-blue-50 overflow-hidden">
-                              {/* Staff identity header */}
-                              <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-blue-100">
-                                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-sm">
-                                  {initials}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-base font-bold text-gray-900 leading-tight truncate">{staffName}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5">
-                                    {empId ? <span className="font-medium text-gray-700">ID: {empId}</span> : null}
-                                    {empId && dept ? <span className="mx-1 text-gray-300">·</span> : null}
-                                    {dept ? <span>{dept}</span> : null}
-                                    {!empId && !dept ? <span className="italic text-gray-400">No profile on file</span> : null}
-                                  </p>
-                                </div>
-                                {dept && (
-                                  <Badge variant="secondary" className="flex-shrink-0 text-xs bg-blue-100 text-blue-800 border-blue-200">
-                                    {dept}
-                                  </Badge>
-                                )}
-                              </div>
-                              {/* Check-out time + location */}
-                              <div className="px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 bg-blue-50">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3 text-blue-400" />
-                                  {new Date(record.check_out_time!).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                                  {' — '}
-                                  <span className="font-semibold text-blue-700">{new Date(record.check_out_time!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                </span>
-                                <span className="flex items-center gap-1 max-w-[180px] truncate" title={getLocationLabel(record, 'out')}>
-                                  <MapPin className="h-3 w-3 text-blue-400 flex-shrink-0" />
-                                  {getLocationLabel(record, 'out')}
-                                </span>
-                              </div>
-                              {/* Reason */}
-                              <div className="px-4 py-3">
-                                <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-1">Reason for Early Checkout</p>
-                                <p className="text-sm text-gray-800 leading-relaxed">{record.early_checkout_reason}</p>
-                                {record.early_checkout_proved_by && (
-                                  <div className="mt-2 pt-2 border-t border-blue-200 flex items-center gap-1.5">
-                                    <span className="text-xs font-semibold text-green-600">✓ Verified by:</span>
-                                    <span className="text-xs text-green-700 font-medium">{record.early_checkout_proved_by}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                        {earlyList.length === 0 && (
-                          <div className="text-center py-8">
-                            <AlertCircle className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                            <p className="text-gray-400 text-sm">No early checkout reasons recorded</p>
-                          </div>
-                        )}
-
-                        {/* Early checkout pagination controls */}
-                        {reasonsRecords.filter(r => r.early_checkout_reason).length > earlyPageSize && (
-                          <div className="flex items-center justify-between mt-4">
-                            <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="sm" onClick={() => setEarlyPage(1)} disabled={earlyPage === 1}>First</Button>
-                              <Button variant="ghost" size="sm" onClick={() => setEarlyPage((p) => Math.max(1, p - 1))} disabled={earlyPage === 1}>Prev</Button>
-                              <span className="text-sm text-gray-600">Page {earlyPage} of {Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize))}</span>
-                              <Button variant="ghost" size="sm" onClick={() => setEarlyPage((p) => p + 1)} disabled={earlyPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize))}>Next</Button>
-                              <Button variant="ghost" size="sm" onClick={() => setEarlyPage(Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize)))} disabled={earlyPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize))}>Last</Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Reason Summary by Location</CardTitle>
-                    <CardDescription>Overview of reasons provided across different locations</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                          {Object.entries(
-                            reasonsRecords
-                              .filter((r) => r.lateness_reason || r.early_checkout_reason)
-                              .reduce((acc, record) => {
-                                const location = getLocationLabel(record, 'in') || 'Unknown'
-                                if (!acc[location]) {
-                                  acc[location] = { lateness: 0, earlyCheckout: 0 }
-                                }
-                                if (record.lateness_reason) acc[location].lateness++
-                                if (record.early_checkout_reason) acc[location].earlyCheckout++
-                                return acc
-                              }, {} as Record<string, { lateness: number; earlyCheckout: number }>)
-                          ).map(([location, counts]) => (
-                        <div key={location} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <MapPin className="h-5 w-5 text-gray-400" />
-                            <span className="font-medium">{location}</span>
-                          </div>
-                          <div className="flex gap-4">
-                            <div className="text-center">
-                              <p className="text-sm text-orange-600 font-medium">{counts.lateness}</p>
-                              <p className="text-xs text-gray-500">Lateness</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-sm text-blue-600 font-medium">{counts.earlyCheckout}</p>
-                              <p className="text-xs text-gray-500">Early Checkout</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/80 backdrop-blur-sm">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Attendance Intelligence
                     </div>
-                  </CardContent>
-                </Card>
+                    <h2 className="text-2xl font-bold text-white tracking-tight">Attendance Reasons</h2>
+                    <p className="mt-1 text-sm text-slate-400">Review lateness and early checkout explanations across all staff</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex flex-col items-center rounded-xl bg-white/10 px-5 py-3 backdrop-blur-sm">
+                      <span className="text-2xl font-bold text-amber-400">{latenessList.length}</span>
+                      <span className="mt-0.5 text-xs text-slate-400">Late Arrivals</span>
+                    </div>
+                    <div className="flex flex-col items-center rounded-xl bg-white/10 px-5 py-3 backdrop-blur-sm">
+                      <span className="text-2xl font-bold text-sky-400">{earlyList.length}</span>
+                      <span className="mt-0.5 text-xs text-slate-400">Early Checkouts</span>
+                    </div>
+                    <div className="flex flex-col items-center rounded-xl bg-white/10 px-5 py-3 backdrop-blur-sm">
+                      <span className="text-2xl font-bold text-emerald-300">{offPremisesList.length}</span>
+                      <span className="mt-0.5 text-xs text-slate-400">Off-Premises Reasons</span>
+                    </div>
+                    <div className="flex flex-col items-center rounded-xl bg-white/10 px-5 py-3 backdrop-blur-sm">
+                      <span className="text-2xl font-bold text-white">{reasonsRecords.filter(r => r.lateness_reason || r.early_checkout_reason).length}</span>
+                      <span className="mt-0.5 text-xs text-slate-400">Total Records</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6 px-8 py-8">
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* ── Lateness Reasons Column ────────────────────────── */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-3 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 shadow-sm">
+                        <Clock className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-amber-900">Lateness Reasons</p>
+                        <p className="text-xs text-amber-700">Arrivals after 9:00 AM</p>
+                      </div>
+                      <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-bold text-white">{latenessList.length}</span>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      {latenessPageItems.map((record) => {
+                        const staffName = displayUserLabel(record)
+                        const empId = record.user_profiles?.employee_id
+                        const dept = record.user_profiles?.departments?.name
+                        const initials = staffName
+                          .split(' ')
+                          .filter((w: string) => w.length > 0 && !w.startsWith('(') && w !== 'Staff' && w !== 'at')
+                          .slice(0, 2)
+                          .map((w: string) => w[0].toUpperCase())
+                          .join('') || '?'
+                        return (
+                          <div key={record.id} className="group rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md hover:border-amber-300 overflow-hidden">
+                            <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                                {initials}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-900 leading-tight truncate">{staffName}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {empId && <span className="font-mono text-slate-600">{empId}</span>}
+                                  {empId && dept && <span className="mx-1.5 text-slate-300">·</span>}
+                                  {dept && <span>{dept}</span>}
+                                  {!empId && !dept && <span className="italic text-slate-400">No profile</span>}
+                                </p>
+                              </div>
+                              <span className="flex-shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">Late</span>
+                            </div>
+                            <div className="mx-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="h-3 w-3 text-amber-500" />
+                                <span className="font-medium text-slate-700">{new Date(record.check_in_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                <span className="font-bold text-amber-600">{new Date(record.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              </span>
+                              <span className="flex items-center gap-1 truncate max-w-[160px]" title={getLocationLabel(record, 'in')}>
+                                <MapPin className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                                {getLocationLabel(record, 'in')}
+                              </span>
+                            </div>
+                            <div className="px-4 pb-4 pt-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-500 mb-1.5">Reason for Lateness</p>
+                              <p className="text-sm text-slate-700 leading-relaxed bg-amber-50/60 rounded-xl px-3 py-2.5 border border-amber-100">{record.lateness_reason}</p>
+                              {record.lateness_proved_by && (
+                                <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-1.5">
+                                  <span className="h-4 w-4 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">✓</span>
+                                  <span className="text-xs text-emerald-700"><span className="font-semibold">Verified by:</span> {record.lateness_proved_by}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {latenessList.length === 0 && (
+                        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12">
+                          <Clock className="h-10 w-10 text-slate-300 mb-3" />
+                          <p className="text-sm font-medium text-slate-400">No lateness reasons recorded</p>
+                          <p className="text-xs text-slate-300 mt-1">All staff arrived on time</p>
+                        </div>
+                      )}
+                      {reasonsRecords.filter(r => r.lateness_reason).length > reasonsPageSize && (
+                        <div className="flex items-center justify-center gap-1.5 pt-1">
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setReasonsPage(1)} disabled={reasonsPage === 1}>«</Button>
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setReasonsPage((p) => Math.max(1, p - 1))} disabled={reasonsPage === 1}>‹ Prev</Button>
+                          <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-medium text-slate-600">
+                            {reasonsPage} / {Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize))}
+                          </span>
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setReasonsPage((p) => p + 1)} disabled={reasonsPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize))}>Next ›</Button>
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setReasonsPage(Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize)))} disabled={reasonsPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.lateness_reason).length / reasonsPageSize))}>»</Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Early Checkout Reasons Column ─────────────────── */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-3 rounded-2xl border border-sky-200/60 bg-gradient-to-r from-sky-50 to-blue-50 px-4 py-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500 shadow-sm">
+                        <AlertCircle className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-sky-900">Early Checkout Reasons</p>
+                        <p className="text-xs text-sky-700">Departures before standard hours</p>
+                      </div>
+                      <span className="rounded-full bg-sky-500 px-2.5 py-0.5 text-xs font-bold text-white">{earlyList.length}</span>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      {earlyPageItems.map((record) => {
+                        const staffName = displayUserLabel(record)
+                        const empId = record.user_profiles?.employee_id
+                        const dept = record.user_profiles?.departments?.name
+                        const initials = staffName
+                          .split(' ')
+                          .filter((w: string) => w.length > 0 && !w.startsWith('(') && w !== 'Staff' && w !== 'at')
+                          .slice(0, 2)
+                          .map((w: string) => w[0].toUpperCase())
+                          .join('') || '?'
+                        return (
+                          <div key={record.id} className="group rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md hover:border-sky-300 overflow-hidden">
+                            <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                                {initials}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-900 leading-tight truncate">{staffName}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {empId && <span className="font-mono text-slate-600">{empId}</span>}
+                                  {empId && dept && <span className="mx-1.5 text-slate-300">·</span>}
+                                  {dept && <span>{dept}</span>}
+                                  {!empId && !dept && <span className="italic text-slate-400">No profile</span>}
+                                </p>
+                              </div>
+                              <span className="flex-shrink-0 rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-700">Early Out</span>
+                            </div>
+                            <div className="mx-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="h-3 w-3 text-sky-500" />
+                                <span className="font-medium text-slate-700">{new Date(record.check_out_time!).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                <span className="font-bold text-sky-600">{new Date(record.check_out_time!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              </span>
+                              <span className="flex items-center gap-1 truncate max-w-[160px]" title={getLocationLabel(record, 'out')}>
+                                <MapPin className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                                {getLocationLabel(record, 'out')}
+                              </span>
+                            </div>
+                            <div className="px-4 pb-4 pt-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-500 mb-1.5">Reason for Early Checkout</p>
+                              <p className="text-sm text-slate-700 leading-relaxed bg-sky-50/60 rounded-xl px-3 py-2.5 border border-sky-100">{record.early_checkout_reason}</p>
+                              {record.early_checkout_proved_by && (
+                                <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-1.5">
+                                  <span className="h-4 w-4 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">✓</span>
+                                  <span className="text-xs text-emerald-700"><span className="font-semibold">Verified by:</span> {record.early_checkout_proved_by}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {earlyList.length === 0 && (
+                        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12">
+                          <AlertCircle className="h-10 w-10 text-slate-300 mb-3" />
+                          <p className="text-sm font-medium text-slate-400">No early checkout reasons recorded</p>
+                          <p className="text-xs text-slate-300 mt-1">All staff checked out at standard time</p>
+                        </div>
+                      )}
+                      {reasonsRecords.filter(r => r.early_checkout_reason).length > earlyPageSize && (
+                        <div className="flex items-center justify-center gap-1.5 pt-1">
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setEarlyPage(1)} disabled={earlyPage === 1}>«</Button>
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setEarlyPage((p) => Math.max(1, p - 1))} disabled={earlyPage === 1}>‹ Prev</Button>
+                          <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-medium text-slate-600">
+                            {earlyPage} / {Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize))}
+                          </span>
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setEarlyPage((p) => p + 1)} disabled={earlyPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize))}>Next ›</Button>
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setEarlyPage(Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize)))} disabled={earlyPage >= Math.max(1, Math.ceil(reasonsRecords.filter(r => r.early_checkout_reason).length / earlyPageSize))}>»</Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Off-Premises Checkout Reasons ────────────────────── */}
+                <div className="rounded-2xl border border-emerald-200/70 bg-white shadow-sm overflow-hidden">
+                  <div className="flex flex-wrap items-center gap-3 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 shadow-sm">
+                      <MapPin className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-emerald-900">Off-Premises Checkout Reasons</p>
+                      <p className="text-xs text-emerald-700">Reasons submitted when staff requested checkout outside QCC range</p>
+                    </div>
+                    <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-xs font-bold text-white">{offPremisesList.length}</span>
+                  </div>
+
+                  <div className="p-4 sm:p-6">
+                    {offPremisesPageItems.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-12">
+                        <MapPin className="h-10 w-10 text-slate-300 mb-3" />
+                        <p className="text-sm font-medium text-slate-400">No off-premises checkout reasons found</p>
+                        <p className="text-xs text-slate-300 mt-1">Checkout request reasons will appear here</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3">
+                        {offPremisesPageItems.map((req) => {
+                          const first = req.user_profiles?.first_name || ""
+                          const last = req.user_profiles?.last_name || ""
+                          const staffName = `${first} ${last}`.trim() || req.user_profiles?.email || "Unknown Staff"
+                          const employeeId = req.user_profiles?.employee_id
+                          const locationName = req.google_maps_name || req.current_location_name || "Unknown Location"
+                          const status = String(req.status || "pending").toLowerCase()
+
+                          return (
+                            <div key={req.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-all">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900">{staffName}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    {employeeId || "No ID"}
+                                    <span className="mx-1.5 text-slate-300">·</span>
+                                    {new Date(req.created_at).toLocaleString()}
+                                  </p>
+                                </div>
+                                <Badge
+                                  className={
+                                    status === "approved"
+                                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                      : status === "rejected"
+                                        ? "bg-red-100 text-red-800 border-red-200"
+                                        : "bg-amber-100 text-amber-800 border-amber-200"
+                                  }
+                                >
+                                  {status}
+                                </Badge>
+                              </div>
+
+                              <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                                <div className="flex items-center gap-1.5">
+                                  <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+                                  <span className="truncate" title={locationName}>{locationName}</span>
+                                </div>
+                                {req.approved_at ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>Reviewed: {new Date(req.approved_at).toLocaleString()}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                    <span>Awaiting review</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600 mb-1">Submitted Checkout Reason</p>
+                                <p className="text-sm text-slate-700 leading-relaxed">{req.reason}</p>
+                              </div>
+
+                              {req.rejection_reason && (
+                                <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-widest text-red-600 mb-1">Reviewer Note</p>
+                                  <p className="text-xs text-red-700 leading-relaxed">{req.rejection_reason}</p>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {offPremisesList.length > offPremisesPageSize && (
+                      <div className="flex items-center justify-center gap-1.5 pt-4">
+                        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setOffPremisesPage(1)} disabled={offPremisesPage === 1}>«</Button>
+                        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setOffPremisesPage((p) => Math.max(1, p - 1))} disabled={offPremisesPage === 1}>‹ Prev</Button>
+                        <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-medium text-slate-600">
+                          {offPremisesPage} / {Math.max(1, Math.ceil(offPremisesList.length / offPremisesPageSize))}
+                        </span>
+                        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setOffPremisesPage((p) => p + 1)} disabled={offPremisesPage >= Math.max(1, Math.ceil(offPremisesList.length / offPremisesPageSize))}>Next ›</Button>
+                        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => setOffPremisesPage(Math.max(1, Math.ceil(offPremisesList.length / offPremisesPageSize)))} disabled={offPremisesPage >= Math.max(1, Math.ceil(offPremisesList.length / offPremisesPageSize))}>»</Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Location Summary ───────────────────────────────────── */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-6 py-4">
+                    <MapPin className="h-4 w-4 text-slate-500" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Reason Summary by Location</p>
+                      <p className="text-xs text-slate-500">Overview of reasons provided across registered QCC locations</p>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    {Object.entries(
+                      reasonsRecords
+                        .filter((r) => r.lateness_reason || r.early_checkout_reason)
+                        .reduce((acc, record) => {
+                          const location = getLocationLabel(record, 'in') || 'Unknown'
+                          if (!acc[location]) acc[location] = { lateness: 0, earlyCheckout: 0 }
+                          if (record.lateness_reason) acc[location].lateness++
+                          if (record.early_checkout_reason) acc[location].earlyCheckout++
+                          return acc
+                        }, {} as Record<string, { lateness: number; earlyCheckout: number }>)
+                    ).length === 0 ? (
+                      <div className="flex flex-col items-center py-8 text-slate-400">
+                        <MapPin className="h-8 w-8 mb-2 text-slate-300" />
+                        <p className="text-sm">No location data available</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {Object.entries(
+                          reasonsRecords
+                            .filter((r) => r.lateness_reason || r.early_checkout_reason)
+                            .reduce((acc, record) => {
+                              const location = getLocationLabel(record, 'in') || 'Unknown'
+                              if (!acc[location]) acc[location] = { lateness: 0, earlyCheckout: 0 }
+                              if (record.lateness_reason) acc[location].lateness++
+                              if (record.early_checkout_reason) acc[location].earlyCheckout++
+                              return acc
+                            }, {} as Record<string, { lateness: number; earlyCheckout: number }>)
+                        ).map(([location, counts]) => (
+                          <div key={location} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 hover:border-slate-200 transition-colors">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-200 flex-shrink-0">
+                              <MapPin className="h-3.5 w-3.5 text-slate-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 truncate">{location}</p>
+                              <div className="flex gap-3 mt-1">
+                                <span className="text-xs text-amber-600 font-medium">{counts.lateness} late</span>
+                                <span className="text-slate-300 text-xs">·</span>
+                                <span className="text-xs text-sky-600 font-medium">{counts.earlyCheckout} early</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </TabsContent>
           </Tabs>

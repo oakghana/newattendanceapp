@@ -1835,93 +1835,118 @@ export function AttendanceRecorder({
           return
         }
 
-        const isPrivilegedRole = isExemptFromAttendanceReasons(userProfile?.role)
-        if (isPrivilegedRole) {
-          // Privileged roles (admin/dept head/regional manager) check out without requiring reason
+        // GPS drift check — trust continuous UI validator over one-shot snapshot
+        const uiSaysInRange = locationValidation?.canCheckOut === true
+        if (uiSaysInRange) {
           console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-            decision: "DIRECT_CHECKOUT_PRIVILEGED_ROLE",
-            role: userProfile?.role,
+            decision: "DIRECT_CHECKOUT_UI_OVERRIDE",
+            reason: "GPS drift detected; UI validator confirms in-range",
+            freshValidation: checkoutValidation.canCheckOut,
+            uiValidation: locationValidation?.canCheckOut,
             device: deviceInfo?.type,
             timestamp: new Date().toISOString(),
           })
+          // fall through to regular checkout path below
         } else {
-            // If the continuous UI location validator says the user IS within range,
-            // trust it over a momentary GPS snapshot that may have drifted by a few
-            // metres.  Do NOT redirect on-premises users to the off-premises flow.
-            const uiSaysInRange = locationValidation?.canCheckOut === true
-            if (uiSaysInRange) {
+          // Compute hours worked to decide if 7-hour auto-approval applies
+          const checkInTimeDate = localTodayAttendance?.check_in_time
+            ? new Date(localTodayAttendance.check_in_time)
+            : null
+          const hoursWorkedSoFar = checkInTimeDate
+            ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
+            : 0
+          const workedSevenPlusHours = hoursWorkedSoFar >= 7
+
+          // Only pure admin roles are exempt from providing a reason (dept heads / regional
+          // managers are NOT exempt unless they also meet the 7-hour threshold)
+          const normalizedRoleStr = String(userProfile?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+          const isAdminOnly = normalizedRoleStr === "admin" || normalizedRoleStr === "super_admin" || normalizedRoleStr === "it_admin"
+
+          if (workedSevenPlusHours) {
+            // All staff: 7+ hours at a QCC location → direct checkout, no reason required
+            console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+              decision: "DIRECT_CHECKOUT_7H_AUTO",
+              hoursWorked: hoursWorkedSoFar.toFixed(2),
+              device: deviceInfo?.type,
+              timestamp: new Date().toISOString(),
+            })
+            // fall through to regular checkout path below
+          } else if (isAdminOnly) {
+            // Admin only: < 7 hours but exempt from reason — location is always captured via API
+            console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+              decision: "DIRECT_CHECKOUT_ADMIN_NO_REASON",
+              hoursWorked: hoursWorkedSoFar.toFixed(2),
+              role: userProfile?.role,
+              device: deviceInfo?.type,
+              timestamp: new Date().toISOString(),
+            })
+            // fall through to regular checkout path below
+          } else {
+            // All other staff with < 7 hours must provide a reason
+            const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
+            const [opStartH, opStartM] = (runtimeFlags.offPremisesCheckoutStartTime ?? "15:00").split(":").map(Number)
+            const [opEndH, opEndM] = (runtimeFlags.offPremisesCheckoutEndTime ?? "23:59").split(":").map(Number)
+            const opStartMins = opStartH * 60 + opStartM
+            const opEndMins = opEndH * 60 + opEndM
+            const isWithinOffPremisesWindow = currentTimeMinutes >= opStartMins && currentTimeMinutes <= opEndMins
+
+            if (!offPremisesEnabled) {
               console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-                decision: "DIRECT_CHECKOUT_UI_OVERRIDE",
-                reason: "GPS drift detected; UI validator confirms in-range",
-                freshValidation: checkoutValidation.canCheckOut,
-                uiValidation: locationValidation?.canCheckOut,
+                decision: "BLOCKED_OFF_PREMISES_DISABLED",
                 device: deviceInfo?.type,
                 timestamp: new Date().toISOString(),
               })
-              // fall through to regular checkout path below
+              setFlashMessage({
+                message: "Off-premises check-out is currently disabled by the administrator. Please return to a registered QCC location to check out.",
+                type: "error",
+              })
+              setIsLoading(false)
+              return
+            } else if (!isWithinOffPremisesWindow) {
+              console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+                decision: "BLOCKED_OFF_PREMISES_WINDOW",
+                windowStart: runtimeFlags.offPremisesCheckoutStartTime ?? "15:00",
+                windowEnd: runtimeFlags.offPremisesCheckoutEndTime ?? "23:59",
+                currentTime: new Date().toLocaleTimeString(),
+                hoursWorked: hoursWorkedSoFar.toFixed(2),
+                device: deviceInfo?.type,
+                timestamp: new Date().toISOString(),
+              })
+              const windowStart = runtimeFlags.offPremisesCheckoutStartTime ?? "15:00"
+              const windowEnd = runtimeFlags.offPremisesCheckoutEndTime ?? "23:59"
+              setFlashMessage({
+                message: `Off-premises check-out is only allowed between ${windowStart} and ${windowEnd}. Please return to a registered QCC location or wait until ${windowStart}.`,
+                type: "error",
+              })
+              setIsLoading(false)
+              return
             } else {
-              const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
-              const [opStartH, opStartM] = (runtimeFlags.offPremisesCheckoutStartTime ?? "15:00").split(":").map(Number)
-              const [opEndH, opEndM] = (runtimeFlags.offPremisesCheckoutEndTime ?? "23:59").split(":").map(Number)
-              const opStartMins = opStartH * 60 + opStartM
-              const opEndMins = opEndH * 60 + opEndM
-              const isWithinOffPremisesWindow = currentTimeMinutes >= opStartMins && currentTimeMinutes <= opEndMins
-
-              if (!offPremisesEnabled) {
-                console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-                  decision: "BLOCKED_OFF_PREMISES_DISABLED",
-                  device: deviceInfo?.type,
-                  timestamp: new Date().toISOString(),
-                })
-                setFlashMessage({
-                  message: "Off-premises check-out is currently disabled by the administrator. Please return to a registered QCC location to check out.",
-                  type: "error",
-                })
-                setIsLoading(false)
-                return
-              } else if (!isWithinOffPremisesWindow) {
-                console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-                  decision: "BLOCKED_OFF_PREMISES_WINDOW",
-                  windowStart: runtimeFlags.offPremisesCheckoutStartTime ?? "15:00",
-                  windowEnd: runtimeFlags.offPremisesCheckoutEndTime ?? "23:59",
-                  currentTime: new Date().toLocaleTimeString(),
-                  device: deviceInfo?.type,
-                  timestamp: new Date().toISOString(),
-                })
-                const windowStart = runtimeFlags.offPremisesCheckoutStartTime ?? "15:00"
-                const windowEnd = runtimeFlags.offPremisesCheckoutEndTime ?? "23:59"
-                setFlashMessage({
-                  message: `Off-premises check-out is only allowed between ${windowStart} and ${windowEnd}. Please return to a registered QCC location or wait until ${windowStart}.`,
-                  type: "error",
-                })
-                setIsLoading(false)
-                return
-              } else {
-                // Show off-premises checkout dialog to collect reason
-                console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-                  decision: "OFFPREMISES_DIALOG",
-                  outOfRange: true,
-                  device: deviceInfo?.type,
-                  timestamp: new Date().toISOString(),
-                })
-                const effectiveCheckOutRadius2 = checkOutRadius ?? proximitySettings.checkInProximityRange
-                let nearestLocForDialog = null
-                if (realTimeLocations && realTimeLocations.length > 0) {
-                  const locationDistances2 = realTimeLocations
-                    .map((loc) => ({
-                      location: loc,
-                      distance: calculateDistance(locationData.latitude, locationData.longitude, loc.latitude, loc.longitude),
-                    }))
-                    .sort((a, b) => a.distance - b.distance)
-                  nearestLocForDialog = locationDistances2[0]?.location ?? null
-                }
-                setPendingOffPremisesCheckoutData({ location: locationData, nearestLocation: nearestLocForDialog })
-                setOffPremisesCheckoutReason("")
-                setShowOffPremisesCheckoutDialog(true)
-                setIsLoading(false)
-                return
+              // Show off-premises checkout dialog — reason is required
+              console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+                decision: "OFFPREMISES_DIALOG",
+                hoursWorked: hoursWorkedSoFar.toFixed(2),
+                outOfRange: true,
+                device: deviceInfo?.type,
+                timestamp: new Date().toISOString(),
+              })
+              const effectiveCheckOutRadius2 = checkOutRadius ?? proximitySettings.checkInProximityRange
+              let nearestLocForDialog = null
+              if (realTimeLocations && realTimeLocations.length > 0) {
+                const locationDistances2 = realTimeLocations
+                  .map((loc) => ({
+                    location: loc,
+                    distance: calculateDistance(locationData.latitude, locationData.longitude, loc.latitude, loc.longitude),
+                  }))
+                  .sort((a, b) => a.distance - b.distance)
+                nearestLocForDialog = locationDistances2[0]?.location ?? null
               }
+              setPendingOffPremisesCheckoutData({ location: locationData, nearestLocation: nearestLocForDialog })
+              setOffPremisesCheckoutReason("")
+              setShowOffPremisesCheckoutDialog(true)
+              setIsLoading(false)
+              return
             }
+          }
         }
       }
 
@@ -3161,13 +3186,20 @@ export function AttendanceRecorder({
                 Off-Premises Check-Out Request
               </CardTitle>
               <CardDescription>
-                You are outside registered QCC locations. Please provide a reason to request off-premises check-out.
+                You are outside registered QCC locations and have worked less than 7 hours today. Please provide a reason to request off-premises check-out.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <Alert className="border-blue-200 bg-blue-50">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertTitle className="text-blue-800">7-Hour Auto-Approval</AlertTitle>
+                <AlertDescription className="text-blue-700">
+                  Staff who have completed <strong>7 or more hours</strong> at a QCC location may check out off-premises without a reason. You can also return to a QCC location to check out directly.
+                </AlertDescription>
+              </Alert>
               <Alert className="border-orange-200 bg-orange-50">
                 <Info className="h-4 w-4 text-orange-600" />
-                <AlertTitle className="text-orange-800">Review Workflow</AlertTitle>
+                <AlertTitle className="text-orange-800">Review Required</AlertTitle>
                 <AlertDescription className="text-orange-700">
                   Your department head/supervisor will be notified with your reason and location details for review.
                 </AlertDescription>

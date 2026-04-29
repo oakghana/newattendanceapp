@@ -16,7 +16,6 @@ function isManagerOrAdminRole(role?: string | null): boolean {
   return [
     "admin",
     "super_admin",
-    "it_admin",
     "department_head",
     "head_of_department",
     "regional_manager",
