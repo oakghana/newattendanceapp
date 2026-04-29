@@ -86,6 +86,16 @@ export function CheckinFailuresClient() {
   const [limit, setLimit] = useState(50)
   const [totalRows, setTotalRows] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteMode, setDeleteMode] = useState<"selected" | "all">("selected")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [forceDialogOpen, setForceDialogOpen] = useState(false)
+  const [forceTarget, setForceTarget] = useState<SummaryUser | null>(null)
+  const [forceAction, setForceAction] = useState<"checkin" | "checkout">("checkin")
+  const [forceBusy, setForceBusy] = useState(false)
+  const [forceNote, setForceNote] = useState("")
 
   const formatAttemptType = (attemptType: string) => {
     switch (attemptType) {
@@ -159,6 +169,81 @@ export function CheckinFailuresClient() {
   }, [startDate, endDate, typeFilter, reasonFilter, limit])
 
   const topReason = useMemo(() => summaryReasons[0]?.reason || "none", [summaryReasons])
+
+  const handleDeleteRecords = useCallback(async () => {
+    try {
+      setDeleting(true)
+      setError(null)
+      setSuccessMsg(null)
+
+      const payload =
+        deleteMode === "all"
+          ? { clearAll: true, startDate, endDate }
+          : { ids: Array.from(selectedIds), clearAll: false }
+
+      const response = await fetch("/api/admin/checkin-failures", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Failed to delete records")
+      }
+
+      setDeleteConfirmOpen(false)
+      setSelectedIds(new Set())
+      setSuccessMsg(result.message || "Records deleted successfully")
+      void fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete records")
+    } finally {
+      setDeleting(false)
+    }
+  }, [deleteMode, endDate, fetchData, selectedIds, startDate])
+
+  const openForceDialog = useCallback((user: SummaryUser, action: "checkin" | "checkout") => {
+    setForceTarget(user)
+    setForceAction(action)
+    setForceNote("")
+    setForceDialogOpen(true)
+  }, [])
+
+  const handleForceAttendance = useCallback(async () => {
+    if (!forceTarget?.user_id) {
+      return
+    }
+
+    try {
+      setForceBusy(true)
+      setError(null)
+      setSuccessMsg(null)
+
+      const response = await fetch("/api/admin/force-attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: forceTarget.user_id,
+          action: forceAction,
+          note: forceNote.trim() || undefined,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Failed to force attendance")
+      }
+
+      setForceDialogOpen(false)
+      setSuccessMsg(result.message || "Attendance updated successfully")
+      void fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to force attendance")
+    } finally {
+      setForceBusy(false)
+    }
+  }, [fetchData, forceAction, forceNote, forceTarget])
 
   const exportExcel = useCallback(async () => {
     if (records.length === 0) {
@@ -245,44 +330,33 @@ export function CheckinFailuresClient() {
             <Download className="h-4 w-4 mr-2" />
             Export Excel
           </Button>
-          import { AlertTriangle, Download, Loader2, LogIn, LogOut, RefreshCw, Search, Trash2 } from "lucide-react"
-          import {
-            Dialog,
-            DialogContent,
-            DialogDescription,
-            DialogFooter,
-            DialogHeader,
-            DialogTitle,
-          } from "@/components/ui/dialog"
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setDeleteMode("all")
+              setDeleteConfirmOpen(true)
+            }}
+            disabled={loading || totalAttempts === 0}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Clear All Records
+          </Button>
+        </div>
       </div>
 
+      {successMsg && (
+        <Alert className="border-emerald-300 bg-emerald-50 text-emerald-800">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-2">
+            {successMsg}
+            <button onClick={() => setSuccessMsg(null)} className="ml-2 text-xs underline">
+              Dismiss
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {error && (
-            <Button onClick={exportExcel} disabled={loading || records.length === 0}>
-              <Download className="h-4 w-4 mr-2" />
-              Export Excel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => { setDeleteMode("all"); setDeleteConfirmOpen(true) }}
-              disabled={loading || totalAttempts === 0}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear All Records
-            </Button>
-          </div>
-        </div>
-
-        {successMsg && (
-          <Alert className="border-emerald-300 bg-emerald-50 text-emerald-800">
-            <CheckCircle2 className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between gap-2">
-              {successMsg}
-              <button onClick={() => setSuccessMsg(null)} className="ml-2 text-xs underline">Dismiss</button>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -371,26 +445,13 @@ export function CheckinFailuresClient() {
                 <TableHead>Role</TableHead>
                 <TableHead className="text-right">Attempts</TableHead>
                 <TableHead>Last Attempt</TableHead>
+                <TableHead>Admin Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {summaryUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Employee ID</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="text-right">Attempts</TableHead>
-                  <TableHead>Last Attempt</TableHead>
-                  <TableHead>Admin Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summaryUsers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     {loading ? "Loading..." : "No failed attempts in selected period."}
                   </TableCell>
                 </TableRow>
@@ -403,38 +464,29 @@ export function CheckinFailuresClient() {
                     <TableCell>{row.role}</TableCell>
                     <TableCell className="text-right font-semibold">{row.attempts}</TableCell>
                     <TableCell>{format(new Date(row.last_attempt_at), "PPpp")}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs"
+                          disabled={!row.user_id}
+                          onClick={() => openForceDialog(row, "checkin")}
+                        >
+                          <LogIn className="h-3 w-3" /> Check In
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 border-rose-300 text-rose-700 hover:bg-rose-50 text-xs"
+                          disabled={!row.user_id}
+                          onClick={() => openForceDialog(row, "checkout")}
+                        >
+                          <LogOut className="h-3 w-3" /> Check Out
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                summaryUsers.map((row) => (
-                    <TableRow key={`${row.user_id || row.employee_id}-${row.last_attempt_at}`}>
-                      <TableCell>{row.full_name}</TableCell>
-                      <TableCell>{row.employee_id}</TableCell>
-                      <TableCell>{row.department_name}</TableCell>
-                      <TableCell>{row.role}</TableCell>
-                      <TableCell className="text-right font-semibold">{row.attempts}</TableCell>
-                      <TableCell>{format(new Date(row.last_attempt_at), "PPpp")}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs"
-                            disabled={!row.user_id}
-                            onClick={() => openForceDialog(row, "checkin")}
-                          >
-                            <LogIn className="h-3 w-3" /> Check In
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 gap-1 border-rose-300 text-rose-700 hover:bg-rose-50 text-xs"
-                            disabled={!row.user_id}
-                            onClick={() => openForceDialog(row, "checkout")}
-                          >
-                            <LogOut className="h-3 w-3" /> Check Out
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
                 ))
               )}
             </TableBody>
@@ -486,45 +538,22 @@ export function CheckinFailuresClient() {
                 <TableHead>Distance</TableHead>
                 <TableHead>Coords</TableHead>
                 <TableHead>Message</TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Nearest Location</TableHead>
-                  <TableHead>Distance</TableHead>
-                  <TableHead>Coords</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     <Loader2 className="h-5 w-5 animate-spin mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : records.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground">
                     No failed attempts found for current filters.
                   </TableCell>
                 </TableRow>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
-                      <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-                    </TableCell>
-                  </TableRow>
-                ) : records.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground">
-                      No failed attempts found for current filters.
-                    </TableCell>
-                  </TableRow>
               ) : (
                 records.map((row) => (
                   <TableRow key={row.id}>
@@ -535,13 +564,13 @@ export function CheckinFailuresClient() {
                     </TableCell>
                     <TableCell>{row.department_name}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">
-                        {formatAttemptType(row.attempt_type)}
-                      </Badge>
+                      <Badge variant="secondary">{formatAttemptType(row.attempt_type)}</Badge>
                     </TableCell>
                     <TableCell className="capitalize">{row.failure_reason.replace(/_/g, " ")}</TableCell>
                     <TableCell>{row.nearest_location_name}</TableCell>
-                    <TableCell>{row.nearest_location_distance_m != null ? `${Math.round(row.nearest_location_distance_m)}m` : "-"}</TableCell>
+                    <TableCell>
+                      {row.nearest_location_distance_m != null ? `${Math.round(row.nearest_location_distance_m)}m` : "-"}
+                    </TableCell>
                     <TableCell>
                       {row.latitude != null && row.longitude != null
                         ? `${row.latitude.toFixed(5)}, ${row.longitude.toFixed(5)}`
@@ -550,26 +579,22 @@ export function CheckinFailuresClient() {
                     <TableCell className="max-w-[360px] truncate" title={row.failure_message || undefined}>
                       {row.failure_message || "-"}
                     </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                        title="Delete this record"
+                        onClick={() => {
+                          setSelectedIds(new Set([row.id]))
+                          setDeleteMode("selected")
+                          setDeleteConfirmOpen(true)
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                      <TableCell className="max-w-[360px] truncate" title={row.failure_message || undefined}>
-                        {row.failure_message || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-rose-500 hover:bg-rose-50 hover:text-rose-700"
-                          title="Delete this record"
-                          onClick={() => {
-                            setSelectedIds(new Set([row.id]))
-                            setDeleteMode("selected")
-                            setDeleteConfirmOpen(true)
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
                 ))
               )}
             </TableBody>
@@ -600,83 +625,86 @@ export function CheckinFailuresClient() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <Trash2 className="h-5 w-5" /> Confirm Delete
+            </DialogTitle>
+            <DialogDescription>
+              {deleteMode === "all"
+                ? `This will permanently delete ALL failure records in the current date range (${startDate} to ${endDate}). This cannot be undone.`
+                : `This will permanently delete ${selectedIds.size} selected record(s). This cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDeleteRecords()} disabled={deleting}>
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              {deleteMode === "all" ? "Delete All" : `Delete ${selectedIds.size} Record(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${forceAction === "checkin" ? "text-emerald-700" : "text-rose-700"}`}>
+              {forceAction === "checkin" ? <LogIn className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
+              Admin Force {forceAction === "checkin" ? "Check-In" : "Check-Out"}
+            </DialogTitle>
+            <DialogDescription>
+              {forceTarget
+                ? `You are about to force ${forceAction === "checkin" ? "check in" : "check out"} ${forceTarget.full_name} (${forceTarget.employee_id}) right now using the current server time.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <span className="font-medium">{forceTarget?.full_name}</span>
+              <span className="mx-2 text-slate-400">|</span>
+              <span className="text-slate-500">{forceTarget?.department_name}</span>
+              <span className="mx-2 text-slate-400">|</span>
+              <span className="text-slate-500 capitalize">{forceTarget?.role}</span>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Optional Note</Label>
+              <Input
+                placeholder="Reason or note (optional)"
+                value={forceNote}
+                onChange={(e) => setForceNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setForceDialogOpen(false)} disabled={forceBusy}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleForceAttendance()}
+              disabled={forceBusy || !forceTarget?.user_id}
+              className={
+                forceAction === "checkin"
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "bg-rose-600 hover:bg-rose-700 text-white"
+              }
+            >
+              {forceBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : forceAction === "checkin" ? (
+                <LogIn className="h-4 w-4 mr-2" />
+              ) : (
+                <LogOut className="h-4 w-4 mr-2" />
+              )}
+              Confirm {forceAction === "checkin" ? "Check-In" : "Check-Out"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-          </CardContent>
-        </Card>
-
-        {/* ── Delete Confirm Dialog ────────────────────────────────────────── */}
-        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-rose-700">
-                <Trash2 className="h-5 w-5" /> Confirm Delete
-              </DialogTitle>
-              <DialogDescription>
-                {deleteMode === "all"
-                  ? `This will permanently delete ALL failure records in the current date range (${startDate} → ${endDate}). This cannot be undone.`
-                  : `This will permanently delete ${selectedIds.size} selected record(s). This cannot be undone.`}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={() => void handleDeleteRecords()} disabled={deleting}>
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                {deleteMode === "all" ? "Delete All" : `Delete ${selectedIds.size} Record(s)`}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Force Attendance Dialog ──────────────────────────────────────── */}
-        <Dialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className={`flex items-center gap-2 ${forceAction === "checkin" ? "text-emerald-700" : "text-rose-700"}`}>
-                {forceAction === "checkin" ? <LogIn className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
-                Admin Force {forceAction === "checkin" ? "Check-In" : "Check-Out"}
-              </DialogTitle>
-              <DialogDescription>
-                {forceTarget
-                  ? `You are about to force ${forceAction === "checkin" ? "check in" : "check out"} ${forceTarget.full_name} (${forceTarget.employee_id}) right now using the current server time.`
-                  : ""}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                <span className="font-medium">{forceTarget?.full_name}</span>
-                <span className="mx-2 text-slate-400">·</span>
-                <span className="text-slate-500">{forceTarget?.department_name}</span>
-                <span className="mx-2 text-slate-400">·</span>
-                <span className="text-slate-500 capitalize">{forceTarget?.role}</span>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Optional Note</Label>
-                <Input
-                  placeholder="Reason or note (optional)"
-                  value={forceNote}
-                  onChange={(e) => setForceNote(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setForceDialogOpen(false)} disabled={forceBusy}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => void handleForceAttendance()}
-                disabled={forceBusy || !forceTarget?.user_id}
-                className={forceAction === "checkin" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-rose-600 hover:bg-rose-700 text-white"}
-              >
-                {forceBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : forceAction === "checkin" ? <LogIn className="h-4 w-4 mr-2" /> : <LogOut className="h-4 w-4 mr-2" />}
-                Confirm {forceAction === "checkin" ? "Check-In" : "Check-Out"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-    )
-  }
