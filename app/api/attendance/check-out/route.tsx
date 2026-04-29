@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       override_reason,
       auto_checkout,
       auto_checkout_reason,
+      login_issue_recovery,
     } = body
 
     if (!qr_code_used && (!latitude || !longitude)) {
@@ -173,6 +174,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const checkInTimeForPolicy = new Date(attendanceRecord.check_in_time)
+    const provisionalWorkHours = (now.getTime() - checkInTimeForPolicy.getTime()) / (1000 * 60 * 60)
+    const serverTimeMinutes = now.getHours() * 60 + now.getMinutes()
+    const isAfter530PmServerTime = serverTimeMinutes >= 17 * 60 + 30
+    const hasWorkedAtLeast7Hours = provisionalWorkHours >= 7
+    const allowCheckoutPolicyBypass = isAfter530PmServerTime || hasWorkedAtLeast7Hours
+
     // CHECK TIME RESTRICTION: Check if check-out is after 6 PM (18:00)
     const timeRestrictCheckData = { 
       departments: userProfile?.departments, 
@@ -180,15 +188,16 @@ export async function POST(request: NextRequest) {
     }
     const { data: sysSettings } = await supabase.from("system_settings").select("settings").maybeSingle()
     const runtimeFlags = parseRuntimeFlags(sysSettings?.settings)
-    const canCheckOut = canCheckOutAtTime(now, timeRestrictCheckData?.departments, timeRestrictCheckData?.role, {
+    const canCheckOutBySchedule = canCheckOutAtTime(now, timeRestrictCheckData?.departments, timeRestrictCheckData?.role, {
       checkoutCutoffTime: runtimeFlags.checkoutCutoffTime,
     })
+    const canCheckOut = canCheckOutBySchedule || allowCheckoutPolicyBypass
     
     // determine bypass if remote checkout (either originally off-premises OR currently out-of-range)
     const isOffPremisesCheckedIn = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
     // Declare checkoutLocationData early so it can be referenced when determining time-rule bypasses
     let checkoutLocationData: any = null
-    const bypassTimeRules = isOffPremisesCheckedIn
+    const bypassTimeRules = isOffPremisesCheckedIn || allowCheckoutPolicyBypass
 
     if (!canCheckOut && !bypassTimeRules) {
       // allow overrides for eligible staff
@@ -475,6 +484,8 @@ export async function POST(request: NextRequest) {
     const checkInTime = new Date(attendanceRecord.check_in_time)
     const checkOutTime = new Date()
     const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
+    const allowLocationBypass = workHours >= 7 || isAfter530PmServerTime
+    let policyLocationBypassUsed = false
 
     // OPTIMIZATION: Parallelize settings fetches
     const [
@@ -536,7 +547,16 @@ export async function POST(request: NextRequest) {
             }),
         )
 
-        if (!validation.canCheckOut && withinStandardRange) {
+        if (!validation.canCheckOut && allowLocationBypass) {
+          console.log("[v0] Checkout policy bypass: allowing out-of-range checkout", {
+            reason: workHours >= 7 ? "worked_7_hours" : "after_5_30pm_server_time",
+            distance: validation.distance,
+            nearestLocation: validation.nearestLocation?.name,
+            workHours,
+          })
+          checkoutLocationData = null
+          policyLocationBypassUsed = true
+        } else if (!validation.canCheckOut && withinStandardRange) {
           console.log("[v0] Checkout override: within <=100m treated as in-range", {
             distance: validation.distance,
             nearestLocation: validation.nearestLocation?.name,
@@ -619,7 +639,8 @@ export async function POST(request: NextRequest) {
       userProfileData?.departments,
     )
     const isPrivilegedReasonExempt = isExemptFromAttendanceReasons(userProfileData?.role)
-    const requiresOutOfLocationReason = willBeRemoteCheckout && !isPrivilegedReasonExempt && !auto_checkout
+    const requiresOutOfLocationReason =
+      willBeRemoteCheckout && !isPrivilegedReasonExempt && !auto_checkout && !allowLocationBypass
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
@@ -648,7 +669,7 @@ export async function POST(request: NextRequest) {
     const checkInTimeForHours = new Date(attendanceRecord.check_in_time)
     const hoursWorked = (checkOutTime.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60)
 
-    if (isEarlyCheckout && effectiveRequireEarlyCheckoutReason && !isWeekend && hoursWorked < 9) {
+    if (isEarlyCheckout && effectiveRequireEarlyCheckoutReason && !isWeekend && hoursWorked < 9 && !isAfter530PmServerTime && !hasWorkedAtLeast7Hours) {
       earlyCheckoutWarning = {
         message: `Early checkout detected at ${checkOutTime.toLocaleTimeString()}. Standard work hours end at ${checkOutEndTime}.`,
         checkoutTime: checkOutTime.toISOString(),
@@ -694,8 +715,22 @@ export async function POST(request: NextRequest) {
       is_remote_checkout: willBeRemoteCheckout || false,
     }
 
+    if (login_issue_recovery) {
+      const recoveryNote = "Checkout completed after resolving login issue."
+      checkoutData.notes = checkoutData.notes
+        ? `${checkoutData.notes}\n${recoveryNote}`
+        : recoveryNote
+    }
+
     if (auto_checkout_reason && String(auto_checkout_reason).trim().length > 0) {
       checkoutData.notes = String(auto_checkout_reason).trim()
+    }
+
+    if (policyLocationBypassUsed) {
+      const policyNote = hasWorkedAtLeast7Hours
+        ? "Checkout location bypass applied: staff has worked at least 7 hours."
+        : "Checkout location bypass applied: checkout requested after 5:30 PM server time."
+      checkoutData.notes = checkoutData.notes ? `${checkoutData.notes}\n${policyNote}` : policyNote
     }
 
     if (latitude && longitude) {
@@ -786,11 +821,14 @@ export async function POST(request: NextRequest) {
     try {
       await supabase.from("audit_logs").insert({
         user_id: user.id,
-        action: "check_out",
+        action: login_issue_recovery ? "check_out_after_login_recovery" : "check_out",
         table_name: "attendance_records",
         record_id: attendanceRecord.id,
         old_values: attendanceRecord,
-        new_values: updatedRecord,
+        new_values: {
+          ...updatedRecord,
+          login_issue_recovery: Boolean(login_issue_recovery),
+        },
         ip_address: request.ip || null,
         user_agent: request.headers.get("user-agent"),
       })

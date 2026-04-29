@@ -197,6 +197,9 @@ async function runForceFailedCheckout(request: NextRequest) {
         check_out_location_name: updatePayload.check_out_location_name,
         work_hours: workHours,
         source: "cron",
+        attempt_type: "auto_checkout_recovery",
+        failure_reason: "auto_force_checkout_after_failed_attempts",
+        failure_message: "System auto check-out completed after repeated failed checkout attempts.",
       },
     })
 

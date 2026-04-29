@@ -18,6 +18,7 @@ const FAILURE_ACTIONS = [
   "offpremises_checkout_failed",
   "qr_check_out_failed",
   "auto_checkout_failed",
+  "force_checkout_after_failed_attempts",
 ]
 
 export async function GET(request: NextRequest) {
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     if (typeFilter === "manual") query = query.in("action", ["check_in_failed", "check_out_failed"])
     if (typeFilter === "offpremises") query = query.in("action", ["offpremises_checkin_failed", "offpremises_checkout_failed"])
     if (typeFilter === "checkin") query = query.in("action", ["check_in_failed", "offpremises_checkin_failed"])
-    if (typeFilter === "checkout") query = query.in("action", ["check_out_failed", "offpremises_checkout_failed", "qr_check_out_failed", "auto_checkout_failed"])
+    if (typeFilter === "checkout") query = query.in("action", ["check_out_failed", "offpremises_checkout_failed", "qr_check_out_failed", "auto_checkout_failed", "force_checkout_after_failed_attempts"])
     if (typeFilter === "qr_checkout") query = query.eq("action", "qr_check_out_failed")
     if (typeFilter === "auto_checkout") query = query.eq("action", "auto_checkout_failed")
 
@@ -118,10 +119,18 @@ export async function GET(request: NextRequest) {
                     ? "qr_checkout"
                     : row.action === "auto_checkout_failed"
                       ? "auto_checkout"
+                      : row.action === "force_checkout_after_failed_attempts"
+                        ? "auto_checkout_recovery"
                       : "manual_checkin"),
-          failure_reason: details?.failure_reason || "unknown",
-          failure_message: details?.failure_message || "",
-          nearest_location_name: details?.nearest_location_name || "Unknown",
+          failure_reason:
+            details?.failure_reason ||
+            (row.action === "force_checkout_after_failed_attempts" ? "auto_force_checkout_after_failed_attempts" : "unknown"),
+          failure_message:
+            details?.failure_message ||
+            (row.action === "force_checkout_after_failed_attempts"
+              ? "System auto check-out completed after repeated failed checkout attempts."
+              : ""),
+          nearest_location_name: details?.nearest_location_name || details?.check_out_location_name || "Unknown",
           nearest_location_distance_m:
             typeof details?.nearest_location_distance_m === "number" ? details.nearest_location_distance_m : null,
           latitude: typeof details?.latitude === "number" ? details.latitude : null,

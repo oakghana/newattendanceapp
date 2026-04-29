@@ -194,6 +194,7 @@ export function AttendanceRecorder({
   const [showEarlyCheckoutDialog, setShowEarlyCheckoutDialog] = useState(false)
   const [earlyCheckoutReason, setEarlyCheckoutReason] = useState("")
   const [earlyCheckoutProvedBy, setEarlyCheckoutProvedBy] = useState("")
+  const [loginIssueRecoveryCheckout, setLoginIssueRecoveryCheckout] = useState(false)
   const [earlyCheckoutReasonRequired, setEarlyCheckoutReasonRequired] = useState(true)
   const [pendingCheckoutData, setPendingCheckoutData] = useState<{
     location: LocationData | null
@@ -529,27 +530,20 @@ export function AttendanceRecorder({
   const showOffPremisesCheckInButton = isResolvingCheckInRange || effectiveCanCheckIn === false
   const manualCheckInFallbackEnabled = !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0
   
-  // CRITICAL: Checkout button should ONLY be enabled if:
-  // 1. User has actually checked in today
-  // 2. User is within the proximity range (location validation passes)
-  // 3. Haven't checked out yet
-  // This prevents users from checking out when out of range
-  // CHECKOUT BUTTON RULES:
-  // 1. Must have checked in and not yet checked out.
-  // 2. The 2-hour minimum applies to EVERYONE — even users who are within range.
-  //    This stops in-range users from checking out immediately after arrival.
-  // 3. Once 2 hours are met, the button is enabled regardless of location so that
-  //    both in-range (direct checkout) and out-of-range (off-premises dialog) users
-  //    can proceed through the same button.
-  // 4. Users who checked in via an approved off-premises request may check out at
-  //    any time (they already have supervisor approval for remote work).
+  const workedHoursForCheckoutPolicy = localTodayAttendance?.check_in_time
+    ? (getSystemNow().getTime() - new Date(localTodayAttendance.check_in_time).getTime()) / (1000 * 60 * 60)
+    : 0
+  const nowMinutesForCheckoutPolicy = getSystemNow().getHours() * 60 + getSystemNow().getMinutes()
+  const checkoutPolicyBypass = workedHoursForCheckoutPolicy >= 7 || nowMinutesForCheckoutPolicy >= 17 * 60 + 30
+
+  // Keep checkout CTA available once staff is checked in; the handler will decide
+  // whether it is direct checkout or off-premises request based on live policy.
   const canCheckOutButton =
     (initialCanCheckOut ?? true) &&
     !recentCheckOut &&
     !!localTodayAttendance?.check_in_time &&
     !localTodayAttendance?.check_out_time &&
-    !isOnLeave &&
-    (checkoutTimeReached || localTodayAttendance?.on_official_duty_outside_premises === true)
+    !isOnLeave
 
   // [DEBUG] Log checkout button state for real device monitoring
   if (localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
@@ -1838,11 +1832,20 @@ export function AttendanceRecorder({
       const checkoutEndTimeMinutes = endHour * 60 + (endMinute || 0)
       const currentTimeMinutes = checkoutHour * 60 + checkoutMinutes
       const isBeforeCheckoutTime = currentTimeMinutes < checkoutEndTimeMinutes
+      const checkInTimeDate = localTodayAttendance?.check_in_time
+        ? new Date(localTodayAttendance.check_in_time)
+        : null
+      const hoursWorkedSoFar = checkInTimeDate
+        ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
+        : 0
+      const workedSevenPlusHours = hoursWorkedSoFar >= 7
+      const isAfter530PmServerTime = currentTimeMinutes >= 17 * 60 + 30
+      const bypassOutOfRangePolicy = workedSevenPlusHours || isAfter530PmServerTime
       console.log("[v0] Processing checkout request with location policy")
 
       // Handle out-of-range checkout with off-premises policy
       if (!checkoutValidation.canCheckOut) {
-        if (!checkoutTimeReached) {
+        if (!checkoutTimeReached && !bypassOutOfRangePolicy) {
           // [DEBUG] Log blocked checkout (insufficient time)
           console.log("[v0] CHECKOUT_ROUTING_DECISION", {
             decision: "BLOCKED_MIN_2_HOURS",
@@ -1874,25 +1877,17 @@ export function AttendanceRecorder({
           })
           // fall through to regular checkout path below
         } else {
-          // Compute hours worked to decide if 7-hour auto-approval applies
-          const checkInTimeDate = localTodayAttendance?.check_in_time
-            ? new Date(localTodayAttendance.check_in_time)
-            : null
-          const hoursWorkedSoFar = checkInTimeDate
-            ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
-            : 0
-          const workedSevenPlusHours = hoursWorkedSoFar >= 7
-
           // Only pure admin roles are exempt from providing a reason (dept heads / regional
           // managers are NOT exempt unless they also meet the 7-hour threshold)
           const normalizedRoleStr = String(userProfile?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
           const isAdminOnly = normalizedRoleStr === "admin" || normalizedRoleStr === "super_admin" || normalizedRoleStr === "it_admin"
 
-          if (workedSevenPlusHours) {
-            // All staff: 7+ hours at a QCC location → direct checkout, no reason required
+          if (bypassOutOfRangePolicy) {
+            // All staff: 7+ hours or after 5:30 PM server time -> direct checkout, no off-premises reason required
             console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-              decision: "DIRECT_CHECKOUT_7H_AUTO",
+              decision: isAfter530PmServerTime ? "DIRECT_CHECKOUT_AFTER_530" : "DIRECT_CHECKOUT_7H_AUTO",
               hoursWorked: hoursWorkedSoFar.toFixed(2),
+              currentTimeMinutes,
               device: deviceInfo?.type,
               timestamp: new Date().toISOString(),
             })
@@ -1923,7 +1918,7 @@ export function AttendanceRecorder({
                 timestamp: new Date().toISOString(),
               })
               setFlashMessage({
-                message: "Off-premises check-out is currently disabled by the administrator. Please return to a registered QCC location to check out.",
+                message: "Off-premises check-out is currently disabled. Please return within an approved QCC location to complete check-out.",
                 type: "error",
               })
               setIsLoading(false)
@@ -1941,7 +1936,7 @@ export function AttendanceRecorder({
               const windowStart = runtimeFlags.offPremisesCheckoutStartTime ?? "15:00"
               const windowEnd = runtimeFlags.offPremisesCheckoutEndTime ?? "23:59"
               setFlashMessage({
-                message: `Off-premises check-out is only allowed between ${windowStart} and ${windowEnd}. Please return to a registered QCC location or wait until ${windowStart}.`,
+                message: `Off-premises check-out requests are accepted between ${windowStart} and ${windowEnd}. Return within range to check out directly, or try again from ${windowStart}.`,
                 type: "error",
               })
               setIsLoading(false)
@@ -2008,9 +2003,9 @@ export function AttendanceRecorder({
       const checkInTimeForHours = localTodayAttendance && localTodayAttendance.check_in_time ? new Date(localTodayAttendance.check_in_time) : null
       const hoursSinceCheckIn = checkInTimeForHours ? (now.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60) : 0
 
-      if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || isSecurityStaff || hoursSinceCheckIn >= 9) {
+      if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || isSecurityStaff || hoursSinceCheckIn >= 9 || workedSevenPlusHours || isAfter530PmServerTime) {
         console.log("[v0] SMART CHECKOUT: Checkout time passed or no reason needed or Security staff or worked >=9 hours - immediate checkout", { hoursSinceCheckIn })
-        await performCheckoutAPI(locationData, nearestLocation, "")
+        await performCheckoutAPI(locationData, nearestLocation, "", null, false, loginIssueRecoveryCheckout)
         return
       }
 
@@ -2055,6 +2050,7 @@ export function AttendanceRecorder({
     reason: string,
     provedBy: string | null = null,
     autoCheckout = false,
+    loginRecovery = false,
   ) => {
     const doCheckoutFetch = () => fetch("/api/attendance/check-out", {
       method: "POST",
@@ -2072,6 +2068,7 @@ export function AttendanceRecorder({
         early_checkout_proved_by: autoCheckout ? null : (provedBy || null),
         auto_checkout: autoCheckout,
         auto_checkout_reason: autoCheckout ? reason : null,
+        login_issue_recovery: loginRecovery,
       }),
     })
 
@@ -2128,6 +2125,7 @@ export function AttendanceRecorder({
         })
 
         setEarlyCheckoutReason("")
+        setLoginIssueRecoveryCheckout(false)
         setPendingCheckoutData(null)
 
         // Refetch to verify checkout was recorded
@@ -2574,7 +2572,7 @@ export function AttendanceRecorder({
       const { location, nearestLocation } = pendingCheckoutData
 
       // Use optimized checkout function with reason and prover
-      await performCheckoutAPI(location, nearestLocation, earlyCheckoutReason, prover || null)
+      await performCheckoutAPI(location, nearestLocation, earlyCheckoutReason, prover || null, false, loginIssueRecoveryCheckout)
     } catch (error) {
       console.error("[v0] Early checkout error:", error)
       setFlashMessage({
@@ -3050,7 +3048,8 @@ export function AttendanceRecorder({
                     locationCheckInTime={checkInLocationData?.check_in_start_time}
                     locationCheckOutTime={checkInLocationData?.check_out_end_time}
                     onCheckOut={handleCheckOut}
-                    canCheckOut={locationValidation?.canCheckOut}
+                    canCheckOut={Boolean(locationValidation?.canCheckOut || checkoutPolicyBypass)}
+                    allowImmediateCheckout={Boolean(locationValidation?.canCheckOut || checkoutPolicyBypass)}
                     isCheckingOut={isLoading}
                     userDepartment={userProfile?.departments}
                     userRole={userProfile?.role}
@@ -3306,7 +3305,7 @@ export function AttendanceRecorder({
                 {/* Transfer warning messages here so we don't duplicate the CTA button (ActiveSessionTimer shows the 'Check Out Now' button). */}
                 {!checkoutTimeReached && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 text-center">
-                    Minimum 2 hours required between check-in and check-out. {minutesUntilCheckout} minutes remaining.
+                    Check-out opens after 2 hours of work. {minutesUntilCheckout} minute(s) remaining.
                   </p>
                 )}
 
@@ -3314,7 +3313,7 @@ export function AttendanceRecorder({
                   <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 mt-2 text-center justify-center">
                     <Clock className="h-3 w-3" />
                     <span>
-                      Off-grid for{" "}
+                      You are currently outside the approved range for{" "}
                       <strong>
                         {(() => {
                           const mins = Math.floor((getSystemNow().getTime() - offGridSince.getTime()) / 60000)
@@ -3323,10 +3322,22 @@ export function AttendanceRecorder({
                           return h > 0 ? `${h}h ${m}m` : `${m} min`
                         })()}
                       </strong>
-                      {". You can submit an off-premises check-out request from here."}
+                      {". You can submit an off-premises check-out request below, or move back within range and check out directly."}
                     </span>
                   </div>
                 )}
+
+                <label className="mt-3 flex items-start gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={loginIssueRecoveryCheckout}
+                    onChange={(e) => setLoginIssueRecoveryCheckout(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    I had login issues earlier. Capture this checkout as <strong>login issue recovered</strong>.
+                  </span>
+                </label>
               </>
             )}
 

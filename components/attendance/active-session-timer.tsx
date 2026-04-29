@@ -18,6 +18,7 @@ interface ActiveSessionTimerProps {
   locationCheckOutTime?: string | null
   onCheckOut?: () => void
   canCheckOut?: boolean
+  allowImmediateCheckout?: boolean
   isCheckingOut?: boolean
   userDepartment?: { code?: string | null; name?: string | null } | undefined | null
   userRole?: string | null
@@ -35,6 +36,7 @@ export function ActiveSessionTimer({
   locationCheckOutTime,
   onCheckOut,
   canCheckOut = true,
+  allowImmediateCheckout = false,
   isCheckingOut = false,
   userDepartment,
   userRole,
@@ -77,7 +79,11 @@ export function ActiveSessionTimer({
   const elapsedHours = Math.floor(elapsedTime / 60)
   const elapsedMinutes = elapsedTime % 60
   const canCheckoutNow =
-    canCheckOut || canCheckOutAtTime(currentTime, userDepartment, userRole, runtimeConfig) || timeUntilCheckout.canCheckout
+    canCheckOut ||
+    allowImmediateCheckout ||
+    canCheckOutAtTime(currentTime, userDepartment, userRole, runtimeConfig) ||
+    timeUntilCheckout.canCheckout
+  const showCheckoutAction = Boolean(onCheckOut) && timeUntilCheckout.canCheckout
 
   return (
     <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/40 dark:to-emerald-900/40 dark:border-green-500/50">
@@ -146,7 +152,7 @@ export function ActiveSessionTimer({
         </div>
 
         {/* Checkout Button - Show when ready */}
-        {timeUntilCheckout.canCheckout && onCheckOut && (
+        {showCheckoutAction && onCheckOut && (
           <Button
             onClick={onCheckOut}
             // once the minimum work period has elapsed we allow checkout regardless of the 6pm deadline
@@ -186,7 +192,9 @@ export function ActiveSessionTimer({
               <div>
                 <p className="font-semibold text-green-900 dark:text-green-100">Ready to check out</p>
                 <p className="text-sm text-green-700 dark:text-green-300">
-                  {'You can now check out from your location'}
+                  {allowImmediateCheckout
+                    ? "You can check out now. The system will apply your location and time policy automatically."
+                    : "You can check out now. You are within the approved range."}
                 </p>
               </div>
             </div>
@@ -196,10 +204,10 @@ export function ActiveSessionTimer({
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
-                  Minimum work period in progress
+                  Checkout is locked until minimum work time is complete
                 </p>
                 <p className="text-xs text-orange-700 dark:text-orange-300">
-                  Checkout will be available after {minimumWorkMinutes} minutes
+                  You can check out after {minimumWorkMinutes} minutes from your check-in time.
                 </p>
               </div>
               <div className="text-right">

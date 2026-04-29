@@ -570,6 +570,9 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                           ? "bg-primary/12 border-primary/30 text-primary"
                           : "border-transparent hover:bg-muted/60 hover:border-border text-sidebar-foreground",
                       )}
+                      onClick={() => {
+                        setIsMobileMenuOpen(false)
+                      }}
                     >
                       <Icon
                         className={cn(

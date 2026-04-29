@@ -74,6 +74,10 @@ export function CheckinFailuresClient() {
     "all" | "manual" | "offpremises" | "checkin" | "checkout" | "qr_checkout" | "auto_checkout"
   >("all")
   const [reasonFilter, setReasonFilter] = useState("")
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(50)
+  const [totalRows, setTotalRows] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
 
   const formatAttemptType = (attemptType: string) => {
     switch (attemptType) {
@@ -89,6 +93,8 @@ export function CheckinFailuresClient() {
         return "QR Check-Out"
       case "auto_checkout":
         return "Auto Check-Out"
+      case "auto_checkout_recovery":
+        return "Auto Recovery Check-Out"
       default:
         return attemptType.replace(/_/g, " ")
     }
@@ -100,8 +106,8 @@ export function CheckinFailuresClient() {
       setError(null)
 
       const params = new URLSearchParams({
-        page: "1",
-        limit: "500",
+        page: String(page),
+        limit: String(limit),
         start_date: startDate,
         end_date: endDate,
         type: typeFilter,
@@ -126,17 +132,23 @@ export function CheckinFailuresClient() {
       setSummaryReasons(payload.summary?.byReason || [])
       setTotalAttempts(payload.summary?.totalAttempts || 0)
       setUniqueUsers(payload.summary?.uniqueUsers || 0)
+      setTotalRows(result.pagination?.total || 0)
+      setTotalPages(result.pagination?.totalPages || 1)
     } catch (err) {
       console.error("[v0] Failed loading attendance failures:", err)
       setError(err instanceof Error ? err.message : "Failed to load failed attendance attempts")
     } finally {
       setLoading(false)
     }
-  }, [endDate, reasonFilter, startDate, typeFilter])
+  }, [endDate, limit, page, reasonFilter, startDate, typeFilter])
 
   useEffect(() => {
     void fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    setPage(1)
+  }, [startDate, endDate, typeFilter, reasonFilter, limit])
 
   const topReason = useMemo(() => summaryReasons[0]?.reason || "none", [summaryReasons])
 
@@ -349,6 +361,32 @@ export function CheckinFailuresClient() {
           <CardDescription>Includes location, reason, and exact error message per attempt.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {records.length} of {totalRows} records
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Rows</Label>
+              <Select
+                value={String(limit)}
+                onValueChange={(v) => {
+                  setLimit(Number(v))
+                }}
+              >
+                <SelectTrigger className="w-[110px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="200">200</SelectItem>
+                  <SelectItem value="500">500</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -406,6 +444,30 @@ export function CheckinFailuresClient() {
               )}
             </TableBody>
           </Table>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap mt-4">
+            <div className="text-sm text-muted-foreground">
+              Page {page} of {Math.max(1, totalPages)}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loading || page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loading || page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

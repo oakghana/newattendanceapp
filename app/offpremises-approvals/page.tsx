@@ -14,6 +14,14 @@ export default function OffPremisesApprovalPage() {
   const [isAuthorized, setIsAuthorized] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push('/dashboard/overview')
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -89,11 +97,19 @@ export default function OffPremisesApprovalPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.back()}
+            onClick={handleBack}
             className="mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/dashboard/overview')}
+            className="mb-4 ml-2"
+          >
+            Go Dashboard
           </Button>
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -117,11 +133,19 @@ export default function OffPremisesApprovalPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.back()}
+            onClick={handleBack}
             className="mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/dashboard/overview')}
+            className="mb-4 ml-2"
+          >
+            Go Dashboard
           </Button>
           
           <div>
