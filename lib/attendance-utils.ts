@@ -73,8 +73,8 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
 /**
  * Returns true when a lateness reason SHOULD be required.
  * - Requires reason only on weekdays (Mon-Fri)
- * - Security, Research, Operational, and Transport departments are exempt
- * - Admin, Department heads and regional managers are exempt
+ * - Security and Transport departments are exempt
+ * - Admin, Department heads and regional managers are exempt (if config allows)
  */
 export function requiresLatenessReason(
   date: Date = new Date(),
@@ -83,9 +83,8 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
-  // Security, Operational, and Transport departments are exempt
+  // Security and Transport departments are exempt
   if (isSecurityDept(dept)) return false
-  if (isOperationalDept(dept)) return false
   if (isTransportDept(dept)) return false
   // Privileged-role exemption (admin toggle can disable this)
   const exemptRoles = config?.exemptPrivilegedRolesFromReason !== false

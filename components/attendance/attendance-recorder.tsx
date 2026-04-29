@@ -551,6 +551,18 @@ export function AttendanceRecorder({
     !isOnLeave &&
     (checkoutTimeReached || localTodayAttendance?.on_official_duty_outside_premises === true)
 
+  // [DEBUG] Log checkout button state for real device monitoring
+  if (localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
+    console.log("[v0] CHECKOUT_BUTTON_STATE", {
+      enabled: canCheckOutButton,
+      checkoutTimeReached,
+      onOfficialDutyOutside: localTodayAttendance?.on_official_duty_outside_premises,
+      locationCanCheckOut: locationValidation?.canCheckOut,
+      device: deviceInfo?.type,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
   const handleQRScanSuccess = async (qrData: QRCodeData) => {
     console.log("[v0] QR scan successful, mode:", qrScanMode)
     setShowQRScanner(false)
@@ -1727,6 +1739,15 @@ export function AttendanceRecorder({
       // OPTIMIZATION: Validate location ONCE
       let checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
 
+      // [DEBUG] Log fresh GPS validation for device monitoring
+      console.log("[v0] FRESH_CHECKOUT_VALIDATION", {
+        canCheckOut: checkoutValidation.canCheckOut,
+        userLocation: { lat: locationData.latitude, lon: locationData.longitude, accuracy: locationData.accuracy },
+        device: deviceInfo?.type,
+        checkOutRadius,
+        timestamp: new Date().toISOString(),
+      })
+
       // Fallback: if validation fails but the client-side nearest-location check (used by the UI badge)
       // indicates the user is within range, allow checkout. This keeps the badge and button behavior
       // consistent when device radius settings or rounding differ between helpers.
@@ -1796,6 +1817,16 @@ export function AttendanceRecorder({
       // Handle out-of-range checkout with off-premises policy
       if (!checkoutValidation.canCheckOut) {
         if (!checkoutTimeReached) {
+          // [DEBUG] Log blocked checkout (insufficient time)
+          console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+            decision: "BLOCKED_MIN_2_HOURS",
+            minutesWorked: localTodayAttendance?.check_in_time
+              ? Math.floor((Date.now() - new Date(localTodayAttendance.check_in_time).getTime()) / 60000)
+              : 0,
+            required: 120,
+            device: deviceInfo?.type,
+            timestamp: new Date().toISOString(),
+          })
           setFlashMessage({
             message: `Minimum 2 hours required before check-out. ${minutesUntilCheckout ? `${minutesUntilCheckout} minutes remaining.` : ''}`,
             type: "error",
@@ -1807,14 +1838,26 @@ export function AttendanceRecorder({
         const isPrivilegedRole = isExemptFromAttendanceReasons(userProfile?.role)
         if (isPrivilegedRole) {
           // Privileged roles (admin/dept head/regional manager) check out without requiring reason
-          console.log("[v0] Privileged role out-of-range checkout - proceeding without reason")
+          console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+            decision: "DIRECT_CHECKOUT_PRIVILEGED_ROLE",
+            role: userProfile?.role,
+            device: deviceInfo?.type,
+            timestamp: new Date().toISOString(),
+          })
         } else {
             // If the continuous UI location validator says the user IS within range,
             // trust it over a momentary GPS snapshot that may have drifted by a few
             // metres.  Do NOT redirect on-premises users to the off-premises flow.
             const uiSaysInRange = locationValidation?.canCheckOut === true
             if (uiSaysInRange) {
-              console.log("[v0] GPS drift detected: UI validator confirms in-range; skipping off-premises redirect")
+              console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+                decision: "DIRECT_CHECKOUT_UI_OVERRIDE",
+                reason: "GPS drift detected; UI validator confirms in-range",
+                freshValidation: checkoutValidation.canCheckOut,
+                uiValidation: locationValidation?.canCheckOut,
+                device: deviceInfo?.type,
+                timestamp: new Date().toISOString(),
+              })
               // fall through to regular checkout path below
             } else {
               const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
@@ -1825,6 +1868,11 @@ export function AttendanceRecorder({
               const isWithinOffPremisesWindow = currentTimeMinutes >= opStartMins && currentTimeMinutes <= opEndMins
 
               if (!offPremisesEnabled) {
+                console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+                  decision: "BLOCKED_OFF_PREMISES_DISABLED",
+                  device: deviceInfo?.type,
+                  timestamp: new Date().toISOString(),
+                })
                 setFlashMessage({
                   message: "Off-premises check-out is currently disabled by the administrator. Please return to a registered QCC location to check out.",
                   type: "error",
@@ -1832,6 +1880,14 @@ export function AttendanceRecorder({
                 setIsLoading(false)
                 return
               } else if (!isWithinOffPremisesWindow) {
+                console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+                  decision: "BLOCKED_OFF_PREMISES_WINDOW",
+                  windowStart: runtimeFlags.offPremisesCheckoutStartTime ?? "15:00",
+                  windowEnd: runtimeFlags.offPremisesCheckoutEndTime ?? "23:59",
+                  currentTime: new Date().toLocaleTimeString(),
+                  device: deviceInfo?.type,
+                  timestamp: new Date().toISOString(),
+                })
                 const windowStart = runtimeFlags.offPremisesCheckoutStartTime ?? "15:00"
                 const windowEnd = runtimeFlags.offPremisesCheckoutEndTime ?? "23:59"
                 setFlashMessage({
@@ -1842,6 +1898,12 @@ export function AttendanceRecorder({
                 return
               } else {
                 // Show off-premises checkout dialog to collect reason
+                console.log("[v0] CHECKOUT_ROUTING_DECISION", {
+                  decision: "OFFPREMISES_DIALOG",
+                  outOfRange: true,
+                  device: deviceInfo?.type,
+                  timestamp: new Date().toISOString(),
+                })
                 const effectiveCheckOutRadius2 = checkOutRadius ?? proximitySettings.checkInProximityRange
                 let nearestLocForDialog = null
                 if (realTimeLocations && realTimeLocations.length > 0) {
