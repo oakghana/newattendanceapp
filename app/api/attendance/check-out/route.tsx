@@ -174,11 +174,68 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Retry history-driven recovery rules based on today's logged checkout failures.
+    // - Out-of-range users after 5:30 PM with >=4 failed attempts can proceed.
+    // - In-range users with >=2 failed attempts are auto-checked out.
+    const todayStartIso = `${today}T00:00:00`
+    const todayEndIso = `${today}T23:59:59`
+    const { data: failedCheckoutAttempts } = await supabase
+      .from("audit_logs")
+      .select("created_at, action, new_values")
+      .eq("user_id", user.id)
+      .in("action", ["check_out_failed", "offpremises_checkout_failed", "qr_check_out_failed", "auto_checkout_failed"])
+      .gte("created_at", todayStartIso)
+      .lte("created_at", todayEndIso)
+
+    const retryStats = (failedCheckoutAttempts || []).reduce(
+      (acc, row: any) => {
+        const payload = (row?.new_values && typeof row.new_values === "object") ? row.new_values : {}
+        const nearestDistance = Number(payload?.nearest_location_distance_m)
+        const nearestName = typeof payload?.nearest_location_name === "string" ? payload.nearest_location_name : null
+        const createdAt = new Date(row.created_at)
+        const minutes = createdAt.getHours() * 60 + createdAt.getMinutes()
+        const isAfter530 = minutes >= 17 * 60 + 30
+
+        if (Number.isFinite(nearestDistance)) {
+          if (nearestDistance <= 100) {
+            acc.inRangeFailures += 1
+          } else if (isAfter530) {
+            acc.outOfRangeAfter530Failures += 1
+            if (!acc.lastOutOfRangeLocationName && nearestName) {
+              acc.lastOutOfRangeLocationName = nearestName
+            }
+          }
+        }
+
+        return acc
+      },
+      {
+        inRangeFailures: 0,
+        outOfRangeAfter530Failures: 0,
+        lastOutOfRangeLocationName: null as string | null,
+      },
+    )
+
     const checkInTimeForPolicy = new Date(attendanceRecord.check_in_time)
     const provisionalWorkHours = (now.getTime() - checkInTimeForPolicy.getTime()) / (1000 * 60 * 60)
     const serverTimeMinutes = now.getHours() * 60 + now.getMinutes()
     const isAfter530PmServerTime = serverTimeMinutes >= 17 * 60 + 30
     const hasWorkedAtLeast7Hours = provisionalWorkHours >= 7
+    const isPrivilegedRole = isExemptFromAttendanceReasons(userProfile?.role)
+
+    // Staff policy: minimum 2 hours required for regular checkout.
+    // Emergency checkout has its own separate endpoint and rules.
+    if (!isPrivilegedRole && provisionalWorkHours < 2) {
+      return NextResponse.json(
+        {
+          error: `You can check out after 2 hours of work. You have worked ${provisionalWorkHours.toFixed(2)} hours so far.`,
+          minimumHoursRequired: 2,
+          workedHours: Number(provisionalWorkHours.toFixed(2)),
+        },
+        { status: 400 },
+      )
+    }
+
     const allowCheckoutPolicyBypass = isAfter530PmServerTime || hasWorkedAtLeast7Hours
 
     // CHECK TIME RESTRICTION: Check if check-out is after 6 PM (18:00)
@@ -197,7 +254,7 @@ export async function POST(request: NextRequest) {
     const isOffPremisesCheckedIn = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
     // Declare checkoutLocationData early so it can be referenced when determining time-rule bypasses
     let checkoutLocationData: any = null
-    const bypassTimeRules = isOffPremisesCheckedIn || allowCheckoutPolicyBypass
+    const bypassTimeRules = isOffPremisesCheckedIn || allowCheckoutPolicyBypass || retryStats.outOfRangeAfter530Failures >= 4
 
     if (!canCheckOut && !bypassTimeRules) {
       // allow overrides for eligible staff
@@ -484,8 +541,10 @@ export async function POST(request: NextRequest) {
     const checkInTime = new Date(attendanceRecord.check_in_time)
     const checkOutTime = new Date()
     const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
-    const allowLocationBypass = workHours >= 7 || isAfter530PmServerTime
+    const allowLocationBypass = workHours >= 7 || isAfter530PmServerTime || retryStats.outOfRangeAfter530Failures >= 4
     let policyLocationBypassUsed = false
+    let retryAutoCheckoutInRangeUsed = false
+    let retryOutOfRangeRecoveryUsed = false
 
     // OPTIMIZATION: Parallelize settings fetches
     const [
@@ -547,15 +606,26 @@ export async function POST(request: NextRequest) {
             }),
         )
 
-        if (!validation.canCheckOut && allowLocationBypass) {
+        const allowOutOfRangeByRetries = !validation.canCheckOut && retryStats.outOfRangeAfter530Failures >= 4
+        const autoCheckoutInRangeByRetries = validation.canCheckOut && retryStats.inRangeFailures >= 2
+
+        if (autoCheckoutInRangeByRetries) {
+          retryAutoCheckoutInRangeUsed = true
+          checkoutLocationData = validation.nearestLocation
+        }
+
+        if (!validation.canCheckOut && (allowLocationBypass || allowOutOfRangeByRetries)) {
           console.log("[v0] Checkout policy bypass: allowing out-of-range checkout", {
-            reason: workHours >= 7 ? "worked_7_hours" : "after_5_30pm_server_time",
+            reason: allowOutOfRangeByRetries
+              ? "after_5_30pm_failed_attempts>=4"
+              : (workHours >= 7 ? "worked_7_hours" : "after_5_30pm_server_time"),
             distance: validation.distance,
             nearestLocation: validation.nearestLocation?.name,
             workHours,
           })
           checkoutLocationData = null
           policyLocationBypassUsed = true
+          retryOutOfRangeRecoveryUsed = allowOutOfRangeByRetries
         } else if (!validation.canCheckOut && withinStandardRange) {
           console.log("[v0] Checkout override: within <=100m treated as in-range", {
             distance: validation.distance,
@@ -731,6 +801,21 @@ export async function POST(request: NextRequest) {
         ? "Checkout location bypass applied: staff has worked at least 7 hours."
         : "Checkout location bypass applied: checkout requested after 5:30 PM server time."
       checkoutData.notes = checkoutData.notes ? `${checkoutData.notes}\n${policyNote}` : policyNote
+    }
+
+    if (retryOutOfRangeRecoveryUsed) {
+      const retryLocation = retryStats.lastOutOfRangeLocationName || "Out-of-range location"
+      checkoutData.check_out_location_name = retryLocation
+      checkoutData.notes = checkoutData.notes
+        ? `${checkoutData.notes}\nRetry recovery applied: checkout allowed after 4+ failed attempts after 5:30 PM while out of range.`
+        : "Retry recovery applied: checkout allowed after 4+ failed attempts after 5:30 PM while out of range."
+    }
+
+    if (retryAutoCheckoutInRangeUsed) {
+      checkoutData.check_out_method = "auto_after_retries_in_range"
+      checkoutData.notes = checkoutData.notes
+        ? `${checkoutData.notes}\nAuto checkout applied after 2+ failed in-range attempts.`
+        : "Auto checkout applied after 2+ failed in-range attempts."
     }
 
     if (latitude && longitude) {

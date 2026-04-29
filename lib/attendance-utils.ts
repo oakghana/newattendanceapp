@@ -127,15 +127,16 @@ export function canCheckInAtTime(date: Date = new Date(), dept?: DeptInfo, role?
   // Exempt roles can check in anytime
   if (isExemptFromTimeRestrictions(dept, role)) return true
   const hours = date.getHours()
-  return hours < 15 // Allow check-in only before 3 PM for regular staff
+  const minutes = date.getMinutes()
+  // Allow check-in before 3:30 PM for regular staff
+  return hours < 15 || (hours === 15 && minutes < 30)
 }
 
 /**
- * Check if check-out time is allowed (before 5:40 PM / 17:40)
- * - Weekends: no time restrictions
- * - Admin, Department Heads, Regional Managers: exempt
- * - Operational, Security, and Transport departments are exempt
- * - Regular staff: can only check out before 5:40 PM
+ * Check if check-out time is allowed.
+ * - Exempt staff (security / operational / transport / managers): anytime
+ * - Regular staff: allowed until 11:00 PM (23:00)
+ * - Same-day enforcement (before midnight) is handled in API routes.
  */
 export function canCheckOutAtTime(
   date: Date = new Date(),
@@ -143,14 +144,13 @@ export function canCheckOutAtTime(
   role?: string | null,
   config?: AttendanceTimeConfig,
 ): boolean {
-  // No restrictions on weekends
-  if (isWeekend(date)) return true
+  // Exempt roles/depts: no time restriction on checkout
   if (isExemptFromTimeRestrictions(dept, role)) return true
-  const cutoffStr = config?.checkoutCutoffTime ?? "17:40"
-  const [cutoffHour, cutoffMin] = cutoffStr.split(":").map(Number)
+  // Weekends: no restriction
+  if (isWeekend(date)) return true
   const hours = date.getHours()
-  const minutes = date.getMinutes()
-  return hours < cutoffHour || (hours === cutoffHour && minutes < cutoffMin)
+  // Regular staff may check out until 11 PM
+  return hours < 23
 }
 
 export function canAutoCheckoutOutOfRange({
@@ -188,17 +188,17 @@ export function canAutoCheckoutOutOfRange({
 }
 
 /**
- * Get check-in deadline time (3 PM for regular staff, anytime for admins/managers)
+ * Get check-in deadline time (3:30 PM for regular staff, anytime for admins/managers)
  */
 export function getCheckInDeadline(): string {
-  return "3:00 PM"
+  return "3:30 PM"
 }
 
 /**
- * Get check-out deadline time (5:40 PM)
+ * Get check-out deadline time (11:00 PM for regular staff)
  */
 export function getCheckOutDeadline(config?: AttendanceTimeConfig): string {
-  const cutoffStr = config?.checkoutCutoffTime ?? "17:40"
+  const cutoffStr = config?.checkoutCutoffTime ?? "23:00"
   const [h, m] = cutoffStr.split(":").map(Number)
   const suffix = h >= 12 ? "PM" : "AM"
   const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h
@@ -238,7 +238,7 @@ export function getStaffRestrictions(dept?: DeptInfo, role?: string | null, date
   } else {
     restrictions.push({
       type: "time_restriction",
-      message: `Check-in is only allowed before ${getCheckInDeadline()}. Check-out is only allowed before ${getCheckOutDeadline()}.`,
+      message: `Check-in is only allowed before ${getCheckInDeadline()}. Check-out is allowed any time before 11:00 PM.`,
     })
   }
 

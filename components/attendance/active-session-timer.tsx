@@ -3,10 +3,9 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Clock, MapPin, Timer, Calendar, LogOut, Loader2 } from "lucide-react"
+import { Clock, MapPin, LogOut, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { useEffect, useState } from "react"
-import { formatDistanceToNow } from "date-fns"
-import { canCheckOutAtTime, getCheckOutDeadline } from "@/lib/attendance-utils"
+import { canCheckOutAtTime } from "@/lib/attendance-utils"
 import type { AttendanceTimeConfig } from "@/lib/attendance-utils"
 
 interface ActiveSessionTimerProps {
@@ -24,13 +23,11 @@ interface ActiveSessionTimerProps {
   userRole?: string | null
   runtimeConfig?: AttendanceTimeConfig
   getNow?: () => Date
-  // New: indicates the user was checked in via an approved off‑premises request
 }
 
 export function ActiveSessionTimer({
   checkInTime,
   checkInLocation,
-  checkOutLocation,
   minimumWorkMinutes = 120,
   locationCheckInTime,
   locationCheckOutTime,
@@ -45,231 +42,197 @@ export function ActiveSessionTimer({
 }: ActiveSessionTimerProps) {
   const resolveNow = getNow || (() => new Date())
   const [currentTime, setCurrentTime] = useState(resolveNow())
-  const [timeUntilCheckout, setTimeUntilCheckout] = useState<{
-    hours: number
-    minutes: number
-    seconds: number
-    canCheckout: boolean
-  }>({ hours: 0, minutes: 0, seconds: 0, canCheckout: false })
+  const [countdown, setCountdown] = useState<{ h: number; m: number; s: number; done: boolean }>({
+    h: 0, m: 0, s: 0, done: false,
+  })
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    const tick = setInterval(() => {
       const now = resolveNow()
       setCurrentTime(now)
-
       const checkInDate = new Date(checkInTime)
-      const minimumCheckoutTime = new Date(checkInDate.getTime() + minimumWorkMinutes * 60 * 1000)
-      const diff = minimumCheckoutTime.getTime() - now.getTime()
-
+      const unlockAt = new Date(checkInDate.getTime() + minimumWorkMinutes * 60 * 1000)
+      const diff = unlockAt.getTime() - now.getTime()
       if (diff <= 0) {
-        setTimeUntilCheckout({ hours: 0, minutes: 0, seconds: 0, canCheckout: true })
+        setCountdown({ h: 0, m: 0, s: 0, done: true })
       } else {
-        const hours = Math.floor(diff / (1000 * 60 * 60))
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000)
-        setTimeUntilCheckout({ hours, minutes, seconds, canCheckout: false })
+        setCountdown({
+          h: Math.floor(diff / 3600000),
+          m: Math.floor((diff % 3600000) / 60000),
+          s: Math.floor((diff % 60000) / 1000),
+          done: false,
+        })
       }
     }, 1000)
-
-    return () => clearInterval(timer)
-  }, [checkInTime, minimumWorkMinutes, resolveNow])
+    return () => clearInterval(tick)
+  }, [checkInTime, minimumWorkMinutes])
 
   const checkInDate = new Date(checkInTime)
-  const elapsedTime = Math.floor((currentTime.getTime() - checkInDate.getTime()) / (1000 * 60))
-  const elapsedHours = Math.floor(elapsedTime / 60)
-  const elapsedMinutes = elapsedTime % 60
+  const elapsedMs = currentTime.getTime() - checkInDate.getTime()
+  const elapsedMins = Math.max(0, Math.floor(elapsedMs / 60000))
+  const elapsedHours = Math.floor(elapsedMins / 60)
+  const elapsedMinutes = elapsedMins % 60
+
+  // Progress toward 8-hour work day (capped at 100%)
+  const targetMins = 8 * 60
+  const progressPct = Math.min(100, Math.round((elapsedMins / targetMins) * 100))
+
   const canCheckoutNow =
     canCheckOut ||
     allowImmediateCheckout ||
     canCheckOutAtTime(currentTime, userDepartment, userRole, runtimeConfig) ||
-    timeUntilCheckout.canCheckout
-  const showCheckoutAction = Boolean(onCheckOut) && timeUntilCheckout.canCheckout
+    countdown.done
+
+  // Status label
+  const statusLabel =
+    elapsedHours >= 7
+      ? "Full day achieved"
+      : elapsedHours >= 2
+        ? "Checkout available"
+        : "Minimum time pending"
+
+  const statusColor =
+    elapsedHours >= 7
+      ? "bg-emerald-500"
+      : elapsedHours >= 2
+        ? "bg-blue-500"
+        : "bg-amber-500"
 
   return (
-    <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/40 dark:to-emerald-900/40 dark:border-green-500/50">
-      <CardContent className="p-6 space-y-4">
-        {/* Active Session Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-20" />
-              <div className="relative bg-green-500 rounded-full p-3">
-                <Clock className="h-6 w-6 text-white" />
-              </div>
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg text-foreground">Active Work Session</h3>
-              <p className="text-sm text-muted-foreground">
-                Started {(() => {
-                  const now = currentTime
-                  const checkInDate = new Date(checkInTime)
-                  const diffMs = now.getTime() - checkInDate.getTime()
-                  const diffMins = Math.floor(diffMs / 60000)
-                  const diffHours = Math.floor(diffMins / 60)
-                  const diffDays = Math.floor(diffHours / 24)
-                  
-                  if (diffDays > 0) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
-                  if (diffHours > 0) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
-                  if (diffMins > 0) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`
-                  return "just now"
-                })()}
-              </p>
-            </div>
-          </div>
-          <Badge className="bg-green-500 text-white hover:bg-green-600">On Duty</Badge>
-        </div>
-
-        {/* Session Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Check-in Info */}
-          <div className="rounded-lg bg-white/60 dark:bg-gray-800/80 border dark:border-gray-700 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              <Calendar className="h-3.5 w-3.5" />
-              Check-In
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {checkInDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </p>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-              <span className="truncate">{checkInLocation}</span>
-            </div>
-          </div>
-
-          {/* Time Worked */}
-          <div className="rounded-lg bg-white/60 dark:bg-gray-800/80 border dark:border-gray-700 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              <Timer className="h-3.5 w-3.5" />
-              Time Worked
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {elapsedHours}h {elapsedMinutes}m
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {elapsedTime} minutes elapsed
-            </p>
-          </div>
-        </div>
-
-        {/* Checkout Button - Show when ready */}
-        {showCheckoutAction && onCheckOut && (
-          <Button
-            onClick={onCheckOut}
-            // once the minimum work period has elapsed we allow checkout regardless of the 6pm deadline
-            // allow checkout if location is valid or the user has met time requirements
-            disabled={isCheckingOut || !canCheckoutNow}
-            variant="destructive"
-            className="w-full transition-all duration-300 bg-red-600 hover:bg-red-700 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600"
-            size="lg"
-            title={
-              // explain why button is disabled if still blocked by time restrictions
-              !canCheckoutNow
-                ? `Check-out only allowed before ${getCheckOutDeadline(runtimeConfig)} or after minimum work period of ${minimumWorkMinutes} minutes or if in range`
-                : "Check out from your location"
-            }
-          >
-            {isCheckingOut ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                {'Checking Out...'}
-              </>
-            ) : (
-              <>
-                <LogOut className="mr-2 h-5 w-5" />
-                {'Check Out Now'}
-              </>
-            )}
-          </Button>
-        )}
-
-        {/* Countdown Timer */}
-        {timeUntilCheckout.canCheckout ? (
-          <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/60 dark:to-emerald-900/60 border border-green-200 dark:border-green-500/50 p-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-green-500 rounded-full p-2">
-                <Clock className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <p className="font-semibold text-green-900 dark:text-green-100">Ready to check out</p>
-                <p className="text-sm text-green-700 dark:text-green-300">
-                  {allowImmediateCheckout
-                    ? "You can check out now. The system will apply your location and time policy automatically."
-                    : "You can check out now. You are within the approved range."}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-lg bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/60 dark:to-amber-900/60 border border-orange-200 dark:border-orange-500/50 p-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
-                  Checkout is locked until minimum work time is complete
-                </p>
-                <p className="text-xs text-orange-700 dark:text-orange-300">
-                  You can check out after {minimumWorkMinutes} minutes from your check-in time.
-                </p>
-              </div>
-              <div className="text-right">
-                <div className="flex items-center gap-1 text-3xl font-bold text-orange-600 dark:text-orange-400 font-mono">
-                  <span className="w-12 text-right">{String(timeUntilCheckout.hours).padStart(2, "0")}</span>
-                  <span className="animate-pulse">:</span>
-                  <span className="w-12">{String(timeUntilCheckout.minutes).padStart(2, "0")}</span>
-                  <span className="animate-pulse">:</span>
-                  <span className="w-12">{String(timeUntilCheckout.seconds).padStart(2, "0")}</span>
-                </div>
-                <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">until checkout available</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Location Working Hours & Checkout Info */}
-        <div className="pt-2 border-t space-y-3">
-          {(locationCheckInTime || locationCheckOutTime) && (
-            <div className="rounded-lg bg-blue-50 dark:bg-blue-900/60 border border-blue-200 dark:border-blue-500/50 p-4">
-              <div className="flex items-start gap-3">
-                <div className="bg-blue-500 rounded-full p-2 mt-0.5">
+    <div className="space-y-3">
+      {/* Main Session Card */}
+      <Card className="border-0 shadow-md overflow-hidden">
+        {/* Top colour strip */}
+        <div className={`h-1.5 w-full ${statusColor} transition-colors duration-700`} />
+        <CardContent className="p-4 md:p-5 space-y-4">
+          {/* Header row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="relative shrink-0">
+                <div className={`absolute inset-0 rounded-full ${statusColor} animate-ping opacity-20`} />
+                <div className={`relative rounded-full p-2 ${statusColor}`}>
                   <Clock className="h-4 w-4 text-white" />
                 </div>
-                <div className="flex-1 space-y-1">
-                  <p className="font-semibold text-sm text-blue-900 dark:text-blue-100">
-                    {checkInLocation} Working Hours
-                  </p>
-                  <div className="flex items-center gap-4 text-sm">
-                    {locationCheckInTime && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-700 dark:text-blue-300 font-medium">Check-In:</span>
-                        <span className="font-mono font-semibold text-blue-900 dark:text-blue-100">
-                          {locationCheckInTime}
-                        </span>
-                      </div>
-                    )}
-                    {locationCheckOutTime && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-700 dark:text-blue-300 font-medium">Check-Out:</span>
-                        <span className="font-mono font-semibold text-blue-900 dark:text-blue-100">
-                          {locationCheckOutTime}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                    Remember to check out before the location's closing time
-                  </p>
-                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-sm leading-tight text-foreground">Active Work Session</p>
+                <p className="text-xs text-muted-foreground">
+                  Started at {checkInDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {checkInLocation ? ` · ${checkInLocation}` : ""}
+                </p>
               </div>
             </div>
-          )}
-          
-          {checkOutLocation && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-              <span>Checkout location: {checkOutLocation}</span>
+            <Badge
+              className={`${statusColor} text-white text-xs shrink-0 hover:opacity-90`}
+            >
+              {statusLabel}
+            </Badge>
+          </div>
+
+          {/* Time display */}
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
+                {String(elapsedHours).padStart(2, "0")}
+                <span className="text-muted-foreground text-2xl">h </span>
+                {String(elapsedMinutes).padStart(2, "0")}
+                <span className="text-muted-foreground text-2xl">m</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">time on duty</p>
             </div>
+            {(locationCheckInTime || locationCheckOutTime) && (
+              <div className="text-right text-xs text-muted-foreground space-y-0.5">
+                {locationCheckInTime && <p>Open: <span className="font-medium text-foreground">{locationCheckInTime}</span></p>}
+                {locationCheckOutTime && <p>Close: <span className="font-medium text-foreground">{locationCheckOutTime}</span></p>}
+              </div>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>0h</span>
+              <span className="font-medium text-foreground">{progressPct}%</span>
+              <span>8h</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ${statusColor}`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> {checkInLocation}
+              </span>
+              {elapsedHours >= 7 ? (
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <CheckCircle2 className="h-3 w-3" /> Full day ✓
+                </span>
+              ) : elapsedHours >= 2 ? (
+                <span className="text-blue-600 dark:text-blue-400 font-medium">Ready to check out</span>
+              ) : (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {countdown.done ? "Ready" : `${countdown.h > 0 ? `${countdown.h}h ` : ""}${countdown.m}m ${countdown.s}s until checkout`}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Checkout Button */}
+          {onCheckOut && (
+            <Button
+              onClick={onCheckOut}
+              disabled={isCheckingOut || !canCheckoutNow}
+              size="lg"
+              className={`w-full font-semibold transition-all duration-300 ${
+                canCheckoutNow
+                  ? "bg-red-600 hover:bg-red-700 text-white shadow-lg active:scale-[0.98]"
+                  : "bg-muted text-muted-foreground cursor-not-allowed"
+              }`}
+            >
+              {isCheckingOut ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Checking Out…
+                </>
+              ) : canCheckoutNow ? (
+                <>
+                  <LogOut className="mr-2 h-5 w-5" />
+                  Check Out Now
+                </>
+              ) : (
+                <>
+                  <Clock className="mr-2 h-4 w-4" />
+                  {countdown.h > 0
+                    ? `Available in ${countdown.h}h ${countdown.m}m`
+                    : `Available in ${countdown.m}m ${countdown.s}s`}
+                </>
+              )}
+            </Button>
           )}
+
+          {/* Info strip: no reason needed after 7h */}
+          {canCheckoutNow && (
+            <p className="text-center text-xs text-muted-foreground">
+              {elapsedHours >= 7
+                ? "No reason required — full day completed."
+                : "Early checkout — a brief reason will be requested."}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Out-of-range notice */}
+      {!canCheckoutNow && !countdown.done && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-amber-800 dark:text-amber-300">
+            Checkout requires a minimum of <strong>2 hours</strong> on duty.
+            After 5:30 pm you may request an off-premises checkout if you are outside the approved range.
+          </p>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   )
 }

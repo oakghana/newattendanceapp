@@ -51,7 +51,31 @@ export async function createAdminClient() {
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured for server admin actions")
+    // Fallback for local/dev environments where service role key is not set.
+    // This keeps APIs functional using the authenticated user's RLS permissions.
+    // Admin-only elevated operations may still require the service role key.
+    const cookieStore = await cookies()
+    const anonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndGFqdHF4Z2N6aGpib2F0dm9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5NzUyNDgsImV4cCI6MjA3MjU1MTI0OH0.EuuTCRC-rDoz_WHl4pwpV6_fEqrqcgGroa4nTjAEn1k"
+
+    console.warn("[v0] SUPABASE_SERVICE_ROLE_KEY missing - createAdminClient() is using authenticated anon fallback")
+
+    return createSupabaseServerClient(supabaseUrl, anonKey, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+          } catch {
+            // no-op
+          }
+        },
+      },
+    })
   }
 
   return createSupabaseServerClient(supabaseUrl, supabaseKey, {

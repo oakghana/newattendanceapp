@@ -1825,8 +1825,10 @@ export function AttendanceRecorder({
       const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
       const requireEarlyCheckoutReason = assignedLocation?.require_early_checkout_reason ?? true
       const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(now, requireEarlyCheckoutReason, userProfile?.role, userProfile?.departments)
-      // Persist effective requirement into state so the modal can relax validation on weekends
-      setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason))
+      // No reason needed when staff has worked 7+ hours — policy exemption
+      const workedSevenPlusHoursForReason = hoursWorkedSoFar >= 7
+      // Persist effective requirement into state so the modal can relax validation on weekends / 7h rule
+      setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedSevenPlusHoursForReason)
 
       const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
       const checkoutEndTimeMinutes = endHour * 60 + (endMinute || 0)
@@ -2993,18 +2995,15 @@ export function AttendanceRecorder({
       )}
 
 
-      {/* Time Restriction Warning */}
-      {timeRestrictionWarning && (
+      {/* Time Restriction Warning — only shown for check-in restriction */}
+      {timeRestrictionWarning && timeRestrictionWarning.type === 'checkin' && (
         <Alert className="bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-500/30">
           <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
           <AlertTitle className="text-red-800 dark:text-red-200 font-semibold">
-            {timeRestrictionWarning.type === 'checkin' ? 'Check-In Window Closed' : 'Check-Out Window Closed'}
+            Check-In Window Closed
           </AlertTitle>
           <AlertDescription className="text-red-700 dark:text-red-300">
-            {timeRestrictionWarning.type === 'checkin' 
-              ? `Regular check-in is only allowed before ${getCheckInDeadline()}. If you are on official duty outside your registered location, click "Check In Outside Premises" to request manager confirmation.`
-              : `Check-out is only allowed before ${getCheckOutDeadline()}. If you need to check out after this time, contact your manager.`
-            }
+            Regular check-in is only allowed before {getCheckInDeadline()}. If you are on official duty outside your registered location, click "Check In Outside Premises" to request manager confirmation.
             <br />
             <small className="text-red-600 dark:text-red-400 mt-2 block">
               Please use the "Check In Outside Premises" button to request manager confirmation if you are working outside your registered location.
@@ -3299,47 +3298,25 @@ export function AttendanceRecorder({
         </div>
       )}
 
-{/* Checkout actions/warnings for active session (ActiveSessionTimer handles the CTA) */}
-            {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && (
-              <>
-                {/* Transfer warning messages here so we don't duplicate the CTA button (ActiveSessionTimer shows the 'Check Out Now' button). */}
-                {!checkoutTimeReached && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 text-center">
-                    Check-out opens after 2 hours of work. {minutesUntilCheckout} minute(s) remaining.
-                  </p>
-                )}
-
-                {checkoutTimeReached && !locationValidation?.canCheckOut && offGridSince && (
-                  <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 mt-2 text-center justify-center">
-                    <Clock className="h-3 w-3" />
-                    <span>
-                      You are currently outside the approved range for{" "}
-                      <strong>
-                        {(() => {
-                          const mins = Math.floor((getSystemNow().getTime() - offGridSince.getTime()) / 60000)
-                          const h = Math.floor(mins / 60)
-                          const m = mins % 60
-                          return h > 0 ? `${h}h ${m}m` : `${m} min`
-                        })()}
-                      </strong>
-                      {". You can submit an off-premises check-out request below, or move back within range and check out directly."}
-                    </span>
-                  </div>
-                )}
-
-                <label className="mt-3 flex items-start gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={loginIssueRecoveryCheckout}
-                    onChange={(e) => setLoginIssueRecoveryCheckout(e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    I had login issues earlier. Capture this checkout as <strong>login issue recovered</strong>.
-                  </span>
-                </label>
-              </>
+{/* Off-grid notice for active session — shown below the session timer card */}
+            {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && checkoutTimeReached && !locationValidation?.canCheckOut && offGridSince && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm mt-1">
+                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <span className="text-amber-800 dark:text-amber-300">
+                  Outside approved range for{" "}
+                  <strong>
+                    {(() => {
+                      const mins = Math.floor((getSystemNow().getTime() - offGridSince.getTime()) / 60000)
+                      const h = Math.floor(mins / 60)
+                      const m = mins % 60
+                      return h > 0 ? `${h}h ${m}m` : `${m} min`
+                    })()}
+                  </strong>
+                  {". Move back within range or submit an off-premises check-out request."}
+                </span>
+              </div>
             )}
+
 
       {/* Refresh Status Card */}
       <Card>
@@ -3453,64 +3430,83 @@ export function AttendanceRecorder({
       )}
 
       {showEarlyCheckoutDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-orange-600">
-                <AlertTriangle className="h-5 w-5" />
-                Early Check-Out Notice
-              </CardTitle>
-            <CardDescription>
-              {getFormattedCheckoutTime()}{earlyCheckoutReasonRequired ? " Please provide a reason." : ""}
-            </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {earlyCheckoutReasonRequired && (
-                <Alert className="border-orange-200 bg-orange-50">
-                  <Info className="h-4 w-4 text-orange-600" />
-                  <AlertTitle className="text-orange-800">Important</AlertTitle>
-                  <AlertDescription className="text-orange-700">
-                    Your reason will be visible to your department head, supervisor, and HR portal for review.
-                  </AlertDescription>
-                </Alert>
-              )}
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md rounded-2xl shadow-2xl">
+            <CardContent className="p-5 space-y-4">
+              {/* Header */}
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-orange-100 dark:bg-orange-900/40 p-2.5 shrink-0">
+                  <LogOut className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base text-foreground">
+                    {earlyCheckoutReasonRequired ? "Early Checkout" : "Confirm Checkout"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {getFormattedCheckoutTime()}
+                  </p>
+                </div>
+              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="early-checkout-reason">Reason for Early Checkout {earlyCheckoutReasonRequired ? '*' : '(optional)'} </Label>
+              {/* Reason field */}
+              <div className="space-y-1.5">
+                <Label htmlFor="early-checkout-reason" className="text-sm font-medium">
+                  {earlyCheckoutReasonRequired ? "Reason *" : "Reason (optional)"}
+                </Label>
                 <textarea
                   id="early-checkout-reason"
                   value={earlyCheckoutReason}
                   onChange={(e) => setEarlyCheckoutReason(e.target.value)}
-                  placeholder="e.g., Medical appointment, family emergency, approved leave..."
-                  className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  placeholder={earlyCheckoutReasonRequired
+                    ? "e.g., Medical appointment, family emergency, approved leave…"
+                    : "Add a note (optional)…"}
+                  className="w-full min-h-[90px] p-3 text-sm border rounded-xl resize-none bg-muted/40 focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none transition"
                   maxLength={500}
+                  autoFocus
                 />
-                <p className="text-xs text-muted-foreground">
-                  {earlyCheckoutReason.length}/500 characters {earlyCheckoutReasonRequired ? '(required)' : '(optional)'}
-                </p>
+                {earlyCheckoutReasonRequired && (
+                  <p className="text-xs text-muted-foreground">
+                    Shared with your supervisor and HR for review.
+                  </p>
+                )}
               </div>
 
-              <div className="flex gap-2">
+              {/* Login issue checkbox */}
+              <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer select-none rounded-lg border border-dashed p-2.5 hover:bg-muted/30 transition">
+                <input
+                  type="checkbox"
+                  checked={loginIssueRecoveryCheckout}
+                  onChange={(e) => setLoginIssueRecoveryCheckout(e.target.checked)}
+                  className="mt-0.5 accent-orange-500"
+                />
+                <span>I had login issues earlier — mark as <strong>login-issue recovery</strong></span>
+              </label>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-1">
                 <Button
                   onClick={handleEarlyCheckoutCancel}
                   variant="outline"
-                  className="flex-1 bg-transparent"
+                  className="flex-1"
                   disabled={isLoading}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleEarlyCheckoutConfirm}
-                  className="flex-1 bg-orange-600 hover:bg-orange-700"
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
                   disabled={isLoading || (earlyCheckoutReasonRequired && earlyCheckoutReason.trim().length === 0)}
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
+                      Checking out…
                     </>
                   ) : (
-                    "Confirm Check-Out"
+                    <>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Check Out
+                    </>
                   )}
                 </Button>
               </div>

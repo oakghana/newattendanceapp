@@ -236,10 +236,10 @@ export function AnalyticsDashboard() {
   return (
     <div className="space-y-6 text-slate-900 dark:text-slate-100">
       {/* Filter bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm font-medium text-slate-500 dark:text-slate-300">Showing data for the selected period:</p>
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-36 h-9 bg-white/90 dark:bg-slate-800 border-gray-200 dark:border-slate-600 shadow-sm text-sm text-slate-800 dark:text-slate-100">
+          <SelectTrigger className="w-full sm:w-36 h-9 bg-white/90 dark:bg-slate-800 border-gray-200 dark:border-slate-600 shadow-sm text-sm text-slate-800 dark:text-slate-100">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -252,9 +252,9 @@ export function AnalyticsDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
         {kpiCards.map((kpi, index) => (
-          <div key={index} className={`relative overflow-hidden rounded-xl p-5 text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${kpi.cardBg}`}>
+          <div key={index} className={`relative overflow-hidden rounded-xl p-4 sm:p-5 text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${kpi.cardBg}`}>
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
             <div className="relative">
               <div className="flex items-start justify-between mb-4">
@@ -273,7 +273,7 @@ export function AnalyticsDashboard() {
                 </div>
               </div>
               <p className="text-white/70 text-xs font-medium uppercase tracking-wide">{kpi.title}</p>
-              <p className="text-3xl font-bold mt-0.5">{kpi.value}</p>
+              <p className="text-2xl sm:text-3xl font-bold mt-0.5">{kpi.value}</p>
               <p className="text-white/60 text-xs mt-1">{kpi.label}</p>
             </div>
           </div>
@@ -281,7 +281,7 @@ export function AnalyticsDashboard() {
       </div>
 
       {/* Predictive Insights */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-cyan-900 to-slate-900 p-6 shadow-xl ring-1 ring-cyan-500/25">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-cyan-900 to-slate-900 p-4 sm:p-6 shadow-xl ring-1 ring-cyan-500/25">
         <div className="absolute top-0 right-0 w-40 h-40 bg-cyan-300/10 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
         <div className="relative">
           <div className="flex items-center gap-3 mb-5">
@@ -312,20 +312,20 @@ export function AnalyticsDashboard() {
 
       {/* Analytics Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800/80">
-          <TabsTrigger value="overview" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-slate-100 dark:bg-slate-800/80">
+          <TabsTrigger value="overview" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <BarChart3 className="h-4 w-4" />
             Overview
           </TabsTrigger>
-          <TabsTrigger value="trends" className="flex items-center gap-2">
+          <TabsTrigger value="trends" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <LineChartIcon className="h-4 w-4" />
             Trends
           </TabsTrigger>
-          <TabsTrigger value="departments" className="flex items-center gap-2">
+          <TabsTrigger value="departments" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <PieChartIcon className="h-4 w-4" />
             Departments
           </TabsTrigger>
-          <TabsTrigger value="locations" className="flex items-center gap-2">
+          <TabsTrigger value="locations" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <MapPin className="h-4 w-4" />
             Locations
           </TabsTrigger>

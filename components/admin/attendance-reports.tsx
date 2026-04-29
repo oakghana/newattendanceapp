@@ -1124,19 +1124,30 @@ export function AttendanceReports() {
             </div>
           </div>
 
-          {/* Quick Select */}
+          {/* Quick Actions */}
           <div className="mb-4">
-            <div className="inline-flex items-center gap-3 border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/30 rounded-md p-2 shadow-sm">
-              <div className="flex items-center gap-2 pl-2 pr-3 border-r border-amber-100 dark:border-amber-900/40">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/30 rounded-md p-2 shadow-sm">
+              <div className="flex w-full sm:w-auto items-center gap-2 pl-2 pr-3 sm:border-r border-amber-100 dark:border-amber-900/40">
                 <CalendarIcon className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                <span className="text-amber-800 dark:text-amber-300 text-sm font-medium">Quick Select</span>
+                <span className="text-amber-800 dark:text-amber-300 text-sm font-medium">Quick Actions</span>
               </div>
 
-              <div className="flex gap-2 items-center">
-                <Button variant={compactMode ? "ghost" : "outline"} size="sm" onClick={() => setQuickDate("today")} className="text-amber-700 dark:text-amber-300 px-3 py-1 text-xs">Today</Button>
-                <Button variant={compactMode ? "ghost" : "outline"} size="sm" onClick={() => setQuickDate("week")} className="text-amber-700 dark:text-amber-300 px-3 py-1 text-xs">Week</Button>
-                <Button variant={compactMode ? "ghost" : "outline"} size="sm" onClick={() => setQuickDate("month")} className="text-amber-700 dark:text-amber-300 px-3 py-1 text-xs">Month</Button>
-              </div>
+              {[ 
+                { label: "Today", value: "today" },
+                { label: "Week", value: "week" },
+                { label: "Month", value: "month" },
+                { label: "Quarter", value: "quarter" }
+              ].map((option) => (
+                <Button
+                  key={option.value}
+                  variant={compactMode ? "ghost" : "outline"}
+                  size="sm"
+                  onClick={() => setQuickDate(option.value as any)}
+                  className="text-amber-700 dark:text-amber-300 px-3 py-1 text-xs min-w-[70px]"
+                >
+                  {option.label}
+                </Button>
+              ))}
             </div>
           </div>
 
@@ -1279,11 +1290,11 @@ export function AttendanceReports() {
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-100 dark:border-slate-700/70">
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
           <Button
             onClick={fetchReport}
             disabled={loading}
-            className={`bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white ${compactMode ? 'px-3 py-1.5 text-sm' : 'px-4 py-2'} rounded-md shadow-sm hover:shadow-md transition-all duration-200`}
+            className={`w-full sm:w-auto justify-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white ${compactMode ? 'px-3 py-1.5 text-sm' : 'px-4 py-2'} rounded-md shadow-sm hover:shadow-md transition-all duration-200`}
           >
             {loading ? (
               <>
@@ -1298,7 +1309,7 @@ export function AttendanceReports() {
             )}
           </Button>
 
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
             <Button
               onClick={() => exportReport("excel")}
               variant="outline"
@@ -1328,33 +1339,13 @@ export function AttendanceReports() {
             variant="ghost"
             size="sm"
             onClick={() => setCompactMode((s) => !s)}
-            className={`h-8 ${compactMode ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-100'} rounded-md px-2 py-1 ml-2 text-sm`}
+            className={`h-8 w-full sm:w-auto ${compactMode ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-100'} rounded-md px-2 py-1 sm:ml-2 text-sm`}
             title="Toggle compact / landscape view (mobile)"
           >
             {compactMode ? 'Compact / Landscape' : 'Normal View'}
           </Button>
         </div>
 
-        {/* Quick Date Select */}
-        <div className="flex gap-2"> 
-          <span className="text-sm font-medium text-gray-600 dark:text-slate-300 self-center mr-2">Quick:</span>
-          {[
-            { label: "Today", value: "today" },
-            { label: "Week", value: "week" },
-            { label: "Month", value: "month" },
-            { label: "Quarter", value: "quarter" }
-          ].map((option) => (
-            <Button
-              key={option.value}
-              variant="ghost"
-              size="sm"
-              onClick={() => setQuickDate(option.value as any)}
-              className="text-gray-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-slate-800 px-3 py-1 rounded-md transition-all duration-150 text-sm"
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
       </div>
 
       {/* Column visibility controls removed per request */}
@@ -1364,24 +1355,24 @@ export function AttendanceReports() {
         <div className="border-b border-gray-200 dark:border-slate-700">
           <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="details" className="w-full">
             <div className="px-4 pt-4">
-              <TabsList className={`grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl ${compactMode ? 'h-10' : 'h-12'}`}>
+              <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-4 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl ${compactMode ? 'h-auto' : 'h-auto'}`}>
                 <TabsTrigger
                   value="details"
-                  className="rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
+                  className="rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
                   <FileText className="h-3.5 w-3.5 flex-shrink-0" />
                   <span>Details</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="overview"
-                  className="rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
+                  className="rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
                   <BarChart3 className="h-3.5 w-3.5 flex-shrink-0" />
                   <span>Overview</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="departments"
-                  className="rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
+                  className="rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
                   <Users className="h-3.5 w-3.5 flex-shrink-0" />
                   <span className="hidden sm:inline">Departments</span>
@@ -1389,7 +1380,7 @@ export function AttendanceReports() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="reasons"
-                  className="rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
+                  className="rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-md data-[state=active]:text-slate-900 dark:data-[state=active]:text-white transition-all duration-200 flex items-center justify-center gap-1.5"
                 >
                   <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
                   <span>Reasons</span>
