@@ -234,12 +234,12 @@ export function AnalyticsDashboard() {
   if (!data) return null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-slate-900 dark:text-slate-100">
       {/* Filter bar */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-slate-400">Showing data for the selected period:</p>
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-300">Showing data for the selected period:</p>
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-36 h-9 bg-white border-gray-200 shadow-sm text-sm">
+          <SelectTrigger className="w-36 h-9 bg-white/90 dark:bg-slate-800 border-gray-200 dark:border-slate-600 shadow-sm text-sm text-slate-800 dark:text-slate-100">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -281,30 +281,30 @@ export function AnalyticsDashboard() {
       </div>
 
       {/* Predictive Insights */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 to-purple-700 p-6 shadow-xl">
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-cyan-900 to-slate-900 p-6 shadow-xl ring-1 ring-cyan-500/25">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-cyan-300/10 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
         <div className="relative">
           <div className="flex items-center gap-3 mb-5">
-            <div className="p-2.5 bg-white/20 rounded-xl">
+            <div className="p-2.5 bg-cyan-400/20 rounded-xl ring-1 ring-cyan-300/30">
               <Target className="h-5 w-5 text-white" />
             </div>
             <div>
               <h3 className="text-base font-bold text-white">Predictive Insights</h3>
-              <p className="text-violet-200 text-xs">AI-powered predictions and recommendations</p>
+              <p className="text-cyan-100/80 text-xs">AI-powered predictions and recommendations</p>
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-cyan-200/20">
               <div className="text-3xl font-bold text-white mb-1">{data.predictions.nextWeekAttendance}%</div>
-              <div className="text-sm text-violet-200">Predicted Next Week</div>
+              <div className="text-sm text-cyan-100/80">Predicted Next Week</div>
             </div>
-            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-cyan-200/20">
               <div className="text-3xl font-bold text-orange-300 mb-1">{data.predictions.riskEmployees}</div>
-              <div className="text-sm text-violet-200">At-Risk Employees</div>
+              <div className="text-sm text-cyan-100/80">At-Risk Employees</div>
             </div>
-            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+            <div className="text-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-cyan-200/20">
               <div className="text-sm font-bold text-green-300 mb-2">Peak Days</div>
-              <div className="text-xs text-violet-200">{data.predictions.peakDays.join(", ")}</div>
+              <div className="text-xs text-cyan-100/80">{data.predictions.peakDays.join(", ")}</div>
             </div>
           </div>
         </div>
@@ -312,7 +312,7 @@ export function AnalyticsDashboard() {
 
       {/* Analytics Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800/80">
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             Overview
@@ -333,7 +333,7 @@ export function AnalyticsDashboard() {
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="shadow-sm border-0 bg-white">
+            <Card className="shadow-sm border border-slate-200/80 dark:border-slate-700 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl">
               <CardHeader>
                 <CardTitle>Daily Attendance Trend</CardTitle>
                 <CardDescription>Last 30 days attendance pattern</CardDescription>
@@ -353,7 +353,7 @@ export function AnalyticsDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm border-0 bg-white">
+            <Card className="shadow-sm border border-slate-200/80 dark:border-slate-700 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl">
               <CardHeader>
                 <CardTitle>Weekly Performance</CardTitle>
                 <CardDescription>Attendance vs productivity correlation</CardDescription>
@@ -376,7 +376,7 @@ export function AnalyticsDashboard() {
         </TabsContent>
 
         <TabsContent value="trends" className="space-y-6">
-          <Card className="shadow-sm border-0 bg-white">
+          <Card className="shadow-sm border border-slate-200/80 dark:border-slate-700 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl">
             <CardHeader>
               <CardTitle>Monthly Trends</CardTitle>
               <CardDescription>Long-term attendance and work hours analysis</CardDescription>
@@ -400,7 +400,7 @@ export function AnalyticsDashboard() {
 
         <TabsContent value="departments" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="shadow-sm border-0 bg-white">
+            <Card className="shadow-sm border border-slate-200/80 dark:border-slate-700 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl">
               <CardHeader>
                 <CardTitle>Department Distribution</CardTitle>
                 <CardDescription>Attendance rates by department</CardDescription>
@@ -428,14 +428,14 @@ export function AnalyticsDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm border-0 bg-white">
+            <Card className="shadow-sm border border-slate-200/80 dark:border-slate-700 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl">
               <CardHeader>
                 <CardTitle>Department Performance</CardTitle>
                 <CardDescription>Detailed metrics by department</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="mb-3 relative">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400 dark:text-slate-400" />
                   <Input
                     value={deptSearch}
                     onChange={(e) => setDeptSearch(e.target.value)}
@@ -455,7 +455,7 @@ export function AnalyticsDashboard() {
                         ] as const).map(({ key, label }) => (
                           <th
                             key={key}
-                            className="py-2 px-3 text-left font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-50 whitespace-nowrap"
+                            className="py-2 px-3 text-left font-semibold text-gray-600 dark:text-slate-300 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-slate-800 whitespace-nowrap"
                             onClick={() => toggleDeptSort(key)}
                           >
                             {label}
@@ -466,14 +466,14 @@ export function AnalyticsDashboard() {
                     </thead>
                     <tbody>
                       {filteredDepts.map((dept, index) => (
-                        <tr key={dept.name} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <tr key={dept.name} className="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
                           <td className="py-2.5 px-3">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                               <span className="font-medium">{dept.name}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-gray-600">{dept.employees}</td>
+                          <td className="py-2.5 px-3 text-gray-600 dark:text-slate-300">{dept.employees}</td>
                           <td className="py-2.5 px-3">
                             <div className="flex items-center gap-2">
                               <Progress value={dept.attendance} className="h-1.5 w-16" />
@@ -482,11 +482,11 @@ export function AnalyticsDashboard() {
                               </span>
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-gray-600">{dept.avgHours}h</td>
+                          <td className="py-2.5 px-3 text-gray-600 dark:text-slate-300">{dept.avgHours}h</td>
                         </tr>
                       ))}
                       {filteredDepts.length === 0 && (
-                        <tr><td colSpan={4} className="py-6 text-center text-gray-400 text-sm">No departments match your filter</td></tr>
+                        <tr><td colSpan={4} className="py-6 text-center text-gray-400 dark:text-slate-400 text-sm">No departments match your filter</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -497,14 +497,14 @@ export function AnalyticsDashboard() {
         </TabsContent>
 
         <TabsContent value="locations" className="space-y-6">
-          <Card className="shadow-sm border-0 bg-white">
+          <Card className="shadow-sm border border-slate-200/80 dark:border-slate-700 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-primary" />Location Statistics</CardTitle>
               <CardDescription>Check-in counts and utilization by location</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="mb-3 relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400 dark:text-slate-400" />
                 <Input
                   value={locSearch}
                   onChange={(e) => setLocSearch(e.target.value)}
@@ -524,7 +524,7 @@ export function AnalyticsDashboard() {
                       ] as const).map(({ key, label }) => (
                         <th
                           key={key}
-                          className="py-2 px-3 text-left font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-50 whitespace-nowrap"
+                          className="py-2 px-3 text-left font-semibold text-gray-600 dark:text-slate-300 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-slate-800 whitespace-nowrap"
                           onClick={() => toggleLocSort(key)}
                         >
                           {label}
@@ -535,11 +535,11 @@ export function AnalyticsDashboard() {
                   </thead>
                   <tbody>
                     {filteredLocs.map((location) => (
-                      <tr key={location.name} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <tr key={location.name} className="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
                         <td className="py-2.5 px-3 font-medium flex items-center gap-2">
                           <MapPin className="h-4 w-4 text-primary flex-shrink-0" />{location.name}
                         </td>
-                        <td className="py-2.5 px-3 text-gray-700 font-semibold">{location.checkins}</td>
+                        <td className="py-2.5 px-3 text-gray-700 dark:text-slate-200 font-semibold">{location.checkins}</td>
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-2">
                             <Progress value={location.utilization} className="h-1.5 w-20" />
@@ -554,7 +554,7 @@ export function AnalyticsDashboard() {
                       </tr>
                     ))}
                     {filteredLocs.length === 0 && (
-                      <tr><td colSpan={4} className="py-6 text-center text-gray-400 text-sm">No locations match your filter</td></tr>
+                      <tr><td colSpan={4} className="py-6 text-center text-gray-400 dark:text-slate-400 text-sm">No locations match your filter</td></tr>
                     )}
                   </tbody>
                 </table>
