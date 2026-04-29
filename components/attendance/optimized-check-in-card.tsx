@@ -28,16 +28,16 @@ const CheckInButton = memo(({ isLoading, isProcessing, onCheckIn }: Pick<Optimiz
     onClick={onCheckIn}
     disabled={isLoading || isProcessing}
     size="lg"
-    className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg h-14 font-semibold"
+    className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg h-12 sm:h-14 font-semibold text-base sm:text-lg transition-all active:scale-95 sm:active:scale-100"
   >
     {isLoading || isProcessing ? (
       <>
-        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin mr-2" />
         Processing...
       </>
     ) : (
       <>
-        <LogIn className="h-5 w-5 mr-2" />
+        <LogIn className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
         Check In
       </>
     )}
@@ -52,18 +52,18 @@ const LocationStatus = memo(({ userLocation, distance, locationName, locationVal
   }, [locationValidation.isValid])
 
   return (
-    <div className={`p-4 rounded-lg border ${statusColor}`}>
-      <div className="flex items-center gap-3">
-        <MapPin className="h-5 w-5 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="font-medium text-sm">{locationName || "Detecting location..."}</p>
+    <div className={`p-3 sm:p-4 rounded-lg border ${statusColor}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        <MapPin className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm sm:text-base truncate">{locationName || "Detecting location..."}</p>
           {distance !== null && userLocation && (
-            <p className="text-xs opacity-75">
+            <p className="text-xs opacity-75 leading-tight">
               Distance: {distance.toFixed(0)}m • Accuracy: {userLocation.accuracy?.toFixed(0)}m
             </p>
           )}
         </div>
-        <Badge variant={locationValidation.isValid ? "default" : "destructive"}>
+        <Badge variant={locationValidation.isValid ? "default" : "destructive"} className="flex-shrink-0">
           {locationValidation.isValid ? "Valid" : "Invalid"}
         </Badge>
       </div>
@@ -112,19 +112,19 @@ export const OptimizedCheckInCard = memo(function OptimizedCheckInCard({
 
   return (
     <Card className="border-0 shadow-sm bg-gradient-to-br from-card to-card/50">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LogIn className="h-5 w-5 text-primary" />
+      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+          <LogIn className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
           Check In
         </CardTitle>
-        <CardDescription>Verify your location and record your attendance</CardDescription>
+        <CardDescription className="text-xs sm:text-sm">Verify your location and record your attendance</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
         <ErrorAlert error={error} />
         <SuccessAlert success={success} />
         <LocationStatus userLocation={userLocation} distance={distance} locationName={locationName} locationValidation={locationValidation} />
         <CheckInButton isLoading={isLoading} isProcessing={isProcessing} onCheckIn={onCheckIn} />
-        {!isReady && <p className="text-center text-sm text-muted-foreground">Waiting for location verification...</p>}
+        {!isReady && <p className="text-center text-xs sm:text-sm text-muted-foreground">Waiting for location verification...</p>}
       </CardContent>
     </Card>
   )

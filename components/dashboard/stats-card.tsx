@@ -39,32 +39,32 @@ export function StatsCard({ title, value, description, icon: Icon, variant = "de
 
   return (
     <Card className={`border shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/30 ${variantStyles[variant]} ${className || ""} group`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-[0.08em] uppercase">{title}</CardTitle>
-        <div className={`p-2.5 rounded-xl transition-colors ${iconBgStyles[variant]}`}>
-          <Icon className={`h-5 w-5 ${iconStyles[variant]}`} />
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
+        <CardTitle className="text-[10px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-[0.08em] uppercase">{title}</CardTitle>
+        <div className={`p-2 sm:p-2.5 rounded-xl transition-colors flex-shrink-0 ${iconBgStyles[variant]}`}>
+          <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${iconStyles[variant]}`} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="text-2xl lg:text-[1.95rem] font-semibold leading-tight text-slate-900 dark:text-slate-100">
+      <CardContent className="space-y-2 px-3 sm:px-6 pb-3 sm:pb-6">
+        <div className="text-xl sm:text-2xl md:text-[1.95rem] font-semibold leading-tight text-slate-900 dark:text-slate-100 text-balance">
           {value}
         </div>
         {description && (
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
             {description}
           </p>
         )}
         {trend && (
-          <div className="flex items-center gap-1.5 text-xs pt-1">
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-xs pt-1">
             {trend.isPositive ? (
-              <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+              <TrendingUp className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-600 flex-shrink-0" />
             ) : (
-              <TrendingDown className="h-3.5 w-3.5 text-red-600" />
+              <TrendingDown className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-600 flex-shrink-0" />
             )}
             <span className={`font-medium ${trend.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
               {trend.value > 0 ? '+' : ''}{trend.value}%
             </span>
-            <span className="text-slate-500 dark:text-slate-400">vs last month</span>
+            <span className="text-slate-500 dark:text-slate-400 hidden sm:inline">vs last month</span>
           </div>
         )}
       </CardContent>

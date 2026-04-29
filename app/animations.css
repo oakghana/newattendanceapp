@@ -170,4 +170,58 @@ html {
   .btn-smooth:hover {
     transform: none;
   }
+
+  /* Optimize transitions for touch devices */
+  * {
+    scroll-behavior: auto;
+  }
+
+  /* Faster animations on mobile for better perceived performance */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  .scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+
+  .slide-up {
+    animation: slideUp 0.25s ease-out;
+  }
+
+  /* Reduce shadow complexity on mobile */
+  .shadow-sm {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+
+  .shadow-md {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Better touch target feedback */
+  button,
+  a[role="button"],
+  [role="button"] {
+    transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  }
+
+  button:active,
+  a[role="button"]:active,
+  [role="button"]:active {
+    opacity: 0.85;
+    transform: scale(0.98);
+  }
+}
+
+/* Tablet specific optimizations (640px - 1024px) */
+@media (min-width: 640px) and (max-width: 1024px) {
+  .btn-smooth:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  .card-smooth:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  }
 }
