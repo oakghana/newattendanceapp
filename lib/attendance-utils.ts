@@ -56,17 +56,11 @@ export function isTransportDept(dept?: DeptInfo): boolean {
 }
 
 export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | null): boolean {
-  if (!dept && !role) return false
-  // Operational, Security and Transport departments are exempt from time restrictions
-  if (isOperationalDept(dept)) return true
-  if (isSecurityDept(dept)) return true
-  if (isTransportDept(dept)) return true
-  // Admin, department/head and regional manager roles are also exempt
-  return isManagerOrAdminRole(role)
+  return false
 }
 
 export function isExemptFromAttendanceReasons(role?: string | null): boolean {
-  return isManagerOrAdminRole(role)
+  return false
 }
 
 /**
@@ -82,12 +76,6 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
-  // Security and Transport departments are exempt
-  if (isSecurityDept(dept)) return false
-  if (isTransportDept(dept)) return false
-  // Privileged-role exemption (admin toggle can disable this)
-  const exemptRoles = config?.exemptPrivilegedRolesFromReason !== false
-  if (exemptRoles && isExemptFromAttendanceReasons(role)) return false
   // Check if current time is past the configured lateness deadline
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
   const [deadlineHour, deadlineMin] = deadlineStr.split(":").map(Number)
@@ -105,12 +93,6 @@ export function requiresLatenessReason(
 export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null, dept?: DeptInfo): boolean {
   if (!locationRequires) return false
   if (isWeekend(date)) return false
-  // Security, Operational, and Transport departments are exempt
-  if (isSecurityDept(dept)) return false
-  if (isOperationalDept(dept)) return false
-  if (isTransportDept(dept)) return false
-  // Admin, department heads and regional managers are exempt
-  if (isExemptFromAttendanceReasons(role)) return false
   return true
 }
 
@@ -233,14 +215,10 @@ export function getStaffRestrictions(dept?: DeptInfo, role?: string | null, date
   const exemptions: Exemption[] = []
   const restrictions: Restriction[] = []
 
-  if (isExemptFromTimeRestrictions(dept, role)) {
-    exemptions.push({ type: "time_restriction", message: "Your department is exempt from time restrictions" })
-  } else {
-    restrictions.push({
-      type: "time_restriction",
-      message: `Check-in is only allowed before ${getCheckInDeadline()}. Check-out is allowed any time before 11:00 PM.`,
-    })
-  }
+  restrictions.push({
+    type: "time_restriction",
+    message: `Check-in is only allowed before ${getCheckInDeadline()}. Check-out is allowed any time before 11:00 PM.`,
+  })
 
   if (requiresLatenessReason(date, dept, role)) {
     restrictions.push({ type: "lateness_reason", message: "Lateness reason is required for late check-ins" })

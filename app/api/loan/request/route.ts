@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-workflow"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
@@ -91,6 +92,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "loan_type_key is required" }, { status: 400 })
     }
 
+    const normalizedReason = String(reason || "").trim()
+    if (normalizedReason.length > 0) {
+      const reasonValidation = validateMeaningfulText(normalizedReason, {
+        fieldLabel: "Loan request reason",
+        minLength: 10,
+      })
+      if (!reasonValidation.ok) {
+        return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
+      }
+    }
+
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id")
@@ -145,7 +157,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      if (!String(reason || "").trim()) {
+      if (!normalizedReason) {
         return NextResponse.json(
           {
             error:
@@ -200,6 +212,20 @@ export async function POST(request: NextRequest) {
       if (hodId && !assignedHodIds.includes(hodId)) assignedHodIds.push(hodId)
     }
 
+    if (assignedHodIds.length === 0 && role === "it_admin") {
+      const { data: adminApprovers } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("role", "admin")
+        .eq("is_active", true)
+        .limit(20)
+
+      for (const approver of adminApprovers || []) {
+        const approverId = (approver as any)?.id
+        if (approverId && !assignedHodIds.includes(approverId)) assignedHodIds.push(approverId)
+      }
+    }
+
     if (assignedHodIds.length === 0 && (profile as any).assigned_location_id) {
       const { data: locationHods } = await admin
         .from("user_profiles")
@@ -243,7 +269,7 @@ export async function POST(request: NextRequest) {
       loan_type_label: loanType.loan_label,
       fixed_amount: (loanType as any).fixed_amount || null,
       requested_amount: (loanType as any).fixed_amount || Number(requested_amount || 0) || null,
-      reason: String(reason || "").trim() || null,
+      reason: normalizedReason || null,
       supporting_document_url: supporting_document_url || null,
       committee_required: Boolean(loanType.requires_committee),
       requires_fd_check: loanType.requires_fd_check !== false,
@@ -331,6 +357,17 @@ export async function PUT(request: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
 
+    const normalizedReason = String(reason || "").trim()
+    if (normalizedReason.length > 0) {
+      const reasonValidation = validateMeaningfulText(normalizedReason, {
+        fieldLabel: "Loan request reason",
+        minLength: 10,
+      })
+      if (!reasonValidation.ok) {
+        return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
+      }
+    }
+
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, role")
@@ -366,7 +403,7 @@ export async function PUT(request: NextRequest) {
 
     let updatePayload: any = {
       requested_amount: Number(requested_amount || 0) || null,
-      reason: String(reason || "").trim() || null,
+      reason: normalizedReason || null,
       supporting_document_url: incomingSupportDoc,
       updated_at: new Date().toISOString(),
     }

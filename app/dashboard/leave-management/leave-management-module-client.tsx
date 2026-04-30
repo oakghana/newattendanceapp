@@ -10,6 +10,7 @@ import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 interface LeaveManagementModuleClientProps {
   userRole: string
   userDepartment: string | null
+  inactivityDays: number
   userDepartmentName: string | null
   userDepartmentCode: string | null
   initialStaffRequests: any[]
@@ -19,6 +20,7 @@ interface LeaveManagementModuleClientProps {
 export function LeaveManagementModuleClient({
   userRole,
   userDepartment,
+  inactivityDays,
   userDepartmentName,
   userDepartmentCode,
   initialStaffRequests,
@@ -43,6 +45,7 @@ export function LeaveManagementModuleClient({
           <LeaveManagementClient
             userRole={userRole}
             userDepartment={userDepartment}
+            inactivityDays={inactivityDays}
             initialStaffRequests={initialStaffRequests}
             initialManagerNotifications={initialManagerNotifications}
           />

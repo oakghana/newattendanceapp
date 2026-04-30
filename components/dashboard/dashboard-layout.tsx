@@ -10,9 +10,10 @@ import { PWAUpdateNotification } from "@/components/ui/pwa-update-notification"
 import { FloatingHomeButton } from "./floating-home-button"
 import { MobileBottomNav } from "./mobile-bottom-nav"
 import { toast } from "@/hooks/use-toast"
+import { ToastAction } from "@/components/ui/toast"
 
-const APPROVAL_ROLES = ["admin", "department_head", "regional_manager"]
 const POLL_INTERVAL_MS = 30_000 // 30 seconds
+const PRODUCT_FLASH_KEY = "qcc_product_rollout_flash_dismissed_v1"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -26,6 +27,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter()
   const lastSeenIdRef = useRef<string | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [showProductFlash, setShowProductFlash] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -64,9 +66,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     checkAuth()
   }, [router])
 
-  // Poll for new approval notifications for privileged roles and show toast
   useEffect(() => {
-    if (!profile || !APPROVAL_ROLES.includes(profile.role)) return
+    const dismissed = typeof window !== "undefined" ? localStorage.getItem(PRODUCT_FLASH_KEY) : "1"
+    setShowProductFlash(!dismissed)
+  }, [])
+
+  // Poll for new notifications and show modern flash toasts.
+  useEffect(() => {
+    if (!profile) return
 
     const checkNewNotifications = async () => {
       try {
@@ -74,11 +81,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         const json = await res.json()
         if (!json.success || !Array.isArray(json.data)) return
 
-        // Only care about off-premises and excuse duty requests that are unread
-        const actionableTypes = ["offpremises_checkin_request", "excuse_duty_request"]
-        const relevant = json.data.filter(
-          (n: any) => actionableTypes.includes(n.type) && !n.is_read
-        )
+        const relevant = json.data.filter((n: any) => !n.is_read)
         if (relevant.length === 0) return
 
         // On first poll, just record the latest id as baseline (don't toast existing ones)
@@ -96,13 +99,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         // Update baseline
         lastSeenIdRef.current = newOnes[0].id
 
-        // Show a toast for each new notification (up to 3)
+        // Show a toast for each new notification (up to 3) and keep it visible for 30s.
         newOnes.slice(0, 3).forEach((n: any) => {
-          const isOffPremises = n.type === "offpremises_checkin_request"
+          const defaultLink = n?.type?.startsWith("loan_")
+            ? "/dashboard/loan-app"
+            : n?.type?.startsWith("leave_")
+              ? "/dashboard/leave-management"
+              : n?.type?.includes("offpremises")
+                ? "/offpremises-approvals"
+                : "/dashboard"
+          const link = n.link || defaultLink
+
           toast({
-            title: isOffPremises ? "Off-Premises Check-In Request" : "Excuse Duty Submission",
-            description: n.message,
-            duration: 10000,
+            title: n.title || "New update",
+            description: n.message || "You have a new workflow update.",
+            duration: 30_000,
+            action: (
+              <ToastAction asChild altText="Open update">
+                <a href={link}>Open</a>
+              </ToastAction>
+            ),
           })
         })
       } catch {
@@ -137,6 +153,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className={`transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-5 sm:pb-32 sm:pt-5 lg:px-12 lg:pb-12 lg:pt-12">
           <div className="relative">
+            {showProductFlash && (
+              <div className="mb-4 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900">News Flash: Loan & Leave Admin Upgrade</p>
+                    <p className="mt-1 text-xs text-blue-800">
+                      New professional memo templates, stronger approval tracking, and smarter manager notifications are being rolled out.
+                    </p>
+                  </div>
+                  <button
+                    className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                    onClick={() => {
+                      setShowProductFlash(false)
+                      localStorage.setItem(PRODUCT_FLASH_KEY, "1")
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             {children}
             <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-accent/[0.02] pointer-events-none -z-10 rounded-3xl" />
           </div>

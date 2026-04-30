@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, QrCode, Award, TrendingUp, Zap, ArrowRight, BookOpen, Calendar } from "lucide-react"
+import { Clock, QrCode, Award, Zap, ArrowRight, BookOpen, Calendar } from "lucide-react"
 import Link from "next/link"
 
 export function StudentQuickActions() {
@@ -39,17 +39,6 @@ export function StudentQuickActions() {
       border: "border-chart-4/20 hover:border-chart-4/30",
       iconBg: "bg-gradient-to-br from-chart-4/10 to-chart-4/20",
       iconColor: "text-chart-4",
-    },
-    {
-      title: "View Reports",
-      description: "Attendance history",
-      href: "/dashboard/reports",
-      icon: TrendingUp,
-      gradient: "from-chart-5/5 via-chart-5/8 to-chart-5/12",
-      hoverGradient: "hover:from-chart-5/10 hover:via-chart-5/15 hover:to-chart-5/20",
-      border: "border-chart-5/20 hover:border-chart-5/30",
-      iconBg: "bg-gradient-to-br from-chart-5/10 to-chart-5/20",
-      iconColor: "text-chart-5",
     },
     {
       title: "My Schedule",

@@ -202,8 +202,8 @@ describe('Checkout Scenarios', () => {
     })
   })
 
-  describe('Scenario 5: Off-Premises Approved Session, Before 2 Hours', () => {
-    it('should enable button even before 2 hours', () => {
+  describe('Scenario 5: Off-Premises Approved Session, Before 7 Hours', () => {
+    it('should keep the button available even before 7 hours', () => {
       const state: AttendanceState = {
         initialCanCheckOut: true,
         recentCheckOut: false,
@@ -213,13 +213,13 @@ describe('Checkout Scenarios', () => {
           on_official_duty_outside_premises: true, // Approved off-premises check-in
         },
         isOnLeave: false,
-        checkoutTimeReached: false, // Less than 2 hours
+        checkoutTimeReached: false, // Less than 7 hours
         locationValidation: { canCheckOut: false }, // Out of range (expected for off-premises)
         freshCheckoutValidation: { canCheckOut: false },
       }
 
       expect(evaluateCanCheckOutButton(state)).toBe(true)
-      // Off-premises users can bypass the 2-hour minimum because they were pre-approved
+      // The button remains visible, but the checkout flow should still enforce the 7-hour policy.
     })
 
     it('should allow checkout without off-premises dialog', () => {

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
+import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
 import { type NextRequest, NextResponse } from "next/server"
 
@@ -28,7 +29,8 @@ export async function POST(request: NextRequest) {
 
     // Normalize request type: accept `request_type`, `action`, or `mode` (legacy)
     const normalizedRequestType = (request_type || action || mode || 'checkin').toString().toLowerCase()
-    const finalRequestType = normalizedRequestType === 'checkout' ? 'checkout' : 'checkin'
+    const finalRequestType = normalizedRequestType.startsWith('checkout') ? 'checkout' : 'checkin'
+    const isAutoApprovedAudit = finalRequestType === 'checkout' && body?.auto_approved === true
 
     if (!current_location) {
       console.error("[v0] Missing current_location")
@@ -78,7 +80,7 @@ export async function POST(request: NextRequest) {
       const { data: sysSettings } = await supabase.from("system_settings").select("settings").maybeSingle()
       const runtimeFlags = parseRuntimeFlags(sysSettings?.settings)
 
-      if (!runtimeFlags.offPremisesCheckoutEnabled && !isPrivilegedExempt) {
+      if (!runtimeFlags.offPremisesCheckoutEnabled) {
         return NextResponse.json(
           { error: 'Off-premises check-out requests are currently disabled by admin policy.' },
           { status: 403 }
@@ -113,14 +115,14 @@ export async function POST(request: NextRequest) {
       }
 
       const hoursWorked = (Date.now() - new Date(openAttendance.check_in_time).getTime()) / (1000 * 60 * 60)
-      if (hoursWorked < 2 && !isPrivilegedExempt) {
+      if (hoursWorked < 7) {
         return NextResponse.json(
-          { error: `Off-premises check-out request is available only after 2 hours of work. You have worked ${hoursWorked.toFixed(2)} hours.` },
+          { error: `Off-premises check-out request is available only after 7 hours of work. You have worked ${hoursWorked.toFixed(2)} hours.` },
           { status: 400 }
         )
       }
 
-      if (!isPrivilegedExempt) {
+      {
         const now = new Date()
         const nowMinutes = now.getHours() * 60 + now.getMinutes()
         const [startHour, startMinute] = (runtimeFlags.offPremisesCheckoutStartTime || '15:00').split(':').map(Number)
@@ -138,9 +140,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!isPrivilegedExempt && (!reason || String(reason).trim().length === 0)) {
+      const reasonValidation = validateMeaningfulText(reason, {
+        fieldLabel: 'Off-premises check-out reason',
+        minLength: 10,
+      })
+      if (!reasonValidation.ok) {
         return NextResponse.json(
-          { error: 'A reason is required for off-premises check-out requests.' },
+          { error: reasonValidation.error || 'A meaningful reason is required for off-premises check-out requests.' },
           { status: 400 }
         )
       }
@@ -290,7 +296,7 @@ export async function POST(request: NextRequest) {
           request_type: finalRequestType,
           google_maps_name: current_location.display_name || current_location.name,
           reason: reason || null,
-          status: "pending",
+          status: isAutoApprovedAudit ? "approved" : "pending",
         })
         .select()
         .single()
@@ -314,7 +320,7 @@ export async function POST(request: NextRequest) {
           accuracy: current_location.accuracy,
           device_info: enrichedDeviceInfo,
           google_maps_name: current_location.display_name || current_location.name,
-          status: 'pending',
+          status: isAutoApprovedAudit ? 'approved' : 'pending',
         }
 
         // only include reason/request_type if DB likely supports them
@@ -342,7 +348,7 @@ export async function POST(request: NextRequest) {
 
     // Send notifications to managers
     const isCheckoutRequest = finalRequestType === 'checkout'
-    const managerNotifications = managers.map((manager: any) => ({
+    const managerNotifications = isAutoApprovedAudit ? [] : managers.map((manager: any) => ({
       recipient_id: manager.id,
       type: isCheckoutRequest ? "offpremises_checkout_request" : "offpremises_checkin_request",
       title: isCheckoutRequest ? "Off-Premises Check-Out Request" : "Off-Premises Check-In Request",
@@ -364,9 +370,11 @@ export async function POST(request: NextRequest) {
       is_read: false,
     }))
 
-    const { error: notificationError } = await supabase
-      .from("staff_notifications")
-      .insert(managerNotifications)
+    const { error: notificationError } = managerNotifications.length === 0
+      ? { error: null }
+      : await supabase
+          .from("staff_notifications")
+          .insert(managerNotifications)
 
     if (notificationError) {
       console.warn("[v0] Failed to send notifications:", notificationError)
@@ -377,7 +385,9 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message:
-          finalRequestType === 'checkout'
+          isAutoApprovedAudit
+            ? "Direct off-premises check-out was logged successfully for audit and archiving"
+            : finalRequestType === 'checkout'
             ? "Your off-premises check-out request has been sent to your department head, supervisor, and admin for approval"
             : "Your off-premises check-in request has been sent to your managers for approval",
         request_id: requestRecord.id,

@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
+import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -68,6 +69,7 @@ type LoanRequest = {
   director_decision_at: string | null
   supporting_document_url: string | null
   hod_reviewer_id?: string | null
+  hod_review_note?: string | null
   hod_name?: string | null
   hod_rank?: string | null
   hod_location?: string | null
@@ -137,6 +139,34 @@ type LookupPayload = {
   }>
   hods: Array<{ id: string; first_name: string; last_name: string; employee_id: string | null; position: string | null; role: string }>
   linkages: Array<{ id: string; staff_user_id: string; hod_user_id: string }>
+}
+
+type RegistrySignature = {
+  id: string
+  workflow_domain: string
+  approval_stage: string
+  signature_mode: "typed" | "draw" | "upload"
+  signature_text: string | null
+  signature_data_url: string | null
+  is_active: boolean
+  updated_at: string
+}
+
+type WorkflowTemplate = {
+  id: string
+  workflow_domain: "loan" | "leave"
+  template_key: string
+  title: string
+  subject: string | null
+  body: string
+  is_active: boolean
+  updated_at: string
+}
+
+type RegistryPayload = {
+  signatures: RegistrySignature[]
+  templates: WorkflowTemplate[]
+  canManageTemplates: boolean
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -523,10 +553,17 @@ export default function LoanAppPage() {
 
   const [lookupData, setLookupData] = useState<LookupPayload | null>(null)
   const [lookupLoading, setLookupLoading] = useState(false)
+  const [registryData, setRegistryData] = useState<RegistryPayload | null>(null)
+  const [registryLoading, setRegistryLoading] = useState(false)
   const [selectedLoanType, setSelectedLoanType] = useState("")
   const [setupFixedAmount, setSetupFixedAmount] = useState("")
   const [setupMaxAmount, setSetupMaxAmount] = useState("")
   const [setupQualification, setSetupQualification] = useState("")
+  const [selectedTemplateDomain, setSelectedTemplateDomain] = useState<"loan" | "leave">("loan")
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState("loan_approval")
+  const [templateTitle, setTemplateTitle] = useState("")
+  const [templateSubject, setTemplateSubject] = useState("")
+  const [templateBody, setTemplateBody] = useState("")
   const [selectedStaffForLink, setSelectedStaffForLink] = useState("")
   const [selectedHodsForLink, setSelectedHodsForLink] = useState<string[]>([])
   const [selectedStaffsForBatchLink, setSelectedStaffsForBatchLink] = useState<string[]>([])
@@ -595,8 +632,17 @@ export default function LoanAppPage() {
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
   const needsAttachment = useMemo(() => requiresProofAttachment(loanTypeKey), [loanTypeKey])
   const p = data?.permissions
-  const isAdmin = normalizeRoleValue(data?.profile?.role) === "admin"
-  const canSaveLoanRequest = isAdmin && !LOAN_SUBMISSION_LOCKED
+  const normalizedRole = normalizeRoleValue(data?.profile?.role)
+  const isAdmin = normalizedRole === "admin" || normalizedRole === "it_admin"
+  const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
+  const templateOptions = useMemo(
+    () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
+    [registryData?.templates, selectedTemplateDomain],
+  )
+  const activeTemplate = useMemo(
+    () => templateOptions.find((template) => template.template_key === selectedTemplateKey) || templateOptions[0] || null,
+    [templateOptions, selectedTemplateKey],
+  )
 
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
@@ -926,24 +972,65 @@ export default function LoanAppPage() {
     }
   }
 
+  const loadRegistry = async () => {
+    setRegistryLoading(true)
+    try {
+      const res = await fetch("/api/workflow/registry?domains=loan,leave", { cache: "no-store" })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || "Failed to load workflow registry")
+      setRegistryData(result)
+
+      const directorSignature = (result.signatures || []).find(
+        (signature: RegistrySignature) => signature.workflow_domain === "loan" && signature.approval_stage === "director_hr",
+      )
+      if (directorSignature) {
+        setSignatureMode(directorSignature.signature_mode)
+        setSignatureText(directorSignature.signature_text || "")
+        setSignatureDataUrl(directorSignature.signature_data_url || null)
+      }
+    } catch (e: any) {
+      toast({ title: "Registry error", description: e?.message || "Failed to load workflow registry", variant: "destructive" })
+    } finally {
+      setRegistryLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (p?.hrOffice || p?.viewAllTabs) {
       void loadLookups()
     }
   }, [p?.hrOffice, p?.viewAllTabs])
 
-  const submitRequest = async () => {
-    if (!canSaveLoanRequest) {
-      toast({
-        title: "Save restricted",
-        description: "Only admin can save loan requests during testing.",
-      })
-      return
+  useEffect(() => {
+    if (p?.directorHr || p?.hrOffice || p?.viewAllTabs || isAdmin) {
+      void loadRegistry()
     }
+  }, [p?.directorHr, p?.hrOffice, p?.viewAllTabs, isAdmin])
 
+  useEffect(() => {
+    if (!activeTemplate) return
+    setSelectedTemplateKey(activeTemplate.template_key)
+    setTemplateTitle(activeTemplate.title || "")
+    setTemplateSubject(activeTemplate.subject || "")
+    setTemplateBody(activeTemplate.body || "")
+  }, [activeTemplate])
+
+  const submitRequest = async () => {
     if (!loanTypeKey) {
       toast({ title: "Missing loan type", description: "Please choose a loan type." })
       return
+    }
+
+    const trimmedReason = reason.trim()
+    if (trimmedReason.length > 0) {
+      const reasonValidation = validateMeaningfulText(trimmedReason, {
+        fieldLabel: "Loan request reason",
+        minLength: 10,
+      })
+      if (!reasonValidation.ok) {
+        toast({ title: "Reason needs detail", description: reasonValidation.error, variant: "destructive" })
+        return
+      }
     }
 
     if (needsAttachment && !supportingDocumentUrl) {
@@ -959,7 +1046,7 @@ export default function LoanAppPage() {
       id: editingId,
       loan_type_key: loanTypeKey,
       requested_amount: selectedType?.fixed_amount || 0,
-      reason,
+      reason: trimmedReason,
       supporting_document_url: supportingDocumentUrl,
     }
 
@@ -1080,6 +1167,64 @@ export default function LoanAppPage() {
     }
     toast({ title: "Updated", description: successMessage })
     await Promise.all([loadData(), loadLookups()])
+  }
+
+  const saveSignatureRegistry = async () => {
+    if (!signatureText.trim() && !signatureDataUrl) {
+      toast({ title: "Signature required", description: "Enter, draw, or upload a signature before saving.", variant: "destructive" })
+      return
+    }
+
+    const res = await fetch("/api/workflow/registry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "upsert_signature",
+        workflow_domain: "loan",
+        approval_stage: "director_hr",
+        signature_mode: signatureMode,
+        signature_text: signatureMode === "typed" ? signatureText.trim() : null,
+        signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
+      }),
+    })
+    const result = await res.json()
+    if (!res.ok) {
+      toast({ title: "Signature save failed", description: result.error || "Try again", variant: "destructive" })
+      return
+    }
+
+    toast({ title: "Signature saved", description: "Director HR signature registry updated." })
+    await loadRegistry()
+  }
+
+  const saveTemplateRegistry = async () => {
+    const title = templateTitle.trim()
+    const body = templateBody.trim()
+    if (!title || !selectedTemplateKey || !body) {
+      toast({ title: "Template incomplete", description: "Title, template key, and body are required.", variant: "destructive" })
+      return
+    }
+
+    const res = await fetch("/api/workflow/registry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "upsert_template",
+        workflow_domain: selectedTemplateDomain,
+        template_key: selectedTemplateKey,
+        title,
+        subject: templateSubject.trim(),
+        body,
+      }),
+    })
+    const result = await res.json()
+    if (!res.ok) {
+      toast({ title: "Template save failed", description: result.error || "Try again", variant: "destructive" })
+      return
+    }
+
+    toast({ title: "Template saved", description: "Workflow communication template updated." })
+    await loadRegistry()
   }
 
   const toggleHodSelection = (hodId: string) => {
@@ -1357,9 +1502,6 @@ export default function LoanAppPage() {
                   Staff Welfare Loan Workspace
                 </div>
                 <CardTitle className="text-3xl font-semibold tracking-tight text-slate-900">QCC Loan Processing Hub</CardTitle>
-                <div className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-                  Under Development: staff may still see ongoing UI and workflow changes.
-                </div>
                 <div className="grid grid-cols-1 gap-x-8 gap-y-3 pt-3 text-sm text-slate-700 md:grid-cols-2">
                   <div><strong>Corporate Email:</strong> {data?.profile.email || "N/A"}</div>
                   <div><strong>Staff Number:</strong> {data?.profile.employeeId || "N/A"}</div>
@@ -1450,12 +1592,11 @@ export default function LoanAppPage() {
               </div>
 
               <div className="flex gap-2">
-                <Button onClick={submitRequest} disabled={!canSaveLoanRequest}>
+                <Button onClick={submitRequest}>
                   Submit Request
                 </Button>
                 {editingId && <Button variant="outline" onClick={resetForm}>Cancel Edit</Button>}
               </div>
-              {!canSaveLoanRequest && <p className="text-xs text-amber-700">Only admin can submit/save loan requests right now.</p>}
             </CardContent>
           </Card>
 
@@ -1810,9 +1951,16 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell>
-                          <Badge className={`text-[10px] whitespace-nowrap ${row.status === "hod_approved" ? "bg-green-700" : "bg-purple-700"} text-white`}>
-                            {statusText(row.status)}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge className={`text-[10px] whitespace-nowrap ${row.status === "hod_approved" ? "bg-green-700" : "bg-purple-700"} text-white`}>
+                              {statusText(row.status)}
+                            </Badge>
+                            {String(row.hod_review_note || "").toLowerCase().includes("auto-approved") && (
+                              <Badge variant="outline" className="text-[10px] whitespace-nowrap border-amber-300 text-amber-700">
+                                Auto-forwarded: HOD did not act in 3 days
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         <TableCell className="text-xs max-w-[200px] truncate" title={row.reason || ""}>{row.reason || "—"}</TableCell>
@@ -3099,6 +3247,11 @@ function StageCard({ row, children }: { row: LoanRequest; children: React.ReactN
         <CardDescription className="flex items-center gap-2 flex-wrap">
           <Wallet className="h-4 w-4" /> GHc {fmtAmount(row.fixed_amount || row.requested_amount)}
           <Badge className={STATUS_COLORS[row.status] || ""}>{statusText(row.status)}</Badge>
+          {String(row.hod_review_note || "").toLowerCase().includes("auto-approved") && (
+            <Badge variant="outline" className="text-[10px] whitespace-nowrap border-amber-300 text-amber-700">
+              Auto-forwarded: HOD did not act in 3 days
+            </Badge>
+          )}
           {row.fd_score !== null && (
             <span className="inline-flex items-center gap-1 text-xs">
               FD: <strong>{row.fd_score}</strong>

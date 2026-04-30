@@ -21,8 +21,8 @@ interface MobileBottomNavProps {
 const staffNavItems: NavItem[] = [
   { href: "/dashboard/overview", icon: Home, label: "Home" },
   { href: "/dashboard/attendance", icon: Clock, label: "Attendance" },
-  { href: "/dashboard/excuse-duty", icon: FileText, label: "Excuse" },
-  { href: "/dashboard/reports", icon: BarChart3, label: "Reports" },
+  { href: "/dashboard/loan-app", icon: FileText, label: "Loan" },
+  { href: "/dashboard/leave-management", icon: BarChart3, label: "Leave" },
   { href: "/dashboard/profile", icon: Settings, label: "Profile" },
 ]
 
@@ -30,7 +30,7 @@ const approvalsNavItems: NavItem[] = [
   { href: "/dashboard/overview", icon: Home, label: "Home" },
   { href: "/dashboard/attendance", icon: Clock, label: "Attendance" },
   { href: "/offpremises-approvals", icon: UserCheck, label: "Approve" },
-  { href: "/dashboard/reports", icon: BarChart3, label: "Reports" },
+  { href: "/dashboard/loan-app", icon: FileText, label: "Loan" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
 ]
 
@@ -38,7 +38,7 @@ const adminNavItems: NavItem[] = [
   { href: "/dashboard/overview", icon: Home, label: "Home" },
   { href: "/dashboard/attendance", icon: Clock, label: "Attendance" },
   { href: "/offpremises-approvals", icon: UserCheck, label: "Approve" },
-  { href: "/dashboard/staff", icon: Users, label: "Staff" },
+  { href: "/dashboard/loan-app", icon: FileText, label: "Loan" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
 ]
 

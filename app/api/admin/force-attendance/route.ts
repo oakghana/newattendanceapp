@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
           user_id: userId,
           check_in_time: now.toISOString(),
           check_in_method: "admin_override",
-          status: "checked_in",
+          status: "present",
+          is_remote_location: false,
           notes: forceNote,
         })
         .select("id")
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
           check_out_time: now.toISOString(),
           check_out_method: "admin_override",
           work_hours: workedHours,
-          status: "checked_out",
+          updated_at: now.toISOString(),
           notes: forceNote,
         })
         .eq("id", openRecord.id)

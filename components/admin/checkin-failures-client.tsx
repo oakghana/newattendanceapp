@@ -96,6 +96,7 @@ export function CheckinFailuresClient() {
   const [forceAction, setForceAction] = useState<"checkin" | "checkout">("checkin")
   const [forceBusy, setForceBusy] = useState(false)
   const [forceNote, setForceNote] = useState("")
+  const [forceError, setForceError] = useState<string | null>(null)
 
   const formatAttemptType = (attemptType: string) => {
     switch (attemptType) {
@@ -207,6 +208,7 @@ export function CheckinFailuresClient() {
     setForceTarget(user)
     setForceAction(action)
     setForceNote("")
+    setForceError(null)
     setForceDialogOpen(true)
   }, [])
 
@@ -217,6 +219,7 @@ export function CheckinFailuresClient() {
 
     try {
       setForceBusy(true)
+      setForceError(null)
       setError(null)
       setSuccessMsg(null)
 
@@ -239,7 +242,7 @@ export function CheckinFailuresClient() {
       setSuccessMsg(result.message || "Attendance updated successfully")
       void fetchData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to force attendance")
+      setForceError(err instanceof Error ? err.message : "Failed to force attendance")
     } finally {
       setForceBusy(false)
     }
@@ -650,7 +653,7 @@ export function CheckinFailuresClient() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+      <Dialog open={forceDialogOpen} onOpenChange={(open) => { setForceDialogOpen(open); if (!open) setForceError(null) }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className={`flex items-center gap-2 ${forceAction === "checkin" ? "text-emerald-700" : "text-rose-700"}`}>
@@ -671,6 +674,12 @@ export function CheckinFailuresClient() {
               <span className="mx-2 text-slate-400">|</span>
               <span className="text-slate-500 capitalize">{forceTarget?.role}</span>
             </div>
+            {forceError && (
+              <Alert variant="destructive" className="py-2">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-xs">{forceError}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Optional Note</Label>
               <Input

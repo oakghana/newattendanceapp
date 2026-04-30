@@ -114,14 +114,34 @@ export async function POST(request: NextRequest) {
     const { action, notificationId, newStatus } = await request.json()
 
     if (action === "dismiss") {
-      const { error } = await supabase
+      // Get the leave_request_id so we can reject the request too
+      const { data: dismissNotif } = await supabase
+        .from("leave_notifications")
+        .select("leave_request_id")
+        .eq("id", notificationId)
+        .single()
+
+      // Mark the notification as dismissed
+      const { error: dismissErr } = await supabase
         .from("leave_notifications")
         .update({ is_dismissed: true })
         .eq("id", notificationId)
 
-      if (error) throw error
+      if (dismissErr) throw dismissErr
 
-      return NextResponse.json({ success: true, message: "Notification dismissed" })
+      // Also reject the leave_request so its status is correctly reflected
+      if (dismissNotif?.leave_request_id) {
+        await supabase
+          .from("leave_requests")
+          .update({
+            status: "rejected",
+            approved_by: user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", dismissNotif.leave_request_id)
+      }
+
+      return NextResponse.json({ success: true, message: "Notification dismissed and leave request rejected" })
     }
 
     if (action === "approve" || action === "reject") {

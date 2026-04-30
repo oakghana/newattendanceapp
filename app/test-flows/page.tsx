@@ -343,7 +343,7 @@ async function runManualCheckout(): Promise<FlowResult> {
 
 /**
  * Flow 5 – Off-Premises Check-out Request
- * Submits an off-premises checkout request (requires active check-in + 2 hr work).
+ * Submits an off-premises checkout request (requires active check-in + 7 hr work).
  */
 async function runOffPremisesCheckout(userId: string): Promise<FlowResult> {
   const res = await callOffPremisesAPI({
@@ -386,11 +386,11 @@ async function runOffPremisesCheckout(userId: string): Promise<FlowResult> {
       raw: data,
     }
   }
-  if (err.includes("2 hours") || err.includes("2h") || err.includes("worked")) {
+  if (err.includes("7 hours") || err.includes("7h") || err.includes("worked")) {
     return {
       status: "warning",
-      message: "Minimum 2 hours of work required — business rule enforcement working",
-      details: parseMessage(data, "Off-premises checkout available after 2 hours"),
+      message: "Minimum 7 hours of work required — business rule enforcement working",
+      details: parseMessage(data, "Off-premises checkout available after 7 hours"),
       httpStatus: res.status,
       raw: data,
     }
@@ -704,7 +704,7 @@ export default function TestFlowsPage() {
 
         <ResultCard
           title="Flow 5 — Off-Premises Check-out Request"
-          description="Submits pending checkout request for manager approval. Requires 2+ hours of active check-in."
+          description="Submits pending checkout request for manager approval. Requires 7+ hours of active check-in."
           icon={<LogOut className="h-4 w-4 text-purple-600" />}
           result={results.offPremisesCheckout}
           onRun={runFlow5}

@@ -50,6 +50,32 @@ function buildAutoMemo(req: any) {
   ].join("\n")
 }
 
+function buildCarLoanHoldNotice(req: any) {
+  return [
+    `Reference: ${req.request_number}`,
+    "Car Loan Committee Scheduling Notice",
+    "",
+    "Your request has passed FD verification and remains active.",
+    "The Car Loan Committee meets periodically (typically once per year).",
+    "You will be notified immediately once your request is scheduled for final committee sitting.",
+    "",
+    "Please hold on for the committee schedule update.",
+  ].join("\n")
+}
+
+function buildFdRejectionMemo(req: any, fdScore: number, note?: string | null) {
+  return [
+    `Reference: ${req.request_number}`,
+    "Loan Request Feedback: FD Threshold Not Met",
+    "",
+    `FD Score: ${fdScore}`,
+    `Minimum Required FD Score: ${GOOD_FD_THRESHOLD}`,
+    `Reason from Accounts: ${note || "FD value below required threshold."}`,
+    "",
+    "You may improve your FD position and submit a new request in a future cycle.",
+  ].join("\n")
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -215,23 +241,43 @@ export async function POST(request: NextRequest) {
       update.status = toStatus
 
       if (fdGood) {
+        const staffMemo = isCarLoan
+          ? buildCarLoanHoldNotice(req)
+          : `Your request ${req.request_number} has FD ${fdScore} (> ${GOOD_FD_THRESHOLD}) and is in good standing for consideration.`
+
         await notifyUsers(
           admin,
           [req.user_id],
-          "Good FD Standing Confirmed",
-          `Your request ${req.request_number} has FD ${fdScore} (> ${GOOD_FD_THRESHOLD}) and is in good standing for consideration.`,
-          "loan_fd_good",
-          { request_id: req.id, fd_score: fdScore },
+          isCarLoan ? "Car Loan in Committee Hold Queue" : "Good FD Standing Confirmed",
+          staffMemo,
+          isCarLoan ? "loan_committee_hold" : "loan_fd_good",
+          { request_id: req.id, fd_score: fdScore, memo: staffMemo },
         )
       } else {
+        const rejectionMemo = buildFdRejectionMemo(req, fdScore, note)
         await notifyUsers(
           admin,
           [req.user_id],
           "Loan Request Auto-Rejected by FD Threshold",
-          `Your request ${req.request_number} was automatically rejected because FD score ${fdScore} is below ${GOOD_FD_THRESHOLD}.`,
+          rejectionMemo,
           "loan_fd_rejected",
-          { request_id: req.id, fd_score: fdScore },
+          { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo: rejectionMemo },
         )
+
+        const approverIds = [req.hod_reviewer_id, req.loan_officer_id, req.hr_officer_id, req.director_hr_id]
+          .filter((id: any) => Boolean(id))
+          .map((id: any) => String(id))
+
+        if (approverIds.length > 0) {
+          await notifyUsers(
+            admin,
+            Array.from(new Set(approverIds)),
+            "FD Rejection Issued",
+            `Request ${req.request_number} was rejected at Accounts. FD ${fdScore} below ${GOOD_FD_THRESHOLD}.${note ? ` Reason: ${note}` : ""}`,
+            "loan_fd_rejected_approver_notice",
+            { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null },
+          )
+        }
       }
 
       const { data: loanOfficeUsers } = await admin
@@ -408,6 +454,30 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (updateError) throw updateError
+
+    if (action === "director_finalize") {
+      const signaturePayload = {
+        user_id: user.id,
+        workflow_domain: "loan",
+        approval_stage: "director_hr",
+        signature_mode: update.director_signature_mode || "typed",
+        signature_text: update.director_signature_text || null,
+        signature_data_url: update.director_signature_data_url || null,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { error: signatureError } = await admin
+        .from("approval_signature_registry")
+        .upsert(signaturePayload, { onConflict: "user_id,workflow_domain,approval_stage" })
+
+      if (signatureError) {
+        const signatureMessage = String(signatureError.message || "")
+        if (!/does not exist|schema cache|relation/i.test(signatureMessage)) {
+          throw signatureError
+        }
+      }
+    }
 
     await timeline(admin, {
       loan_request_id: id,

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   canDoAccounts,
+  canDoCommittee,
   canDoDirectorHr,
+  canDoHodReview,
   canDoHrOffice,
   canDoLoanOffice,
   normalizeRole,
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
         .select("id, role, departments(name, code)")
         .eq("id", user.id)
         .single(),
-      admin.from("loan_requests").select("id, user_id, status").eq("id", loanId).single(),
+      admin.from("loan_requests").select("id, user_id, status, hod_reviewer_id, committee_reviewer_id, hr_officer_id, director_hr_id").eq("id", loanId).single(),
     ])
 
     if (profileError || !profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
@@ -46,10 +48,13 @@ export async function POST(request: NextRequest) {
     const canAccess =
       loan.user_id === user.id ||
       role === "admin" ||
+      canDoHodReview(role) ||
+      canDoCommittee(role) ||
       canDoLoanOffice(role, deptName, deptCode) ||
       canDoHrOffice(role, deptName, deptCode) ||
       canDoDirectorHr(role, deptName, deptCode) ||
-      canDoAccounts(role, deptName, deptCode)
+      canDoAccounts(role, deptName, deptCode) ||
+      [loan.hod_reviewer_id, loan.committee_reviewer_id, loan.hr_officer_id, loan.director_hr_id].includes(user.id)
 
     if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 

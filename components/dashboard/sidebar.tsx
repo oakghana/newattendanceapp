@@ -119,13 +119,6 @@ const navigationItems = [
     category: "main",
   },
   {
-    title: "Reports & Trends",
-    href: "/dashboard/reports",
-    icon: BarChart3,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff"],
-    category: "main",
-  },
-  {
     title: "Loan Application",
     href: "/dashboard/loan-app",
     icon: Banknote,

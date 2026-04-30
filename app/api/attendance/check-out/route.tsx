@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const allowCheckoutPolicyBypass = isAfter530PmServerTime || hasWorkedAtLeast7Hours
+    const allowCheckoutPolicyBypass = hasWorkedAtLeast7Hours
 
     // CHECK TIME RESTRICTION: Check if check-out is after 6 PM (18:00)
     const timeRestrictCheckData = { 
@@ -541,7 +541,7 @@ export async function POST(request: NextRequest) {
     const checkInTime = new Date(attendanceRecord.check_in_time)
     const checkOutTime = new Date()
     const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
-    const allowLocationBypass = workHours >= 7 || isAfter530PmServerTime || retryStats.outOfRangeAfter530Failures >= 4
+    const allowLocationBypass = workHours >= 7 || retryStats.outOfRangeAfter530Failures >= 4
     let policyLocationBypassUsed = false
     let retryAutoCheckoutInRangeUsed = false
     let retryOutOfRangeRecoveryUsed = false
@@ -580,6 +580,17 @@ export async function POST(request: NextRequest) {
     // Determine whether this attendance record was created from an approved off-premises request
     const isAttendanceOffPremises = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
 
+    if (isAttendanceOffPremises && workHours < 7) {
+      return NextResponse.json(
+        {
+          error: `Approved off-premises sessions can check out remotely only after 7 hours of work. You have worked ${workHours.toFixed(2)} hours so far.`,
+          minimumHoursRequired: 7,
+          workedHours: Number(workHours.toFixed(2)),
+        },
+        { status: 400 },
+      )
+    }
+
     if (!qr_code_used && latitude && longitude) {
       const userLocation: LocationData = {
         latitude,
@@ -616,9 +627,7 @@ export async function POST(request: NextRequest) {
 
         if (!validation.canCheckOut && (allowLocationBypass || allowOutOfRangeByRetries)) {
           console.log("[v0] Checkout policy bypass: allowing out-of-range checkout", {
-            reason: allowOutOfRangeByRetries
-              ? "after_5_30pm_failed_attempts>=4"
-              : (workHours >= 7 ? "worked_7_hours" : "after_5_30pm_server_time"),
+            reason: allowOutOfRangeByRetries ? "after_5_30pm_failed_attempts>=4" : "worked_7_hours",
             distance: validation.distance,
             nearestLocation: validation.nearestLocation?.name,
             workHours,
@@ -634,10 +643,10 @@ export async function POST(request: NextRequest) {
           checkoutLocationData = validation.nearestLocation
         } else
 
-        if (!validation.canCheckOut && !withinStandardRange && workHours < 2) {
+        if (!validation.canCheckOut && !withinStandardRange && workHours < 7) {
           return NextResponse.json(
             {
-              error: "Out-of-location check-out is available only after working at least 2 hours.",
+              error: "Out-of-location check-out is available only after working at least 7 hours.",
             },
             { status: 400 },
           )
@@ -647,7 +656,7 @@ export async function POST(request: NextRequest) {
           console.log("[v0] Automatic out-of-range checkout allowed after 4 PM")
           checkoutLocationData = null
         } else if (!validation.canCheckOut && !withinStandardRange) {
-          console.log("[v0] Out-of-range checkout allowed after mandatory 2 hours")
+          console.log("[v0] Out-of-range checkout allowed after mandatory 7 hours")
           checkoutLocationData = null
         } else if (!checkoutLocationData) {
           checkoutLocationData = validation.nearestLocation

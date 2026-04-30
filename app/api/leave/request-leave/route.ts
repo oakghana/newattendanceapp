@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { validateMeaningfulText } from "@/lib/meaningful-text"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -36,6 +37,14 @@ export async function POST(request: NextRequest) {
 
     if (!start_date || !end_date || !reason) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    const reasonValidation = validateMeaningfulText(reason, {
+      fieldLabel: "Leave reason",
+      minLength: 10,
+    })
+    if (!reasonValidation.ok) {
+      return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
     }
 
     const requestedDays = computeLeaveDays(start_date, end_date)
@@ -168,7 +177,7 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       start_date,
       end_date,
-      reason,
+      reason: reasonValidation.normalized,
       leave_type: leaveTypeKey,
       leave_year_period,
       status: shouldAutoApprove ? "approved" : "pending",

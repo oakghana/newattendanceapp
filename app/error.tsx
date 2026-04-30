@@ -16,14 +16,11 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         <CardHeader>
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            <CardTitle>Something went wrong</CardTitle>
+            <CardTitle>We could not load that page</CardTitle>
           </div>
-          <CardDescription>An error occurred while loading the page</CardDescription>
+          <CardDescription>Please retry, or return to your dashboard. Technical details are hidden for security.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-md bg-muted p-4">
-            <p className="text-sm font-mono text-muted-foreground">{error.message || "Unknown error"}</p>
-          </div>
           <div className="flex gap-2">
             <Button onClick={reset} className="flex-1">
               Try again

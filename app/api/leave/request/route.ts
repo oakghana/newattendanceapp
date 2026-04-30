@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -89,5 +89,59 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[v0] Leave request error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+async function tryDeleteAll(admin: any, table: string) {
+  const { error } = await admin.from(table).delete().neq("id", "")
+  if (error) {
+    const message = String(error.message || "")
+    if (/does not exist|schema cache|relation/i.test(message)) {
+      return
+    }
+    throw error
+  }
+}
+
+export async function DELETE() {
+  try {
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    const normalizedRole = String((profile as any).role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+    if (normalizedRole !== "admin") {
+      return NextResponse.json({ error: "Only admin can clear testing leave records." }, { status: 403 })
+    }
+
+    await tryDeleteAll(admin, "leave_plan_stagger_reviews")
+    await tryDeleteAll(admin, "leave_plan_reviews")
+    await tryDeleteAll(admin, "leave_plan_stagger_requests")
+    await tryDeleteAll(admin, "leave_plan_requests")
+    await tryDeleteAll(admin, "leave_notifications")
+    await tryDeleteAll(admin, "leave_status")
+    await tryDeleteAll(admin, "leave_requests")
+
+    return NextResponse.json({ success: true, message: "All testing leave records have been cleared." })
+  } catch (error: any) {
+    console.error("[v0] Leave request cleanup error:", error)
+    return NextResponse.json({ error: error?.message || "Failed to clear leave testing records" }, { status: 500 })
   }
 }

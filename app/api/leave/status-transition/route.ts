@@ -155,6 +155,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const today = new Date().toISOString().split("T")[0]
+    const inactivityDays = Math.max(1, Number(process.env.LEAVE_SUPERVISOR_INACTIVITY_DAYS || 5))
 
     // Find approved leave notifications that should be activated (start date today)
     const { data: toActivate } = await supabase
@@ -178,6 +179,7 @@ export async function GET(request: NextRequest) {
 
     let activatedCount = 0
     let restoredCount = 0
+    let autoApprovedCount = 0
 
     // Activate leave for users whose leave starts today
     if (toActivate && toActivate.length > 0) {
@@ -223,12 +225,43 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const staleCutoff = new Date()
+    staleCutoff.setDate(staleCutoff.getDate() - inactivityDays)
+
+    const { data: staleRequests } = await supabase
+      .from("leave_requests")
+      .select("id")
+      .eq("status", "pending")
+      .lte("created_at", staleCutoff.toISOString())
+      .limit(1000)
+
+    if (staleRequests && staleRequests.length > 0) {
+      const staleIds = staleRequests.map((request) => request.id)
+      const approvedAt = new Date().toISOString()
+
+      await supabase
+        .from("leave_requests")
+        .update({ status: "approved", approved_at: approvedAt, updated_at: approvedAt })
+        .in("id", staleIds)
+        .eq("status", "pending")
+
+      await supabase
+        .from("leave_notifications")
+        .update({ status: "approved", approved_at: approvedAt })
+        .in("leave_request_id", staleIds)
+        .eq("status", "pending")
+
+      autoApprovedCount = staleIds.length
+    }
+
     return NextResponse.json({
       success: true,
       message: "Leave status auto-transitions completed",
       activated: activatedCount,
       restored: restoredCount,
-      totalProcessed: activatedCount + restoredCount,
+      autoApproved: autoApprovedCount,
+      inactivityDays,
+      totalProcessed: activatedCount + restoredCount + autoApprovedCount,
     })
   } catch (error) {
     console.error("Error in auto-transition job:", error)

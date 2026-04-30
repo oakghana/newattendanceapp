@@ -24,10 +24,10 @@ export function PWAInstallToast() {
       setIsVisible(true)
     }, 1000)
 
-    // Auto-hide after 5 seconds
+    // Auto-hide after ~30 seconds to give users enough time to act
     const hideTimer = setTimeout(() => {
       setIsVisible(false)
-    }, 6000) // 1s delay + 5s visible = 6s total
+    }, 31_000) // 1s delay + 30s visible
 
     return () => {
       clearTimeout(showTimer)
@@ -106,7 +106,7 @@ export function PWAInstallToast() {
 
           <div className="mt-3">
             <div className="h-0.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-300 dark:bg-emerald-500 animate-[shrink_5s_linear_1s_forwards]" style={{ width: "100%" }} />
+              <div className="h-full bg-emerald-300 dark:bg-emerald-500 animate-[shrink_30s_linear_1s_forwards]" style={{ width: "100%" }} />
             </div>
           </div>
         </div>

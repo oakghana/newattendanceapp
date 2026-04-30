@@ -41,7 +41,7 @@ export async function GET() {
       admin
         .from("user_profiles")
         .select("id, first_name, last_name, employee_id, position, role, department_id, departments(name, code), assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
-        .in("role", ["staff", "nsp", "intern", "contract", "department_head", "regional_manager", "loan_officer", "hr_officer", "accounts"])
+        .in("role", ["staff", "nsp", "intern", "contract", "it_admin", "department_head", "regional_manager", "loan_officer", "hr_officer", "accounts"])
         .eq("is_active", true)
         .order("first_name", { ascending: true }),
       admin
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
       const { data: staffRows, error: staffError } = await admin
         .from("user_profiles")
         .select("id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))")
-        .in("role", ["staff", "nsp", "intern", "contract"])
+        .in("role", ["staff", "nsp", "intern", "contract", "it_admin"])
         .eq("is_active", true)
 
       if (staffError) throw staffError
@@ -340,6 +340,46 @@ export async function POST(request: NextRequest) {
 
         const { error: upsertErr } = await admin.from("loan_hod_linkages").upsert(payload, { onConflict: "staff_user_id,hod_user_id" })
         if (!upsertErr) updated += payload.length
+      }
+
+      return NextResponse.json({ success: true, updated })
+    }
+
+    if (action === "auto_link_it_admin_staff") {
+      const [{ data: staffRows, error: staffError }, { data: adminRows, error: adminError }] = await Promise.all([
+        admin
+          .from("user_profiles")
+          .select("id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))")
+          .eq("role", "it_admin")
+          .eq("is_active", true),
+        admin
+          .from("user_profiles")
+          .select("id, position")
+          .eq("role", "admin")
+          .eq("is_active", true),
+      ])
+
+      if (staffError) throw staffError
+      if (adminError) throw adminError
+
+      let updated = 0
+      for (const staff of staffRows || []) {
+        const payload = (adminRows || []).map((adminProfile: any) => ({
+          staff_user_id: (staff as any).id,
+          hod_user_id: adminProfile.id,
+          location_id: (staff as any).assigned_location_id || null,
+          district_name: (staff as any)?.geofence_locations?.districts?.name || null,
+          location_address: (staff as any)?.geofence_locations?.address || null,
+          staff_rank: (staff as any)?.position || null,
+          hod_rank: adminProfile.position || "Admin",
+          created_by: user.id,
+          updated_at: new Date().toISOString(),
+        }))
+
+        if (payload.length === 0) continue
+
+        const { error } = await admin.from("loan_hod_linkages").upsert(payload, { onConflict: "staff_user_id,hod_user_id" })
+        if (!error) updated += payload.length
       }
 
       return NextResponse.json({ success: true, updated })

@@ -57,13 +57,25 @@ export function PWAUpdateNotification() {
       }
     }
 
+    const handleUpdateEvent = () => {
+      setShowUpdate(true)
+    }
+
     navigator.serviceWorker.addEventListener("message", handleMessage)
+    window.addEventListener("pwa-update-available", handleUpdateEvent)
     checkForUpdates()
 
     return () => {
       navigator.serviceWorker.removeEventListener("message", handleMessage)
+      window.removeEventListener("pwa-update-available", handleUpdateEvent)
     }
   }, [])
+
+  useEffect(() => {
+    if (!showUpdate) return
+    const timer = setTimeout(() => setShowUpdate(false), 30_000)
+    return () => clearTimeout(timer)
+  }, [showUpdate])
 
   const handleUpdate = () => {
     if (registration?.waiting) {

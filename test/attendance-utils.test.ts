@@ -31,19 +31,19 @@ describe("attendance-utils", () => {
 
     expect(requiresLatenessReason(weekday, { code: "HR" })).toBe(true)
     expect(requiresLatenessReason(saturday, { code: "HR" })).toBe(false)
-    expect(requiresLatenessReason(weekday, { code: "security" })).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "security" })).toBe(true)
   })
 
-  it("does not require lateness or early-checkout reasons for admin, regional manager, and department head", () => {
+  it("does not bypass lateness or early-checkout reasons for privileged roles", () => {
     const weekday = new Date("2026-02-12T10:30:00Z")
 
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "admin")).toBe(false)
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(false)
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "department_head")).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "admin")).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "department_head")).toBe(true)
 
-    expect(requiresEarlyCheckoutReason(weekday, true, "admin", { code: "HR" })).toBe(false)
-    expect(requiresEarlyCheckoutReason(weekday, true, "regional_manager", { code: "HR" })).toBe(false)
-    expect(requiresEarlyCheckoutReason(weekday, true, "department_head", { code: "HR" })).toBe(false)
+    expect(requiresEarlyCheckoutReason(weekday, true, "admin", { code: "HR" })).toBe(true)
+    expect(requiresEarlyCheckoutReason(weekday, true, "regional_manager", { code: "HR" })).toBe(true)
+    expect(requiresEarlyCheckoutReason(weekday, true, "department_head", { code: "HR" })).toBe(true)
   })
 
   it("enforces early-checkout reason only when location requires it and not on weekends", () => {
@@ -55,11 +55,11 @@ describe("attendance-utils", () => {
     expect(requiresEarlyCheckoutReason(saturday, true)).toBe(false)
   })
 
-  it("does not require lateness or early-checkout reason for operational category", () => {
+  it("does not bypass lateness or early-checkout reason for operational category", () => {
     const weekday = new Date("2026-02-12T10:30:00Z")
 
-    expect(requiresLatenessReason(weekday, { code: "operational" })).toBe(false)
-    expect(requiresEarlyCheckoutReason(weekday, true, undefined, { code: "operational" })).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "operational" })).toBe(true)
+    expect(requiresEarlyCheckoutReason(weekday, true, undefined, { code: "operational" })).toBe(true)
   })
 
   it("allows automatic out-of-range checkout from 4 PM only after 7 hours", () => {

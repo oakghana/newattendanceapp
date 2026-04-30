@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Calendar,
   CheckCircle2,
+  Copy,
   FileClock,
   Info,
   Loader2,
@@ -39,11 +40,15 @@ interface LeaveNotification {
   user_id: string
   status: "pending" | "approved" | "dismissed"
   leave_requests: LeaveRequest
+  requester_role?: string
+  requester_name?: string
+  waiting_days?: number
 }
 
 interface LeaveManagementClientProps {
   userRole: string
   userDepartment: string | null
+  inactivityDays: number
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
 }
@@ -51,6 +56,7 @@ interface LeaveManagementClientProps {
 export function LeaveManagementClient({
   userRole,
   userDepartment,
+  inactivityDays,
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementClientProps) {
@@ -60,6 +66,19 @@ export function LeaveManagementClient({
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [, setDismissalReason] = useState("")
 
+  const leaveApprovalTemplate = `QUALITY CONTROL COMPANY LTD.\nHUMAN RESOURCE DIRECTORATE\n\nSUBJECT: LEAVE APPROVAL NOTICE\n\nYour leave request has been reviewed and approved.\n\nKindly proceed based on the approved period and handover guidance from your supervisor.\n\nRegards,\nHR Administration\nQuality Control Company Ltd.`
+
+  const leaveRejectionTemplate = `QUALITY CONTROL COMPANY LTD.\nHUMAN RESOURCE DIRECTORATE\n\nSUBJECT: LEAVE REQUEST FEEDBACK\n\nYour leave request has not been approved at this time.\n\nReason: [Insert review reason here]\n\nYou may reapply with updated dates or documentation where applicable.\n\nRegards,\nHR Administration\nQuality Control Company Ltd.`
+
+  const copyTemplate = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast({ title: `${label} copied`, description: "Template copied to clipboard." })
+    } catch {
+      toast({ title: "Copy failed", description: "Please copy manually.", variant: "destructive" })
+    }
+  }
+
   const showUnderReviewToast = () => {
     toast({
       title: "Under Review",
@@ -67,8 +86,39 @@ export function LeaveManagementClient({
     })
   }
 
+  const handleDeleteAllTestingRecords = async () => {
+    if (String(userRole || "") !== "admin") {
+      toast({ title: "Forbidden", description: "Only admin can clear leave testing records.", variant: "destructive" })
+      return
+    }
+
+    if (!window.confirm("Delete all leave testing records, notifications, and planning items? This cannot be undone.")) {
+      return
+    }
+
+    setProcessingId("leave-testing-cleanup")
+    try {
+      const response = await fetch("/api/leave/request", { method: "DELETE" })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error || "Failed to clear leave testing records")
+      }
+      toast({ title: "Leave records cleared", description: result?.message || "Testing leave records removed successfully." })
+      window.location.reload()
+    } catch (error) {
+      toast({
+        title: "Cleanup failed",
+        description: error instanceof Error ? error.message : "Failed to clear leave testing records.",
+        variant: "destructive",
+      })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
   const handleApprove = async (notificationId: string) => {
-    if (userRole !== "admin") {
+    const canManageLeave = ["admin", "department_head", "regional_manager"].includes(userRole ?? "")
+    if (!canManageLeave) {
       showUnderReviewToast()
       return
     }
@@ -104,7 +154,8 @@ export function LeaveManagementClient({
   }
 
   const handleDismiss = async (notificationId: string, reason: string) => {
-    if (userRole !== "admin") {
+    const canManageLeave = ["admin", "department_head", "regional_manager"].includes(userRole ?? "")
+    if (!canManageLeave) {
       showUnderReviewToast()
       return
     }
@@ -144,8 +195,114 @@ export function LeaveManagementClient({
   const pendingRequests = staffRequests.filter((r) => r.status === "pending")
   const approvedRequests = staffRequests.filter((r) => r.status === "approved")
   const pendingNotifications = managerNotifications.filter((n) => n.status === "pending")
+  const adminAllPending = pendingNotifications
+  const adminStaffQueue = pendingNotifications.filter((n) => {
+    const role = String(n.requester_role || "").toLowerCase()
+    return ["staff", "nsp", "intern", "it-admin", "it_admin", "contract"].includes(role)
+  })
+  const adminHodQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "department_head")
+  const adminRegionalQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager")
+  const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
+
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it-admin"].includes(userRole || "")
-  const isManagerView = ["admin", "regional_manager", "department_head"].includes(userRole || "")
+  const isManagerView = ["admin", "regional_manager", "department_head", "it-admin"].includes(userRole || "")
+  const isAdminView = String(userRole || "").toLowerCase() === "admin"
+
+  const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string) => {
+    if (rows.length === 0) {
+      return (
+        <Card className="border border-dashed border-slate-300 bg-slate-50/80">
+          <CardContent className="py-14 text-center">
+            <CheckCircle2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+            <p className="font-medium text-slate-700">{emptyMessage}</p>
+          </CardContent>
+        </Card>
+      )
+    }
+
+    return (
+      <div className="grid gap-4 xl:grid-cols-2">
+        {rows.map((notification) => {
+          const leave = notification.leave_requests
+          return (
+            <Card key={notification.id} className="overflow-hidden border border-amber-200 bg-[linear-gradient(180deg,_rgba(255,251,235,0.88)_0%,_#ffffff_100%)] shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-lg text-slate-900">{formatLeaveType(leave.leave_type)} Leave Request</CardTitle>
+                    <CardDescription className="mt-1 line-clamp-2">{leave.reason}</CardDescription>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge className="border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">Pending Review</Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase tracking-wide text-slate-600">
+                      {formatLeaveType(String(notification.requester_role || "staff"))}
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-400">Start Date</p>
+                    <p className="mt-1 font-semibold text-slate-900">{format(new Date(leave.start_date), "MMM dd, yyyy")}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-400">End Date</p>
+                    <p className="mt-1 font-semibold text-slate-900">{format(new Date(leave.end_date), "MMM dd, yyyy")}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                  <p><strong>Staff Role:</strong> {formatLeaveType(String(notification.requester_role || "staff"))}</p>
+                  <p><strong>Waiting Days:</strong> {Number(notification.waiting_days || 0)} day(s)</p>
+                </div>
+
+                <div className="flex gap-2 border-t border-slate-200 pt-4">
+                  <Button
+                    onClick={() => handleApprove(notification.id)}
+                    disabled={processingId === notification.id}
+                    size="sm"
+                    className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {processingId === notification.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        Approve
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => handleDismiss(notification.id, "Request dismissed by manager")}
+                    disabled={processingId === notification.id}
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1 gap-2"
+                  >
+                    {processingId === notification.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4" />
+                        Dismiss
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -208,6 +365,51 @@ export function LeaveManagementClient({
         </Card>
       )}
 
+      {isManagerView && (
+        <Card className="border-blue-200 bg-blue-50/60 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-blue-900">HR Response Templates</CardTitle>
+            <CardDescription>
+              Professional approval and rejection templates for endorsed leave requests.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded-xl border border-blue-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Approval Template</p>
+              <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-700">{leaveApprovalTemplate}</pre>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => copyTemplate(leaveApprovalTemplate, "Approval template")}>
+                <Copy className="h-4 w-4 mr-1" />
+                Copy Approval Template
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-rose-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Rejection Template</p>
+              <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-700">{leaveRejectionTemplate}</pre>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => copyTemplate(leaveRejectionTemplate, "Rejection template")}>
+                <Copy className="h-4 w-4 mr-1" />
+                Copy Rejection Template
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {String(userRole || "") === "admin" && (
+        <Card className="border-rose-200 bg-rose-50/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-rose-900">Testing Data Cleanup</CardTitle>
+            <CardDescription>Clear leave testing data before go-live so management starts from a clean state.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="destructive" onClick={handleDeleteAllTestingRecords} disabled={processingId === "leave-testing-cleanup"}>
+              {processingId === "leave-testing-cleanup" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete All Leave Testing Records
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue={canUseStaffLeaveHub ? "my-requests" : "pending-approvals"} className="space-y-6">
         <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
           {canUseStaffLeaveHub ? (
@@ -224,6 +426,22 @@ export function LeaveManagementClient({
               <TabsTrigger value="pending-approvals" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=inactive]:text-amber-700">
                 Pending ({pendingNotifications.length})
               </TabsTrigger>
+              {isAdminView && (
+                <>
+                  <TabsTrigger value="role-staff" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-sky-600 data-[state=active]:text-white data-[state=inactive]:text-sky-700">
+                    Staff ({adminStaffQueue.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="role-hod" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=inactive]:text-violet-700">
+                    HOD ({adminHodQueue.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="role-regional" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-indigo-700">
+                    Regional ({adminRegionalQueue.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="delayed" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-rose-600 data-[state=active]:text-white data-[state=inactive]:text-rose-700">
+                    Delayed {`>=${inactivityDays}d`} ({adminDelayedQueue.length})
+                  </TabsTrigger>
+                </>
+              )}
               <TabsTrigger value="history" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
                 History
               </TabsTrigger>
@@ -273,86 +491,30 @@ export function LeaveManagementClient({
         {isManagerView && (
           <>
             <TabsContent value="pending-approvals" className="space-y-4">
-              {pendingNotifications.length === 0 ? (
-                <Card className="border border-dashed border-slate-300 bg-slate-50/80">
-                  <CardContent className="py-14 text-center">
-                    <CheckCircle2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
-                    <p className="font-medium text-slate-700">No pending leave requests to approve</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
-                  {pendingNotifications.map((notification) => {
-                    const leave = notification.leave_requests
-                    return (
-                      <Card key={notification.id} className="overflow-hidden border border-amber-200 bg-[linear-gradient(180deg,_rgba(255,251,235,0.88)_0%,_#ffffff_100%)] shadow-sm">
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <CardTitle className="text-lg text-slate-900">{formatLeaveType(leave.leave_type)} Leave Request</CardTitle>
-                              <CardDescription className="mt-1 line-clamp-2">{leave.reason}</CardDescription>
-                            </div>
-                            <Badge className="border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">Pending Review</Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs uppercase tracking-wide text-slate-400">Start Date</p>
-                              <p className="mt-1 font-semibold text-slate-900">{format(new Date(leave.start_date), "MMM dd, yyyy")}</p>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs uppercase tracking-wide text-slate-400">End Date</p>
-                              <p className="mt-1 font-semibold text-slate-900">{format(new Date(leave.end_date), "MMM dd, yyyy")}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2 border-t border-slate-200 pt-4">
-                            <Button
-                              onClick={() => handleApprove(notification.id)}
-                              disabled={processingId === notification.id}
-                              size="sm"
-                              className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700"
-                            >
-                              {processingId === notification.id ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  Processing...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="h-4 w-4" />
-                                  Approve
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              onClick={() => handleDismiss(notification.id, "Request dismissed by manager")}
-                              disabled={processingId === notification.id}
-                              size="sm"
-                              variant="destructive"
-                              className="flex-1 gap-2"
-                            >
-                              {processingId === notification.id ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  Processing...
-                                </>
-                              ) : (
-                                <>
-                                  <XCircle className="h-4 w-4" />
-                                  Dismiss
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              )}
+              <Alert className="border-amber-200 bg-amber-50">
+                <AlertDescription>
+                  Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
+                </AlertDescription>
+              </Alert>
+              {renderManagerNotifications(adminAllPending, "No pending leave requests to approve")}
             </TabsContent>
+
+            {isAdminView && (
+              <>
+                <TabsContent value="role-staff" className="space-y-4">
+                  {renderManagerNotifications(adminStaffQueue, "No staff queue requests pending")}
+                </TabsContent>
+                <TabsContent value="role-hod" className="space-y-4">
+                  {renderManagerNotifications(adminHodQueue, "No HOD queue requests pending")}
+                </TabsContent>
+                <TabsContent value="role-regional" className="space-y-4">
+                  {renderManagerNotifications(adminRegionalQueue, "No regional queue requests pending")}
+                </TabsContent>
+                <TabsContent value="delayed" className="space-y-4">
+                  {renderManagerNotifications(adminDelayedQueue, `No delayed requests at or above ${inactivityDays} days`)}
+                </TabsContent>
+              </>
+            )}
 
             <TabsContent value="history" className="space-y-4">
               <Alert className="border-slate-200 bg-white shadow-sm">

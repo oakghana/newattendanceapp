@@ -1,8 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
 
 export default async function LeaveManagementPage() {
   const supabase = await createClient()
+  const admin = await createAdminClient()
+  const inactivityDays = Number(process.env.LEAVE_SUPERVISOR_INACTIVITY_DAYS || 5)
 
   const {
     data: { user },
@@ -27,7 +29,7 @@ export default async function LeaveManagementPage() {
   let managerNotifications = []
 
   // Fetch staff's own leave requests
-  if (["staff"].includes(profile.role)) {
+  if (["staff", "nsp", "intern", "it-admin"].includes(profile.role)) {
     const { data: requests } = await supabase
       .from("leave_requests")
       .select("*")
@@ -37,24 +39,90 @@ export default async function LeaveManagementPage() {
     staffRequests = requests || []
   }
 
+  try {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - Math.max(1, inactivityDays))
+
+    const { data: stalePending } = await admin
+      .from("leave_requests")
+      .select("id, user_id, start_date, end_date, status, created_at")
+      .eq("status", "pending")
+      .lte("created_at", cutoff.toISOString())
+      .limit(500)
+
+    for (const request of stalePending || []) {
+      const approvedAt = new Date().toISOString()
+      await admin
+        .from("leave_requests")
+        .update({ status: "approved", approved_at: approvedAt, updated_at: approvedAt })
+        .eq("id", (request as any).id)
+        .eq("status", "pending")
+
+      await admin
+        .from("leave_notifications")
+        .update({ status: "approved", approved_at: approvedAt })
+        .eq("leave_request_id", (request as any).id)
+        .eq("status", "pending")
+    }
+  } catch (error) {
+    console.warn("leave inactivity auto-approval skipped:", error)
+  }
+
   // Fetch pending notifications for managers
-  if (["admin", "regional_manager", "department_head"].includes(profile.role)) {
-    let query = supabase
+  if (["admin", "regional_manager", "department_head", "it-admin"].includes(profile.role)) {
+    let query = admin
       .from("leave_notifications")
       .select("*, leave_requests(*)")
-      .eq("status", "pending")
+      .order("created_at", { ascending: false })
 
-    if (profile.role === "department_head") {
-      // Department heads see requests from their department staff
-      query = query.not("status", "eq", "dismissed")
-    } else if (profile.role === "regional_manager") {
-      // Regional managers see all pending requests
-      query = query.not("status", "eq", "dismissed")
+    if (profile.role !== "admin") {
+      query = query.eq("status", "pending")
     }
-    // Admin sees all
 
-    const { data: notifications } = await query.order("created_at", { ascending: false })
-    managerNotifications = notifications || []
+    const { data: notifications } = await query
+
+    const leaveRows = (notifications || [])
+      .map((notification: any) => notification.leave_requests)
+      .filter((leave: any) => Boolean(leave))
+
+    const requesterIds = Array.from(new Set(leaveRows.map((leave: any) => String(leave.user_id || "")).filter(Boolean)))
+
+    let requesterProfiles: any[] = []
+    if (requesterIds.length > 0) {
+      const { data } = await admin
+        .from("user_profiles")
+        .select("id, role, department_id, first_name, last_name")
+        .in("id", requesterIds)
+      requesterProfiles = data || []
+    }
+
+    const requesterMap = new Map(requesterProfiles.map((row: any) => [row.id, row]))
+    const managerDepartmentId = (profile as any).department_id || null
+
+    managerNotifications = (notifications || [])
+      .filter((notification: any) => {
+        if (profile.role === "admin") return true
+        const leave = notification.leave_requests
+        if (!leave?.user_id) return false
+        const requester = requesterMap.get(String(leave.user_id))
+        if (!requester) return false
+        return requester.department_id && requester.department_id === managerDepartmentId
+      })
+      .map((notification: any) => {
+        const leave = notification.leave_requests
+        const requester = requesterMap.get(String(leave?.user_id || ""))
+        const sourceDate = leave?.created_at || notification.created_at
+        const waitingDays = sourceDate
+          ? Math.max(0, Math.floor((Date.now() - new Date(sourceDate).getTime()) / (1000 * 60 * 60 * 24)))
+          : 0
+        return {
+          ...notification,
+          requester_role: String(requester?.role || "staff"),
+          requester_name: requester ? `${requester.first_name || ""} ${requester.last_name || ""}`.trim() : "Staff",
+          waiting_days: waitingDays,
+        }
+      })
+
   }
 
   return (
@@ -62,6 +130,7 @@ export default async function LeaveManagementPage() {
       <LeaveManagementModuleClient
         userRole={profile.role}
         userDepartment={profile.department_id}
+        inactivityDays={Math.max(1, inactivityDays)}
         userDepartmentName={(profile as any)?.departments?.name || null}
         userDepartmentCode={(profile as any)?.departments?.code || null}
         initialStaffRequests={staffRequests}

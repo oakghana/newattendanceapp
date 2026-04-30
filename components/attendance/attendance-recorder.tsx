@@ -47,6 +47,7 @@ import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils"
 import { requiresLatenessReason, requiresEarlyCheckoutReason, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
+import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
 import {
@@ -115,6 +116,7 @@ interface AttendanceRecorderProps {
 type WindowsCapabilities = ReturnType<typeof detectWindowsLocationCapabilities>
 
 const REFRESH_PAUSE_DURATION = 50000 // 50 seconds instead of 120000 (2 minutes)
+const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 7
 
 // Helper function to get ordinal suffix for numbers (1st, 2nd, 3rd, etc.)
 function getOrdinalSuffix(num: number): string {
@@ -216,16 +218,8 @@ export function AttendanceRecorder({
   const [pendingOffPremisesCheckoutData, setPendingOffPremisesCheckoutData] = useState<{ location: any; nearestLocation: any } | null>(null)
   // Track when user went off-grid (out of all registered locations after check-in)
   const [offGridSince, setOffGridSince] = useState<Date | null>(null)
-
-  // Helper: treat Security department as exempt from lateness / early-checkout reason prompts
-  const isSecurityStaff = useMemo(() => {
-    const deptName = userProfile?.departments?.name || ""
-    const deptCode = (userProfile?.departments?.code || "").toString()
-    return Boolean(
-      deptCode.toLowerCase() === "security" ||
-      deptName.toLowerCase().includes("security")
-    )
-  }, [userProfile]);
+    // true = direct checkout (5h+), false = send approval request
+    const [pendingOffPremisesIsDirectCheckout, setPendingOffPremisesIsDirectCheckout] = useState(false)
 
   const [pendingCheckInData, setPendingCheckInData] = useState<{
     location: LocationData | null
@@ -275,57 +269,27 @@ export function AttendanceRecorder({
   const loadRuntimeFlags = useCallback(async () => {
     try {
       const response = await fetch("/api/settings/runtime", { cache: "no-store" })
-      if (!response.ok) return
+      if (!response.ok) {
+        setRuntimeFlags(DEFAULT_RUNTIME_FLAGS)
+        return
+      }
 
       const data = (await response.json()) as { flags?: RuntimeFlags }
-      if (data.flags) {
-        setRuntimeFlags(data.flags)
-      }
+      setRuntimeFlags(data.flags ?? DEFAULT_RUNTIME_FLAGS)
     } catch {
-      // Keep defaults when runtime settings endpoint is unavailable.
+      setRuntimeFlags(DEFAULT_RUNTIME_FLAGS)
     }
   }, [])
 
   const getSystemNow = useCallback(() => {
     const clock = serverClockRef.current
-    if (!clock) return new Date()
+    if (!clock) {
+      return new Date()
+    }
 
     const elapsedMs = performance.now() - clock.basePerfMs
     return new Date(clock.baseServerMs + elapsedMs)
   }, [])
-
-  const clearPendingDeviceSharingWarning = useCallback(() => {
-    setPendingDeviceSharingWarning(null)
-
-    try {
-      window.sessionStorage.removeItem(DEVICE_SHARING_WARNING_STORAGE_KEY)
-    } catch {
-      // Ignore storage failures and continue attendance flow.
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadRuntimeFlags()
-    const id = setInterval(() => {
-      void loadRuntimeFlags()
-    }, 60_000)
-
-    return () => clearInterval(id)
-  }, [loadRuntimeFlags])
-
-  useEffect(() => {
-    if (localTodayAttendance?.check_in_time) {
-      clearPendingDeviceSharingWarning()
-      return
-    }
-
-    try {
-      const storedWarning = window.sessionStorage.getItem(DEVICE_SHARING_WARNING_STORAGE_KEY)
-      setPendingDeviceSharingWarning(storedWarning || null)
-    } catch {
-      setPendingDeviceSharingWarning(null)
-    }
-  }, [clearPendingDeviceSharingWarning, localTodayAttendance?.check_in_time])
 
   useEffect(() => {
     let isCancelled = false
@@ -336,7 +300,7 @@ export function AttendanceRecorder({
         if (!response.ok) return
 
         const payload = (await response.json()) as { utcEpochMs?: number }
-        if (!payload.utcEpochMs) return
+        if (typeof payload?.utcEpochMs !== "number") return
 
         serverClockRef.current = {
           baseServerMs: payload.utcEpochMs,
@@ -370,19 +334,15 @@ export function AttendanceRecorder({
     }
   }, [])
 
+  useEffect(() => {
+    void loadRuntimeFlags()
+  }, [loadRuntimeFlags])
+
   // Check time restrictions and show warnings
   useEffect(() => {
     const now = getSystemNow()
     const userDept = userProfile?.departments
     const userRole = userProfile?.role
-
-    // If user is in an exempt department (security / operations / transport),
-    // do not show time-based restriction warnings — they can check in/out anytime.
-    const isExemptDept = isSecurityDept(userDept) || isOperationalDept(userDept) || isTransportDept(userDept)
-    if (isExemptDept) {
-      setTimeRestrictionWarning(null)
-      return
-    }
 
     const canCheckIn = canCheckInAtTime(now, userDept, userRole)
     const attendanceTimeConfig = {
@@ -455,7 +415,8 @@ export function AttendanceRecorder({
   const [flashMessage, setFlashMessage] = useState<{
     message: string
     type: "success" | "error" | "info" | "warning"
-  } | null>(null)
+      actions?: Array<{ label: string; onClick: () => void; variant?: "default" | "outline" | "destructive" | "secondary" }>
+    } | null>(null)
 
   const [refreshTimer, setRefreshTimer] = useState<number | null>(null)
 
@@ -763,20 +724,19 @@ export function AttendanceRecorder({
       const now = getSystemNow()
       const hoursSinceCheckIn = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
 
-      // normal 2‑hour timer logic; off-premises status does not change countdown – user must be within range to checkout
-      if (hoursSinceCheckIn < 2) {
-        const minutesLeft = Math.ceil((2 - hoursSinceCheckIn) * 60)
+      if (hoursSinceCheckIn < MINIMUM_OFF_PREMISES_CHECKOUT_HOURS) {
+        const minutesLeft = Math.ceil((MINIMUM_OFF_PREMISES_CHECKOUT_HOURS - hoursSinceCheckIn) * 60)
         setMinutesUntilCheckout(minutesLeft)
 
         const interval = setInterval(() => {
           const now2 = getSystemNow()
           const hours2 = (now2.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
-          if (hours2 >= 2) {
+          if (hours2 >= MINIMUM_OFF_PREMISES_CHECKOUT_HOURS) {
             setMinutesUntilCheckout(null)
             setCheckoutTimeReached(true)
             clearInterval(interval)
           } else {
-            setMinutesUntilCheckout(Math.ceil((2 - hours2) * 60))
+            setMinutesUntilCheckout(Math.ceil((MINIMUM_OFF_PREMISES_CHECKOUT_HOURS - hours2) * 60))
           }
         }, 60000)
 
@@ -799,7 +759,7 @@ export function AttendanceRecorder({
         const checkInTime = new Date(localTodayAttendance.check_in_time)
         const now = getSystemNow()
         const hoursSinceCheckIn = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
-        setCheckoutTimeReached(hoursSinceCheckIn >= 2)
+        setCheckoutTimeReached(hoursSinceCheckIn >= MINIMUM_OFF_PREMISES_CHECKOUT_HOURS)
       } else {
         setCheckoutTimeReached(false)
       }
@@ -1430,10 +1390,19 @@ export function AttendanceRecorder({
               )
             : null,
       })
-      setFlashMessage({
-        message: errorMessage,
-        type: "error",
-      })
+        const isRangeOrGpsError =
+          errorMessage.toLowerCase().includes("within") ||
+          errorMessage.toLowerCase().includes("location") ||
+          errorMessage.toLowerCase().includes("range") ||
+          errorMessage.toLowerCase().includes("could not retrieve") ||
+          errorMessage.toLowerCase().includes("gps")
+        setFlashMessage({
+          message: errorMessage,
+          type: "error",
+          actions: isRangeOrGpsError
+            ? [{ label: "Check In Outside Premises", onClick: handleCheckInOutsidePremises, variant: "outline" as const }]
+            : undefined,
+        })
 
       setTimeout(() => {
         setRecentCheckIn(false)
@@ -1486,10 +1455,14 @@ export function AttendanceRecorder({
 
   const handleSendOffPremisesRequest = async () => {
     if (!pendingOffPremisesLocation) return
-    if (!offPremisesReason.trim()) {
+    const reasonValidation = validateMeaningfulText(offPremisesReason, {
+      fieldLabel: "Off-premises reason",
+      minLength: 10,
+    })
+    if (!reasonValidation.ok) {
       toast({
         title: "Reason Required",
-        description: "Please provide a reason for your off-premises request.",
+        description: reasonValidation.error,
         variant: "destructive",
       })
       return
@@ -1570,7 +1543,7 @@ export function AttendanceRecorder({
         },
         device_info: getDeviceInfo(),
         user_id: currentUser.id,
-        reason: offPremisesReason.trim(),
+        reason: reasonValidation.normalized,
         request_type: 'checkin', // only check-in requests allowed
       }
       
@@ -1617,30 +1590,16 @@ export function AttendanceRecorder({
         throw new Error(errMsg)
       }
 
-      // safety check: API may return 200 but indicate failure or omit key fields
-      if (result && (result.success === false || !result.request_id)) {
-        console.error("[v0] Off-premises request not successful or missing id:", result)
-        const msg = result.error || result.message || "Request was not successful"
-        throw new Error(msg)
-      }
-
-      console.log("[v0] Off-premises request submitted successfully", { request_id: result.request_id })
-
-      setFlashMessage({
-        message: `Off-premises check-in request sent to your supervisor for approval. We'll notify you when the supervisor approves and your attendance will be recorded using the ORIGINAL request time and the submitted location.`,
-        type: "success",
+      toast({
+        title: "Off-Premises Request Sent",
+        description: `Your request (ID: ${result.request_id || "N/A"}) has been sent to your approvers and is awaiting approval. You will be notified when a decision is made.`,
+        action: (
+          <ToastAction asChild>
+            <a href="/dashboard/notifications">View Notifications</a>
+          </ToastAction>
+        ),
+        className: "border-emerald-400 bg-emerald-50 text-emerald-900",
       })
-
-        toast({
-          title: "Off‑Premises Request Sent",
-          description: `Your request (ID: ${result.request_id || 'N/A'}) has been sent to your approvers and is awaiting approval. You'll be notified when a decision is made.`,
-          action: (
-            <ToastAction asChild>
-              <a href="/dashboard/notifications">View Notifications</a>
-            </ToastAction>
-          ),
-          className: "border-emerald-400 bg-emerald-50 text-emerald-900",
-        })
       // Prevent duplicate requests by disabling check-in buttons until request is resolved
       setHasPendingOffPremisesRequest(true)
 
@@ -1825,10 +1784,6 @@ export function AttendanceRecorder({
       const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
       const requireEarlyCheckoutReason = assignedLocation?.require_early_checkout_reason ?? true
       const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(now, requireEarlyCheckoutReason, userProfile?.role, userProfile?.departments)
-      // No reason needed when staff has worked 7+ hours — policy exemption
-      const workedSevenPlusHoursForReason = hoursWorkedSoFar >= 7
-      // Persist effective requirement into state so the modal can relax validation on weekends / 7h rule
-      setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedSevenPlusHoursForReason)
 
       const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
       const checkoutEndTimeMinutes = endHour * 60 + (endMinute || 0)
@@ -1840,26 +1795,30 @@ export function AttendanceRecorder({
       const hoursWorkedSoFar = checkInTimeDate
         ? (now.getTime() - checkInTimeDate.getTime()) / (1000 * 60 * 60)
         : 0
+      const workedSevenPlusHoursForReason = hoursWorkedSoFar >= 7
+      // Persist effective requirement into state so the modal can relax validation on weekends / 7h rule
+      setEarlyCheckoutReasonRequired(Boolean(effectiveRequireEarlyCheckoutReason) && !workedSevenPlusHoursForReason)
       const workedSevenPlusHours = hoursWorkedSoFar >= 7
-      const isAfter530PmServerTime = currentTimeMinutes >= 17 * 60 + 30
-      const bypassOutOfRangePolicy = workedSevenPlusHours || isAfter530PmServerTime
+      const isApprovedOffPremisesStarter = Boolean(
+        localTodayAttendance?.on_official_duty_outside_premises || localTodayAttendance?.is_remote_location,
+      )
       console.log("[v0] Processing checkout request with location policy")
 
       // Handle out-of-range checkout with off-premises policy
       if (!checkoutValidation.canCheckOut) {
-        if (!checkoutTimeReached && !bypassOutOfRangePolicy) {
+        if (!checkoutTimeReached) {
           // [DEBUG] Log blocked checkout (insufficient time)
           console.log("[v0] CHECKOUT_ROUTING_DECISION", {
             decision: "BLOCKED_MIN_2_HOURS",
             minutesWorked: localTodayAttendance?.check_in_time
               ? Math.floor((Date.now() - new Date(localTodayAttendance.check_in_time).getTime()) / 60000)
               : 0,
-            required: 120,
+            required: MINIMUM_OFF_PREMISES_CHECKOUT_HOURS * 60,
             device: deviceInfo?.type,
             timestamp: new Date().toISOString(),
           })
           setFlashMessage({
-            message: `Minimum 2 hours required before check-out. ${minutesUntilCheckout ? `${minutesUntilCheckout} minutes remaining.` : ''}`,
+            message: `Minimum ${MINIMUM_OFF_PREMISES_CHECKOUT_HOURS} hours required before out-of-range check-out. ${minutesUntilCheckout ? `${minutesUntilCheckout} minutes remaining.` : ''}`,
             type: "error",
           })
           setIsLoading(false)
@@ -1879,41 +1838,14 @@ export function AttendanceRecorder({
           })
           // fall through to regular checkout path below
         } else {
-          // Only pure admin roles are exempt from providing a reason (dept heads / regional
-          // managers are NOT exempt unless they also meet the 7-hour threshold)
-          const normalizedRoleStr = String(userProfile?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-          const isAdminOnly = normalizedRoleStr === "admin" || normalizedRoleStr === "super_admin" || normalizedRoleStr === "it_admin"
+          const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
+          const [opStartH, opStartM] = (runtimeFlags.offPremisesCheckoutStartTime ?? "15:00").split(":").map(Number)
+          const [opEndH, opEndM] = (runtimeFlags.offPremisesCheckoutEndTime ?? "23:59").split(":").map(Number)
+          const opStartMins = opStartH * 60 + opStartM
+          const opEndMins = opEndH * 60 + opEndM
+          const isWithinOffPremisesWindow = currentTimeMinutes >= opStartMins && currentTimeMinutes <= opEndMins
 
-          if (bypassOutOfRangePolicy) {
-            // All staff: 7+ hours or after 5:30 PM server time -> direct checkout, no off-premises reason required
-            console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-              decision: isAfter530PmServerTime ? "DIRECT_CHECKOUT_AFTER_530" : "DIRECT_CHECKOUT_7H_AUTO",
-              hoursWorked: hoursWorkedSoFar.toFixed(2),
-              currentTimeMinutes,
-              device: deviceInfo?.type,
-              timestamp: new Date().toISOString(),
-            })
-            // fall through to regular checkout path below
-          } else if (isAdminOnly) {
-            // Admin only: < 7 hours but exempt from reason — location is always captured via API
-            console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-              decision: "DIRECT_CHECKOUT_ADMIN_NO_REASON",
-              hoursWorked: hoursWorkedSoFar.toFixed(2),
-              role: userProfile?.role,
-              device: deviceInfo?.type,
-              timestamp: new Date().toISOString(),
-            })
-            // fall through to regular checkout path below
-          } else {
-            // All other staff with < 7 hours must provide a reason
-            const offPremisesEnabled = runtimeFlags.offPremisesCheckoutEnabled
-            const [opStartH, opStartM] = (runtimeFlags.offPremisesCheckoutStartTime ?? "15:00").split(":").map(Number)
-            const [opEndH, opEndM] = (runtimeFlags.offPremisesCheckoutEndTime ?? "23:59").split(":").map(Number)
-            const opStartMins = opStartH * 60 + opStartM
-            const opEndMins = opEndH * 60 + opEndM
-            const isWithinOffPremisesWindow = currentTimeMinutes >= opStartMins && currentTimeMinutes <= opEndMins
-
-            if (!offPremisesEnabled) {
+          if (!offPremisesEnabled) {
               console.log("[v0] CHECKOUT_ROUTING_DECISION", {
                 decision: "BLOCKED_OFF_PREMISES_DISABLED",
                 device: deviceInfo?.type,
@@ -1925,7 +1857,7 @@ export function AttendanceRecorder({
               })
               setIsLoading(false)
               return
-            } else if (!isWithinOffPremisesWindow) {
+          } else if (!isWithinOffPremisesWindow) {
               console.log("[v0] CHECKOUT_ROUTING_DECISION", {
                 decision: "BLOCKED_OFF_PREMISES_WINDOW",
                 windowStart: runtimeFlags.offPremisesCheckoutStartTime ?? "15:00",
@@ -1943,10 +1875,9 @@ export function AttendanceRecorder({
               })
               setIsLoading(false)
               return
-            } else {
-              // Show off-premises checkout dialog — reason is required
+          } else {
               console.log("[v0] CHECKOUT_ROUTING_DECISION", {
-                decision: "OFFPREMISES_DIALOG",
+                decision: isApprovedOffPremisesStarter && workedSevenPlusHours ? "DIRECT_OFFPREMISES_CHECKOUT" : "OFFPREMISES_DIALOG",
                 hoursWorked: hoursWorkedSoFar.toFixed(2),
                 outOfRange: true,
                 device: deviceInfo?.type,
@@ -1964,11 +1895,11 @@ export function AttendanceRecorder({
                 nearestLocForDialog = locationDistances2[0]?.location ?? null
               }
               setPendingOffPremisesCheckoutData({ location: locationData, nearestLocation: nearestLocForDialog })
+              setPendingOffPremisesIsDirectCheckout(isApprovedOffPremisesStarter && workedSevenPlusHours)
               setOffPremisesCheckoutReason("")
               setShowOffPremisesCheckoutDialog(true)
               setIsLoading(false)
               return
-            }
           }
         }
       }
@@ -2005,7 +1936,7 @@ export function AttendanceRecorder({
       const checkInTimeForHours = localTodayAttendance && localTodayAttendance.check_in_time ? new Date(localTodayAttendance.check_in_time) : null
       const hoursSinceCheckIn = checkInTimeForHours ? (now.getTime() - checkInTimeForHours.getTime()) / (1000 * 60 * 60) : 0
 
-      if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || isSecurityStaff || hoursSinceCheckIn >= 9 || workedSevenPlusHours || isAfter530PmServerTime) {
+      if (!isBeforeCheckoutTime || !effectiveRequireEarlyCheckoutReason || hoursSinceCheckIn >= 9 || workedSevenPlusHours) {
         console.log("[v0] SMART CHECKOUT: Checkout time passed or no reason needed or Security staff or worked >=9 hours - immediate checkout", { hoursSinceCheckIn })
         await performCheckoutAPI(locationData, nearestLocation, "", null, false, loginIssueRecoveryCheckout)
         return
@@ -2551,13 +2482,15 @@ export function AttendanceRecorder({
   }
 
   const handleEarlyCheckoutConfirm = async () => {
-    const trimmedReason = earlyCheckoutReason.trim()
+    const reasonValidation = validateMeaningfulText(earlyCheckoutReason, {
+      fieldLabel: "Early checkout reason",
+      minLength: 10,
+    })
 
-    // If a reason is required (weekday / policy), enforce validation.
     if (earlyCheckoutReasonRequired) {
-      if (!trimmedReason) {
+      if (!reasonValidation.ok) {
         setFlashMessage({
-          message: "Please provide a reason for early checkout before proceeding.",
+          message: reasonValidation.error || "Please provide a valid reason for early checkout before proceeding.",
           type: "error",
         })
         return
@@ -2574,7 +2507,7 @@ export function AttendanceRecorder({
       const { location, nearestLocation } = pendingCheckoutData
 
       // Use optimized checkout function with reason and prover
-      await performCheckoutAPI(location, nearestLocation, earlyCheckoutReason, prover || null, false, loginIssueRecoveryCheckout)
+      await performCheckoutAPI(location, nearestLocation, reasonValidation.normalized, prover || null, false, loginIssueRecoveryCheckout)
     } catch (error) {
       console.error("[v0] Early checkout error:", error)
       setFlashMessage({
@@ -2595,11 +2528,44 @@ export function AttendanceRecorder({
 
   const handleOffPremisesCheckoutConfirm = async () => {
     if (!pendingOffPremisesCheckoutData) return
-    const trimmedReason = offPremisesCheckoutReason.trim()
+    const isDirectCheckout = pendingOffPremisesIsDirectCheckout
+    const reasonValidation = isDirectCheckout
+      ? { ok: true, normalized: "", error: null }
+      : validateMeaningfulText(offPremisesCheckoutReason, {
+          fieldLabel: "Off-premises checkout reason",
+          minLength: 10,
+        })
+    if (!reasonValidation.ok) {
+      toast({ title: "Reason required", description: "Please enter a reason before confirming.", variant: "destructive" })
+      return
+    }
+    const { location, nearestLocation: nearestLocFromDialog } = pendingOffPremisesCheckoutData
     setShowOffPremisesCheckoutDialog(false)
-    setIsLoading(true)
-    const { location } = pendingOffPremisesCheckoutData
+    setPendingOffPremisesIsDirectCheckout(false)
     setPendingOffPremisesCheckoutData(null)
+    if (isDirectCheckout) {
+      setIsLoading(true)
+      try {
+        await performCheckoutAPI(location, nearestLocFromDialog, "", null, false, false)
+        void fetch("/api/attendance/check-in-outside-request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            current_location: { latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracy ?? 10, name: nearestLocFromDialog?.name || `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` },
+            device_info: getDeviceInfo(),
+            reason: "Auto-approved direct off-premises checkout after approved remote start",
+            request_type: "checkout_direct",
+            auto_approved: true,
+          }),
+        }).catch(() => {})
+      } catch (err) {
+        setFlashMessage({ message: err instanceof Error ? err.message : "Check-out failed.", type: "error", actions: [{ label: "Retry", onClick: handleCheckOut, variant: "outline" as const }] })
+      }
+      setOffPremisesCheckoutReason("")
+      setIsLoading(false)
+      return
+    }
+    setIsLoading(true)
 
     try {
       // Check auth FIRST before any slow network calls
@@ -2672,7 +2638,7 @@ export function AttendanceRecorder({
         },
         device_info: getDeviceInfo(),
         user_id: currentUser.id,
-        reason: trimmedReason,
+        reason: reasonValidation.normalized,
         request_type: "checkout",
         off_grid_hours_before_request: offGridHoursBeforeRequest,
         off_grid_started_at: offGridSince ? offGridSince.toISOString() : null,
@@ -2752,11 +2718,14 @@ export function AttendanceRecorder({
     }
   }
   const handleLatenessConfirm = async () => {
-    const trimmedReason = latenessReason.trim()
-    
-    if (!trimmedReason) {
+    const reasonValidation = validateMeaningfulText(latenessReason, {
+      fieldLabel: "Lateness reason",
+      minLength: 10,
+    })
+
+    if (!reasonValidation.ok) {
       setFlashMessage({
-        message: "Please provide a reason for your late arrival before proceeding.",
+        message: reasonValidation.error || "Please provide a valid reason for your late arrival before proceeding.",
         type: "error",
       })
       return
@@ -2771,7 +2740,7 @@ export function AttendanceRecorder({
       const { location, nearestLocation } = pendingCheckInData
 
       // Use optimized check-in function with reason and prover
-      await performCheckInAPI(location, nearestLocation, latenessReason, latenessProver || null)
+      await performCheckInAPI(location, nearestLocation, reasonValidation.normalized, latenessProver || null)
     } catch (error) {
       console.error("[v0] Late check-in error:", error)
       setFlashMessage({
@@ -2869,23 +2838,38 @@ export function AttendanceRecorder({
   return (
     <div className={cn("space-y-6", className)}>
       {flashMessage && (
-        <Card className={cn("mb-4", flashMessage?.type === 'success' ? 'border-l-4 border-l-green-500 bg-green-50 dark:bg-green-900/60 dark:border-green-500/50' : flashMessage?.type === 'error' ? 'border-l-4 border-l-rose-500 bg-rose-50 dark:bg-rose-900/60 dark:border-rose-500/50' : flashMessage?.type === 'warning' ? 'border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-900/60 dark:border-amber-500/50' : 'border-l-4 border-l-slate-400 bg-slate-50') }>
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className={cn("flex-shrink-0 rounded-full p-2", flashMessage?.type === 'success' ? 'bg-green-100 dark:bg-green-800/60' : flashMessage?.type === 'error' ? 'bg-rose-100 dark:bg-rose-800/60' : flashMessage?.type === 'warning' ? 'bg-amber-100 dark:bg-amber-800/60' : 'bg-slate-100') }>
-                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-300" />
-                </div>
-                <div className="flex-1">
-                  <div className="space-y-1">
-                    <p className={cn("text-sm font-medium", flashMessage?.type === 'success' ? 'text-green-900 dark:text-green-100' : flashMessage?.type === 'error' ? 'text-rose-900 dark:text-rose-100' : flashMessage?.type === 'warning' ? 'text-amber-800 dark:text-amber-100' : 'text-slate-800') }>
-                      {flashMessage?.type === 'success' ? 'Success' : flashMessage?.type === 'error' ? 'Error' : flashMessage?.type === 'warning' ? 'Notice' : 'Info'}
-                    </p>
-                    <p className={cn("text-xs", flashMessage?.type === 'success' ? 'text-green-800 dark:text-green-100' : flashMessage?.type === 'error' ? 'text-rose-800 dark:text-rose-100' : flashMessage?.type === 'warning' ? 'text-amber-700 dark:text-amber-200' : 'text-slate-700') }>{flashMessage?.message}</p>
-                  </div>
-                </div>
+        <Card className={cn("mb-4 shadow-sm", flashMessage.type === 'success' ? 'border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-900/40' : flashMessage.type === 'error' ? 'border-l-4 border-l-rose-500 bg-rose-50 dark:bg-rose-900/40' : flashMessage.type === 'warning' ? 'border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-900/40' : 'border-l-4 border-l-blue-400 bg-blue-50 dark:bg-blue-900/30')}>
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className={cn("flex-shrink-0 rounded-full p-2 mt-0.5", flashMessage.type === 'success' ? 'bg-emerald-100 dark:bg-emerald-800/50' : flashMessage.type === 'error' ? 'bg-rose-100 dark:bg-rose-800/50' : flashMessage.type === 'warning' ? 'bg-amber-100 dark:bg-amber-800/50' : 'bg-blue-100 dark:bg-blue-800/50')}>
+                {flashMessage.type === 'success' ? <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" /> : flashMessage.type === 'error' ? <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-300" /> : flashMessage.type === 'warning' ? <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-300" /> : <Info className="h-4 w-4 text-blue-600 dark:text-blue-300" />}
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex-1 min-w-0">
+                <p className={cn("text-sm font-semibold", flashMessage.type === 'success' ? 'text-emerald-900 dark:text-emerald-100' : flashMessage.type === 'error' ? 'text-rose-900 dark:text-rose-100' : flashMessage.type === 'warning' ? 'text-amber-900 dark:text-amber-100' : 'text-blue-900 dark:text-blue-100')}>
+                  {flashMessage.type === 'success' ? 'Success' : flashMessage.type === 'error' ? 'Action Required' : flashMessage.type === 'warning' ? 'Notice' : 'Info'}
+                </p>
+                <p className={cn("text-xs mt-0.5 leading-relaxed", flashMessage.type === 'success' ? 'text-emerald-800 dark:text-emerald-200' : flashMessage.type === 'error' ? 'text-rose-800 dark:text-rose-200' : flashMessage.type === 'warning' ? 'text-amber-800 dark:text-amber-200' : 'text-blue-800 dark:text-blue-200')}>{flashMessage.message}</p>
+                {flashMessage.actions && flashMessage.actions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {flashMessage.actions.map((action, idx) => (
+                      <Button
+                        key={idx}
+                        size="sm"
+                        variant={action.variant === "destructive" ? "destructive" : "outline"}
+                        onClick={() => { setFlashMessage(null); action.onClick() }}
+                        className={cn("h-7 text-xs font-medium", flashMessage.type === 'error' ? 'border-rose-300 text-rose-800 hover:bg-rose-100 dark:border-rose-700 dark:text-rose-200' : 'border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200')}
+                      >
+                        {action.label}
+                      </Button>
+                    ))}
+                    <Button size="sm" variant="ghost" onClick={() => setFlashMessage(null)} className="h-7 text-xs text-muted-foreground">Dismiss</Button>
+                  </div>
+                )}
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setFlashMessage(null)} className="h-6 w-6 p-0 rounded-full flex-shrink-0 text-muted-foreground hover:text-foreground -mt-1 -mr-1">✕</Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {hasPendingOffPremisesRequest && !localTodayAttendance?.check_in_time && (
@@ -3043,7 +3027,7 @@ export function AttendanceRecorder({
                     checkInTime={localTodayAttendance.check_in_time}
                     checkInLocation={checkInLocationData?.name || "Unknown Location"}
                     checkOutLocation={assignedLocationInfo?.name}
-                    minimumWorkMinutes={120}
+                    minimumWorkMinutes={MINIMUM_OFF_PREMISES_CHECKOUT_HOURS * 60}
                     locationCheckInTime={checkInLocationData?.check_in_start_time}
                     locationCheckOutTime={checkInLocationData?.check_out_end_time}
                     onCheckOut={handleCheckOut}
@@ -3223,71 +3207,64 @@ export function AttendanceRecorder({
       )}
 
       {showOffPremisesCheckoutDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-orange-600">
-                <LogOut className="h-5 w-5" />
-                Off-Premises Check-Out Request
-              </CardTitle>
-              <CardDescription>
-                You are outside registered QCC locations and have worked less than 7 hours today. Please provide a reason to request off-premises check-out.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Alert className="border-blue-200 bg-blue-50">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertTitle className="text-blue-800">7-Hour Auto-Approval</AlertTitle>
-                <AlertDescription className="text-blue-700">
-                  Staff who have completed <strong>7 or more hours</strong> at a QCC location may check out off-premises without a reason. You can also return to a QCC location to check out directly.
-                </AlertDescription>
-              </Alert>
-              <Alert className="border-orange-200 bg-orange-50">
-                <Info className="h-4 w-4 text-orange-600" />
-                <AlertTitle className="text-orange-800">Review Required</AlertTitle>
-                <AlertDescription className="text-orange-700">
-                  Your department head/supervisor will be notified with your reason and location details for review.
-                </AlertDescription>
-              </Alert>
-
-              <div className="space-y-2">
-                <Label htmlFor="offpremises-checkout-reason">Reason for Off-Premises Check-Out *</Label>
-                <textarea
-                  id="offpremises-checkout-reason"
-                  value={offPremisesCheckoutReason}
-                  onChange={(e) => setOffPremisesCheckoutReason(e.target.value)}
-                  placeholder="e.g., Left site for official assignment, emergency travel, client delivery..."
-                  className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  maxLength={500}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {offPremisesCheckoutReason.length}/500 characters
-                </p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md rounded-2xl shadow-2xl">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className={cn("rounded-full p-2.5 shrink-0", pendingOffPremisesIsDirectCheckout ? "bg-emerald-100 dark:bg-emerald-900/40" : "bg-orange-100 dark:bg-orange-900/40")}>
+                  <LogOut className={cn("h-5 w-5", pendingOffPremisesIsDirectCheckout ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400")} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base">
+                    {pendingOffPremisesIsDirectCheckout ? "Check Out Off-Premises" : "Request Off-Premises Check-Out"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {pendingOffPremisesIsDirectCheckout
+                      ? "You started the day on approved off-premises duty and have worked 7+ hours. You can check out immediately."
+                      : "You're outside your registered location. Your supervisor will review and approve your check-out request."}
+                  </p>
+                </div>
               </div>
-
-              <div className="flex gap-2">
+              <div className={cn("rounded-lg px-3 py-2 text-xs font-medium flex items-center gap-2", pendingOffPremisesIsDirectCheckout ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800" : "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800")}>
+                {pendingOffPremisesIsDirectCheckout ? (
+                  <><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Direct checkout unlocked after approved off-premises start plus 7 hours worked. No extra reason or approval is required.</>
+                ) : (
+                  <><Info className="h-3.5 w-3.5 shrink-0" /> Your request will be reviewed. You will be notified when approved.</>
+                )}
+              </div>
+              {!pendingOffPremisesIsDirectCheckout && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="offpremises-checkout-reason" className="text-sm font-medium">Reason for Off-Premises Check-Out *</Label>
+                  <textarea
+                    id="offpremises-checkout-reason"
+                    value={offPremisesCheckoutReason}
+                    onChange={(e) => setOffPremisesCheckoutReason(e.target.value)}
+                    placeholder="e.g., Official assignment, field visit, emergency travel, client delivery..."
+                    className="w-full min-h-[90px] p-3 text-sm border rounded-xl resize-none bg-muted/40 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition"
+                    maxLength={500}
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground">{offPremisesCheckoutReason.length}/500</p>
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
                 <Button
-                  onClick={() => {
-                    setShowOffPremisesCheckoutDialog(false)
-                    setPendingOffPremisesCheckoutData(null)
-                    setOffPremisesCheckoutReason("")
-                  }}
+                  onClick={() => { setShowOffPremisesCheckoutDialog(false); setPendingOffPremisesCheckoutData(null); setPendingOffPremisesIsDirectCheckout(false); setOffPremisesCheckoutReason("") }}
                   variant="outline"
-                  className="flex-1 bg-transparent"
+                  className="flex-1"
                   disabled={isLoading}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleOffPremisesCheckoutConfirm}
-                  className="flex-1 bg-orange-600 hover:bg-orange-700"
-                  disabled={isLoading || offPremisesCheckoutReason.trim().length === 0}
+                  className={cn("flex-1 text-white", pendingOffPremisesIsDirectCheckout ? "bg-emerald-600 hover:bg-emerald-700" : "bg-orange-600 hover:bg-orange-700")}
+                  disabled={isLoading || (!pendingOffPremisesIsDirectCheckout && offPremisesCheckoutReason.trim().length === 0)}
                 >
                   {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending...
-                    </>
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{pendingOffPremisesIsDirectCheckout ? "Checking out..." : "Sending..."}</>
+                  ) : pendingOffPremisesIsDirectCheckout ? (
+                    <><LogOut className="mr-2 h-4 w-4" />Check Out Now</>
                   ) : (
                     "Send Request"
                   )}
@@ -3300,20 +3277,36 @@ export function AttendanceRecorder({
 
 {/* Off-grid notice for active session — shown below the session timer card */}
             {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && checkoutTimeReached && !locationValidation?.canCheckOut && offGridSince && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm mt-1">
-                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <span className="text-amber-800 dark:text-amber-300">
-                  Outside approved range for{" "}
-                  <strong>
-                    {(() => {
-                      const mins = Math.floor((getSystemNow().getTime() - offGridSince.getTime()) / 60000)
-                      const h = Math.floor(mins / 60)
-                      const m = mins % 60
-                      return h > 0 ? `${h}h ${m}m` : `${m} min`
-                    })()}
-                  </strong>
-                  {". Move back within range or submit an off-premises check-out request."}
-                </span>
+              <div className="rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 mt-1">
+                <div className="flex items-start gap-2.5">
+                  <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-amber-800 dark:text-amber-300">
+                      Outside approved range for{" "}
+                      <strong>
+                        {(() => {
+                          const mins = Math.floor((getSystemNow().getTime() - offGridSince.getTime()) / 60000)
+                          const h = Math.floor(mins / 60)
+                          const m = mins % 60
+                          return h > 0 ? `${h}h ${m}m` : `${m} min`
+                        })()}
+                      </strong>
+                      {workedHoursForCheckoutPolicy >= 5
+                        ? " — You've worked 5+ hours. Tap below to check out off-premises directly."
+                        : ". Return within range or continue working until 5 hours to check out off-premises."}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCheckOut}
+                      disabled={isLoading}
+                      className="mt-2 h-7 text-xs border-amber-400 text-amber-900 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-200"
+                    >
+                      <LogOut className="h-3 w-3 mr-1" />
+                      {workedHoursForCheckoutPolicy >= 5 ? "Check Out Off-Premises" : "Request Check-Out"}
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 
