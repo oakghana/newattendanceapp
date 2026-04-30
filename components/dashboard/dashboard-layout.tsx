@@ -154,16 +154,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-5 sm:pb-32 sm:pt-5 lg:px-12 lg:pb-12 lg:pt-12">
           <div className="relative">
             {showProductFlash && (
-              <div className="mb-4 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
+              <div className="relative mb-4 overflow-hidden rounded-2xl border border-pink-300/80 bg-gradient-to-r from-pink-100 via-fuchsia-100 to-rose-100 p-4 shadow-[0_10px_30px_-12px_rgba(236,72,153,0.65)]">
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_10%,rgba(255,255,255,0.58)_32%,transparent_54%)] animate-[shine_3.6s_linear_infinite]" />
+                <div className="relative flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-blue-900">News Flash: Loan & Leave Admin Upgrade</p>
-                    <p className="mt-1 text-xs text-blue-800">
-                      New professional memo templates, stronger approval tracking, and smarter manager notifications are being rolled out.
+                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-rose-900">
+                      <span className="inline-block h-2 w-2 rounded-full bg-pink-600 animate-pulse" />
+                      News Flash: Loan & Leave Admin Upgrade
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-rose-800">
+                      TO STAY GLUED TO THE ANNOUCEMENT WE ARE DEVELOPING A professional,stronger approval tracking, and smarter manager notifications FOR OUR LOAN AND LEAVE ADMINISTRATION SOON.
                     </p>
                   </div>
                   <button
-                    className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                    className="text-xs font-semibold text-rose-700 transition-colors hover:text-rose-900"
                     onClick={() => {
                       setShowProductFlash(false)
                       localStorage.setItem(PRODUCT_FLASH_KEY, "1")

@@ -133,6 +133,13 @@ const navigationItems = [
     category: "main",
   },
   {
+    title: "Reports & Trends",
+    href: "/dashboard/reports",
+    icon: BarChart3,
+    roles: ["admin", "regional_manager", "department_head"],
+    category: "admin",
+  },
+  {
     title: "Locations",
     href: "/dashboard/locations",
     icon: MapPin,
