@@ -27,6 +27,19 @@ export function isManagerRole(role: string | null | undefined): boolean {
   return ["regional_manager", "department_head"].includes(normalized)
 }
 
+export function isHrPlanningRole(role: string | null | undefined, departmentName?: string | null, departmentCode?: string | null): boolean {
+  const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  return (
+    normalized === "admin" ||
+    normalized === "hr" ||
+    normalized === "hr_officer" ||
+    normalized === "hr_director" ||
+    normalized === "director_hr" ||
+    normalized === "manager_hr" ||
+    (normalized === "department_head" && isHrDepartment(departmentName, departmentCode))
+  )
+}
+
 export function isHrDepartment(departmentName?: string | null, departmentCode?: string | null): boolean {
   const name = (departmentName || "").toLowerCase()
   const code = (departmentCode || "").toLowerCase()

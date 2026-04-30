@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import {
   buildHologramCode,
   calculateRequestedDays,
+  isHrPlanningRole,
   isHrDepartment,
   isManagerRole,
   isStaffRole,
@@ -134,7 +135,7 @@ export async function GET() {
       .replace(/[-\s]+/g, "_")
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
-    const isHr = role === "admin" || role === "hr" || (role === "department_head" && isHrDepartment(departmentName, departmentCode))
+    const isHr = isHrPlanningRole(role, departmentName, departmentCode)
 
     if (isStaffRole(role)) {
       const { data, error } = await supabase
@@ -419,12 +420,22 @@ export async function POST(request: NextRequest) {
     }
 
     const role = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    const canSelfApply = isStaffRole(role) || ["admin", "regional_manager", "department_head"].includes(role)
+    const canSelfApply =
+      isStaffRole(role) ||
+      ["admin", "regional_manager", "department_head", "hr_officer", "hr_director", "director_hr", "manager_hr"].includes(role)
     if (!canSelfApply) {
       return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
     }
 
-    const shouldEnforceAttendance = !["admin", "regional_manager", "department_head"].includes(role)
+    const shouldEnforceAttendance = ![
+      "admin",
+      "regional_manager",
+      "department_head",
+      "hr_officer",
+      "hr_director",
+      "director_hr",
+      "manager_hr",
+    ].includes(role)
     if (shouldEnforceAttendance) {
       const attendanceCheck = await validateAttendanceEngagementForRequest(supabase, user.id)
       if (!attendanceCheck.ok) {
@@ -480,7 +491,14 @@ export async function POST(request: NextRequest) {
         }
 
         const canSubmitBeyondEntitlementForHrAdjustment =
-          role === "admin" || role === "regional_manager" || role === "department_head" || role.includes("manager")
+          role === "admin" ||
+          role === "regional_manager" ||
+          role === "department_head" ||
+          role === "hr_officer" ||
+          role === "hr_director" ||
+          role === "director_hr" ||
+          role === "manager_hr" ||
+          role.includes("manager")
 
         if (entitlementDays !== null && requestedDays > entitlementDays && !canSubmitBeyondEntitlementForHrAdjustment) {
           return NextResponse.json(

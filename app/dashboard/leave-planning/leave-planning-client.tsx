@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { SignaturePad } from "@/components/leave/signature-pad"
-import { isHrDepartment, isManagerRole, isStaffRole } from "@/lib/leave-planning"
+import { isHrPlanningRole, isManagerRole, isStaffRole } from "@/lib/leave-planning"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
 
@@ -97,12 +97,17 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrDrawnSignatureDataUrl, setHrDrawnSignatureDataUrl] = useState<string | null>(null)
 
   const staff = isStaffRole(normalizedRole)
-  const manager = isManagerRole(normalizedRole) && !isHrDepartment(profile.departmentName, profile.departmentCode)
-  const hr =
+  const hr = isHrPlanningRole(normalizedRole, profile.departmentName, profile.departmentCode)
+  const manager = isManagerRole(normalizedRole) && !hr
+  const canSelfApply =
+    staff ||
     normalizedRole === "admin" ||
-    normalizedRole === "hr" ||
-    (normalizedRole === "department_head" && isHrDepartment(profile.departmentName, profile.departmentCode))
-  const canSelfApply = staff || normalizedRole === "admin" || normalizedRole === "regional_manager" || normalizedRole === "department_head"
+    normalizedRole === "regional_manager" ||
+    normalizedRole === "department_head" ||
+    normalizedRole === "hr_officer" ||
+    normalizedRole === "hr_director" ||
+    normalizedRole === "director_hr" ||
+    normalizedRole === "manager_hr"
   const hasModuleAccess = canSelfApply || staff || manager || hr
 
   const showUnderReviewToast = () => {
