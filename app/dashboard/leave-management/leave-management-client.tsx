@@ -22,7 +22,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { LeaveNotificationsClient } from "@/components/leave/leave-notifications-client"
 import { useToast } from "@/hooks/use-toast"
 
 interface LeaveRequest {
@@ -32,7 +31,7 @@ interface LeaveRequest {
   end_date: string
   reason: string
   leave_type: string
-  status: "pending" | "approved" | "dismissed" | "rejected"
+  status: string
   created_at: string
   user_name?: string
   department?: string
@@ -40,9 +39,10 @@ interface LeaveRequest {
 
 interface LeaveNotification {
   id: string
-  leave_request_id: string
-  user_id: string
-  status: "pending" | "pending_hod" | "pending_hr" | "approved" | "dismissed" | "rejected"
+  leave_plan_request_id?: string
+  leave_request_id?: string
+  user_id?: string
+  status: string
   leave_requests: LeaveRequest
   requester_role?: string
   requester_name?: string
@@ -66,6 +66,10 @@ export function LeaveManagementClient({
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementClientProps) {
+    const pendingStatuses = new Set(["pending", "pending_hod", "pending_hr", "pending_manager_review", "manager_confirmed"])
+    const approvedStatuses = new Set(["approved", "hr_approved"])
+    const editableStatuses = new Set(["pending", "pending_manager_review", "manager_changes_requested", "manager_rejected", "hr_rejected"])
+
   const { toast } = useToast()
   const [staffRequests, setStaffRequests] = useState<LeaveRequest[]>(initialStaffRequests)
   const [managerNotifications] = useState<LeaveNotification[]>(initialManagerNotifications)
@@ -150,13 +154,13 @@ export function LeaveManagementClient({
       return
     }
 
-    const response = await fetch("/api/leave/request-leave", {
+    const response = await fetch("/api/leave/planning", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: editingRequest.id,
-        start_date: editStartDate,
-        end_date: editEndDate,
+        preferred_start_date: editStartDate,
+        preferred_end_date: editEndDate,
         reason: editReason,
         leave_type: editLeaveType,
       }),
@@ -177,6 +181,7 @@ export function LeaveManagementClient({
               end_date: editEndDate,
               reason: editReason.trim(),
               leave_type: editLeaveType,
+              status: "pending_manager_review",
             }
           : row,
       ),
@@ -194,14 +199,21 @@ export function LeaveManagementClient({
       return
     }
 
+    const notification = managerNotifications.find((row) => row.id === notificationId)
+    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
+    if (!requestId) {
+      toast({ title: "Missing assignment", description: "Leave planning request id was not found.", variant: "destructive" })
+      return
+    }
+
     setProcessingId(notificationId)
     try {
-      const response = await fetch("/api/leave/notifications", {
+      const response = await fetch("/api/leave/planning/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "approve",
-          notificationId,
+          leave_plan_request_id: requestId,
         }),
       })
 
@@ -241,15 +253,22 @@ export function LeaveManagementClient({
       return
     }
 
+    const notification = managerNotifications.find((row) => row.id === notificationId)
+    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
+    if (!requestId) {
+      toast({ title: "Missing assignment", description: "Leave planning request id was not found.", variant: "destructive" })
+      return
+    }
+
     setProcessingId(notificationId)
     try {
-      const response = await fetch("/api/leave/notifications", {
+      const response = await fetch("/api/leave/planning/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "reject",
-          notificationId,
-          reason,
+          leave_plan_request_id: requestId,
+          recommendation: reason,
         }),
       })
 
@@ -273,9 +292,9 @@ export function LeaveManagementClient({
     }
   }
 
-  const pendingRequests = staffRequests.filter((r) => r.status === "pending")
-  const approvedRequests = staffRequests.filter((r) => r.status === "approved")
-  const pendingNotifications = managerNotifications.filter((n) => ["pending", "pending_hod", "pending_hr"].includes(String(n.status || "")))
+  const pendingRequests = staffRequests.filter((r) => pendingStatuses.has(String(r.status || "")))
+  const approvedRequests = staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
+  const pendingNotifications = managerNotifications.filter((n) => pendingStatuses.has(String(n.status || "")))
   const adminAllPending = pendingNotifications
   const adminStaffQueue = pendingNotifications.filter((n) => {
     const role = String(n.requester_role || "").toLowerCase()
@@ -422,18 +441,6 @@ export function LeaveManagementClient({
         </CardContent>
       </Card>
 
-      {isManagerView && (
-        <Card className="border-slate-200 bg-white/85 shadow-sm backdrop-blur">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl text-slate-900">Notifications Inbox</CardTitle>
-            <CardDescription>Inline approval notifications for managers, heads, and admins.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <LeaveNotificationsClient />
-          </CardContent>
-        </Card>
-      )}
-
       {canUseStaffLeaveHub && !hasHodLinkage && (
         <Alert className="border-amber-200 bg-amber-50">
           <AlertDescription className="text-amber-800">
@@ -538,7 +545,7 @@ export function LeaveManagementClient({
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {staffRequests.map((request) => (
-                    <LeaveRequestCard key={request.id} request={request} canEdit={request.status === "pending"} onEdit={() => openEditRequest(request)} />
+                    <LeaveRequestCard key={request.id} request={request} canEdit={editableStatuses.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} />
                   ))}
                 </div>
               )}
@@ -684,10 +691,14 @@ function LeaveRequestCard({
   canEdit?: boolean
   onEdit?: () => void
 }) {
+  const normalizedStatus = String(request.status || "").toLowerCase()
+  const isApproved = ["approved", "hr_approved"].includes(normalizedStatus)
+  const isPending = ["pending", "pending_hod", "pending_hr", "pending_manager_review", "manager_confirmed"].includes(normalizedStatus)
+
   const statusTone =
-    request.status === "approved"
+    isApproved
       ? "border-emerald-200 bg-emerald-50/60"
-      : request.status === "pending"
+      : isPending
         ? "border-amber-200 bg-amber-50/60"
         : "border-rose-200 bg-rose-50/60"
 
@@ -699,7 +710,7 @@ function LeaveRequestCard({
             <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
             <CardDescription className="mt-1 line-clamp-2">{request.reason}</CardDescription>
           </div>
-          <Badge className={request.status === "approved" ? "bg-emerald-600 text-white hover:bg-emerald-600" : request.status === "pending" ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
+          <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
             {formatLeaveType(request.status)}
           </Badge>
         </div>

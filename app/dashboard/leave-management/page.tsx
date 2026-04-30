@@ -41,44 +41,24 @@ export default async function LeaveManagementPage() {
     hasHodLinkage = false
   }
 
-  // Fetch user's own leave requests for personal tracking (including managers)
+  // Fetch user's own leave planning requests for personal tracking.
   {
-    const { data: requests } = await supabase
-      .from("leave_requests")
-      .select("*")
+    const { data: requests } = await admin
+      .from("leave_plan_requests")
+      .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
-    staffRequests = requests || []
-  }
-
-  try {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - Math.max(1, inactivityDays))
-
-    const { data: stalePending } = await admin
-      .from("leave_requests")
-      .select("id, user_id, start_date, end_date, status, created_at")
-      .eq("status", "pending")
-      .lte("created_at", cutoff.toISOString())
-      .limit(500)
-
-    for (const request of stalePending || []) {
-      const approvedAt = new Date().toISOString()
-      await admin
-        .from("leave_requests")
-        .update({ status: "approved", approved_at: approvedAt, updated_at: approvedAt })
-        .eq("id", (request as any).id)
-        .eq("status", "pending")
-
-      await admin
-        .from("leave_notifications")
-        .update({ status: "approved", approved_at: approvedAt })
-        .eq("leave_request_id", (request as any).id)
-        .eq("status", "pending_hr")
-    }
-  } catch (error) {
-    console.warn("leave inactivity auto-approval skipped:", error)
+    staffRequests = (requests || []).map((request: any) => ({
+      id: String(request.id),
+      user_id: String(request.user_id),
+      start_date: request.preferred_start_date,
+      end_date: request.preferred_end_date,
+      reason: request.reason || "",
+      leave_type: request.leave_type_key || "annual",
+      status: request.status,
+      created_at: request.created_at,
+    }))
   }
 
   const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
@@ -94,24 +74,55 @@ export default async function LeaveManagementPage() {
     "it_admin",
   ].includes(roleNorm)
 
-  // Fetch pending notifications for HOD/HR/admin
+  // Fetch leave planning review assignments for HOD/HR/admin metrics and queue summaries.
   if (canReviewLeave) {
-    let query = admin
-      .from("leave_notifications")
-      .select("id, recipient_id, sender_id, status, notification_type, created_at, leave_requests(*)")
-      .order("created_at", { ascending: false })
+    const reviewerFilter = roleNorm === "admin" ? undefined : user.id
+    const { data: planningReviews } = reviewerFilter
+      ? await admin
+          .from("leave_plan_reviews")
+          .select(`
+            id,
+            reviewer_id,
+            reviewer_role,
+            decision,
+            reviewed_at,
+            leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
+              id,
+              user_id,
+              preferred_start_date,
+              preferred_end_date,
+              leave_type_key,
+              reason,
+              status,
+              created_at
+            )
+          `)
+          .eq("reviewer_id", reviewerFilter)
+          .order("created_at", { ascending: false })
+      : await admin
+          .from("leave_plan_reviews")
+          .select(`
+            id,
+            reviewer_id,
+            reviewer_role,
+            decision,
+            reviewed_at,
+            leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
+              id,
+              user_id,
+              preferred_start_date,
+              preferred_end_date,
+              leave_type_key,
+              reason,
+              status,
+              created_at
+            )
+          `)
+          .order("created_at", { ascending: false })
 
-    if (roleNorm !== "admin") {
-      query = query.eq("recipient_id", user.id)
-    }
+    const notifications = (planningReviews || []).filter((review: any) => Boolean(review?.leave_plan_request))
 
-    const { data: notifications } = await query
-
-    const leaveRows = (notifications || [])
-      .map((notification: any) => notification.leave_requests)
-      .filter((leave: any) => Boolean(leave))
-
-    const requesterIds = Array.from(new Set(leaveRows.map((leave: any) => String(leave.user_id || "")).filter(Boolean)))
+    const requesterIds = Array.from(new Set(notifications.map((review: any) => String(review.leave_plan_request?.user_id || "")).filter(Boolean)))
 
     let requesterProfiles: any[] = []
     if (requesterIds.length > 0) {
@@ -125,23 +136,34 @@ export default async function LeaveManagementPage() {
     const requesterMap = new Map(requesterProfiles.map((row: any) => [row.id, row]))
 
     managerNotifications = (notifications || [])
-      .filter((notification: any) => {
+      .filter((review: any) => {
         if (roleNorm === "admin") return true
-        const leave = notification.leave_requests
-        return Boolean(leave?.user_id)
+        return Boolean(review?.leave_plan_request?.user_id)
       })
-      .map((notification: any) => {
-        const leave = notification.leave_requests
+      .map((review: any) => {
+        const leave = review.leave_plan_request
         const requester = requesterMap.get(String(leave?.user_id || ""))
-        const sourceDate = leave?.created_at || notification.created_at
+        const sourceDate = leave?.created_at || review.reviewed_at
         const waitingDays = sourceDate
           ? Math.max(0, Math.floor((Date.now() - new Date(sourceDate).getTime()) / (1000 * 60 * 60 * 24)))
           : 0
         return {
-          ...notification,
+          id: String(review.id),
+          leave_plan_request_id: String(leave?.id || ""),
+          status: String(leave?.status || review.decision || "pending_manager_review"),
           requester_role: String(requester?.role || "staff"),
           requester_name: requester ? `${requester.first_name || ""} ${requester.last_name || ""}`.trim() : "Staff",
           waiting_days: waitingDays,
+          leave_requests: {
+            id: String(leave?.id || ""),
+            user_id: String(leave?.user_id || ""),
+            start_date: leave?.preferred_start_date,
+            end_date: leave?.preferred_end_date,
+            reason: leave?.reason || "",
+            leave_type: leave?.leave_type_key || "annual",
+            status: String(leave?.status || "pending_manager_review"),
+            created_at: leave?.created_at,
+          },
         }
       })
 

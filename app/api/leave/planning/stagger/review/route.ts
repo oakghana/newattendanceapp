@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
 
 function isSchemaIssue(error: any) {
@@ -30,6 +30,7 @@ function normalizeDecision(action: string): LeavePlanReviewDecision | null {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, role")
       .eq("id", user.id)
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: review, error: reviewError } = await supabase
+    const { data: review, error: reviewError } = await admin
       .from("leave_plan_stagger_reviews")
       .select("id")
       .eq("leave_plan_stagger_request_id", leave_plan_stagger_request_id)
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
     }
 
-    const { data: staggerRequest, error: staggerRequestError } = await supabase
+    const { data: staggerRequest, error: staggerRequestError } = await admin
       .from("leave_plan_stagger_requests")
       .select("id, user_id, requested_start_date, requested_end_date, entitlement_days")
       .eq("id", leave_plan_stagger_request_id)
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { error: updateReviewError } = await supabase
+    const { error: updateReviewError } = await admin
       .from("leave_plan_stagger_reviews")
       .update({
         decision,
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
       throw updateReviewError
     }
 
-    const { data: allReviews, error: allReviewsError } = await supabase
+    const { data: allReviews, error: allReviewsError } = await admin
       .from("leave_plan_stagger_reviews")
       .select("decision, recommendation")
       .eq("leave_plan_stagger_request_id", leave_plan_stagger_request_id)
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.requested_end_date = nextEndDate
     }
 
-    const { error: requestUpdateError } = await supabase
+    const { error: requestUpdateError } = await admin
       .from("leave_plan_stagger_requests")
       .update(requestUpdatePayload)
       .eq("id", leave_plan_stagger_request_id)
@@ -203,7 +204,7 @@ export async function POST(request: NextRequest) {
           ? `${profile.role === "regional_manager" ? "Regional Manager" : "Department Head"} requested updates to your stagger leave request (${nextStartDate} to ${nextEndDate}). Reason: ${recommendation}`
           : `${profile.role === "regional_manager" ? "Regional Manager" : "Department Head"} rejected your stagger leave request. Reason: ${recommendation}`
 
-      await supabase.from("staff_notifications").insert({
+      await admin.from("staff_notifications").insert({
         recipient_id: staggerRequest.user_id,
         type: "leave_plan_stagger_manager_review",
         title,
