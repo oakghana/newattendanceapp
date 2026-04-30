@@ -24,26 +24,24 @@ function isHeadOfficeStaff(staff: any): boolean {
 }
 
 function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: string } {
-  const staffDept = String(staff?.department_id || "")
   const staffLoc = String(staff?.assigned_location_id || "")
-  const hodDept = String(hod?.department_id || "")
   const hodLoc = String(hod?.assigned_location_id || "")
   const hodRole = normalizeRole(String(hod?.role || ""))
 
+  // Admin/it-admin linkages are fully trusted — only validate HOD role type
   if (isHeadOfficeStaff(staff)) {
-    if (hodRole !== "department_head") {
+    if (hodRole !== "department_head" && hodRole !== "admin" && hodRole !== "it_admin") {
       return { ok: false, reason: "Head-office staff can only be linked to Department Heads." }
     }
-    if (!staffDept || !hodDept || staffDept !== hodDept) {
-      return { ok: false, reason: "Head-office staff can only be linked to Department Heads in the same department." }
-    }
+    // Department matching is NOT enforced — admin decides the correct HOD assignment
     return { ok: true }
   }
 
-  if (hodRole !== "regional_manager") {
+  // Regional staff must link to a regional_manager; enforce same location
+  if (hodRole !== "regional_manager" && hodRole !== "admin" && hodRole !== "it_admin") {
     return { ok: false, reason: "Regional staff can only be linked to Regional Managers." }
   }
-  if (!staffLoc || !hodLoc || staffLoc !== hodLoc) {
+  if (hodRole === "regional_manager" && staffLoc && hodLoc && staffLoc !== hodLoc) {
     return { ok: false, reason: "Regional staff can only be linked to Regional Managers in the same location." }
   }
   return { ok: true }

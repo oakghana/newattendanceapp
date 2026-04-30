@@ -218,7 +218,16 @@ export async function POST(request: NextRequest) {
           const sameDept = reviewerDept && requesterDept && reviewerDept === requesterDept
           const sameLocation = !reviewerLocation || (requesterLocation && reviewerLocation === requesterLocation)
           if (!sameDept || !sameLocation) {
-            return NextResponse.json({ error: "Department heads can review only requests within their department and assigned location." }, { status: 403 })
+            // Fall back to checking explicit HOD linkage table before blocking
+            const { data: linkage } = await admin
+              .from("loan_hod_linkages")
+              .select("id")
+              .eq("hod_user_id", user.id)
+              .eq("staff_user_id", req.user_id)
+              .maybeSingle()
+            if (!linkage) {
+              return NextResponse.json({ error: "Department heads can review only requests within their department and assigned location." }, { status: 403 })
+            }
           }
         }
       }

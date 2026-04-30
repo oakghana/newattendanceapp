@@ -64,13 +64,21 @@ async function validateAttendanceEngagementForRequest(admin: any, userId: string
 
   const rows = attendanceRows || []
   const now = new Date()
+  const todayStr = now.toDateString()
+
+  // If user has checked in today (with or without checkout), allow immediately
+  const hasTodayCheckIn = rows.some((row: any) => {
+    if (!row?.check_in_time) return false
+    return new Date(row.check_in_time).toDateString() === todayStr
+  })
+  if (hasTodayCheckIn) return { ok: true as const }
+
   const sevenDaysAgo = new Date(now)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
   const staleOpenCheckout = rows.find((row: any) => {
     if (!row?.check_in_time || row?.check_out_time) return false
-    const checkInDate = new Date(row.check_in_time)
-    return checkInDate.toDateString() !== now.toDateString()
+    return new Date(row.check_in_time).toDateString() !== todayStr
   })
 
   if (staleOpenCheckout) {
