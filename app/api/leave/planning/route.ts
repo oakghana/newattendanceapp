@@ -12,6 +12,15 @@ import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
 
 const YEAR_PERIOD = "2026/2027"
 
+const EDITABLE_STATUSES = ["pending_manager_review", "manager_changes_requested", "manager_rejected", "hr_rejected"] as const
+
+function normalizeRoleValue(role: string | null | undefined) {
+  return String(role || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[-\s]+/g, "_")
+}
+
 function isSchemaIssue(error: any) {
   const code = error?.code || ""
   const message = String(error?.message || "")
@@ -108,6 +117,85 @@ async function validateAttendanceEngagementForRequest(admin: any, userId: string
   return { ok: true as const }
 }
 
+async function resolveManagerReviewers(admin: any, userId: string, departmentId: string | null) {
+  const linkedReviewerIds: string[] = []
+  const { data: linkages } = await admin
+    .from("loan_hod_linkages")
+    .select("hod_user_id")
+    .eq("staff_user_id", userId)
+    .limit(20)
+
+  for (const row of linkages || []) {
+    const reviewerId = String((row as any)?.hod_user_id || "")
+    if (reviewerId && !linkedReviewerIds.includes(reviewerId)) linkedReviewerIds.push(reviewerId)
+  }
+
+  if (linkedReviewerIds.length > 0) {
+    const { data: linkedReviewers } = await admin
+      .from("user_profiles")
+      .select("id, role")
+      .in("id", linkedReviewerIds)
+      .in("role", ["regional_manager", "department_head"])
+      .eq("is_active", true)
+
+    const reviewers = (linkedReviewers || []).map((r: any) => ({
+      id: String(r.id),
+      role: String(r.role || ""),
+    }))
+
+    if (reviewers.length > 0) return reviewers
+  }
+
+  const { data: reviewers } = await admin
+    .from("user_profiles")
+    .select("id, role, department_id")
+    .in("role", ["regional_manager", "department_head"])
+    .eq("is_active", true)
+
+  return (reviewers || []).filter((r: any) => {
+    if (r.role === "regional_manager") return true
+    if (r.role === "department_head") return Boolean(r.department_id && departmentId && r.department_id === departmentId)
+    return false
+  }).map((r: any) => ({ id: String(r.id), role: String(r.role || "") }))
+}
+
+async function syncManagerReviews(admin: any, leavePlanRequestId: string, reviewers: Array<{ id: string; role: string }>) {
+  await admin.from("leave_plan_reviews").delete().eq("leave_plan_request_id", leavePlanRequestId)
+  if (reviewers.length === 0) return
+
+  const reviewRows = reviewers.map((reviewer) => ({
+    leave_plan_request_id: leavePlanRequestId,
+    reviewer_id: reviewer.id,
+    reviewer_role: reviewer.role,
+    decision: "pending",
+  }))
+
+  await admin.from("leave_plan_reviews").insert(reviewRows)
+}
+
+async function resolveEntitlementDays(admin: any, leaveTypeKey: string) {
+  const normalizedLeaveTypeKey = String(leaveTypeKey || "annual").toLowerCase()
+  try {
+    const { data: policyRows, error: policyError } = await admin
+      .from("leave_policy_catalog")
+      .select("leave_type_key, entitlement_days, is_enabled")
+      .eq("leave_year_period", YEAR_PERIOD)
+      .eq("leave_type_key", normalizedLeaveTypeKey)
+      .limit(1)
+
+    if (!policyError && policyRows && policyRows.length > 0) {
+      const policy = policyRows[0] as any
+      if (!policy.is_enabled) return { error: "Selected leave type is disabled by policy.", entitlementDays: null }
+      return { entitlementDays: Number(policy.entitlement_days || 0), error: null }
+    }
+  } catch {
+    // Use default fallback below.
+  }
+
+  const fallback = DEFAULT_LEAVE_TYPES.find((t) => t.leaveTypeKey === normalizedLeaveTypeKey)
+  return { entitlementDays: fallback ? fallback.entitlementDays : null, error: null }
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -129,10 +217,7 @@ export async function GET() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String(profile.role || "")
-      .toLowerCase()
-      .trim()
-      .replace(/[-\s]+/g, "_")
+    const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
     const isHr = isHrPlanningRole(role, departmentName, departmentCode)
@@ -466,30 +551,12 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
-        let entitlementDays: number | null = null
-        let leaveTypeKey = String(leave_type || "annual").toLowerCase()
-        try {
-          const { data: policyRows, error: policyError } = await admin
-            .from("leave_policy_catalog")
-            .select("leave_type_key, entitlement_days, is_enabled")
-            .eq("leave_year_period", YEAR_PERIOD)
-            .eq("leave_type_key", leaveTypeKey)
-            .limit(1)
-
-          if (!policyError && policyRows && policyRows.length > 0) {
-            const policy = policyRows[0] as any
-            if (!policy.is_enabled) {
-              return NextResponse.json({ error: "Selected leave type is disabled by policy." }, { status: 400 })
-            }
-            entitlementDays = Number(policy.entitlement_days || 0)
-          } else {
-            const fallback = DEFAULT_LEAVE_TYPES.find((t) => t.leaveTypeKey === leaveTypeKey)
-            entitlementDays = fallback ? fallback.entitlementDays : null
-          }
-        } catch {
-          const fallback = DEFAULT_LEAVE_TYPES.find((t) => t.leaveTypeKey === leaveTypeKey)
-          entitlementDays = fallback ? fallback.entitlementDays : null
-        }
+    const leaveTypeKey = String(leave_type || "annual").toLowerCase()
+    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey)
+    if (entitlementResult.error) {
+      return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+    }
+    const entitlementDays = entitlementResult.entitlementDays
 
         const canSubmitBeyondEntitlementForHrAdjustment =
           role === "admin" ||
@@ -545,23 +612,7 @@ export async function POST(request: NextRequest) {
       throw requestError
     }
 
-    const { data: reviewers, error: reviewerError } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id")
-      .in("role", ["regional_manager", "department_head"])
-      .eq("is_active", true)
-
-    if (reviewerError) {
-      throw reviewerError
-    }
-
-    const nonHrReviewers = (reviewers || []).filter((r: any) => {
-      if (r.role === "regional_manager") return true
-      if (r.role === "department_head") {
-        return r.department_id && r.department_id === profile.department_id
-      }
-      return false
-    })
+    const nonHrReviewers = await resolveManagerReviewers(admin, user.id, (profile as any).department_id || null)
 
     if (nonHrReviewers.length === 0) {
       return NextResponse.json(
@@ -572,19 +623,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const reviewRows = nonHrReviewers.map((reviewer: any) => ({
-      leave_plan_request_id: requestRow.id,
-      reviewer_id: reviewer.id,
-      reviewer_role: reviewer.role,
-      decision: "pending",
-    }))
-
-    const { error: reviewInsertError } = await admin.from("leave_plan_reviews").insert(reviewRows)
-    if (reviewInsertError) {
-      const migrationError = handleMissingSchema(reviewInsertError)
-      if (migrationError) return migrationError
-      throw reviewInsertError
-    }
+    await syncManagerReviews(admin, requestRow.id, nonHrReviewers as any)
 
     return NextResponse.json({ success: true, request: requestRow }, { status: 201 })
   } catch (error) {
@@ -600,5 +639,202 @@ export async function POST(request: NextRequest) {
             }
           })() || "Unknown error"
     return NextResponse.json({ error: `Failed to submit leave planning request: ${errMsg}` }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("id, role, department_id")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    const role = normalizeRoleValue(profile.role)
+    const canSelfApply =
+      isStaffRole(role) ||
+      ["admin", "regional_manager", "department_head", "hr_officer", "hr_director", "director_hr", "manager_hr"].includes(role)
+
+    if (!canSelfApply) {
+      return NextResponse.json({ error: "Only staff, managers, and admins can update leave plans." }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const {
+      id,
+      leave_year_period,
+      preferred_start_date,
+      preferred_end_date,
+      leave_type,
+      reason,
+      user_signature_mode,
+      user_signature_text,
+      user_signature_image_url,
+      user_signature_data_url,
+    } = body
+
+    if (!id || !preferred_start_date || !preferred_end_date) {
+      return NextResponse.json({ error: "id, start date, and end date are required." }, { status: 400 })
+    }
+
+    if ((leave_year_period || YEAR_PERIOD) !== YEAR_PERIOD) {
+      return NextResponse.json({ error: "Only 2026/2027 leave period is supported in this workflow." }, { status: 400 })
+    }
+
+    const { data: existing, error: existingError } = await admin
+      .from("leave_plan_requests")
+      .select("id, user_id, status")
+      .eq("id", id)
+      .single()
+
+    if (existingError || !existing) {
+      return NextResponse.json({ error: "Leave plan request not found." }, { status: 404 })
+    }
+
+    if (existing.user_id !== user.id) {
+      return NextResponse.json({ error: "You can only update your own leave request." }, { status: 403 })
+    }
+
+    if (!EDITABLE_STATUSES.includes(String(existing.status || "") as any)) {
+      return NextResponse.json({ error: "This leave request cannot be edited at its current stage." }, { status: 400 })
+    }
+
+    const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
+    if (requestedDays <= 0) {
+      return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
+    }
+
+    const leaveTypeKey = String(leave_type || "annual").toLowerCase()
+    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey)
+    if (entitlementResult.error) {
+      return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+    }
+    const entitlementDays = entitlementResult.entitlementDays
+
+    const canSubmitBeyondEntitlementForHrAdjustment =
+      role === "admin" ||
+      role === "regional_manager" ||
+      role === "department_head" ||
+      role === "hr_officer" ||
+      role === "hr_director" ||
+      role === "director_hr" ||
+      role === "manager_hr" ||
+      role.includes("manager")
+
+    if (entitlementDays !== null && requestedDays > entitlementDays && !canSubmitBeyondEntitlementForHrAdjustment) {
+      return NextResponse.json(
+        {
+          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type.`,
+        },
+        { status: 400 },
+      )
+    }
+
+    const updatePayload: Record<string, any> = {
+      leave_year_period: YEAR_PERIOD,
+      preferred_start_date,
+      preferred_end_date,
+      leave_type_key: leaveTypeKey,
+      entitlement_days: entitlementDays,
+      requested_days: requestedDays,
+      reason: reason || null,
+      status: "pending_manager_review",
+      manager_recommendation: null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (user_signature_mode !== undefined) updatePayload.user_signature_mode = user_signature_mode || "typed"
+    if (user_signature_text !== undefined) updatePayload.user_signature_text = user_signature_text || null
+    if (user_signature_image_url !== undefined) updatePayload.user_signature_image_url = user_signature_image_url || null
+    if (user_signature_data_url !== undefined) updatePayload.user_signature_data_url = user_signature_data_url || null
+
+    const { data: updated, error: updateError } = await admin
+      .from("leave_plan_requests")
+      .update(updatePayload)
+      .eq("id", id)
+      .select("*")
+      .single()
+
+    if (updateError || !updated) {
+      return NextResponse.json({ error: "Failed to update leave request." }, { status: 500 })
+    }
+
+    const reviewers = await resolveManagerReviewers(admin, user.id, (profile as any).department_id || null)
+    if (reviewers.length === 0) {
+      return NextResponse.json(
+        {
+          error: "No regional manager or department head is configured for this workflow.",
+        },
+        { status: 400 },
+      )
+    }
+
+    await syncManagerReviews(admin, id, reviewers)
+
+    return NextResponse.json({ success: true, request: updated })
+  } catch (error: any) {
+    console.error("[v0] Leave planning PUT error:", error)
+    return NextResponse.json({ error: error?.message || "Failed to update leave planning request." }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const id = String(body?.id || "")
+    if (!id) {
+      return NextResponse.json({ error: "id is required." }, { status: 400 })
+    }
+
+    const { data: existing, error: existingError } = await admin
+      .from("leave_plan_requests")
+      .select("id, user_id, status")
+      .eq("id", id)
+      .single()
+
+    if (existingError || !existing) {
+      return NextResponse.json({ error: "Leave plan request not found." }, { status: 404 })
+    }
+
+    if (existing.user_id !== user.id) {
+      return NextResponse.json({ error: "You can only delete your own leave request." }, { status: 403 })
+    }
+
+    if (!EDITABLE_STATUSES.includes(String(existing.status || "") as any)) {
+      return NextResponse.json({ error: "This leave request cannot be deleted at its current stage." }, { status: 400 })
+    }
+
+    await admin.from("leave_plan_reviews").delete().eq("leave_plan_request_id", id)
+    const { error: deleteError } = await admin.from("leave_plan_requests").delete().eq("id", id)
+    if (deleteError) throw deleteError
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error("[v0] Leave planning DELETE error:", error)
+    return NextResponse.json({ error: error?.message || "Failed to delete leave planning request." }, { status: 500 })
   }
 }

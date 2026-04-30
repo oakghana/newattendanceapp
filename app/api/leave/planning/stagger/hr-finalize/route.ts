@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
     const isHr =
       role === "admin" ||
       role === "hr" ||
+      role === "hr_officer" ||
+      role === "hr_director" ||
+      role === "director_hr" ||
+      role === "manager_hr" ||
       (role === "department_head" &&
         isHrDepartment((profile as any)?.departments?.name, (profile as any)?.departments?.code))
 

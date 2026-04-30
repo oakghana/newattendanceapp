@@ -100,6 +100,35 @@ async function findYearlyDuplicateLoanRequest(
   return null
 }
 
+async function loadLoanType(admin: any, loanTypeKey: string) {
+  const withTerms = await admin
+    .from("loan_types")
+    .select("loan_key, loan_label, category, requires_committee, requires_fd_check, fixed_amount, loan_terms, default_recovery_months")
+    .eq("loan_key", loanTypeKey)
+    .eq("is_active", true)
+    .single()
+
+  if (!withTerms.error && withTerms.data) return withTerms
+  if (!isSchemaIssue(withTerms.error)) return withTerms
+
+  const legacy = await admin
+    .from("loan_types")
+    .select("loan_key, loan_label, category, requires_committee, requires_fd_check, fixed_amount")
+    .eq("loan_key", loanTypeKey)
+    .eq("is_active", true)
+    .single()
+
+  if (legacy.error || !legacy.data) return legacy
+  return {
+    data: {
+      ...legacy.data,
+      loan_terms: null,
+      default_recovery_months: null,
+    },
+    error: null,
+  }
+}
+
 async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
   const { data: attendanceRows, error } = await admin
     .from("attendance_records")
@@ -227,12 +256,7 @@ export async function POST(request: NextRequest) {
       return loanSubmissionClosedResponse()
     }
 
-    const { data: loanType, error: typeError } = await admin
-      .from("loan_types")
-      .select("loan_key, loan_label, category, requires_committee, requires_fd_check, fixed_amount, loan_terms, default_recovery_months")
-      .eq("loan_key", loan_type_key)
-      .eq("is_active", true)
-      .single()
+    const { data: loanType, error: typeError } = await loadLoanType(admin, loan_type_key)
 
     if (typeError || !loanType) {
       return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
@@ -541,12 +565,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (loan_type_key) {
-      const { data: loanType } = await admin
-        .from("loan_types")
-        .select("loan_key, loan_label, category, requires_committee, requires_fd_check, fixed_amount, loan_terms, default_recovery_months")
-        .eq("loan_key", loan_type_key)
-        .eq("is_active", true)
-        .single()
+      const { data: loanType } = await loadLoanType(admin, loan_type_key)
 
       if (loanType) {
         if (role !== "admin") {

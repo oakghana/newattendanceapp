@@ -226,12 +226,22 @@ export async function GET() {
     }
     const reviewerScopedStaffIds = Array.from(new Set(linkedStaffIds))
 
-    const [typesRes, myRes, myHodLinkRes] = await Promise.all([
+    const loanTypesWithTermsQuery = () =>
       admin
         .from("loan_types")
         .select("loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, fixed_amount, max_amount, loan_terms, default_recovery_months, sort_order")
         .eq("is_active", true)
-        .order("sort_order", { ascending: true }),
+        .order("sort_order", { ascending: true })
+
+    const loanTypesLegacyQuery = () =>
+      admin
+        .from("loan_types")
+        .select("loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, fixed_amount, max_amount, sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+
+    const [typesRes, myRes, myHodLinkRes] = await Promise.all([
+      loanTypesWithTermsQuery(),
       admin
         .from("loan_requests")
         .select("*")
@@ -272,7 +282,22 @@ export async function GET() {
       role: row.role || null,
     }))
 
-    if (typesRes.error && isSchemaIssue(typesRes.error)) {
+    let resolvedTypesRes: any = typesRes
+    if (resolvedTypesRes.error && isSchemaIssue(resolvedTypesRes.error)) {
+      const legacyTypesRes = await loanTypesLegacyQuery()
+      if (!legacyTypesRes.error) {
+        resolvedTypesRes = {
+          data: (legacyTypesRes.data || []).map((row: any) => ({
+            ...row,
+            loan_terms: null,
+            default_recovery_months: null,
+          })),
+          error: null,
+        }
+      }
+    }
+
+    if (resolvedTypesRes.error && isSchemaIssue(resolvedTypesRes.error)) {
       const viewAllTabs = role === "admin"
       return NextResponse.json(
         {
@@ -310,7 +335,7 @@ export async function GET() {
       )
     }
 
-    if (typesRes.error) throw typesRes.error
+    if (resolvedTypesRes.error) throw resolvedTypesRes.error
     if (myRes.error) throw myRes.error
 
     await autoAdvanceStaleHodRequests(admin)
@@ -561,7 +586,7 @@ export async function GET() {
       },
       role,
       permissions,
-      loanTypes: typesRes.data || [],
+      loanTypes: resolvedTypesRes.data || [],
       myRequests: attachName(myRes.data || []),
       myTimelines,
       directorApprovers,

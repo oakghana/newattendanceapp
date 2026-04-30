@@ -59,6 +59,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [data, setData] = useState<any>(null)
+  const [editingRequestId, setEditingRequestId] = useState<string | null>(null)
 
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -109,6 +110,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     normalizedRole === "director_hr" ||
     normalizedRole === "manager_hr"
   const hasModuleAccess = canSelfApply || staff || manager || hr
+  const canManagerReviewAction = manager || normalizedRole === "admin"
+  const canHrFinalizeAction = hr || normalizedRole === "admin"
+  const editableStatuses = new Set(["pending_manager_review", "manager_changes_requested", "manager_rejected", "hr_rejected"])
 
   const showUnderReviewToast = () => {
     toast({
@@ -209,9 +213,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     setError(null)
     try {
       const response = await fetch("/api/leave/planning", {
-        method: "POST",
+        method: editingRequestId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editingRequestId,
           leave_year_period: yearPeriod,
           preferred_start_date: startDate,
           preferred_end_date: endDate,
@@ -231,12 +236,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       setStartDate("")
       setEndDate("")
       setReason("")
+      setEditingRequestId(null)
       setTypedSignature("")
       setUploadedSignatureDataUrl(null)
       setDrawnSignatureDataUrl(null)
       await loadPlanningData()
       toast({
-        title: "Request submitted",
+        title: editingRequestId ? "Leave request updated" : "Leave request submitted",
         description: `Expected return-to-work date: ${computeReturnToWorkDate(endDate)}`,
       })
     } catch (err) {
@@ -247,7 +253,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }
 
   const submitManagerReview = async (requestId: string, draft: ReviewDraft) => {
-    if (profile.role !== "admin") {
+    if (!canManagerReviewAction) {
       showUnderReviewToast()
       return
     }
@@ -284,7 +290,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }
 
   const submitHrDecision = async (requestId: string) => {
-    if (profile.role !== "admin") {
+    if (!canHrFinalizeAction) {
       showUnderReviewToast()
       return
     }
@@ -396,7 +402,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }
 
   const submitStaggerManagerReview = async (requestId: string, draft: ReviewDraft) => {
-    if (profile.role !== "admin") {
+    if (!canManagerReviewAction) {
       showUnderReviewToast()
       return
     }
@@ -433,7 +439,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }
 
   const submitStaggerHrDecision = async (requestId: string) => {
-    if (profile.role !== "admin") {
+    if (!canHrFinalizeAction) {
       showUnderReviewToast()
       return
     }
@@ -647,6 +653,45 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     ].join("\n")
   }
 
+  const beginEditLeaveRequest = (row: any) => {
+    setEditingRequestId(String(row.id))
+    setStartDate(String(row.preferred_start_date || ""))
+    setEndDate(String(row.preferred_end_date || ""))
+    setReason(String(row.reason || ""))
+    setLeaveType(String(row.leave_type_key || leaveType || "annual"))
+  }
+
+  const cancelEditLeaveRequest = () => {
+    setEditingRequestId(null)
+    setStartDate("")
+    setEndDate("")
+    setReason("")
+  }
+
+  const deleteLeaveRequest = async (requestId: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/leave/planning", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: requestId }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to delete leave request")
+      }
+
+      if (editingRequestId === requestId) cancelEditLeaveRequest()
+      await loadPlanningData()
+      toast({ title: "Leave request deleted" })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete leave request")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -682,7 +727,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       )}
 
       <Tabs defaultValue={canSelfApply ? "staff" : manager ? "manager" : "hr"} className="space-y-4">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-1 gap-2 rounded-xl bg-slate-100 p-2 md:grid-cols-3">
           {canSelfApply && <TabsTrigger value="staff">My Leave</TabsTrigger>}
           {manager && <TabsTrigger value="manager">Review Requests</TabsTrigger>}
           {hr && <TabsTrigger value="hr">HR Approval</TabsTrigger>}
@@ -770,9 +815,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   setDrawnSignatureDataUrl,
                 )}
 
-                <Button onClick={submitPlan} disabled={loading}>
-                  {loading ? "Submitting..." : "Submit My Leave Request"}
+                <Button onClick={submitPlan} disabled={loading} className="w-full md:w-auto">
+                  {loading ? "Submitting..." : editingRequestId ? "Save Leave Application" : "Save Leave Application"}
                 </Button>
+                {editingRequestId && (
+                  <Button variant="outline" onClick={cancelEditLeaveRequest} disabled={loading} className="ml-2 w-full md:w-auto">
+                    Cancel Edit
+                  </Button>
+                )}
 
                 {periodLocked && (
                   <p className="text-xs text-amber-600">
@@ -840,6 +890,16 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       <p className="mt-2 text-sm">
                         <span className="font-medium">HR Letter:</span> {row.hr_response_letter}
                       </p>
+                    )}
+                    {editableStatuses.has(String(row.status || "")) && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => beginEditLeaveRequest(row)} disabled={loading}>
+                          Edit Application
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => void deleteLeaveRequest(String(row.id))} disabled={loading}>
+                          Delete Application
+                        </Button>
+                      </div>
                     )}
                   </div>
                 ))}

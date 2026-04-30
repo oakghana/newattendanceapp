@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workflow"
 
+function isSchemaIssue(error: any): boolean {
+  const code = String(error?.code || "")
+  const message = String(error?.message || "").toLowerCase()
+  return (
+    code === "PGRST205" ||
+    code === "PGRST108" ||
+    code === "42P01" ||
+    code === "42703" ||
+    message.includes("does not exist") ||
+    message.includes("schema cache")
+  )
+}
+
 function canManageLookups(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   return (
     role === "admin" ||
@@ -98,11 +111,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
-    const [loanTypesRes, locationsRes, allStaff, allHods, allLinkages] = await Promise.all([
+    const loanTypesWithTermsQuery = () =>
       admin
         .from("loan_types")
         .select("loan_key, loan_label, category, fixed_amount, max_amount, min_qualification_note, loan_terms, default_recovery_months, requires_committee, requires_fd_check, is_active, sort_order")
-        .order("sort_order", { ascending: true }),
+        .order("sort_order", { ascending: true })
+
+    const loanTypesLegacyQuery = () =>
+      admin
+        .from("loan_types")
+        .select("loan_key, loan_label, category, fixed_amount, max_amount, min_qualification_note, requires_committee, requires_fd_check, is_active, sort_order")
+        .order("sort_order", { ascending: true })
+
+    const [loanTypesRes, locationsRes, allStaff, allHods, allLinkages] = await Promise.all([
+      loanTypesWithTermsQuery(),
       admin.from("geofence_locations").select("id, name, address, districts(name)").order("name", { ascending: true }),
       fetchAllRows(
         (from, to) =>
@@ -134,7 +156,22 @@ export async function GET(request: NextRequest) {
       ),
     ])
 
-    if (loanTypesRes.error) throw loanTypesRes.error
+    let resolvedLoanTypesRes: any = loanTypesRes
+    if (resolvedLoanTypesRes.error && isSchemaIssue(resolvedLoanTypesRes.error)) {
+      const fallbackLoanTypesRes = await loanTypesLegacyQuery()
+      if (!fallbackLoanTypesRes.error) {
+        resolvedLoanTypesRes = {
+          data: (fallbackLoanTypesRes.data || []).map((row: any) => ({
+            ...row,
+            loan_terms: null,
+            default_recovery_months: null,
+          })),
+          error: null,
+        }
+      }
+    }
+
+    if (resolvedLoanTypesRes.error) throw resolvedLoanTypesRes.error
     if (locationsRes.error) throw locationsRes.error
 
     let staffRows = allStaff || []
@@ -273,7 +310,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      loanTypes: loanTypesRes.data || [],
+      loanTypes: resolvedLoanTypesRes.data || [],
       locations: locationsRes.data || [],
       staff: staffRows,
       hods: hodRows,
@@ -347,6 +384,24 @@ export async function POST(request: NextRequest) {
         .eq("loan_key", loanKey)
         .select("*")
         .single()
+
+      if (error && isSchemaIssue(error)) {
+        const fallback = await admin
+          .from("loan_types")
+          .update({
+            fixed_amount: fixedAmount,
+            max_amount: maxAmount,
+            min_qualification_note: minQualification,
+            requires_committee: requiresCommittee,
+            requires_fd_check: requiresFdCheck,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("loan_key", loanKey)
+          .select("*")
+          .single()
+        if (fallback.error) throw fallback.error
+        return NextResponse.json({ success: true, data: fallback.data })
+      }
 
       if (error) throw error
       return NextResponse.json({ success: true, data })

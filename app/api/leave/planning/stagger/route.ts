@@ -2,6 +2,47 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { buildHologramCode, isStaffRole, calculateRequestedDays } from "@/lib/leave-planning"
 
+async function resolveManagerReviewers(supabase: any, userId: string, departmentId: string | null) {
+  const linkedReviewerIds: string[] = []
+  const { data: linkages } = await supabase
+    .from("loan_hod_linkages")
+    .select("hod_user_id")
+    .eq("staff_user_id", userId)
+    .limit(20)
+
+  for (const row of linkages || []) {
+    const reviewerId = String((row as any)?.hod_user_id || "")
+    if (reviewerId && !linkedReviewerIds.includes(reviewerId)) linkedReviewerIds.push(reviewerId)
+  }
+
+  if (linkedReviewerIds.length > 0) {
+    const { data: linkedReviewers } = await supabase
+      .from("user_profiles")
+      .select("id, role")
+      .in("id", linkedReviewerIds)
+      .in("role", ["regional_manager", "department_head"])
+      .eq("is_active", true)
+
+    const reviewers = (linkedReviewers || []).map((r: any) => ({
+      id: String(r.id),
+      role: String(r.role || ""),
+    }))
+    if (reviewers.length > 0) return reviewers
+  }
+
+  const { data: reviewers } = await supabase
+    .from("user_profiles")
+    .select("id, role, department_id")
+    .in("role", ["regional_manager", "department_head"])
+    .eq("is_active", true)
+
+  return (reviewers || []).filter((r: any) => {
+    if (r.role === "regional_manager") return true
+    if (r.role === "department_head") return Boolean(r.department_id && departmentId && r.department_id === departmentId)
+    return false
+  }).map((r: any) => ({ id: String(r.id), role: String(r.role || "") }))
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -97,16 +138,7 @@ export async function POST(request: NextRequest) {
       throw staggerInsertError
     }
 
-    const { data: reviewers, error: reviewerError } = await supabase
-      .from("user_profiles")
-      .select("id, role")
-      .in("role", ["regional_manager", "department_head"])
-      .eq("is_active", true)
-
-    if (reviewerError) {
-      throw reviewerError
-    }
-
+    const reviewers = await resolveManagerReviewers(supabase, user.id, (profile as any).department_id || null)
     const reviewRows = (reviewers || []).map((r: any) => ({
       leave_plan_stagger_request_id: staggerRequest.id,
       reviewer_id: r.id,

@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS public.loan_types (
   requires_fd_check BOOLEAN NOT NULL DEFAULT true,
   min_fd_score NUMERIC(5,2) NOT NULL DEFAULT 39,
   min_qualification_note TEXT,
+  loan_terms TEXT,
+  default_recovery_months INTEGER,
   fixed_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
   max_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT true,
@@ -141,6 +143,12 @@ ALTER TABLE public.loan_types
 ALTER TABLE public.loan_types
   ADD COLUMN IF NOT EXISTS min_qualification_note TEXT;
 
+ALTER TABLE public.loan_types
+  ADD COLUMN IF NOT EXISTS loan_terms TEXT;
+
+ALTER TABLE public.loan_types
+  ADD COLUMN IF NOT EXISTS default_recovery_months INTEGER;
+
 ALTER TABLE public.loan_requests
   ADD COLUMN IF NOT EXISTS requires_fd_check BOOLEAN NOT NULL DEFAULT true;
 
@@ -161,25 +169,25 @@ ALTER TABLE public.loan_requests
 
 CREATE INDEX IF NOT EXISTS idx_loan_requests_location ON public.loan_requests(staff_location_id, created_at DESC);
 
-INSERT INTO public.loan_types (loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, fixed_amount, max_amount, is_active, sort_order)
+INSERT INTO public.loan_types (loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, loan_terms, default_recovery_months, fixed_amount, max_amount, is_active, sort_order)
 VALUES
-  ('car_loan_junior',               'Car Loan (Junior)',                'car',   true,  true,  39, 'Junior and above', 15000.00, 15000.00, true,  1),
-  ('car_loan_senior',               'Car Loan (Senior)',                'car',   true,  true,  39, 'Senior and above', 25000.00, 25000.00, true,  2),
-  ('car_loan_junior_motor',         'Car Loan (Junior Motor)',          'car',   true,  true,  39, 'Junior and above', 10000.00, 10000.00, true,  3),
-  ('education_loan_junior',         'Education Loan (Junior)',          'other', false, true,  39, 'Junior and above',  5000.00,  5000.00, true,  4),
-  ('education_loan_senior',         'Education Loan (Senior)',          'other', false, true,  39, 'Senior and above',  8000.00,  8000.00, true,  5),
-  ('funeral_loan_junior',           'Funeral Loan (Junior)',            'other', false, false, 39, 'Junior and above', 10000.00, 10000.00, true,  6),
-  ('funeral_loan_senior',           'Funeral Loan (Senior)',            'other', false, false, 39, 'Senior and above', 15000.00, 15000.00, true,  7),
-  ('household_durable_loan_junior', 'Household Durable Loan (Junior)',  'other', false, true,  39, 'Junior and above',  5000.00,  5000.00, true,  8),
-  ('household_durable_loan_senior', 'Household Durable Loan (Senior)',  'other', false, true,  39, 'Senior and above',  8000.00,  8000.00, true,  9),
-  ('rent_loan_junior',              'Rent Loan (Junior)',               'other', false, true,  39, 'Junior and above',  5000.00,  5000.00, true, 10),
-  ('rent_loan_senior',              'Rent Loan (Senior)',               'other', false, true,  39, 'Senior and above',  8000.00,  8000.00, true, 11),
-  ('vehicle_repair_loan_junior',    'Vehicle Repair Loan (Junior)',     'other', false, true,  39, 'Junior and above',  5000.00,  5000.00, true, 12),
-  ('vehicle_repair_loan_junior_motor','Vehicle Repair Loan (Junior Motor)','other',false,true, 39, 'Junior and above',  5000.00,  5000.00, true, 13),
-  ('vehicle_repair_loan_manager',   'Vehicle Repair Loan (Manager)',    'other', false, true,  39, 'Manager and above', 10000.00, 10000.00, true, 14),
-  ('vehicle_repair_loan_senior',    'Vehicle Repair Loan (Senior)',     'other', false, true,  39, 'Senior and above',  8000.00,  8000.00, true, 15),
-  ('vehicle_insurance_loan_manager','Vehicle Insurance Loan (Manager)', 'other', false, false, 39, 'Manager and above',  5000.00,  5000.00, true, 16),
-  ('vehicle_insurance_loan_senior', 'Vehicle Insurance Loan (Senior)',  'other', false, false, 39, 'Senior and above',  3000.00,  3000.00, true, 17)
+  ('car_loan_junior',               'Car Loan (Junior)',                'car',   true,  true,  39, 'Junior and above', 'Standard car-loan recovery applies.', 48, 15000.00, 15000.00, true,  1),
+  ('car_loan_senior',               'Car Loan (Senior)',                'car',   true,  true,  39, 'Senior and above', 'Standard car-loan recovery applies.', 48, 25000.00, 25000.00, true,  2),
+  ('car_loan_junior_motor',         'Car Loan (Junior Motor)',          'car',   true,  true,  39, 'Junior and above', 'Standard car-loan recovery applies.', 36, 10000.00, 10000.00, true,  3),
+  ('education_loan_junior',         'Education Loan (Junior)',          'other', false, true,  39, 'Junior and above', 'Education loan repayment applies.', 24,  5000.00,  5000.00, true,  4),
+  ('education_loan_senior',         'Education Loan (Senior)',          'other', false, true,  39, 'Senior and above', 'Education loan repayment applies.', 24,  8000.00,  8000.00, true,  5),
+  ('funeral_loan_junior',           'Funeral Loan (Junior)',            'other', false, false, 39, 'Junior and above', 'Immediate welfare support; recovery applies per policy.', 12, 10000.00, 10000.00, true,  6),
+  ('funeral_loan_senior',           'Funeral Loan (Senior)',            'other', false, false, 39, 'Senior and above', 'Immediate welfare support; recovery applies per policy.', 12, 15000.00, 15000.00, true,  7),
+  ('household_durable_loan_junior', 'Household Durable Loan (Junior)',  'other', false, true,  39, 'Junior and above', 'Household durable loan repayment applies.', 24,  5000.00,  5000.00, true,  8),
+  ('household_durable_loan_senior', 'Household Durable Loan (Senior)',  'other', false, true,  39, 'Senior and above', 'Household durable loan repayment applies.', 24,  8000.00,  8000.00, true,  9),
+  ('rent_loan_junior',              'Rent Loan (Junior)',               'other', false, true,  39, 'Junior and above', 'Rent loan repayment applies.', 18,  5000.00,  5000.00, true, 10),
+  ('rent_loan_senior',              'Rent Loan (Senior)',               'other', false, true,  39, 'Senior and above', 'Rent loan repayment applies.', 18,  8000.00,  8000.00, true, 11),
+  ('vehicle_repair_loan_junior',    'Vehicle Repair Loan (Junior)',     'other', false, true,  39, 'Junior and above', 'Vehicle repair repayment applies.', 18,  5000.00,  5000.00, true, 12),
+  ('vehicle_repair_loan_junior_motor','Vehicle Repair Loan (Junior Motor)','other',false,true, 39, 'Junior and above', 'Vehicle repair repayment applies.', 18,  5000.00,  5000.00, true, 13),
+  ('vehicle_repair_loan_manager',   'Vehicle Repair Loan (Manager)',    'other', false, true,  39, 'Manager and above', 'Vehicle repair repayment applies.', 24, 10000.00, 10000.00, true, 14),
+  ('vehicle_repair_loan_senior',    'Vehicle Repair Loan (Senior)',     'other', false, true,  39, 'Senior and above', 'Vehicle repair repayment applies.', 24,  8000.00,  8000.00, true, 15),
+  ('vehicle_insurance_loan_manager','Vehicle Insurance Loan (Manager)', 'other', false, false, 39, 'Manager and above', 'Insurance-backed welfare loan terms apply.', 12,  5000.00,  5000.00, true, 16),
+  ('vehicle_insurance_loan_senior', 'Vehicle Insurance Loan (Senior)',  'other', false, false, 39, 'Senior and above', 'Insurance-backed welfare loan terms apply.', 12,  3000.00,  3000.00, true, 17)
 ON CONFLICT (loan_key) DO UPDATE SET
   loan_label = EXCLUDED.loan_label,
   category = EXCLUDED.category,
@@ -187,6 +195,8 @@ ON CONFLICT (loan_key) DO UPDATE SET
   requires_fd_check = EXCLUDED.requires_fd_check,
   min_fd_score = EXCLUDED.min_fd_score,
   min_qualification_note = EXCLUDED.min_qualification_note,
+  loan_terms = EXCLUDED.loan_terms,
+  default_recovery_months = EXCLUDED.default_recovery_months,
   fixed_amount = EXCLUDED.fixed_amount,
   max_amount = EXCLUDED.max_amount,
   is_active = EXCLUDED.is_active,
