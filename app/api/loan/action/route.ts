@@ -47,6 +47,27 @@ async function timeline(admin: any, payload: any) {
   await admin.from("loan_request_timeline").insert(payload)
 }
 
+async function getDirectorApprovers(admin: any) {
+  const { data } = await admin
+    .from("user_profiles")
+    .select("id")
+    .in("role", ["director_hr", "manager_hr", "hr_director", "admin"])
+    .eq("is_active", true)
+  return (data || []).map((row: any) => String(row.id))
+}
+
+async function validateDirectorApprover(admin: any, approverId: string) {
+  const { data } = await admin
+    .from("user_profiles")
+    .select("id, role, is_active")
+    .eq("id", approverId)
+    .maybeSingle()
+
+  if (!data) return false
+  const role = normalizeRole((data as any).role)
+  return Boolean((data as any).is_active) && ["director_hr", "manager_hr", "hr_director", "admin"].includes(role)
+}
+
 function buildAutoMemo(req: any) {
   return [
     "QUALITY CONTROL COMPANY LIMITED",
@@ -152,6 +173,7 @@ export async function POST(request: NextRequest) {
     const action = String(body.action || "") as ActionKey
     const id = String(body.id || "")
     const note = String(body.note || "").trim() || null
+    const selectedDirectorApproverId = String(body.director_approver_id || "").trim() || null
 
     if (!action || !id) {
       return NextResponse.json({ error: "action and id are required" }, { status: 400 })
@@ -263,6 +285,13 @@ export async function POST(request: NextRequest) {
       if (body.corporate_email !== undefined) update.corporate_email = String(body.corporate_email || "").trim() || null
       if (body.hod_reviewer_id !== undefined) update.hod_reviewer_id = String(body.hod_reviewer_id || "").trim() || null
       if (normalizedReference) update.reference_number = normalizedReference
+      if (selectedDirectorApproverId) {
+        const isValidDirector = await validateDirectorApprover(admin, selectedDirectorApproverId)
+        if (!isValidDirector) {
+          return NextResponse.json({ error: "Selected approver is not an active Director HR approver." }, { status: 400 })
+        }
+        update.director_hr_id = selectedDirectorApproverId
+      }
 
       update.loan_office_reviewer_id = user.id
       update.loan_office_note = note
@@ -474,7 +503,13 @@ export async function POST(request: NextRequest) {
       update.hr_forwarded_at = new Date().toISOString()
 
       // Track who is expected to sign/finalize the memo.
-      if (role === "director_hr" || role === "manager_hr" || role === "hr_director") {
+      if (selectedDirectorApproverId) {
+        const isValidDirector = await validateDirectorApprover(admin, selectedDirectorApproverId)
+        if (!isValidDirector) {
+          return NextResponse.json({ error: "Selected approver is not an active Director HR approver." }, { status: 400 })
+        }
+        update.director_hr_id = selectedDirectorApproverId
+      } else if (role === "director_hr" || role === "manager_hr" || role === "hr_director") {
         update.director_hr_id = user.id
       } else if (!req.director_hr_id) {
         const { data: directorCandidates } = await admin
@@ -510,19 +545,30 @@ export async function POST(request: NextRequest) {
       )
 
       // Notify Director HR
-      const { data: directorUsers } = await admin
-        .from("user_profiles")
-        .select("id")
-        .in("role", ["director_hr", "manager_hr", "hr_director", "admin"])
-        .eq("is_active", true)
-      await notifyUsers(
-        admin,
-        (directorUsers || []).map((r: any) => r.id),
-        "Loan Ready for Director HR Decision",
-        `Request ${req.request_number} from ${req.staff_rank || "staff"} is ready for your final approval.`,
-        "loan_director_pending",
-        { request_id: req.id },
-      )
+      const ownerId = String(update.director_hr_id || req.director_hr_id || "").trim() || null
+      const directorIds = await getDirectorApprovers(admin)
+      if (ownerId) {
+        await notifyUsers(
+          admin,
+          [ownerId],
+          "Loan Ready for Your Approval",
+          `Request ${req.request_number} from ${req.staff_rank || "staff"} is assigned to you for final approval.`,
+          "loan_director_pending_owner",
+          { request_id: req.id, role: "owner" },
+        )
+      }
+
+      const watcherIds = directorIds.filter((uid) => uid !== ownerId)
+      if (watcherIds.length > 0) {
+        await notifyUsers(
+          admin,
+          watcherIds,
+          "Loan Approval Copy (Watch)",
+          `Copy notice: Request ${req.request_number} is pending final approval by assigned approver.`,
+          "loan_director_pending_copy",
+          { request_id: req.id, role: "watcher", owner_id: ownerId },
+        )
+      }
     }
 
     if (action === "director_finalize") {
@@ -532,6 +578,11 @@ export async function POST(request: NextRequest) {
       }
       if (req.status !== "awaiting_director_hr") {
         return NextResponse.json({ error: "Request is not at Director HR stage" }, { status: 400 })
+      }
+
+      const assignedDirectorId = String(req.director_hr_id || "").trim() || null
+      if (assignedDirectorId && role !== "admin" && assignedDirectorId !== user.id) {
+        return NextResponse.json({ error: "This request is assigned to another approver. You can view copy only." }, { status: 403 })
       }
 
       const decision = body.decision === "reject" ? "reject" : "approve"
@@ -611,14 +662,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unknown or unsupported action" }, { status: 400 })
     }
 
-    const { data: updated, error: updateError } = await admin
-      .from("loan_requests")
-      .update(update)
-      .eq("id", id)
-      .select("*")
-      .single()
+    let updateQuery: any = admin.from("loan_requests").update(update).eq("id", id)
+    if (action !== "loan_office_update_request") {
+      // First-action-wins lock: once status changes, later approvers cannot overwrite.
+      updateQuery = updateQuery.eq("status", req.status)
+    }
 
-    if (updateError) throw updateError
+    const { data: updated, error: updateError } = await updateQuery.select("*").single()
+
+    if (updateError) {
+      const msg = String(updateError?.message || "")
+      if (msg.toLowerCase().includes("no rows")) {
+        return NextResponse.json({ error: "Request was already processed by another approver. Refresh queue." }, { status: 409 })
+      }
+      throw updateError
+    }
 
     if (requestedStaffFullName !== null) {
       const parts = requestedStaffFullName.split(/\s+/).filter(Boolean)

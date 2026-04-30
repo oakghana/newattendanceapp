@@ -148,75 +148,89 @@ export async function GET(request: NextRequest) {
     linkageRows = linkageRows.filter((row: any) => finalStaffIds.has(String(row.staff_user_id || "")))
 
     if (role === "admin") {
-      const linkageNotifications = await fetchAllRows(
-        (from, to) =>
-          admin
-            .from("staff_notifications")
-            .select("id, recipient_id, title, message, type, data, is_read, read_at, created_at")
-            .eq("type", "hod_linkage_request")
-            .order("created_at", { ascending: false })
-            .range(from, to),
-        250,
-      )
+      try {
+        const linkageNotifications = await fetchAllRows(
+          (from, to) =>
+            admin
+              .from("staff_notifications")
+              .select("id, recipient_id, title, message, type, data, is_read, read_at, created_at")
+              .eq("type", "hod_linkage_request")
+              .order("created_at", { ascending: false })
+              .range(from, to),
+          250,
+        )
 
-      const requestNotifications = (linkageNotifications || []).filter((row: any) => String(row.recipient_id || "") === String(user.id))
-      const referencedIds = Array.from(
-        new Set(
-          requestNotifications
-            .flatMap((row: any) => [
-              String((row as any)?.data?.requested_by || ""),
-              String((row as any)?.data?.staff_user_id || ""),
-              String((row as any)?.data?.requested_hod_user_id || ""),
-              String((row as any)?.data?.resolved_by || ""),
-            ])
-            .filter(Boolean),
-        ),
-      )
+        const requestNotifications = (linkageNotifications || []).filter((row: any) => String(row.recipient_id || "") === String(user.id))
+        const referencedIds = Array.from(
+          new Set(
+            requestNotifications
+              .flatMap((row: any) => [
+                String((row as any)?.data?.requested_by || ""),
+                String((row as any)?.data?.staff_user_id || ""),
+                String((row as any)?.data?.requested_hod_user_id || ""),
+                String((row as any)?.data?.resolved_by || ""),
+              ])
+              .filter(Boolean),
+          ),
+        )
 
-      const { data: referencedProfiles } = referencedIds.length
-        ? await admin
-            .from("user_profiles")
-            .select("id, first_name, last_name, employee_id, position, role")
-            .in("id", referencedIds)
-        : ({ data: [] } as any)
+        const { data: referencedProfiles } = referencedIds.length
+          ? await admin
+              .from("user_profiles")
+              .select("id, first_name, last_name, employee_id, position, role")
+              .in("id", referencedIds)
+          : ({ data: [] } as any)
 
-      const profileMap = new Map(
-        (referencedProfiles || []).map((row: any) => [
-          String(row.id),
-          {
+        const profileMap = new Map(
+          (referencedProfiles || []).map((row: any) => [
+            String(row.id),
+            {
+              id: row.id,
+              full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.role || "Unknown",
+              employee_id: row.employee_id || null,
+              position: row.position || null,
+              role: row.role || null,
+            },
+          ]),
+        )
+
+        linkageRequestRows = requestNotifications.map((row: any) => {
+          const payload = (row.data && typeof row.data === "object") ? row.data : {}
+          const requesterId = String(payload.requested_by || "")
+          const staffId = String(payload.staff_user_id || "")
+          const requestedHodId = String(payload.requested_hod_user_id || "")
+          const resolvedById = String(payload.resolved_by || "")
+
+          return {
             id: row.id,
-            full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.role || "Unknown",
-            employee_id: row.employee_id || null,
-            position: row.position || null,
-            role: row.role || null,
-          },
-        ]),
-      )
+            title: row.title,
+            message: row.message,
+            created_at: row.created_at,
+            is_read: row.is_read,
+            read_at: row.read_at || null,
+            request_status: payload.request_status || "pending",
+            request_note: payload.note || null,
+            resolution_note: payload.resolution_note || null,
+            resolved_at: payload.resolved_at || null,
+            requester: profileMap.get(requesterId) || null,
+            staff: profileMap.get(staffId) || null,
+            requested_hod: profileMap.get(requestedHodId) || null,
+            resolved_by: profileMap.get(resolvedById) || null,
+          }
+        })
+      } catch (linkageError: any) {
+        const msg = String(linkageError?.message || "").toLowerCase()
+        const legacyNotificationsSchema =
+          msg.includes("staff_notifications") &&
+          (msg.includes("column") || msg.includes("schema cache") || msg.includes("does not exist"))
 
-      linkageRequestRows = requestNotifications.map((row: any) => {
-        const payload = (row.data && typeof row.data === "object") ? row.data : {}
-        const requesterId = String(payload.requested_by || "")
-        const staffId = String(payload.staff_user_id || "")
-        const requestedHodId = String(payload.requested_hod_user_id || "")
-        const resolvedById = String(payload.resolved_by || "")
-
-        return {
-          id: row.id,
-          title: row.title,
-          message: row.message,
-          created_at: row.created_at,
-          is_read: row.is_read,
-          read_at: row.read_at || null,
-          request_status: payload.request_status || "pending",
-          request_note: payload.note || null,
-          resolution_note: payload.resolution_note || null,
-          resolved_at: payload.resolved_at || null,
-          requester: profileMap.get(requesterId) || null,
-          staff: profileMap.get(staffId) || null,
-          requested_hod: profileMap.get(requestedHodId) || null,
-          resolved_by: profileMap.get(resolvedById) || null,
+        if (!legacyNotificationsSchema) {
+          throw linkageError
         }
-      })
+
+        // Legacy DB schema: linkage request notifications are unavailable, but do not block admin lookup data.
+        linkageRequestRows = []
+      }
     }
 
     return NextResponse.json({

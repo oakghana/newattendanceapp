@@ -288,6 +288,20 @@ export async function GET() {
       }
     }
 
+    const { data: directorApproverRows } = await admin
+      .from("user_profiles")
+      .select("id, first_name, last_name, position, role")
+      .in("role", ["director_hr", "manager_hr", "hr_director", "admin"])
+      .eq("is_active", true)
+      .order("first_name", { ascending: true })
+
+    const directorApprovers = (directorApproverRows || []).map((row: any) => ({
+      id: String(row.id),
+      full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim() || String(row.role || "Approver"),
+      position: row.position || null,
+      role: row.role || null,
+    }))
+
     if (typesRes.error && isSchemaIssue(typesRes.error)) {
       const viewAllTabs = role === "admin"
       return NextResponse.json(
@@ -299,6 +313,7 @@ export async function GET() {
           loanTypes: [],
           myRequests: [],
           myTimelines: [],
+          directorApprovers,
           inbox: {
             hod: [],
             loanOffice: [],
@@ -451,6 +466,7 @@ export async function GET() {
           loanTypes: typesRes.data || [],
           myRequests: myRes.data || [],
           myTimelines: [],
+          directorApprovers,
           inbox: {
             hod: [],
             loanOffice: [],
@@ -580,6 +596,7 @@ export async function GET() {
       loanTypes: typesRes.data || [],
       myRequests: attachName(myRes.data || []),
       myTimelines,
+      directorApprovers,
       myTasks: attachName(myTasksRes.data || []),
       inbox: {
         hod: attachName(hodRes.data || []),

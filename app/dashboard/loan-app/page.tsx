@@ -71,6 +71,7 @@ type LoanRequest = {
   director_decision_at: string | null
   supporting_document_url: string | null
   hod_reviewer_id?: string | null
+  director_hr_id?: string | null
   hod_review_note?: string | null
   hod_name?: string | null
   hod_rank?: string | null
@@ -109,6 +110,7 @@ type WorkflowResponse = {
     allLoans?: boolean
   }
   loanTypes: LoanType[]
+  directorApprovers?: Array<{ id: string; full_name: string; position?: string | null; role?: string | null }>
   myRequests: LoanRequest[]
   myTimelines: { loan_request_id: string; entries: TimelineEntry[] }[]
   myTasks?: LoanRequest[]
@@ -598,6 +600,7 @@ export default function LoanAppPage() {
   const [modalCorporateEmail, setModalCorporateEmail] = useState("")
   const [modalReferenceNumber, setModalReferenceNumber] = useState("")
   const [modalHodReviewerId, setModalHodReviewerId] = useState("")
+  const [modalDirectorApproverId, setModalDirectorApproverId] = useState("")
   const [modalSignatureText, setModalSignatureText] = useState("")
   const [modalSignatureDataUrl, setModalSignatureDataUrl] = useState<string | null>(null)
   const [modalSignatureMode, setModalSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
@@ -1512,6 +1515,7 @@ export default function LoanAppPage() {
         setModalCorporateEmail("")
         setModalReferenceNumber("")
         setModalHodReviewerId("")
+        setModalDirectorApproverId("")
         setModalSignatureText("")
         setModalSignatureDataUrl(null)
         setModalSignatureMode("typed")
@@ -1523,6 +1527,7 @@ export default function LoanAppPage() {
           setModalCorporateEmail(row.corporate_email || "")
           setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
           setModalHodReviewerId(row.hod_reviewer_id || "")
+          setModalDirectorApproverId(row.director_hr_id || "")
         }
         if (actionType === "accounts") {
           const fd = fdInputs[row.id]
@@ -1538,6 +1543,7 @@ export default function LoanAppPage() {
           setModalHodName(entry?.hodName || row.hod_name || "")
           setModalHodLocation(entry?.hodLocation || row.hod_location || row.staff_location_name || "")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
+          setModalDirectorApproverId(row.director_hr_id || "")
         }
         if (actionType === "director") {
           const entry = hrInputs[row.id]
@@ -2224,9 +2230,9 @@ export default function LoanAppPage() {
                                 <Button
                                   size="sm"
                                   className="text-xs"
-                                  onClick={() => runAction({ action: "loan_office_forward", id: row.id, note: loanOfficeNotes[row.id] || null })}
+                                  onClick={() => openActionModal(row, "loan_office")}
                                 >
-                                  Forward
+                                  Review &amp; Forward
                                 </Button>
                               </div>
                             ) : (
@@ -3409,6 +3415,15 @@ export default function LoanAppPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Label>Assigned Director HR Approver</Label>
+                <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
+                  <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
+                  <SelectContent>
+                    {(data?.directorApprovers || []).map((approver) => (
+                      <SelectItem key={approver.id} value={approver.id}>{approver.full_name} {approver.position ? `(${approver.position})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Label>Note (optional)</Label>
                 <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Loan office note before forwarding" rows={3} />
               </>
@@ -3462,6 +3477,15 @@ export default function LoanAppPage() {
                 <Input value={modalHodName} onChange={(e) => setModalHodName(e.target.value)} placeholder="e.g. THE REGIONAL MANAGER" />
                 <Label>HOD Location (Station)</Label>
                 <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Breman Asikuma" />
+                <Label>Assigned Director HR Approver</Label>
+                <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
+                  <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
+                  <SelectContent>
+                    {(data?.directorApprovers || []).map((approver) => (
+                      <SelectItem key={approver.id} value={approver.id}>{approver.full_name} {approver.position ? `(${approver.position})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Label>HR Note (optional)</Label>
                 <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="HR note" rows={2} />
               </>
@@ -3493,6 +3517,7 @@ export default function LoanAppPage() {
                     corporate_email: modalCorporateEmail || null,
                     reference_number: modalReferenceNumber || null,
                     hod_reviewer_id: modalHodReviewerId || null,
+                    director_approver_id: modalDirectorApproverId || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save Edits</Button>
@@ -3507,6 +3532,7 @@ export default function LoanAppPage() {
                     corporate_email: modalCorporateEmail || null,
                     reference_number: modalReferenceNumber || null,
                     hod_reviewer_id: modalHodReviewerId || null,
+                    director_approver_id: modalDirectorApproverId || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save &amp; Forward to Accounts</Button>
@@ -3544,6 +3570,7 @@ export default function LoanAppPage() {
                     reference_number: modalMemoRef || null,
                     hod_name: modalHodName || null,
                     hod_location: modalHodLocation || null,
+                    director_approver_id: modalDirectorApproverId || null,
                     note: modalNote || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
