@@ -199,6 +199,7 @@ async function resolveEntitlementDays(admin: any, leaveTypeKey: string) {
 export async function GET() {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -207,7 +208,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, role, department_id, departments(name, code)")
       .eq("id", user.id)
@@ -223,7 +224,7 @@ export async function GET() {
     const isHr = isHrPlanningRole(role, departmentName, departmentCode)
 
     if (isStaffRole(role)) {
-      const { data, error } = await supabase
+      const { data, error } = await admin
         .from("leave_plan_requests")
         .select("*")
         .eq("user_id", user.id)
@@ -236,7 +237,7 @@ export async function GET() {
         throw error
       }
 
-      const { data: stagger, error: staggerError } = await supabase
+      const { data: stagger, error: staggerError } = await admin
         .from("leave_plan_stagger_requests")
         .select("*")
         .eq("user_id", user.id)
@@ -257,7 +258,7 @@ export async function GET() {
     }
 
     if (isManagerRole(role) && !isHr) {
-      const { data, error } = await supabase
+      const { data, error } = await admin
         .from("leave_plan_reviews")
         .select(`
           id,
@@ -294,7 +295,7 @@ export async function GET() {
         throw error
       }
 
-      const { data: staggerReviews, error: staggerError } = await supabase
+      const { data: staggerReviews, error: staggerError } = await admin
         .from("leave_plan_stagger_reviews")
         .select(`
           id,
@@ -331,13 +332,13 @@ export async function GET() {
       }
 
       // Also fetch this user's own leave plan requests (they can apply for themselves too)
-      const { data: myRequests } = await supabase
+      const { data: myRequests } = await admin
         .from("leave_plan_requests")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
-      const { data: myStaggerRequests } = await supabase
+      const { data: myStaggerRequests } = await admin
         .from("leave_plan_stagger_requests")
         .select("*")
         .eq("user_id", user.id)
@@ -353,7 +354,7 @@ export async function GET() {
     }
 
     if (isHr) {
-      const { data, error } = await supabase
+      const { data, error } = await admin
         .from("leave_plan_requests")
         .select(`
           id,
@@ -399,7 +400,7 @@ export async function GET() {
         throw error
       }
 
-      const { data: stagger, error: staggerError } = await supabase
+      const { data: stagger, error: staggerError } = await admin
         .from("leave_plan_stagger_requests")
         .select(`
           id,
@@ -445,13 +446,13 @@ export async function GET() {
       }
 
       // Also fetch this admin/HR user's own leave plan requests
-      const { data: myRequests } = await supabase
+      const { data: myRequests } = await admin
         .from("leave_plan_requests")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
-      const { data: myStaggerRequests } = await supabase
+      const { data: myStaggerRequests } = await admin
         .from("leave_plan_stagger_requests")
         .select("*")
         .eq("user_id", user.id)

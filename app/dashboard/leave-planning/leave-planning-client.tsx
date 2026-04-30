@@ -233,6 +233,19 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
         throw new Error(result.error || "Failed to submit leave planning request")
       }
 
+      if (result?.request) {
+        setData((prev: any) => {
+          const base = prev || {}
+          const nextRequests = [result.request, ...(base.requests || []).filter((row: any) => String(row?.id) !== String(result.request.id))]
+          const nextMyRequests = [result.request, ...(base.myRequests || []).filter((row: any) => String(row?.id) !== String(result.request.id))]
+          return {
+            ...base,
+            requests: nextRequests,
+            myRequests: nextMyRequests,
+          }
+        })
+      }
+
       setStartDate("")
       setEndDate("")
       setReason("")
@@ -520,6 +533,22 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   )
 
   const requestRows = data?.myRequests || (staff ? data?.requests : []) || []
+  const mergedRequestRows = useMemo(() => {
+    const combined = [...(data?.myRequests || []), ...(staff ? data?.requests || [] : [])]
+    const seen = new Set<string>()
+    const deduped: any[] = []
+    for (const row of combined) {
+      const id = String(row?.id || "")
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      deduped.push(row)
+    }
+    return deduped.sort(
+      (a: any, b: any) =>
+        new Date(String(b?.created_at || b?.submitted_at || 0)).getTime() -
+        new Date(String(a?.created_at || a?.submitted_at || 0)).getTime(),
+    )
+  }, [data?.myRequests, data?.requests, staff])
   const reviewRows = data?.reviews || []
   const hrRows = data?.requests || []
   const staggerRows = data?.myStaggerRequests || (staff ? data?.staggerRequests : []) || []
@@ -871,8 +900,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <CardTitle>My Leave Requests</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {requestRows.length === 0 && <p className="text-sm text-muted-foreground">You haven't applied for any leave yet. Go ahead and apply above! 👆</p>}
-                {requestRows.map((row: any) => (
+                {mergedRequestRows.length === 0 && <p className="text-sm text-muted-foreground">You haven't applied for any leave yet. Go ahead and apply above! 👆</p>}
+                {mergedRequestRows.map((row: any) => (
                   <div key={row.id} className="rounded border p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-medium">
