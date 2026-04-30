@@ -75,21 +75,34 @@ export default async function LeaveManagementPage() {
         .from("leave_notifications")
         .update({ status: "approved", approved_at: approvedAt })
         .eq("leave_request_id", (request as any).id)
-        .eq("status", "pending")
+        .eq("status", "pending_hr")
     }
   } catch (error) {
     console.warn("leave inactivity auto-approval skipped:", error)
   }
 
-  // Fetch pending notifications for managers
-  if (["admin", "regional_manager", "department_head", "it-admin"].includes(profile.role)) {
+  const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const canReviewLeave = [
+    "admin",
+    "regional_manager",
+    "department_head",
+    "hr_officer",
+    "manager_hr",
+    "director_hr",
+    "hr_director",
+    "loan_office",
+    "it_admin",
+  ].includes(roleNorm)
+
+  // Fetch pending notifications for HOD/HR/admin
+  if (canReviewLeave) {
     let query = admin
       .from("leave_notifications")
-      .select("*, leave_requests(*)")
+      .select("id, recipient_id, sender_id, status, notification_type, created_at, leave_requests(*)")
       .order("created_at", { ascending: false })
 
-    if (profile.role !== "admin") {
-      query = query.eq("status", "pending")
+    if (roleNorm !== "admin") {
+      query = query.eq("recipient_id", user.id)
     }
 
     const { data: notifications } = await query
@@ -109,48 +122,13 @@ export default async function LeaveManagementPage() {
       requesterProfiles = data || []
     }
 
-    // Fetch loan_hod_linkages for this manager so we know which staff are explicitly linked to them
-    let linkedStaffIds: Set<string> = new Set()
-    if (["department_head", "regional_manager"].includes(profile.role)) {
-      try {
-        const { data: linkages } = await admin
-          .from("loan_hod_linkages")
-          .select("staff_user_id")
-          .eq("hod_user_id", user.id)
-        linkedStaffIds = new Set((linkages || []).map((l: any) => String(l.staff_user_id)))
-      } catch {
-        linkedStaffIds = new Set()
-      }
-    }
-
     const requesterMap = new Map(requesterProfiles.map((row: any) => [row.id, row]))
-    const managerDepartmentId = (profile as any).department_id || null
-    const managerLocationId = (profile as any).assigned_location_id || null
 
     managerNotifications = (notifications || [])
       .filter((notification: any) => {
-        if (profile.role === "admin") return true
+        if (roleNorm === "admin") return true
         const leave = notification.leave_requests
-        if (!leave?.user_id) return false
-        const staffId = String(leave.user_id)
-
-        // If staff is explicitly linked to this HOD via loan_hod_linkages, always show
-        if (linkedStaffIds.has(staffId)) return true
-
-        const requester = requesterMap.get(staffId)
-        if (!requester) return false
-
-        if (profile.role === "regional_manager") {
-          return Boolean(managerLocationId) && requester.assigned_location_id === managerLocationId
-        }
-
-        if (profile.role === "department_head") {
-          const sameDepartment = Boolean(requester.department_id) && requester.department_id === managerDepartmentId
-          const sameLocation = !managerLocationId || requester.assigned_location_id === managerLocationId
-          return sameDepartment && sameLocation
-        }
-
-        return requester.department_id && requester.department_id === managerDepartmentId
+        return Boolean(leave?.user_id)
       })
       .map((notification: any) => {
         const leave = notification.leave_requests

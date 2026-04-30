@@ -173,7 +173,7 @@ async function addTimeline(admin: any, loanRequestId: string, actorId: string, a
 async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
   if (!userIds.length) return
   const rows = userIds.map((uid) => ({
-    user_id: uid,
+    recipient_id: uid,
     title,
     message,
     type,

@@ -16,7 +16,7 @@ const POST_LOAN_OFFICE_DELAY_DAYS = 5
 async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
   if (!userIds.length) return
   await admin.from("staff_notifications").insert(
-    userIds.map((uid) => ({ user_id: uid, title, message, type, data, is_read: false })),
+    userIds.map((uid) => ({ recipient_id: uid, title, message, type, data, is_read: false })),
   )
 }
 
@@ -245,6 +245,17 @@ export async function GET() {
       scopedStaffIds = (scopedStaff || []).map((row: any) => row.id)
     }
 
+    let linkedStaffIds: string[] = []
+    if (isRegionalManager || isDepartmentHead) {
+      const { data: linkageRows } = await admin
+        .from("loan_hod_linkages")
+        .select("staff_user_id")
+        .eq("hod_user_id", user.id)
+        .limit(5000)
+      linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
+    }
+    const reviewerScopedStaffIds = Array.from(new Set([...scopedStaffIds, ...linkedStaffIds]))
+
     const [typesRes, myRes, myHodLinkRes] = await Promise.all([
       admin
         .from("loan_types")
@@ -344,12 +355,12 @@ export async function GET() {
           .order("created_at", { ascending: false })
       }
 
-      if (scopedStaffIds.length === 0) return { data: [], error: null }
+      if (reviewerScopedStaffIds.length === 0) return { data: [], error: null }
       return admin
         .from("loan_requests")
         .select("*")
         .eq("status", "pending_hod")
-        .in("user_id", scopedStaffIds)
+        .in("user_id", reviewerScopedStaffIds)
         .order("created_at", { ascending: false })
     })()
 
@@ -400,11 +411,11 @@ export async function GET() {
       viewAllTabs
         ? admin.from("loan_requests").select("*").order("created_at", { ascending: false })
         : isRegionalManager || isDepartmentHead
-          ? (scopedStaffIds.length > 0
+          ? (reviewerScopedStaffIds.length > 0
               ? admin
                   .from("loan_requests")
                   .select("*")
-                  .in("user_id", scopedStaffIds)
+                  .in("user_id", reviewerScopedStaffIds)
                   .order("created_at", { ascending: false })
               : Promise.resolve({ data: [], error: null } as any))
             : Promise.resolve({ data: [], error: null } as any),
@@ -490,7 +501,7 @@ export async function GET() {
         const fullName = sp ? `${sp.first_name || ""} ${sp.last_name || ""}`.trim() : null
         return {
           ...r,
-          staff_full_name: fullName || null,
+          staff_full_name: fullName || r.staff_full_name || null,
           corporate_email: sp?.email || r.corporate_email || null,
           staff_number: sp?.employee_id || r.staff_number || null,
           staff_rank: sp?.position || r.staff_rank || null,

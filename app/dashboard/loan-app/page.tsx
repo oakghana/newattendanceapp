@@ -45,6 +45,7 @@ type TimelineEntry = {
 type LoanRequest = {
   id: string
   request_number: string
+  reference_number?: string | null
   user_id: string
   corporate_email: string | null
   staff_number: string | null
@@ -219,6 +220,7 @@ const ACTION_LABELS: Record<string, string> = {
   staff_submit: "Staff Submitted",
   staff_edit: "Staff Edited",
   hod_decision: "HOD Decision",
+  loan_office_update_request: "Loan Office Updated Request",
   loan_office_forward: "Loan Office Forward",
   accounts_fd_update: "Accounts FD Update",
   committee_decision: "Committee Decision",
@@ -443,6 +445,13 @@ function deriveMemoRef(requestNumber: string | null | undefined): string {
   return `QCC/HRD/SWL/V.2/${seq}`
 }
 
+function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: string | null) {
+  const candidate = String(referenceNumber || "").trim()
+  const match = candidate.match(/^QCC\/HRD\/SWL\/V\.2\/(\d+)$/i)
+  if (match) return `QCC/HRD/SWL/V.2/${match[1]}`
+  return deriveMemoRef(requestNumber)
+}
+
 function buildDirectorAutoMemoDraft(
   row: LoanRequest,
   entry?: { hodName?: string; hodLocation?: string; memoRef?: string },
@@ -452,12 +461,12 @@ function buildDirectorAutoMemoDraft(
   const amtFormatted = amtNum.toLocaleString("en-GH", { minimumFractionDigits: 2 })
   const amtWords = amountToWords(amtNum)
   const loanLabel = row.loan_type_label || row.loan_type_key || "Loan"
-  const staffName = (row.staff_full_name || "").toUpperCase()
+  const staffName = (row.staff_full_name || "REQUESTING STAFF").toUpperCase()
   const staffNo = row.staff_number || "—"
   const staffRank = (row.staff_rank || "").toUpperCase()
   const hodName = (entry?.hodName || row.hod_name || "THE REGIONAL MANAGER").toUpperCase()
   const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || "—"
-  const memoRef = entry?.memoRef || deriveMemoRef(row.request_number)
+  const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
   const disbursementMonth = fmtMemoMonth(row.disbursement_date)
@@ -583,6 +592,12 @@ export default function LoanAppPage() {
   const [modalHodLocation, setModalHodLocation] = useState("")
   const [modalMemoRef, setModalMemoRef] = useState("")
   const [modalMemoText, setModalMemoText] = useState("")
+  const [modalStaffFullName, setModalStaffFullName] = useState("")
+  const [modalStaffNumber, setModalStaffNumber] = useState("")
+  const [modalStaffRank, setModalStaffRank] = useState("")
+  const [modalCorporateEmail, setModalCorporateEmail] = useState("")
+  const [modalReferenceNumber, setModalReferenceNumber] = useState("")
+  const [modalHodReviewerId, setModalHodReviewerId] = useState("")
   const [modalSignatureText, setModalSignatureText] = useState("")
   const [modalSignatureDataUrl, setModalSignatureDataUrl] = useState<string | null>(null)
   const [modalSignatureMode, setModalSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
@@ -679,7 +694,7 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = normalizedRole === "admin" || normalizedRole === "it_admin"
-  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.viewAllTabs)
+  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
     () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
@@ -708,7 +723,7 @@ export default function LoanAppPage() {
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Director HR (${c.director})` })
-    if (p?.hrOffice || p?.loanOffice || p?.viewAllTabs) tabs.push({ key: "setup", label: "Setup & Linkage" })
+    if (p?.hod || p?.hrOffice || p?.loanOffice || p?.viewAllTabs) tabs.push({ key: "setup", label: "Setup & Linkage" })
     if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
@@ -1099,10 +1114,10 @@ export default function LoanAppPage() {
   }
 
   useEffect(() => {
-    if (p?.hrOffice || p?.viewAllTabs || p?.hod) {
+    if (p?.hrOffice || p?.loanOffice || p?.viewAllTabs || p?.hod) {
       void loadLookups()
     }
-  }, [p?.hrOffice, p?.viewAllTabs, p?.hod])
+  }, [p?.hrOffice, p?.loanOffice, p?.viewAllTabs, p?.hod])
 
   useEffect(() => {
     if (p?.directorHr || p?.hrOffice || p?.viewAllTabs || isAdmin) {
@@ -1491,9 +1506,24 @@ export default function LoanAppPage() {
         setModalHodLocation("")
         setModalMemoRef("")
         setModalMemoText("")
+        setModalStaffFullName("")
+        setModalStaffNumber("")
+        setModalStaffRank("")
+        setModalCorporateEmail("")
+        setModalReferenceNumber("")
+        setModalHodReviewerId("")
         setModalSignatureText("")
         setModalSignatureDataUrl(null)
         setModalSignatureMode("typed")
+        if (actionType === "loan_office") {
+          setModalNote(loanOfficeNotes[row.id] || "")
+          setModalStaffFullName(row.staff_full_name || "")
+          setModalStaffNumber(row.staff_number || "")
+          setModalStaffRank(row.staff_rank || "")
+          setModalCorporateEmail(row.corporate_email || "")
+          setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
+          setModalHodReviewerId(row.hod_reviewer_id || "")
+        }
         if (actionType === "accounts") {
           const fd = fdInputs[row.id]
           setModalFdScore(fd?.score || "")
@@ -1507,7 +1537,7 @@ export default function LoanAppPage() {
           setModalNote(entry?.note || "")
           setModalHodName(entry?.hodName || row.hod_name || "")
           setModalHodLocation(entry?.hodLocation || row.hod_location || row.staff_location_name || "")
-          setModalMemoRef(entry?.memoRef || deriveMemoRef(row.request_number))
+          setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
         }
         if (actionType === "director") {
           const entry = hrInputs[row.id]
@@ -3350,6 +3380,35 @@ export default function LoanAppPage() {
             {/* Loan Office */}
             {actionModal.actionType === "loan_office" && (
               <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Staff Name</Label>
+                    <Input value={modalStaffFullName} onChange={(e) => setModalStaffFullName(e.target.value)} placeholder="Requesting staff full name" />
+                  </div>
+                  <div>
+                    <Label>Staff Number</Label>
+                    <Input value={modalStaffNumber} onChange={(e) => setModalStaffNumber(e.target.value)} placeholder="Staff number" />
+                  </div>
+                  <div>
+                    <Label>Staff Rank</Label>
+                    <Input value={modalStaffRank} onChange={(e) => setModalStaffRank(e.target.value)} placeholder="Rank" />
+                  </div>
+                  <div>
+                    <Label>Corporate Email</Label>
+                    <Input value={modalCorporateEmail} onChange={(e) => setModalCorporateEmail(e.target.value)} placeholder="staff@qcc.com" />
+                  </div>
+                </div>
+                <Label>Reference Number</Label>
+                <Input value={modalReferenceNumber} onChange={(e) => setModalReferenceNumber(e.target.value)} placeholder="QCC/HRD/SWL/V.2/0001" />
+                <Label>THRO (HOD / Regional Manager / Department Head)</Label>
+                <Select value={modalHodReviewerId} onValueChange={setModalHodReviewerId}>
+                  <SelectTrigger><SelectValue placeholder="Select reviewer" /></SelectTrigger>
+                  <SelectContent>
+                    {(lookupData?.hods || []).map((h) => (
+                      <SelectItem key={h.id} value={h.id}>{[h.first_name, h.last_name].filter(Boolean).join(" ") || h.email} {h.position ? `(${h.position})` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Label>Note (optional)</Label>
                 <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Loan office note before forwarding" rows={3} />
               </>
@@ -3422,10 +3481,36 @@ export default function LoanAppPage() {
               </>
             )}
             {actionModal.actionType === "loan_office" && actionModal.row && (
-              <Button onClick={() => {
-                runAction({ action: "loan_office_forward", id: actionModal.row!.id, note: modalNote || null })
-                setActionModal((s) => ({ ...s, open: false }))
-              }}>Forward to Accounts</Button>
+              <>
+                <Button variant="outline" onClick={() => {
+                  runAction({
+                    action: "loan_office_update_request",
+                    id: actionModal.row!.id,
+                    note: modalNote || null,
+                    staff_full_name: modalStaffFullName || null,
+                    staff_number: modalStaffNumber || null,
+                    staff_rank: modalStaffRank || null,
+                    corporate_email: modalCorporateEmail || null,
+                    reference_number: modalReferenceNumber || null,
+                    hod_reviewer_id: modalHodReviewerId || null,
+                  })
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}>Save Edits</Button>
+                <Button onClick={() => {
+                  runAction({
+                    action: "loan_office_forward",
+                    id: actionModal.row!.id,
+                    note: modalNote || null,
+                    staff_full_name: modalStaffFullName || null,
+                    staff_number: modalStaffNumber || null,
+                    staff_rank: modalStaffRank || null,
+                    corporate_email: modalCorporateEmail || null,
+                    reference_number: modalReferenceNumber || null,
+                    hod_reviewer_id: modalHodReviewerId || null,
+                  })
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}>Save &amp; Forward to Accounts</Button>
+              </>
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
               <Button onClick={() => {
@@ -3450,7 +3535,17 @@ export default function LoanAppPage() {
                 }}>Preview Memo</Button>
                 <Button onClick={() => {
                   setHrInputs((s) => ({ ...s, [actionModal.row!.id]: { disbursement: modalDisbursement, recovery: modalRecovery, months: modalMonths, note: modalNote, hodName: modalHodName, hodLocation: modalHodLocation, memoRef: modalMemoRef } }))
-                  runAction({ action: "hr_set_terms", id: actionModal.row!.id, disbursement_date: modalDisbursement, recovery_start_date: modalRecovery, recovery_months: Number(modalMonths || 0), note: modalNote || null })
+                  runAction({
+                    action: "hr_set_terms",
+                    id: actionModal.row!.id,
+                    disbursement_date: modalDisbursement,
+                    recovery_start_date: modalRecovery,
+                    recovery_months: Number(modalMonths || 0),
+                    reference_number: modalMemoRef || null,
+                    hod_name: modalHodName || null,
+                    hod_location: modalHodLocation || null,
+                    note: modalNote || null,
+                  })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Set Terms &amp; Forward to Director HR</Button>
               </>

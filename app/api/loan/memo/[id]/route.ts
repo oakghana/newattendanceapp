@@ -26,7 +26,15 @@ function fmtAmount(value?: number | null) {
 function fmtName(profile?: any) {
   const first = String(profile?.first_name || "").trim()
   const last = String(profile?.last_name || "").trim()
-  return [first, last].filter(Boolean).join(" ") || String(profile?.position || profile?.role || "Approver")
+  return [first, last].filter(Boolean).join(" ")
+}
+
+function canonicalReference(referenceNumber?: string | null, requestNumber?: string | null) {
+  const raw = String(referenceNumber || "").trim()
+  const match = raw.match(/^QCC\/HRD\/SWL\/V\.2\/(\d+)$/i)
+  if (match) return `QCC/HRD/SWL/V.2/${match[1]}`
+  const fallbackSeq = String(requestNumber || "").split("-").pop() || "—"
+  return `QCC/HRD/SWL/V.2/${fallbackSeq}`
 }
 
 function fmtDate(value?: string | null) {
@@ -294,7 +302,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const memoDate = fmtDate(
       loan.director_decision_at || loan.hr_forwarded_at || loan.fd_checked_at || loan.created_at,
     )
-    const refNumber = String((loan as any).reference_number || loan.request_number || "")
+    const refNumber = canonicalReference((loan as any).reference_number, loan.request_number)
 
     const doc = new jsPDF({ unit: "mm", format: "a4" })
     const pageWidth = doc.internal.pageSize.getWidth()
@@ -345,7 +353,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += 10
 
     // ─── Applicant block ──────────────────────────────────────────────
-    const applicantFullName = fmtName(applicantProfile).toUpperCase()
+    const applicantFullName = (fmtName(applicantProfile) || "REQUESTING STAFF").toUpperCase()
     const applicantStaffNo =
       String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || loan.staff_number || "")
     const applicantPosition = String((applicantProfile as any)?.position || loan.staff_rank || "STAFF").toUpperCase()

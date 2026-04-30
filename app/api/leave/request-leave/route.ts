@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       document_url = uploadResult.data?.path || null
     }
 
-    const autoApproveRoles = ["admin", "regional_manager", "department_head"]
+    const autoApproveRoles = ["admin"]
     const shouldAutoApprove = normalizedRole ? autoApproveRoles.includes(normalizedRole) : false
 
     // Create leave request (status depends on role)
@@ -312,26 +312,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create notification for the leave request
-    const { error: notificationError } = await supabase
-      .from("leave_notifications")
-      .insert({
-        leave_request_id: leaveRequest.id,
-        user_id: user.id,
-        notification_type: shouldAutoApprove ? "leave_approved" : "leave_request",
-        status: shouldAutoApprove ? "approved" : "pending",
-      })
-
-    if (notificationError) {
-      console.warn("Failed to create leave notification:", notificationError.message)
-    }
-
     // ── HOD notification via loan_hod_linkages ──────────────────────────────
     // Resolve the staff's HOD using the same linkage table as the loan system,
     // then notify them so they can approve in the leave management queue.
     if (!shouldAutoApprove) {
       try {
-        const admin = await createAdminClient()
         const hodIds: string[] = []
 
         // 1. Primary: explicit linkage table (same as loan workflow)
@@ -386,6 +371,30 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        if (hodIds.length === 0) {
+          return NextResponse.json(
+            {
+              error:
+                "No HOD/manager routing found for your profile. Please contact HR/Admin to complete staff-to-HOD linkage before submitting leave.",
+            },
+            { status: 400 },
+          )
+        }
+
+        const leaveNotifications = hodIds.map((hodId) => ({
+          leave_request_id: leaveRequest.id,
+          recipient_id: hodId,
+          sender_id: user.id,
+          notification_type: "leave_request_hod",
+          message: `Leave request requires your review (${start_date} to ${end_date}).`,
+          status: "pending_hod",
+        }))
+
+        const { error: leaveNotifError } = await admin.from("leave_notifications").insert(leaveNotifications)
+        if (leaveNotifError) {
+          console.warn("Failed to create HOD leave notifications:", leaveNotifError.message)
+        }
+
         if (hodIds.length > 0) {
           const { data: staffProfile } = await admin
             .from("user_profiles")
@@ -396,7 +405,7 @@ export async function POST(request: NextRequest) {
             ? `${(staffProfile as any).first_name || ""} ${(staffProfile as any).last_name || ""}`.trim()
             : "A staff member"
           const notifRows = hodIds.map((hodId) => ({
-            user_id: hodId,
+            recipient_id: hodId,
             title: "New Leave Request",
             message: `${staffName} has submitted a leave request from ${start_date} to ${end_date}. Please review in Leave Management.`,
             type: "leave_request",
@@ -411,6 +420,23 @@ export async function POST(request: NextRequest) {
       }
     }
     // ── end HOD notification ────────────────────────────────────────────────
+
+    if (shouldAutoApprove) {
+      const { error: notificationError } = await supabase
+        .from("leave_notifications")
+        .insert({
+          leave_request_id: leaveRequest.id,
+          recipient_id: user.id,
+          sender_id: user.id,
+          notification_type: "leave_approved",
+          message: "Leave auto-approved by admin workflow.",
+          status: "approved",
+        })
+
+      if (notificationError) {
+        console.warn("Failed to create leave notification:", notificationError.message)
+      }
+    }
 
     // If auto-approved, also populate per-day leave_status rows (trigger only handles updates)
     if (shouldAutoApprove) {

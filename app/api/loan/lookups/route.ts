@@ -152,14 +152,14 @@ export async function GET(request: NextRequest) {
         (from, to) =>
           admin
             .from("staff_notifications")
-            .select("id, user_id, title, message, type, data, is_read, read_at, created_at")
+            .select("id, recipient_id, title, message, type, data, is_read, read_at, created_at")
             .eq("type", "hod_linkage_request")
             .order("created_at", { ascending: false })
             .range(from, to),
         250,
       )
 
-      const requestNotifications = (linkageNotifications || []).filter((row: any) => String(row.user_id || "") === String(user.id))
+      const requestNotifications = (linkageNotifications || []).filter((row: any) => String(row.recipient_id || "") === String(user.id))
       const referencedIds = Array.from(
         new Set(
           requestNotifications
@@ -574,7 +574,7 @@ export async function POST(request: NextRequest) {
       const hodName = `${(hodProfile as any)?.first_name || ""} ${(hodProfile as any)?.last_name || ""}`.trim()
 
       const notifications = adminIds.map((adminId) => ({
-        user_id: adminId,
+        recipient_id: adminId,
         title: "HOD Linkage Request",
         message: `${requesterName} requested linkage: ${staffName} (${(staffProfile as any)?.employee_id || "N/A"}) -> ${hodName} (${(hodProfile as any)?.role || "HOD"}).`,
         type: "hod_linkage_request",
@@ -608,7 +608,7 @@ export async function POST(request: NextRequest) {
 
       const { data: notificationRow, error: notificationError } = await admin
         .from("staff_notifications")
-        .select("id, user_id, title, message, type, data, is_read")
+        .select("id, recipient_id, title, message, type, data, is_read")
         .eq("id", requestId)
         .eq("type", "hod_linkage_request")
         .maybeSingle()
@@ -686,7 +686,7 @@ export async function POST(request: NextRequest) {
       const notifyIds = Array.from(new Set([requestedById, staffUserId].filter(Boolean)))
       await admin.from("staff_notifications").insert(
         notifyIds.map((recipientId) => ({
-          user_id: recipientId,
+          recipient_id: recipientId,
           title: `HOD Linkage Request ${decision === "approve" ? "Approved" : "Rejected"}`,
           message: `Admin ${decisionLabel} the linkage request for ${staffName} -> ${hodName}.${resolutionNote ? ` Note: ${resolutionNote}` : ""}`,
           type: decision === "approve" ? "hod_linkage_request_approved" : "hod_linkage_request_rejected",

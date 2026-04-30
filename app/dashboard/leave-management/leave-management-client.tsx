@@ -42,7 +42,7 @@ interface LeaveNotification {
   id: string
   leave_request_id: string
   user_id: string
-  status: "pending" | "approved" | "dismissed"
+  status: "pending" | "pending_hod" | "pending_hr" | "approved" | "dismissed" | "rejected"
   leave_requests: LeaveRequest
   requester_role?: string
   requester_name?: string
@@ -187,7 +187,8 @@ export function LeaveManagementClient({
   }
 
   const handleApprove = async (notificationId: string) => {
-    const canManageLeave = ["admin", "department_head", "regional_manager"].includes(userRole ?? "")
+    const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -224,9 +225,19 @@ export function LeaveManagementClient({
   }
 
   const handleDismiss = async (notificationId: string, reason: string) => {
-    const canManageLeave = ["admin", "department_head", "regional_manager"].includes(userRole ?? "")
+    const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
+      return
+    }
+
+    if (!String(reason || "").trim()) {
+      toast({
+        title: "Reason required",
+        description: "Please provide a reason before rejecting.",
+        variant: "destructive",
+      })
       return
     }
 
@@ -236,25 +247,25 @@ export function LeaveManagementClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "dismiss",
+          action: "reject",
           notificationId,
           reason,
         }),
       })
 
       if (response.ok) {
-        toast({ title: "Request dismissed", description: "Refreshing the view with latest status." })
+        toast({ title: "Request rejected", description: "Refreshing the view with latest status." })
         window.location.reload()
         setDismissalReason("")
       } else {
         const result = await response.json().catch(() => ({}))
-        throw new Error(result?.error || "Failed to dismiss leave request")
+        throw new Error(result?.error || "Failed to reject leave request")
       }
     } catch (error) {
-      console.error("Error dismissing leave:", error)
+      console.error("Error rejecting leave:", error)
       toast({
-        title: "Dismissal failed",
-        description: error instanceof Error ? error.message : "Could not dismiss leave request.",
+        title: "Rejection failed",
+        description: error instanceof Error ? error.message : "Could not reject leave request.",
         variant: "destructive",
       })
     } finally {
@@ -264,7 +275,7 @@ export function LeaveManagementClient({
 
   const pendingRequests = staffRequests.filter((r) => r.status === "pending")
   const approvedRequests = staffRequests.filter((r) => r.status === "approved")
-  const pendingNotifications = managerNotifications.filter((n) => n.status === "pending")
+  const pendingNotifications = managerNotifications.filter((n) => ["pending", "pending_hod", "pending_hr"].includes(String(n.status || "")))
   const adminAllPending = pendingNotifications
   const adminStaffQueue = pendingNotifications.filter((n) => {
     const role = String(n.requester_role || "").toLowerCase()
@@ -275,7 +286,7 @@ export function LeaveManagementClient({
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin"].includes(userRole || "")
-  const isManagerView = ["admin", "regional_manager", "department_head", "it-admin"].includes(userRole || "")
+  const isManagerView = ["admin", "regional_manager", "department_head", "it-admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(userRole || "")
   const isAdminView = String(userRole || "").toLowerCase() === "admin"
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalizedRole)
@@ -293,86 +304,72 @@ export function LeaveManagementClient({
     }
 
     return (
-      <div className="grid gap-4 xl:grid-cols-2">
-        {rows.map((notification) => {
-          const leave = notification.leave_requests
-          return (
-            <Card key={notification.id} className="overflow-hidden border border-amber-200 bg-[linear-gradient(180deg,_rgba(255,251,235,0.88)_0%,_#ffffff_100%)] shadow-sm">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-lg text-slate-900">{formatLeaveType(leave.leave_type)} Leave Request</CardTitle>
-                    <CardDescription className="mt-1 line-clamp-2">{leave.reason}</CardDescription>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge className="border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">Pending Review</Badge>
-                    <Badge variant="outline" className="text-[10px] uppercase tracking-wide text-slate-600">
-                      {formatLeaveType(String(notification.requester_role || "staff"))}
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Start Date</p>
-                    <p className="mt-1 font-semibold text-slate-900">{format(new Date(leave.start_date), "MMM dd, yyyy")}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">End Date</p>
-                    <p className="mt-1 font-semibold text-slate-900">{format(new Date(leave.end_date), "MMM dd, yyyy")}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
-                  <p><strong>Staff Role:</strong> {formatLeaveType(String(notification.requester_role || "staff"))}</p>
-                  <p><strong>Waiting Days:</strong> {Number(notification.waiting_days || 0)} day(s)</p>
-                </div>
-
-                <div className="flex gap-2 border-t border-slate-200 pt-4">
-                  <Button
-                    onClick={() => handleApprove(notification.id)}
-                    disabled={processingId === notification.id}
-                    size="sm"
-                    className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    {processingId === notification.id ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="h-4 w-4" />
-                        Approve
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={() => handleDismiss(notification.id, "Request dismissed by manager")}
-                    disabled={processingId === notification.id}
-                    size="sm"
-                    variant="destructive"
-                    className="flex-1 gap-2"
-                  >
-                    {processingId === notification.id ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-4 w-4" />
-                        Dismiss
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      <Card className="border border-slate-200 bg-white shadow-sm">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Staff</th>
+                  <th className="px-4 py-3">Leave Type</th>
+                  <th className="px-4 py-3">Start</th>
+                  <th className="px-4 py-3">End</th>
+                  <th className="px-4 py-3">Stage</th>
+                  <th className="px-4 py-3">Reason</th>
+                  <th className="px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((notification) => {
+                  const leave = notification.leave_requests
+                  return (
+                    <tr key={notification.id} className="border-t border-slate-100 align-top">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-900">{notification.requester_name || "Staff"}</div>
+                        <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(leave.leave_type)}</td>
+                      <td className="px-4 py-3">{format(new Date(leave.start_date), "MMM dd, yyyy")}</td>
+                      <td className="px-4 py-3">{format(new Date(leave.end_date), "MMM dd, yyyy")}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline">{formatLeaveType(String(notification.status || "pending"))}</Badge>
+                      </td>
+                      <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{leave.reason}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleApprove(notification.id)}
+                            disabled={processingId === notification.id}
+                            size="sm"
+                            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                          >
+                            {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                            Approve
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              const rejectReason = window.prompt("Provide rejection reason") || ""
+                              if (!rejectReason.trim()) return
+                              void handleDismiss(notification.id, rejectReason)
+                            }}
+                            disabled={processingId === notification.id}
+                            size="sm"
+                            variant="destructive"
+                            className="gap-1"
+                          >
+                            {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                            Reject
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 
