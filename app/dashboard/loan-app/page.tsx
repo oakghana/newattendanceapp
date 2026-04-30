@@ -105,6 +105,7 @@ type WorkflowResponse = {
     hrOffice: boolean
     directorHr: boolean
     viewAllTabs: boolean
+    allLoans?: boolean
   }
   loanTypes: LoanType[]
   myRequests: LoanRequest[]
@@ -707,11 +708,11 @@ export default function LoanAppPage() {
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Director HR (${c.director})` })
-    if (p?.hrOffice || p?.viewAllTabs || p?.hod) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs) {
+    if (p?.hrOffice || p?.loanOffice || p?.viewAllTabs) tabs.push({ key: "setup", label: "Setup & Linkage" })
+    if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
-    if (p?.viewAllTabs || normalizedRole === "regional_manager" || normalizedRole === "department_head") {
+    if (p?.allLoans || p?.viewAllTabs) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs

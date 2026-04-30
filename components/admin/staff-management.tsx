@@ -577,6 +577,10 @@ export function StaffManagement() {
                   <SelectItem value="it-admin">IT-Admin</SelectItem>
                   <SelectItem value="department_head">Department Head</SelectItem>
                   <SelectItem value="audit_staff">Audit Staff</SelectItem>
+                  <SelectItem value="accounts">Accounts</SelectItem>
+                  <SelectItem value="loan_office">Loan Office</SelectItem>
+                  <SelectItem value="manager_hr">Manager HR</SelectItem>
+                  <SelectItem value="director_hr">Director HR</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
                   <SelectItem value="nsp">NSP</SelectItem>
                   <SelectItem value="intern">Intern</SelectItem>
@@ -732,6 +736,10 @@ export function StaffManagement() {
                                 <SelectItem value="audit_staff">Audit Staff</SelectItem>
                                 <SelectItem value="department_head">Department Head</SelectItem>
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                                 {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
                                   <SelectItem value="it-admin">IT Admin</SelectItem>
                                 )}
@@ -904,6 +912,10 @@ export function StaffManagement() {
                             <SelectItem value="audit_staff">Audit Staff</SelectItem>
                             <SelectItem value="department_head">Department Head</SelectItem>
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
                               <SelectItem value="it-admin">IT Admin</SelectItem>
                             )}

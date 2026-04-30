@@ -109,6 +109,20 @@ export default async function LeaveManagementPage() {
       requesterProfiles = data || []
     }
 
+    // Fetch loan_hod_linkages for this manager so we know which staff are explicitly linked to them
+    let linkedStaffIds: Set<string> = new Set()
+    if (["department_head", "regional_manager"].includes(profile.role)) {
+      try {
+        const { data: linkages } = await admin
+          .from("loan_hod_linkages")
+          .select("staff_user_id")
+          .eq("hod_user_id", user.id)
+        linkedStaffIds = new Set((linkages || []).map((l: any) => String(l.staff_user_id)))
+      } catch {
+        linkedStaffIds = new Set()
+      }
+    }
+
     const requesterMap = new Map(requesterProfiles.map((row: any) => [row.id, row]))
     const managerDepartmentId = (profile as any).department_id || null
     const managerLocationId = (profile as any).assigned_location_id || null
@@ -118,7 +132,12 @@ export default async function LeaveManagementPage() {
         if (profile.role === "admin") return true
         const leave = notification.leave_requests
         if (!leave?.user_id) return false
-        const requester = requesterMap.get(String(leave.user_id))
+        const staffId = String(leave.user_id)
+
+        // If staff is explicitly linked to this HOD via loan_hod_linkages, always show
+        if (linkedStaffIds.has(staffId)) return true
+
+        const requester = requesterMap.get(staffId)
         if (!requester) return false
 
         if (profile.role === "regional_manager") {

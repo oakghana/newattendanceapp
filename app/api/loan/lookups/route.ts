@@ -5,6 +5,10 @@ import { canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workfl
 function canManageLookups(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   return (
     role === "admin" ||
+    role === "loan_office" ||
+    role === "manager_hr" ||
+    role === "director_hr" ||
+    role === "accounts" ||
     role === "regional_manager" ||
     role === "department_head" ||
     canDoHrOffice(role, deptName, deptCode) ||
@@ -74,7 +78,7 @@ export async function GET(request: NextRequest) {
           admin
             .from("user_profiles")
             .select("id, first_name, last_name, employee_id, position, role, department_id, departments(name, code), assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
-            .in("role", ["staff", "nsp", "intern", "contract", "it_admin", "department_head", "regional_manager", "loan_officer", "hr_officer", "accounts"])
+            .in("role", ["staff", "nsp", "intern", "contract", "it_admin", "department_head", "regional_manager", "loan_officer", "hr_officer", "accounts", "loan_office", "director_hr", "manager_hr"])
             .eq("is_active", true)
             .order("first_name", { ascending: true })
             .range(from, to),

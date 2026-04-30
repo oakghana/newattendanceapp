@@ -438,9 +438,9 @@ export async function POST(request: NextRequest) {
           {
             success: false,
             error:
-              "Database constraint prevents the 'audit_staff' role from being saved. Please add 'audit_staff' to your user_profiles role constraint or run the migration provided in the admin docs.",
+              "Database constraint prevents the new role from being saved. Please run the migration to update the user_profiles role constraint.",
             details:
-              "Suggested SQL (Postgres):\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;\nALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff'));",
+              "Suggested SQL (Postgres):\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;\nALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','director_hr','manager_hr'));",
           },
           400,
         )
@@ -459,6 +459,32 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[v0] Staff API - Staff member created successfully")
+
+    // Auto-link IT department staff to the IT HOD
+    try {
+      const newDeptId = (newProfile as any)?.department_id
+      const newDeptName = String((newProfile as any)?.departments?.name || "").toLowerCase()
+      const newDeptCode = String((newProfile as any)?.departments?.code || "").toLowerCase()
+      const isItDept = newDeptName.includes("information") || newDeptName.includes(" it ") || newDeptCode === "it" || newDeptCode.startsWith("it")
+      if (isItDept && newDeptId) {
+        const { data: itHod } = await adminSupabase
+          .from("user_profiles")
+          .select("id")
+          .eq("department_id", newDeptId)
+          .eq("role", "department_head")
+          .eq("is_active", true)
+          .maybeSingle()
+        if (itHod?.id && itHod.id !== authUser.user.id) {
+          await adminSupabase.from("loan_hod_linkages").upsert(
+            { staff_user_id: authUser.user.id, hod_user_id: itHod.id },
+            { onConflict: "staff_user_id,hod_user_id", ignoreDuplicates: true },
+          )
+          console.log("[v0] Staff API - Auto-linked IT staff to IT HOD:", itHod.id)
+        }
+      }
+    } catch (linkErr) {
+      console.error("[v0] Staff API - IT auto-link failed (non-fatal):", linkErr)
+    }
 
     // write an audit log for creation
     try {

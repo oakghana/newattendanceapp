@@ -60,7 +60,7 @@ async function autoAdvanceStaleHodRequests(admin: any) {
   const { data: loanOfficeUsers } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["loan_officer", "hr_officer", "admin", "director_hr", "hr_director"])
+    .in("role", ["loan_officer", "hr_officer", "admin", "director_hr", "hr_director", "loan_office", "manager_hr"])
     .eq("is_active", true)
 
   const loanOfficeIds = (loanOfficeUsers || []).map((u: any) => u.id)
@@ -307,6 +307,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs,
+            allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr"].includes(role),
           },
         },
         { status: 200 },
@@ -329,6 +330,7 @@ export async function GET() {
       hrOffice: canDoHrOffice(role, deptName, deptCode),
       directorHr: canDoDirectorHr(role, deptName, deptCode),
       viewAllTabs,
+      allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr"].includes(role),
     }
 
     // HOD query: linked HODs can review linked staff requests; first approval is enough to move forward.

@@ -53,7 +53,7 @@ export function canDoHodReview(role: string): boolean {
 }
 
 export function canDoLoanOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return role === "admin" || role === "loan_officer" || isLoanOfficeDepartment(deptName, deptCode)
+  return role === "admin" || role === "loan_officer" || role === "loan_office" || role === "manager_hr" || isLoanOfficeDepartment(deptName, deptCode)
 }
 
 export function canDoAccounts(role: string, deptName?: string | null, deptCode?: string | null): boolean {
@@ -62,11 +62,11 @@ export function canDoAccounts(role: string, deptName?: string | null, deptCode?:
 }
 
 export function canDoCommittee(role: string): boolean {
-  return role === "admin" || role === "loan_committee" || role === "committee_member"
+  return role === "admin" || role === "loan_committee" || role === "committee_member" || role === "director_hr" || role === "manager_hr"
 }
 
 export function canDoHrOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return role === "admin" || role === "hr_officer" || isHrDepartment(deptName, deptCode)
+  return role === "admin" || role === "hr_officer" || role === "manager_hr" || role === "loan_office" || isHrDepartment(deptName, deptCode)
 }
 
 export function canDoDirectorHr(role: string, deptName?: string | null, deptCode?: string | null): boolean {
