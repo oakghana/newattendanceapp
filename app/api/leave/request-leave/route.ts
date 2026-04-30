@@ -14,6 +14,58 @@ const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "special_unpaid",
 ])
 
+async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
+  const { data: attendanceRows, error } = await admin
+    .from("attendance_records")
+    .select("id, check_in_time, check_out_time")
+    .eq("user_id", userId)
+    .order("check_in_time", { ascending: false })
+    .limit(60)
+
+  if (error) return { ok: true as const }
+
+  const rows = attendanceRows || []
+  const now = new Date()
+  const sevenDaysAgo = new Date(now)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+  const staleOpenCheckout = rows.find((row: any) => {
+    if (!row?.check_in_time || row?.check_out_time) return false
+    const checkInDate = new Date(row.check_in_time)
+    return checkInDate.toDateString() !== now.toDateString()
+  })
+
+  if (staleOpenCheckout) {
+    return {
+      ok: false as const,
+      status: 403,
+      error:
+        "Please complete your pending check-out first in Attendance before submitting a leave request.",
+      message:
+        "Kindly pass through Attendance and complete your check-out. It helps HR process your leave quickly and keeps your records clean.",
+    }
+  }
+
+  const hasRecentAttendance = rows.some((row: any) => {
+    if (!row?.check_in_time) return false
+    const checkInDate = new Date(row.check_in_time)
+    return checkInDate >= sevenDaysAgo
+  })
+
+  if (!hasRecentAttendance) {
+    return {
+      ok: false as const,
+      status: 403,
+      error:
+        "Attendance activity is required before requesting leave. Please check in and check out properly using the Attendance module.",
+      message:
+        "Please use the Attendance module consistently. If attendance usage is repeatedly missing, future leave and loan requests may be restricted.",
+    }
+  }
+
+  return { ok: true as const }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -59,6 +111,21 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const normalizedRole = String((roleProfile as any)?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+    const shouldEnforceAttendance = !["admin", "regional_manager", "department_head"].includes(normalizedRole)
+    if (shouldEnforceAttendance) {
+      const admin = await createAdminClient()
+      const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
+      if (!attendanceCheck.ok) {
+        return NextResponse.json(
+          {
+            error: attendanceCheck.error,
+            message: attendanceCheck.message,
+          },
+          { status: attendanceCheck.status },
+        )
+      }
+    }
+
     const canSubmitBeyondEntitlementForHrAdjustment =
       normalizedRole === "admin" ||
       normalizedRole === "regional_manager" ||
@@ -397,6 +464,107 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     console.error("Error creating leave request:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const id = String(body?.id || "")
+    const start_date = String(body?.start_date || "")
+    const end_date = String(body?.end_date || "")
+    const reason = String(body?.reason || "").trim()
+    const leave_type = String(body?.leave_type || "").trim().toLowerCase()
+
+    if (!id || !start_date || !end_date || !reason || !leave_type) {
+      return NextResponse.json({ error: "id, start_date, end_date, leave_type and reason are required" }, { status: 400 })
+    }
+
+    const reasonValidation = validateMeaningfulText(reason, {
+      fieldLabel: "Leave reason",
+      minLength: 10,
+    })
+    if (!reasonValidation.ok) {
+      return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
+    }
+
+    const requestedDays = computeLeaveDays(start_date, end_date)
+    if (requestedDays <= 0) {
+      return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from("leave_requests")
+      .select("id, user_id, status, approved_by, approved_at")
+      .eq("id", id)
+      .single()
+
+    if (existingError || !existing) {
+      return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
+    }
+
+    if (String(existing.user_id) !== user.id) {
+      return NextResponse.json({ error: "You can only edit your own leave request" }, { status: 403 })
+    }
+
+    const hasReviewerAction =
+      String(existing.status || "") !== "pending" ||
+      Boolean(existing.approved_by) ||
+      Boolean(existing.approved_at)
+
+    if (hasReviewerAction) {
+      return NextResponse.json(
+        { error: "This leave request can no longer be edited because review has already started." },
+        { status: 409 },
+      )
+    }
+
+    const { data: reviewedNotification } = await supabase
+      .from("leave_notifications")
+      .select("id, status")
+      .eq("leave_request_id", id)
+      .neq("status", "pending")
+      .limit(1)
+      .maybeSingle()
+
+    if (reviewedNotification?.id) {
+      return NextResponse.json(
+        { error: "This leave request can no longer be edited because it is already being handled." },
+        { status: 409 },
+      )
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from("leave_requests")
+      .update({
+        start_date,
+        end_date,
+        reason: reasonValidation.normalized,
+        leave_type,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("*")
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message || "Failed to update leave request" }, { status: 400 })
+    }
+
+    return NextResponse.json({ success: true, message: "Leave request updated successfully.", data: updated })
+  } catch (error) {
+    console.error("Error updating leave request:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

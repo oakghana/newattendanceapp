@@ -52,6 +52,53 @@ function handleMissingSchema(error: any) {
   )
 }
 
+async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
+  const { data: attendanceRows, error } = await admin
+    .from("attendance_records")
+    .select("id, check_in_time, check_out_time")
+    .eq("user_id", userId)
+    .order("check_in_time", { ascending: false })
+    .limit(60)
+
+  if (error) return { ok: true as const }
+
+  const rows = attendanceRows || []
+  const now = new Date()
+  const sevenDaysAgo = new Date(now)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+  const staleOpenCheckout = rows.find((row: any) => {
+    if (!row?.check_in_time || row?.check_out_time) return false
+    const checkInDate = new Date(row.check_in_time)
+    return checkInDate.toDateString() !== now.toDateString()
+  })
+
+  if (staleOpenCheckout) {
+    return {
+      ok: false as const,
+      status: 403,
+      error:
+        "Please complete your pending check-out first in Attendance before submitting a leave planning request.",
+    }
+  }
+
+  const hasRecentAttendance = rows.some((row: any) => {
+    if (!row?.check_in_time) return false
+    return new Date(row.check_in_time) >= sevenDaysAgo
+  })
+
+  if (!hasRecentAttendance) {
+    return {
+      ok: false as const,
+      status: 403,
+      error:
+        "Attendance activity is required before submitting leave planning. Please use Attendance check-in and check-out first.",
+    }
+  }
+
+  return { ok: true as const }
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -367,6 +414,14 @@ export async function POST(request: NextRequest) {
     const canSelfApply = isStaffRole(role) || ["admin", "regional_manager", "department_head"].includes(role)
     if (!canSelfApply) {
       return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
+    }
+
+    const shouldEnforceAttendance = !["admin", "regional_manager", "department_head"].includes(role)
+    if (shouldEnforceAttendance) {
+      const attendanceCheck = await validateAttendanceEngagementForRequest(supabase, user.id)
+      if (!attendanceCheck.ok) {
+        return NextResponse.json({ error: attendanceCheck.error }, { status: attendanceCheck.status })
+      }
     }
 
     const body = await request.json()

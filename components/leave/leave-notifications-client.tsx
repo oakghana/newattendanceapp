@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,8 +26,10 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { LeaveNotificationCard, type LeaveNotification } from "@/components/leave/leave-notification-card"
 import { LeaveRequestDialog, type LeaveRequestData } from "@/components/leave/leave-request-dialog"
+import { useToast } from "@/hooks/use-toast"
 
 export function LeaveNotificationsClient() {
+  const { toast } = useToast()
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<LeaveNotification[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +39,8 @@ export function LeaveNotificationsClient() {
   const [selectedNotifId, setSelectedNotifId] = useState<string | null>(null)
   const [newLeaveOpen, setNewLeaveOpen] = useState(false)
   const supabase = createClient()
+  const previousPendingCountRef = useRef<number | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const allowedRequestRoles = ["staff", "nsp", "intern", "it-admin", "regional_manager"]
 
@@ -54,11 +58,19 @@ export function LeaveNotificationsClient() {
       const err = await resp.json()
       throw new Error(err.error || 'Failed to submit leave request')
     }
+    toast({ title: "Leave request submitted", description: "Your request was sent successfully. You can edit it before reviewer action starts." })
     await fetchNotifications()
   }
 
   useEffect(() => {
     fetchNotifications()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void fetchNotifications()
+    }, 15000)
+    return () => window.clearInterval(timer)
   }, [])
 
   const canRequestLeave = (role: string | null) => {
@@ -189,7 +201,45 @@ export function LeaveNotificationsClient() {
         throw error
       }
 
-      setNotifications(data || [])
+      const rows = data || []
+      const pendingCount = rows.filter((row: any) => String(row?.status || "") === "pending").length
+      const managerRole = ["admin", "regional_manager", "department_head"].includes(String(profile?.role || ""))
+
+      if (
+        managerRole &&
+        previousPendingCountRef.current !== null &&
+        pendingCount > Number(previousPendingCountRef.current)
+      ) {
+        try {
+          if (!audioContextRef.current) audioContextRef.current = new AudioContext()
+          const audioContext = audioContextRef.current
+          const now = audioContext.currentTime
+          const oscillator = audioContext.createOscillator()
+          const gain = audioContext.createGain()
+
+          oscillator.type = "triangle"
+          oscillator.frequency.setValueAtTime(720, now)
+          oscillator.frequency.exponentialRampToValueAtTime(960, now + 0.16)
+          gain.gain.setValueAtTime(0.0001, now)
+          gain.gain.exponentialRampToValueAtTime(0.1, now + 0.02)
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24)
+
+          oscillator.connect(gain)
+          gain.connect(audioContext.destination)
+          oscillator.start(now)
+          oscillator.stop(now + 0.26)
+        } catch {
+          // Ignore browser autoplay restrictions.
+        }
+
+        toast({
+          title: "New Leave Request Alert",
+          description: "A new leave request is pending your review.",
+        })
+      }
+
+      previousPendingCountRef.current = pendingCount
+      setNotifications(rows)
     } catch (err) {
       // provide richer console output for debugging
       if (err instanceof Error) {

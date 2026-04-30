@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -140,6 +140,22 @@ type LookupPayload = {
   }>
   hods: Array<{ id: string; first_name: string; last_name: string; employee_id: string | null; position: string | null; role: string }>
   linkages: Array<{ id: string; staff_user_id: string; hod_user_id: string }>
+  linkageRequests: Array<{
+    id: string
+    title: string
+    message: string
+    created_at: string
+    is_read: boolean
+    read_at?: string | null
+    request_status: "pending" | "approved" | "rejected"
+    request_note?: string | null
+    resolution_note?: string | null
+    resolved_at?: string | null
+    requester?: { id: string; full_name: string; employee_id?: string | null; position?: string | null; role?: string | null } | null
+    staff?: { id: string; full_name: string; employee_id?: string | null; position?: string | null; role?: string | null } | null
+    requested_hod?: { id: string; full_name: string; employee_id?: string | null; position?: string | null; role?: string | null } | null
+    resolved_by?: { id: string; full_name: string; employee_id?: string | null; position?: string | null; role?: string | null } | null
+  }>
 }
 
 type RegistrySignature = {
@@ -232,6 +248,27 @@ function fmtAmount(n?: number | null) {
 
 function statusText(value: string) {
   return STATUS_LABELS[value] || value.replace(/_/g, " ")
+}
+
+function statusBadgeClass(status: string, emphasis: "soft" | "solid" = "soft") {
+  if (emphasis === "solid") {
+    const solidMap: Record<string, string> = {
+      pending_hod: "bg-amber-600 text-white",
+      hod_approved: "bg-green-700 text-white",
+      hod_rejected: "bg-red-700 text-white",
+      sent_to_accounts: "bg-blue-700 text-white",
+      rejected_fd: "bg-rose-700 text-white",
+      awaiting_committee: "bg-violet-700 text-white",
+      committee_rejected: "bg-red-700 text-white",
+      awaiting_hr_terms: "bg-cyan-700 text-white",
+      awaiting_director_hr: "bg-indigo-700 text-white",
+      approved_director: "bg-emerald-700 text-white",
+      director_rejected: "bg-red-800 text-white",
+    }
+    return `text-[11px] font-semibold whitespace-nowrap px-2.5 py-1 ${solidMap[status] || "bg-slate-700 text-white"}`
+  }
+
+  return `text-[11px] font-semibold whitespace-nowrap ${STATUS_COLORS[status] || "bg-slate-100 text-slate-800"}`
 }
 
 function stageOwner(status: string) {
@@ -567,6 +604,10 @@ export default function LoanAppPage() {
   const [templateBody, setTemplateBody] = useState("")
   const [selectedStaffForLink, setSelectedStaffForLink] = useState("")
   const [selectedHodsForLink, setSelectedHodsForLink] = useState<string[]>([])
+  const [linkageRequestNote, setLinkageRequestNote] = useState("")
+  const [linkageSearch, setLinkageSearch] = useState("")
+  const [linkageRequestStatusFilter, setLinkageRequestStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending")
+  const [linkageResolutionNotes, setLinkageResolutionNotes] = useState<Record<string, string>>({})
   const [selectedStaffsForBatchLink, setSelectedStaffsForBatchLink] = useState<string[]>([])
   const [selectedHodForBatchLink, setSelectedHodForBatchLink] = useState("")
   const [staffLocationFilter, setStaffLocationFilter] = useState("all")
@@ -625,6 +666,8 @@ export default function LoanAppPage() {
   const [allSort, setAllSort] = useState<"newest" | "oldest">("newest")
   const [allPage, setAllPage] = useState(1)
   const pageSize = 10
+  const previousHodQueueCountRef = useRef<number | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const filteredLoanTypes = useMemo(() => {
     return data?.loanTypes || []
@@ -635,6 +678,7 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = normalizedRole === "admin" || normalizedRole === "it_admin"
+  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
     () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
@@ -663,13 +707,15 @@ export default function LoanAppPage() {
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Director HR (${c.director})` })
-    if (p?.hrOffice || p?.viewAllTabs) tabs.push({ key: "setup", label: "Setup & Linkage" })
+    if (p?.hrOffice || p?.viewAllTabs || p?.hod) tabs.push({ key: "setup", label: "Setup & Linkage" })
     if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
-    if (p?.viewAllTabs) tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+    if (p?.viewAllTabs || normalizedRole === "regional_manager" || normalizedRole === "department_head") {
+      tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+    }
     return tabs
-  }, [data])
+  }, [data, normalizedRole])
 
   const defaultTab = visibleTabs[0]?.key || "staff"
 
@@ -908,12 +954,54 @@ export default function LoanAppPage() {
     if (directorPage > totalDirectorPages) setDirectorPage(totalDirectorPages)
   }, [directorPage, totalDirectorPages])
 
-  const loadData = async () => {
-    setLoading(true)
+  const loadData = async (options?: { silent?: boolean }) => {
+    const playQueueAlert = () => {
+      try {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioContext()
+        }
+        const audioContext = audioContextRef.current
+        const now = audioContext.currentTime
+        const oscillator = audioContext.createOscillator()
+        const gain = audioContext.createGain()
+
+        oscillator.type = "sine"
+        oscillator.frequency.setValueAtTime(880, now)
+        oscillator.frequency.exponentialRampToValueAtTime(1240, now + 0.18)
+        gain.gain.setValueAtTime(0.0001, now)
+        gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.26)
+
+        oscillator.connect(gain)
+        gain.connect(audioContext.destination)
+        oscillator.start(now)
+        oscillator.stop(now + 0.28)
+      } catch {
+        // Ignore sound errors when browser blocks autoplay until user interaction.
+      }
+    }
+
+    const shouldShowLoader = !options?.silent
+    if (shouldShowLoader) setLoading(true)
     try {
       const res = await fetch("/api/loan/workflow", { cache: "no-store" })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to load loan workflow")
+
+      const currentHodCount = Number(result?.inbox?.hod?.length || 0)
+      const shouldQueueAlert = Boolean(result?.permissions?.hod || result?.permissions?.viewAllTabs)
+      if (
+        shouldQueueAlert &&
+        previousHodQueueCountRef.current !== null &&
+        currentHodCount > Number(previousHodQueueCountRef.current)
+      ) {
+        playQueueAlert()
+        toast({
+          title: "New Loan Request Alert",
+          description: "A new request has entered your HOD review queue.",
+        })
+      }
+      previousHodQueueCountRef.current = currentHodCount
 
       setData(result)
       setWarning(result.degraded ? result.warning || "Loan module is in degraded mode." : null)
@@ -925,13 +1013,26 @@ export default function LoanAppPage() {
     } catch (e: any) {
       toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
     } finally {
-      setLoading(false)
+      if (shouldShowLoader) setLoading(false)
     }
   }
 
   useEffect(() => {
     void loadData()
   }, [])
+
+  useEffect(() => {
+    const shouldRefreshInBackground = Boolean(
+      p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs,
+    )
+    if (!shouldRefreshInBackground) return
+
+    const timer = window.setInterval(() => {
+      void loadData({ silent: true })
+    }, 15000)
+
+    return () => window.clearInterval(timer)
+  }, [p?.hod, p?.loanOffice, p?.accounts, p?.committee, p?.hrOffice, p?.directorHr, p?.viewAllTabs])
 
   const resetForm = () => {
     setEditingId(null)
@@ -962,7 +1063,7 @@ export default function LoanAppPage() {
   const loadLookups = async () => {
     setLookupLoading(true)
     try {
-      const res = await fetch("/api/loan/lookups", { cache: "no-store" })
+      const res = await fetch("/api/loan/lookups?limit=20000", { cache: "no-store" })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to load lookup data")
       setLookupData(result)
@@ -997,10 +1098,10 @@ export default function LoanAppPage() {
   }
 
   useEffect(() => {
-    if (p?.hrOffice || p?.viewAllTabs) {
+    if (p?.hrOffice || p?.viewAllTabs || p?.hod) {
       void loadLookups()
     }
-  }, [p?.hrOffice, p?.viewAllTabs])
+  }, [p?.hrOffice, p?.viewAllTabs, p?.hod])
 
   useEffect(() => {
     if (p?.directorHr || p?.hrOffice || p?.viewAllTabs || isAdmin) {
@@ -1106,7 +1207,7 @@ export default function LoanAppPage() {
       toast({ title: "Action failed", description: result.error || "Try again", variant: "destructive" })
       return
     }
-    toast({ title: "Action completed", description: "Workflow updated successfully." })
+    toast({ title: result.alreadyForwarded ? "Already forwarded" : "Action completed", description: result.message || "Workflow updated successfully." })
     await loadData()
   }
 
@@ -1168,6 +1269,60 @@ export default function LoanAppPage() {
     }
     toast({ title: "Updated", description: successMessage })
     await Promise.all([loadData(), loadLookups()])
+  }
+
+  const requestLinkageApproval = async () => {
+    if (!selectedStaffForLink || selectedHodsForLink.length === 0) {
+      toast({ title: "Select staff and HOD", description: "Choose at least one staff and one HOD before requesting linkage." })
+      return
+    }
+
+    const requests = selectedHodsForLink.map((hodId) =>
+      fetch("/api/loan/lookups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "request_hod_linkage",
+          staff_user_id: selectedStaffForLink,
+          requested_hod_user_id: hodId,
+          note: linkageRequestNote.trim() || null,
+        }),
+      }),
+    )
+
+    const responses = await Promise.all(requests)
+    const failed = responses.filter((response) => !response.ok)
+    if (failed.length > 0) {
+      toast({ title: "Request failed", description: "Some linkage requests could not be sent. Please try again.", variant: "destructive" })
+      return
+    }
+
+    toast({ title: "Request submitted", description: "Admin has been notified to approve the requested staff-to-HOD linkage." })
+    setLinkageRequestNote("")
+    await loadLookups()
+  }
+
+  const resolveLinkageRequest = async (requestId: string, decision: "approve" | "reject") => {
+    const note = linkageResolutionNotes[requestId]?.trim() || null
+    const res = await fetch("/api/loan/lookups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "resolve_hod_linkage_request",
+        request_id: requestId,
+        decision,
+        note,
+      }),
+    })
+    const result = await res.json()
+    if (!res.ok) {
+      toast({ title: "Linkage approval failed", description: result.error || "Could not resolve linkage request.", variant: "destructive" })
+      return
+    }
+
+    toast({ title: `Request ${decision === "approve" ? "approved" : "rejected"}`, description: result.message || "Linkage request updated successfully." })
+    setLinkageResolutionNotes((prev) => ({ ...prev, [requestId]: "" }))
+    await loadLookups()
   }
 
   const saveSignatureRegistry = async () => {
@@ -1264,6 +1419,51 @@ export default function LoanAppPage() {
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }))
   }, [lookupData?.staff])
 
+  const filteredLinkageRows = useMemo(() => {
+    const q = linkageSearch.trim().toLowerCase()
+    if (!q) return lookupData?.linkages || []
+
+    return (lookupData?.linkages || []).filter((link) => {
+      const staff = (lookupData?.staff || []).find((row) => row.id === link.staff_user_id)
+      const hod = (lookupData?.hods || []).find((row) => row.id === link.hod_user_id)
+      const searchText = [
+        staff?.first_name,
+        staff?.last_name,
+        staff?.employee_id,
+        staff?.position,
+        staff?.geofence_locations?.name,
+        staff?.geofence_locations?.districts?.name,
+        hod?.first_name,
+        hod?.last_name,
+        hod?.position,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+
+      return searchText.includes(q)
+    })
+  }, [lookupData?.linkages, lookupData?.staff, lookupData?.hods, linkageSearch])
+
+  const filteredLinkageRequests = useMemo(() => {
+    let rows = [...(lookupData?.linkageRequests || [])]
+    if (linkageRequestStatusFilter !== "all") {
+      rows = rows.filter((row) => row.request_status === linkageRequestStatusFilter)
+    }
+    return rows
+  }, [lookupData?.linkageRequests, linkageRequestStatusFilter])
+
+  const hodMemoCopyRows = useMemo(() => {
+    const currentUserId = data?.profile?.id || ""
+    if (!currentUserId) return []
+
+    return (data?.myTasks || []).filter((row) => {
+      const approvedByCurrentReviewer = String(row.hod_reviewer_id || "") === currentUserId
+      const hasMemoCopy = ["rejected_fd", "director_rejected"].includes(String(row.status || ""))
+      return approvedByCurrentReviewer && hasMemoCopy
+    })
+  }, [data?.myTasks, data?.profile?.id])
+
   const openSecureMemo = async (loanId: string) => {
     const res = await fetch("/api/loan/memo-link", {
       method: "POST",
@@ -1359,6 +1559,9 @@ export default function LoanAppPage() {
           doc.setTextColor(70, 70, 70)
           doc.text(["P.O Box M14", "Accra Ghana"], pageWidth - 42, 36)
           doc.setFont("times", "normal")
+          doc.setFontSize(7)
+          doc.text(`Date: ${new Date().toISOString().slice(0, 10)}`, pageWidth - 42, 44)
+          doc.setFont("times", "normal")
           doc.setTextColor(0, 0, 0)
         }
 
@@ -1419,7 +1622,12 @@ export default function LoanAppPage() {
           y += 4.9
         }
 
-        doc.save(`${row.request_number || "memo"}-director-approval.pdf`)
+        doc.setFont("times", "bold")
+        doc.setFontSize(28)
+        doc.setTextColor(235, 235, 235)
+        doc.text("Loan App", pageWidth / 2 - 25, pageHeight / 2 + 10, { angle: -28 })
+
+        doc.save(`${row.request_number || "memo"}-qcc-loan-memo.pdf`)
       }
 
       const deleteLoanRequestById = async (id: string) => {
@@ -1572,6 +1780,9 @@ export default function LoanAppPage() {
               <div>
                 <Label>Reason (Optional)</Label>
                 <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="You can add reason if needed" />
+                <p className="mt-2 text-xs text-amber-700">
+                  Kindly keep your Attendance check-in and check-out up to date. Missing attendance activity or pending checkout can block new loan and leave requests.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -1614,7 +1825,7 @@ export default function LoanAppPage() {
                 <div key={row.id} className="border rounded-lg p-3 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
-                    <Badge className={STATUS_COLORS[row.status] || ""}>{statusText(row.status)}</Badge>
+                    <Badge className={statusBadgeClass(row.status, "soft")}>{statusText(row.status)}</Badge>
                   </div>
                   {row.staff_full_name && <div className="text-sm font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div className="text-sm text-muted-foreground">Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
@@ -1685,7 +1896,7 @@ export default function LoanAppPage() {
                   <div key={req.id} className="border rounded-md p-3 space-y-2">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="font-medium">{req.request_number} - {req.loan_type_label}</div>
-                      <Badge className={STATUS_COLORS[req.status] || ""}>{statusText(req.status)}</Badge>
+                      <Badge className={statusBadgeClass(req.status, "soft")}>{statusText(req.status)}</Badge>
                     </div>
                     <div className="text-sm text-muted-foreground">Amount: GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</div>
                     {timeline.length === 0 ? (
@@ -1782,7 +1993,7 @@ export default function LoanAppPage() {
                         <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
-                        <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.hod && (
                           <TableCell>
@@ -2083,7 +2294,7 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                          <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           {p?.hrOffice && (
                             <TableCell>
                               <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "hr_terms")}>Set Terms</Button>
@@ -2179,7 +2390,7 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
-                          <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                          <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
                             <TableCell>
@@ -2313,7 +2524,7 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.committee && (
                           <TableCell>
@@ -2430,7 +2641,7 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell><Badge className="text-[10px] whitespace-nowrap bg-purple-700 text-white">{statusText(row.status)}</Badge></TableCell>
+                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.directorHr && (
                           <TableCell>
@@ -2467,6 +2678,32 @@ export default function LoanAppPage() {
         </TabsContent>
 
         <TabsContent value="my-tasks" className="space-y-3">
+          {hodMemoCopyRows.length > 0 && (
+            <Card className="border-amber-200 bg-amber-50/70">
+              <CardHeader>
+                <CardTitle>Rejection Memo Copies for Staff You Approved</CardTitle>
+                <CardDescription>Downstream rejection memos remain available here for HOD follow-up and record keeping.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2">
+                {hodMemoCopyRows.map((row) => (
+                  <div key={`hod-memo-${row.id}`} className="rounded border bg-white p-3 text-sm shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
+                      <Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge>
+                    </div>
+                    <div className="mt-2 font-semibold text-purple-900">{row.staff_full_name || "Staff member"}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
+                    <div className="mt-3 flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>
+                        <FileText className="mr-1 h-4 w-4" /> Open Rejection Memo
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>My Loan Tasks & Decisions</CardTitle>
@@ -2520,6 +2757,7 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Status</TableHead>
                         <TableHead className="whitespace-nowrap">Location</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
+                        <TableHead className="whitespace-nowrap">Memo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2531,9 +2769,14 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
-                          <TableCell><Badge className={`text-[10px] whitespace-nowrap ${STATUS_COLORS[row.status] || "bg-gray-500"} text-white`}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.staff_location_name || "—"}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{fmtDate(row.updated_at || row.created_at)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status)
+                              ? <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
+                              : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -2545,13 +2788,18 @@ export default function LoanAppPage() {
                 <div key={`my-task-${row.id}`} className="rounded border p-3 text-sm space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
-                    <Badge className={STATUS_COLORS[row.status] || ""}>{statusText(row.status)}</Badge>
+                    <Badge className={statusBadgeClass(row.status, "soft")}>{statusText(row.status)}</Badge>
                   </div>
                   {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
                   <div className="text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
+                  {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
+                    <div className="pt-2">
+                      <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -2689,7 +2937,7 @@ export default function LoanAppPage() {
               variant="outline"
               className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
               onClick={() => runLookupAction({ action: "auto_link_by_location" }, "Auto-link by location completed")}
-              disabled={lookupLoading}
+              disabled={lookupLoading || !canDirectLinkageUpdate}
             >
               Auto-link Staff to HOD by Location
             </Button>
@@ -2750,7 +2998,11 @@ export default function LoanAppPage() {
             <Card className="border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle>Single Staff HOD Linkage</CardTitle>
-                <CardDescription>Attach one staff member to one or more HOD or regional manager profiles.</CardDescription>
+                <CardDescription>
+                  {canDirectLinkageUpdate
+                    ? "Attach one staff member to one or more HOD or regional manager profiles."
+                    : "Select a staff member and preferred HOD; your request will be sent to Admin for approval."}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -2781,15 +3033,108 @@ export default function LoanAppPage() {
                     })}
                   </div>
                 </div>
-                <Button
-                  onClick={() => runLookupAction({ action: "upsert_hod_linkage_batch", staff_user_id: selectedStaffForLink, hod_user_ids: selectedHodsForLink }, "Staff-to-HOD linkages updated")}
-                  disabled={!selectedStaffForLink || selectedHodsForLink.length === 0}
-                >
-                  Save Staff-HOD Linkages
-                </Button>
+                {!canDirectLinkageUpdate && (
+                  <div className="space-y-2">
+                    <Label>Reason / Note for Admin (optional)</Label>
+                    <Textarea
+                      value={linkageRequestNote}
+                      onChange={(e) => setLinkageRequestNote(e.target.value)}
+                      rows={3}
+                      placeholder="Tell Admin why this linkage is needed"
+                    />
+                  </div>
+                )}
+                {canDirectLinkageUpdate ? (
+                  <Button
+                    onClick={() => runLookupAction({ action: "upsert_hod_linkage_batch", staff_user_id: selectedStaffForLink, hod_user_ids: selectedHodsForLink }, "Staff-to-HOD linkages updated")}
+                    disabled={!selectedStaffForLink || selectedHodsForLink.length === 0}
+                  >
+                    Save Staff-HOD Linkages
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={requestLinkageApproval}
+                    disabled={!selectedStaffForLink || selectedHodsForLink.length === 0}
+                  >
+                    Request Linkage Approval
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
+
+          {isAdmin && (
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader>
+                <CardTitle>Linkage Request Approval Queue</CardTitle>
+                <CardDescription>Approve or reject requested staff-to-HOD linkages and keep the full decision history in one queue.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <Select value={linkageRequestStatusFilter} onValueChange={(value: "all" | "pending" | "approved" | "rejected") => setLinkageRequestStatusFilter(value)}>
+                    <SelectTrigger className="md:w-[220px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending only</SelectItem>
+                      <SelectItem value="approved">Approved only</SelectItem>
+                      <SelectItem value="rejected">Rejected only</SelectItem>
+                      <SelectItem value="all">All requests</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground">Showing {filteredLinkageRequests.length} linkage request(s)</div>
+                </div>
+
+                {filteredLinkageRequests.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No linkage requests match the selected status.</p>
+                )}
+
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {filteredLinkageRequests.map((request) => (
+                    <div key={request.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-slate-900">{`${request.staff?.full_name || "Staff"} -> ${request.requested_hod?.full_name || "HOD"}`}</div>
+                          <div className="text-xs text-muted-foreground">Requested by {request.requester?.full_name || "Unknown requester"} on {fmtDate(request.created_at)}</div>
+                        </div>
+                        <Badge className={request.request_status === "pending" ? "bg-amber-600 text-white" : request.request_status === "approved" ? "bg-emerald-700 text-white" : "bg-red-700 text-white"}>
+                          {request.request_status === "pending" ? "Pending Review" : request.request_status === "approved" ? "Approved" : "Rejected"}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-3 space-y-1 text-sm">
+                        <div><strong>Staff ID:</strong> {request.staff?.employee_id || "N/A"}</div>
+                        <div><strong>Requested HOD Role:</strong> {request.requested_hod?.role || request.requested_hod?.position || "N/A"}</div>
+                        <div><strong>Requester Note:</strong> {request.request_note || "No note added."}</div>
+                        <div><strong>System Message:</strong> {request.message}</div>
+                        {request.resolved_at && (
+                          <div><strong>Audit Trail:</strong> {request.request_status} by {request.resolved_by?.full_name || "Admin"} on {fmtDate(request.resolved_at)}{request.resolution_note ? ` | Note: ${request.resolution_note}` : ""}</div>
+                        )}
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        <Textarea
+                          value={linkageResolutionNotes[request.id] || ""}
+                          onChange={(e) => setLinkageResolutionNotes((prev) => ({ ...prev, [request.id]: e.target.value }))}
+                          rows={2}
+                          placeholder={request.request_status === "pending" ? "Optional admin note for approval or rejection" : "Existing resolution note"}
+                          disabled={request.request_status !== "pending"}
+                        />
+
+                        {request.request_status === "pending" ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" onClick={() => resolveLinkageRequest(request.id, "approve")}>Approve Linkage</Button>
+                            <Button size="sm" variant="destructive" onClick={() => resolveLinkageRequest(request.id, "reject")}>Reject Linkage</Button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">This request is closed and retained here as audit history.</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <Card className="border-slate-200 shadow-sm">
@@ -2881,7 +3226,7 @@ export default function LoanAppPage() {
                   <p className="text-sm text-muted-foreground">Selected staff: {selectedStaffsForBatchLink.length}</p>
                   <Button
                     onClick={() => runLookupAction({ action: "upsert_hod_linkage_staff_batch", staff_user_ids: selectedStaffsForBatchLink, hod_user_id: selectedHodForBatchLink }, "Bulk staff-to-HOD linkage updated")}
-                    disabled={selectedStaffsForBatchLink.length === 0 || !selectedHodForBatchLink}
+                    disabled={selectedStaffsForBatchLink.length === 0 || !selectedHodForBatchLink || !canDirectLinkageUpdate}
                   >
                     Link Selected Staff to HOD
                   </Button>
@@ -2921,7 +3266,7 @@ export default function LoanAppPage() {
                   </div>
                   <Button
                     onClick={() => runLookupAction({ action: "update_staff_rank", staff_user_id: selectedStaffForRank, rank_level: selectedRankLevel }, "Staff rank updated")}
-                    disabled={!selectedStaffForRank}
+                    disabled={!selectedStaffForRank || !canDirectLinkageUpdate}
                   >
                     Update Staff Rank
                   </Button>
@@ -2936,8 +3281,15 @@ export default function LoanAppPage() {
               <CardDescription>Review the active staff-to-HOD mapping records currently available in the system.</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-3">
+                <Input
+                  value={linkageSearch}
+                  onChange={(e) => setLinkageSearch(e.target.value)}
+                  placeholder="Search by staff name, employee ID, HOD, rank, location, or district"
+                />
+              </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {(lookupData?.linkages || []).map((link) => {
+                {filteredLinkageRows.map((link) => {
                   const staff = (lookupData?.staff || []).find((s) => s.id === link.staff_user_id)
                   const hod = (lookupData?.hods || []).find((h) => h.id === link.hod_user_id)
                   return (
@@ -2950,8 +3302,8 @@ export default function LoanAppPage() {
                     </div>
                   )
                 })}
-                {(lookupData?.linkages || []).length === 0 && (
-                  <p className="text-sm text-muted-foreground">No staff-to-HOD linkages configured yet.</p>
+                {filteredLinkageRows.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No staff-to-HOD linkages match your search.</p>
                 )}
               </div>
             </CardContent>
@@ -3255,7 +3607,7 @@ function StageCard({ row, children }: { row: LoanRequest; children: React.ReactN
         </CardTitle>
         <CardDescription className="flex items-center gap-2 flex-wrap">
           <Wallet className="h-4 w-4" /> GHc {fmtAmount(row.fixed_amount || row.requested_amount)}
-          <Badge className={STATUS_COLORS[row.status] || ""}>{statusText(row.status)}</Badge>
+          <Badge className={statusBadgeClass(row.status, "soft")}>{statusText(row.status)}</Badge>
           {String(row.hod_review_note || "").toLowerCase().includes("auto-approved") && (
             <Badge variant="outline" className="text-[10px] whitespace-nowrap border-amber-300 text-amber-700">
               Auto-forwarded: HOD did not act in 3 days

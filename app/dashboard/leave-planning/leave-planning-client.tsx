@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -84,6 +84,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, ReviewDraft>>({})
   const [staggerReviewDrafts, setStaggerReviewDrafts] = useState<Record<string, ReviewDraft>>({})
+  const previousReviewCountRef = useRef<number | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const [hrAction, setHrAction] = useState<"approve" | "reject">("approve")
   const [hrLetter, setHrLetter] = useState("")
@@ -515,6 +517,55 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const requestedDays = computeLeaveDays(startDate, endDate)
   const periodLocked = yearPeriod !== "2026/2027"
 
+  useEffect(() => {
+    if (!(manager || hr)) return
+
+    const timer = window.setInterval(() => {
+      void loadPlanningData()
+    }, 15000)
+
+    return () => window.clearInterval(timer)
+  }, [manager, hr])
+
+  useEffect(() => {
+    if (!(manager || hr)) return
+
+    const currentReviewCount = Number((reviewRows || []).length + (staggerReviewRows || []).length)
+    if (
+      previousReviewCountRef.current !== null &&
+      currentReviewCount > Number(previousReviewCountRef.current)
+    ) {
+      try {
+        if (!audioContextRef.current) audioContextRef.current = new AudioContext()
+        const audioContext = audioContextRef.current
+        const now = audioContext.currentTime
+        const oscillator = audioContext.createOscillator()
+        const gain = audioContext.createGain()
+
+        oscillator.type = "sine"
+        oscillator.frequency.setValueAtTime(760, now)
+        oscillator.frequency.exponentialRampToValueAtTime(1020, now + 0.18)
+        gain.gain.setValueAtTime(0.0001, now)
+        gain.gain.exponentialRampToValueAtTime(0.1, now + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.26)
+
+        oscillator.connect(gain)
+        gain.connect(audioContext.destination)
+        oscillator.start(now)
+        oscillator.stop(now + 0.28)
+      } catch {
+        // Ignore autoplay restrictions.
+      }
+
+      toast({
+        title: "New Leave Queue Alert",
+        description: "New leave request(s) arrived for review.",
+      })
+    }
+
+    previousReviewCountRef.current = currentReviewCount
+  }, [manager, hr, reviewRows, staggerReviewRows, toast])
+
   const getReviewDraft = (row: any): ReviewDraft => {
     const request = row?.leave_plan_request
     const requestId = request?.id
@@ -692,6 +743,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <div className="space-y-2">
                   <Label>Why do you need this leave?</Label>
                   <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Briefly tell us the reason for your leave" />
+                  <p className="text-xs text-amber-700">
+                    Kindly keep Attendance check-in and check-out updated. Missing attendance activity or pending checkout can prevent leave and loan submissions.
+                  </p>
                 </div>
 
                 {selectedType && (

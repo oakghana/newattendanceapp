@@ -1,9 +1,36 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+
+function normalizeRole(role: string | null | undefined) {
+  return String(role || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_")
+}
+
+function canManageByScope(
+  actorRole: string,
+  actorDepartmentId: string,
+  actorLocationId: string,
+  requesterDepartmentId: string,
+  requesterLocationId: string,
+) {
+  if (actorRole === "admin") return true
+  if (actorRole === "regional_manager") {
+    return Boolean(actorLocationId) && actorLocationId === requesterLocationId
+  }
+  if (actorRole === "department_head") {
+    const sameDepartment = Boolean(actorDepartmentId) && actorDepartmentId === requesterDepartmentId
+    const sameLocation = !actorLocationId || actorLocationId === requesterLocationId
+    return sameDepartment && sameLocation
+  }
+  return false
+}
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
@@ -11,9 +38,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user profile to check role
-    const { data: profile } = await supabase
+    const { data: profile } = await admin
       .from("user_profiles")
-      .select("role, department_id")
+      .select("role, department_id, assigned_location_id")
       .eq("id", user.id)
       .single()
 
@@ -21,13 +48,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    let query = supabase
+    const actorRole = normalizeRole((profile as any).role)
+    const actorDepartmentId = String((profile as any).department_id || "")
+    const actorLocationId = String((profile as any).assigned_location_id || "")
+
+    const { data: notifications, error } = await admin
       .from("leave_notifications")
       .select(
         `
         id,
         leave_request_id,
+        status,
         leave_requests (
+          id,
           user_id,
           leave_type,
           start_date,
@@ -44,41 +77,46 @@ export async function GET(request: NextRequest) {
         is_dismissed
       `
       )
-
-    // Filter based on role
-    if (profile.role === "admin") {
-      // Admin sees all leave notifications
-      query = query.eq("is_dismissed", false)
-    } else if (profile.role === "regional_manager") {
-      // Regional manager sees staff in their region
-      query = query
-        .eq("is_dismissed", false)
-        .eq("leave_requests.status", "pending")
-    } else if (profile.role === "department_head") {
-      // Department head sees their department's staff
-      const { data: deptStaff } = await supabase
-        .from("user_profiles")
-        .select("id")
-        .eq("department_id", profile.department_id)
-
-      const staffIds = deptStaff?.map(s => s.id) || []
-      query = query
-        .eq("is_dismissed", false)
-        .in("leave_requests.user_id", staffIds)
-        .eq("leave_requests.status", "pending")
-    } else {
-      // Staff only sees their own notifications
-      query = query
-        .eq("leave_requests.user_id", user.id)
-        .eq("is_dismissed", false)
-    }
-
-    const { data: notifications, error } = await query.order("created_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(5000)
 
     if (error) throw error
 
+    const requesterIds = Array.from(
+      new Set((notifications || []).map((row: any) => String(row?.leave_requests?.user_id || "")).filter(Boolean)),
+    )
+
+    const { data: requesterProfiles } = requesterIds.length
+      ? await admin
+          .from("user_profiles")
+          .select("id, department_id, assigned_location_id")
+          .in("id", requesterIds)
+      : ({ data: [] } as any)
+
+    const requesterMap = new Map((requesterProfiles || []).map((row: any) => [String(row.id), row]))
+
+    const scopedNotifications = (notifications || []).filter((notif: any) => {
+      if (notif?.is_dismissed) return false
+      const requesterId = String(notif?.leave_requests?.user_id || "")
+      const requester = requesterMap.get(requesterId)
+      const requesterDepartmentId = String((requester as any)?.department_id || "")
+      const requesterLocationId = String((requester as any)?.assigned_location_id || "")
+
+      if (actorRole === "admin") return true
+      if (["regional_manager", "department_head"].includes(actorRole)) {
+        return canManageByScope(
+          actorRole,
+          actorDepartmentId,
+          actorLocationId,
+          requesterDepartmentId,
+          requesterLocationId,
+        )
+      }
+      return requesterId === user.id
+    })
+
     // Format the response
-    const formattedNotifications = notifications?.map(notif => ({
+    const formattedNotifications = scopedNotifications.map((notif: any) => ({
       id: notif.id,
       user_id: notif.leave_requests?.user_id,
       staff_name: notif.leave_requests?.user ? `${notif.leave_requests.user.first_name} ${notif.leave_requests.user.last_name}` : "Unknown",
@@ -89,8 +127,8 @@ export async function GET(request: NextRequest) {
       reason: notif.leave_requests?.reason,
       status: notif.leave_requests?.status,
       created_at: notif.created_at,
-      can_dismiss: profile.role !== "staff" || notif.leave_requests?.status !== "pending",
-    })) || []
+      can_dismiss: actorRole !== "staff" || notif.leave_requests?.status !== "pending",
+    }))
 
     return NextResponse.json(formattedNotifications)
   } catch (error) {
@@ -105,69 +143,96 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { action, notificationId, newStatus } = await request.json()
+    const { action, notificationId, reason } = await request.json()
+
+    const { data: actorProfile } = await admin
+      .from("user_profiles")
+      .select("role, department_id, assigned_location_id")
+      .eq("id", user.id)
+      .single()
+
+    if (!actorProfile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    const actorRole = normalizeRole((actorProfile as any).role)
+    const actorDepartmentId = String((actorProfile as any).department_id || "")
+    const actorLocationId = String((actorProfile as any).assigned_location_id || "")
+
+    const { data: notification } = await admin
+      .from("leave_notifications")
+      .select("id, leave_request_id")
+      .eq("id", notificationId)
+      .single()
+
+    if (!notification?.leave_request_id) {
+      return NextResponse.json({ error: "Notification not found" }, { status: 404 })
+    }
+
+    const { data: leaveRequest } = await admin
+      .from("leave_requests")
+      .select("id, user_id, start_date, end_date")
+      .eq("id", notification.leave_request_id)
+      .single()
+
+    if (!leaveRequest) {
+      return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
+    }
+
+    const { data: requesterProfile } = await admin
+      .from("user_profiles")
+      .select("department_id, assigned_location_id")
+      .eq("id", leaveRequest.user_id)
+      .maybeSingle()
+
+    const requesterDepartmentId = String((requesterProfile as any)?.department_id || "")
+    const requesterLocationId = String((requesterProfile as any)?.assigned_location_id || "")
+
+    const canManage = canManageByScope(
+      actorRole,
+      actorDepartmentId,
+      actorLocationId,
+      requesterDepartmentId,
+      requesterLocationId,
+    )
+
+    if (!canManage && String(leaveRequest.user_id) !== user.id) {
+      return NextResponse.json({ error: "Permission denied for this request scope" }, { status: 403 })
+    }
 
     if (action === "dismiss") {
-      // Get the leave_request_id so we can reject the request too
-      const { data: dismissNotif } = await supabase
+      const { error: dismissErr } = await admin
         .from("leave_notifications")
-        .select("leave_request_id")
-        .eq("id", notificationId)
-        .single()
-
-      // Mark the notification as dismissed
-      const { error: dismissErr } = await supabase
-        .from("leave_notifications")
-        .update({ is_dismissed: true })
+        .update({ is_dismissed: true, status: "dismissed" })
         .eq("id", notificationId)
 
       if (dismissErr) throw dismissErr
 
-      // Also reject the leave_request so its status is correctly reflected
-      if (dismissNotif?.leave_request_id) {
-        await supabase
-          .from("leave_requests")
-          .update({
-            status: "rejected",
-            approved_by: user.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", dismissNotif.leave_request_id)
-      }
+      await admin
+        .from("leave_requests")
+        .update({
+          status: "rejected",
+          approved_by: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", notification.leave_request_id)
 
       return NextResponse.json({ success: true, message: "Notification dismissed and leave request rejected" })
     }
 
     if (action === "approve" || action === "reject") {
-      // First get the leave_request_id from the notification
-      const { data: notification } = await supabase
-        .from("leave_notifications")
-        .select("leave_request_id")
-        .eq("id", notificationId)
-        .single()
-
-      if (!notification) {
-        return NextResponse.json({ error: "Notification not found" }, { status: 404 })
-      }
-
-      // Check if user has permission to approve/reject
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
-
-      if (!["admin", "regional_manager", "department_head"].includes(profile?.role)) {
+      if (!["admin", "regional_manager", "department_head"].includes(actorRole)) {
         return NextResponse.json({ error: "Permission denied" }, { status: 403 })
       }
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await admin
         .from("leave_requests")
         .update({
           status: action === "approve" ? "approved" : "rejected",
@@ -178,24 +243,21 @@ export async function POST(request: NextRequest) {
 
       if (updateError) throw updateError
 
+      await admin
+        .from("leave_notifications")
+        .update({ status: action === "approve" ? "approved" : "rejected", is_dismissed: false })
+        .eq("id", notificationId)
+
       // If approved, update the user's leave status
       if (action === "approve") {
-        const { data: leaveRequest } = await supabase
-          .from("leave_requests")
-          .select("user_id, start_date, end_date")
-          .eq("id", notification.leave_request_id)
-          .single()
-
-        if (leaveRequest) {
-          await supabase
-            .from("user_profiles")
-            .update({
-              leave_status: "on_leave",
-              leave_start_date: leaveRequest.start_date,
-              leave_end_date: leaveRequest.end_date,
-            })
-            .eq("id", leaveRequest.user_id)
-        }
+        await admin
+          .from("user_profiles")
+          .update({
+            leave_status: "on_leave",
+            leave_start_date: leaveRequest.start_date,
+            leave_end_date: leaveRequest.end_date,
+          })
+          .eq("id", leaveRequest.user_id)
       }
 
       return NextResponse.json({ 

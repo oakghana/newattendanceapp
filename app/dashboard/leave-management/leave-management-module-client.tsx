@@ -13,6 +13,7 @@ interface LeaveManagementModuleClientProps {
   inactivityDays: number
   userDepartmentName: string | null
   userDepartmentCode: string | null
+  hasHodLinkage: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
 }
@@ -23,6 +24,7 @@ export function LeaveManagementModuleClient({
   inactivityDays,
   userDepartmentName,
   userDepartmentCode,
+  hasHodLinkage,
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementModuleClientProps) {
@@ -45,6 +47,7 @@ export function LeaveManagementModuleClient({
           <LeaveManagementClient
             userRole={userRole}
             userDepartment={userDepartment}
+            hasHodLinkage={hasHodLinkage}
             inactivityDays={inactivityDays}
             initialStaffRequests={initialStaffRequests}
             initialManagerNotifications={initialManagerNotifications}

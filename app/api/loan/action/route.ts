@@ -10,6 +10,7 @@ import {
   canDoLoanOffice,
   normalizeRole,
 } from "@/lib/loan-workflow"
+import { createMemoToken } from "@/lib/secure-memo"
 
 type ActionKey =
   | "hod_decision"
@@ -76,6 +77,41 @@ function buildFdRejectionMemo(req: any, fdScore: number, note?: string | null) {
   ].join("\n")
 }
 
+function buildHrTermsMemo(req: any, disbursementDate: string, recoveryStartDate: string, recoveryMonths: number, note?: string | null) {
+  return [
+    `Reference: ${req.request_number}`,
+    "Loan Terms Set by HR Office",
+    "",
+    `Disbursement Date: ${disbursementDate}`,
+    `Recovery Start Date: ${recoveryStartDate}`,
+    `Recovery Duration: ${recoveryMonths} month(s)`,
+    `${note ? `HR Note: ${note}` : ""}`,
+    "",
+    "Your request has been forwarded to Director HR for final approval.",
+  ].join("\n")
+}
+
+function buildDirectorRejectionMemo(req: any, note?: string | null) {
+  return [
+    `Reference: ${req.request_number}`,
+    "Director HR Decision: Not Approved",
+    "",
+    `Loan Type: ${req.loan_type_label}`,
+    `${note ? `Reason: ${note}` : "Reason: Not stated."}`,
+    "",
+    "For further support, kindly contact HR Office.",
+  ].join("\n")
+}
+
+function buildMemoPath(loanId: string, recipientUserId: string) {
+  const token = createMemoToken({
+    loanId,
+    userId: recipientUserId,
+    exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+  })
+  return `/api/loan/memo/${loanId}?token=${encodeURIComponent(token)}`
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -90,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, department_id, departments(name, code)")
+      .select("id, role, department_id, assigned_location_id, departments(name, code)")
       .eq("id", user.id)
       .single()
 
@@ -108,6 +144,12 @@ export async function POST(request: NextRequest) {
     const { data: req, error: reqError } = await admin.from("loan_requests").select("*").eq("id", id).single()
     if (reqError || !req) return NextResponse.json({ error: "Loan request not found" }, { status: 404 })
 
+    const { data: requesterProfile } = await admin
+      .from("user_profiles")
+      .select("id, department_id, assigned_location_id")
+      .eq("id", req.user_id)
+      .maybeSingle()
+
     const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
@@ -120,17 +162,23 @@ export async function POST(request: NextRequest) {
       if (req.status !== "pending_hod") return NextResponse.json({ error: "Request is not pending HOD review" }, { status: 400 })
 
       if (role !== "admin") {
-        const directlyAssigned = req.hod_reviewer_id === user.id
-        const { data: linkRow } = await admin
-          .from("loan_hod_linkages")
-          .select("id")
-          .eq("staff_user_id", req.user_id)
-          .eq("hod_user_id", user.id)
-          .maybeSingle()
-        const isLinkedHod = Boolean((linkRow as any)?.id)
+        const reviewerDept = String((profile as any)?.department_id || "")
+        const reviewerLocation = String((profile as any)?.assigned_location_id || "")
+        const requesterDept = String((requesterProfile as any)?.department_id || req.department_id || "")
+        const requesterLocation = String((requesterProfile as any)?.assigned_location_id || req.staff_location_id || "")
 
-        if (!directlyAssigned && !isLinkedHod) {
-          return NextResponse.json({ error: "You are not linked to review this staff request." }, { status: 403 })
+        if (role === "regional_manager") {
+          if (!reviewerLocation || !requesterLocation || reviewerLocation !== requesterLocation) {
+            return NextResponse.json({ error: "Regional managers can review only staff requests within their assigned region/location." }, { status: 403 })
+          }
+        }
+
+        if (role === "department_head") {
+          const sameDept = reviewerDept && requesterDept && reviewerDept === requesterDept
+          const sameLocation = !reviewerLocation || (requesterLocation && reviewerLocation === requesterLocation)
+          if (!sameDept || !sameLocation) {
+            return NextResponse.json({ error: "Department heads can review only requests within their department and assigned location." }, { status: 403 })
+          }
         }
       }
 
@@ -165,6 +213,16 @@ export async function POST(request: NextRequest) {
     if (action === "loan_office_forward") {
       if (!canDoLoanOffice(role, deptName, deptCode)) {
         return NextResponse.json({ error: "Only Loan Office/Admin can forward" }, { status: 403 })
+      }
+      if (req.status === "sent_to_accounts" || req.status === "awaiting_hr_terms") {
+        return NextResponse.json({
+          success: true,
+          alreadyForwarded: true,
+          data: req,
+          message: req.status === "sent_to_accounts"
+            ? "Request has already been forwarded to Accounts."
+            : "Request has already been forwarded to HR Terms.",
+        })
       }
       if (req.status !== "hod_approved") return NextResponse.json({ error: "Request is not ready for Loan Office" }, { status: 400 })
 
@@ -244,6 +302,7 @@ export async function POST(request: NextRequest) {
         const staffMemo = isCarLoan
           ? buildCarLoanHoldNotice(req)
           : `Your request ${req.request_number} has FD ${fdScore} (> ${GOOD_FD_THRESHOLD}) and is in good standing for consideration.`
+        const memoPath = buildMemoPath(req.id, req.user_id)
 
         await notifyUsers(
           admin,
@@ -251,20 +310,21 @@ export async function POST(request: NextRequest) {
           isCarLoan ? "Car Loan in Committee Hold Queue" : "Good FD Standing Confirmed",
           staffMemo,
           isCarLoan ? "loan_committee_hold" : "loan_fd_good",
-          { request_id: req.id, fd_score: fdScore, memo: staffMemo },
+          { request_id: req.id, fd_score: fdScore, memo: staffMemo, memo_path: memoPath },
         )
       } else {
         const rejectionMemo = buildFdRejectionMemo(req, fdScore, note)
+        const memoPath = buildMemoPath(req.id, req.user_id)
         await notifyUsers(
           admin,
           [req.user_id],
           "Loan Request Auto-Rejected by FD Threshold",
           rejectionMemo,
           "loan_fd_rejected",
-          { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo: rejectionMemo },
+          { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo: rejectionMemo, memo_path: memoPath },
         )
 
-        const approverIds = [req.hod_reviewer_id, req.loan_officer_id, req.hr_officer_id, req.director_hr_id]
+        const approverIds = [req.hod_reviewer_id, req.loan_office_reviewer_id, req.hr_officer_id, req.director_hr_id]
           .filter((id: any) => Boolean(id))
           .map((id: any) => String(id))
 
@@ -275,7 +335,7 @@ export async function POST(request: NextRequest) {
             "FD Rejection Issued",
             `Request ${req.request_number} was rejected at Accounts. FD ${fdScore} below ${GOOD_FD_THRESHOLD}.${note ? ` Reason: ${note}` : ""}`,
             "loan_fd_rejected_approver_notice",
-            { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null },
+            { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo_path: memoPath },
           )
         }
       }
@@ -359,13 +419,15 @@ export async function POST(request: NextRequest) {
       update.hr_forwarded_at = new Date().toISOString()
 
       // Notify staff that terms are set and awaiting Director HR
+      const hrMemo = buildHrTermsMemo(req, disbursementDate, recoveryStartDate, recoveryMonths, note)
+      const hrMemoPath = buildMemoPath(req.id, req.user_id)
       await notifyUsers(
         admin,
         [req.user_id],
         "Loan Terms Set — Pending Director HR Approval",
         `Your request ${req.request_number} terms have been set by HR Office (Disbursement: ${disbursementDate}; Recovery Start: ${recoveryStartDate}; ${recoveryMonths} months) and forwarded to Director HR for final approval.`,
         "loan_hr_terms_set",
-        { request_id: req.id },
+        { request_id: req.id, memo: hrMemo, memo_path: hrMemoPath },
       )
 
       // Notify Director HR
@@ -421,7 +483,11 @@ export async function POST(request: NextRequest) {
           ? `Your request ${req.request_number} is fully approved. Disbursement: ${req.disbursement_date || "TBD"}; Recovery starts: ${req.recovery_start_date || "TBD"}; Duration: ${req.recovery_months || "TBD"} months.`
           : `Your request ${req.request_number} was declined by Director HR.${note ? ` Reason: ${note}` : ""}`,
         decision === "approve" ? "loan_final_approved" : "loan_final_rejected",
-        { request_id: req.id, auto_memo: decision === "approve" ? (directorLetter || autoMemo) : null },
+        {
+          request_id: req.id,
+          auto_memo: decision === "approve" ? (directorLetter || autoMemo) : buildDirectorRejectionMemo(req, note),
+          memo_path: buildMemoPath(req.id, req.user_id),
+        },
       )
 
       if (decision === "approve") {
@@ -439,6 +505,25 @@ export async function POST(request: NextRequest) {
           "loan_signed_letter_copy",
           { request_id: req.id },
         )
+      } else {
+        const approverIds = [req.hod_reviewer_id, req.loan_office_reviewer_id, req.hr_officer_id]
+          .filter((id: any) => Boolean(id))
+          .map((id: any) => String(id))
+
+        if (approverIds.length > 0) {
+          await notifyUsers(
+            admin,
+            Array.from(new Set(approverIds)),
+            "Director HR Rejection Memo Available",
+            `Request ${req.request_number} was rejected by Director HR.${note ? ` Reason: ${note}` : ""}`,
+            "loan_director_rejected_approver_notice",
+            {
+              request_id: req.id,
+              reason: note || null,
+              memo_path: buildMemoPath(req.id, req.user_id),
+            },
+          )
+        }
       }
     }
 

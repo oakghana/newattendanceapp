@@ -46,6 +46,106 @@ function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boo
   return true
 }
 
+async function findYearlyDuplicateLoanRequest(
+  admin: any,
+  userId: string,
+  loanTypeKey: string,
+  excludeId?: string,
+) {
+  const year = new Date().getFullYear()
+  const yearStart = `${year}-01-01T00:00:00.000Z`
+  const yearEnd = `${year}-12-31T23:59:59.999Z`
+
+  let query = admin
+    .from("loan_requests")
+    .select("id, status, request_number, loan_type_label")
+    .eq("user_id", userId)
+    .eq("loan_type_key", loanTypeKey)
+    .gte("created_at", yearStart)
+    .lte("created_at", yearEnd)
+    .order("created_at", { ascending: false })
+
+  if (excludeId) query = query.neq("id", excludeId)
+
+  const { data, error } = await query.limit(20)
+  if (error) return null
+
+  const rows = data || []
+  if (rows.length === 0) return null
+
+  const approvedRow = rows.find((row: any) => row.status === "approved_director")
+  if (approvedRow) {
+    return {
+      error:
+        `You already have an approved ${approvedRow.loan_type_label || loanTypeKey} request this calendar year (${year}). Same loan type cannot be requested twice in the same year.`,
+    }
+  }
+
+  const openRow = rows.find((row: any) => !["hod_rejected", "rejected_fd", "committee_rejected", "director_rejected"].includes(String(row.status || "")))
+  if (openRow) {
+    return {
+      error:
+        `You already submitted this loan type this calendar year (Ref: ${openRow.request_number || openRow.id}). Wait for that request to finish before creating another one.`,
+    }
+  }
+
+  return null
+}
+
+async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
+  const { data: attendanceRows, error } = await admin
+    .from("attendance_records")
+    .select("id, check_in_time, check_out_time")
+    .eq("user_id", userId)
+    .order("check_in_time", { ascending: false })
+    .limit(60)
+
+  if (error) {
+    return { ok: true as const }
+  }
+
+  const rows = attendanceRows || []
+  const now = new Date()
+  const sevenDaysAgo = new Date(now)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+  const staleOpenCheckout = rows.find((row: any) => {
+    if (!row?.check_in_time || row?.check_out_time) return false
+    const checkInDate = new Date(row.check_in_time)
+    return checkInDate.toDateString() !== now.toDateString()
+  })
+
+  if (staleOpenCheckout) {
+    return {
+      ok: false as const,
+      status: 403,
+      error:
+        "Please complete your pending check-out first. Kindly open Attendance and close your previous day session before submitting new loan or leave requests.",
+      message:
+        "Chale, kindly pass through Attendance and complete your check-out first. This helps us keep your welfare records clean and protects future loan/leave approvals.",
+    }
+  }
+
+  const hasRecentAttendance = rows.some((row: any) => {
+    if (!row?.check_in_time) return false
+    const checkInDate = new Date(row.check_in_time)
+    return checkInDate >= sevenDaysAgo
+  })
+
+  if (!hasRecentAttendance) {
+    return {
+      ok: false as const,
+      status: 403,
+      error:
+        "Attendance activity is required before requesting loan or leave. Please check in and check out properly using the Attendance module.",
+      message:
+        "Please use the Attendance module regularly. If attendance usage is consistently missing, future loan and leave requests may be restricted.",
+    }
+  }
+
+  return { ok: true as const }
+}
+
 function shouldRetryWithoutLocationColumns(error: any): boolean {
   const msg = String(error?.message || "").toLowerCase()
   return msg.includes("staff_location_id") || msg.includes("staff_location_name") || msg.includes("staff_district_name") || msg.includes("staff_location_address")
@@ -118,6 +218,20 @@ export async function POST(request: NextRequest) {
 
     const role = normalizeRole((profile as any).role)
 
+    const shouldEnforceAttendance = !["admin", "regional_manager", "department_head"].includes(role)
+    if (shouldEnforceAttendance) {
+      const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
+      if (!attendanceCheck.ok) {
+        return NextResponse.json(
+          {
+            error: attendanceCheck.error,
+            message: attendanceCheck.message,
+          },
+          { status: attendanceCheck.status },
+        )
+      }
+    }
+
     if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
       return loanSubmissionClosedResponse()
     }
@@ -131,6 +245,13 @@ export async function POST(request: NextRequest) {
 
     if (typeError || !loanType) {
       return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
+    }
+
+    if (role !== "admin") {
+      const duplicateLoan = await findYearlyDuplicateLoanRequest(admin, user.id, loanType.loan_key)
+      if (duplicateLoan) {
+        return NextResponse.json({ error: duplicateLoan.error }, { status: 409 })
+      }
     }
 
     if (!isQualifiedForLoan(loanType.loan_key, (profile as any).position) && role !== "admin") {
@@ -420,6 +541,12 @@ export async function PUT(request: NextRequest) {
         .single()
 
       if (loanType) {
+        if (role !== "admin") {
+          const duplicateLoan = await findYearlyDuplicateLoanRequest(admin, user.id, loanType.loan_key, id)
+          if (duplicateLoan) {
+            return NextResponse.json({ error: duplicateLoan.error }, { status: 409 })
+          }
+        }
         if (!isQualifiedForLoan(loanType.loan_key, (existing as any).staff_rank) && role !== "admin") {
           return NextResponse.json(
             { error: "You are not qualified for this loan type based on current rank." },

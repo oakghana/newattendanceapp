@@ -17,7 +17,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import { LeaveNotificationsClient } from "@/components/leave/leave-notifications-client"
 import { useToast } from "@/hooks/use-toast"
 
@@ -28,7 +32,7 @@ interface LeaveRequest {
   end_date: string
   reason: string
   leave_type: string
-  status: "pending" | "approved" | "dismissed"
+  status: "pending" | "approved" | "dismissed" | "rejected"
   created_at: string
   user_name?: string
   department?: string
@@ -48,6 +52,7 @@ interface LeaveNotification {
 interface LeaveManagementClientProps {
   userRole: string
   userDepartment: string | null
+  hasHodLinkage: boolean
   inactivityDays: number
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
@@ -56,15 +61,21 @@ interface LeaveManagementClientProps {
 export function LeaveManagementClient({
   userRole,
   userDepartment,
+  hasHodLinkage,
   inactivityDays,
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementClientProps) {
   const { toast } = useToast()
-  const [staffRequests] = useState<LeaveRequest[]>(initialStaffRequests)
+  const [staffRequests, setStaffRequests] = useState<LeaveRequest[]>(initialStaffRequests)
   const [managerNotifications] = useState<LeaveNotification[]>(initialManagerNotifications)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [, setDismissalReason] = useState("")
+  const [editingRequest, setEditingRequest] = useState<LeaveRequest | null>(null)
+  const [editStartDate, setEditStartDate] = useState("")
+  const [editEndDate, setEditEndDate] = useState("")
+  const [editReason, setEditReason] = useState("")
+  const [editLeaveType, setEditLeaveType] = useState("")
 
   const leaveApprovalTemplate = `QUALITY CONTROL COMPANY LTD.\nHUMAN RESOURCE DIRECTORATE\n\nSUBJECT: LEAVE APPROVAL NOTICE\n\nYour leave request has been reviewed and approved.\n\nKindly proceed based on the approved period and handover guidance from your supervisor.\n\nRegards,\nHR Administration\nQuality Control Company Ltd.`
 
@@ -114,6 +125,65 @@ export function LeaveManagementClient({
     } finally {
       setProcessingId(null)
     }
+  }
+
+  const openEditRequest = (request: LeaveRequest) => {
+    setEditingRequest(request)
+    setEditStartDate(request.start_date)
+    setEditEndDate(request.end_date)
+    setEditReason(request.reason || "")
+    setEditLeaveType(request.leave_type || "annual")
+  }
+
+  const closeEditDialog = () => {
+    setEditingRequest(null)
+    setEditStartDate("")
+    setEditEndDate("")
+    setEditReason("")
+    setEditLeaveType("")
+  }
+
+  const handleUpdateLeaveRequest = async () => {
+    if (!editingRequest) return
+    if (!editStartDate || !editEndDate || !editLeaveType || !editReason.trim()) {
+      toast({ title: "Incomplete update", description: "Start date, end date, leave type, and reason are required.", variant: "destructive" })
+      return
+    }
+
+    const response = await fetch("/api/leave/request-leave", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editingRequest.id,
+        start_date: editStartDate,
+        end_date: editEndDate,
+        reason: editReason,
+        leave_type: editLeaveType,
+      }),
+    })
+
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      toast({ title: "Update failed", description: result?.error || "Could not edit leave request.", variant: "destructive" })
+      return
+    }
+
+    setStaffRequests((prev) =>
+      prev.map((row) =>
+        row.id === editingRequest.id
+          ? {
+              ...row,
+              start_date: editStartDate,
+              end_date: editEndDate,
+              reason: editReason.trim(),
+              leave_type: editLeaveType,
+            }
+          : row,
+      ),
+    )
+
+    toast({ title: "Leave request updated", description: "Your leave request was updated before reviewer action." })
+    closeEditDialog()
   }
 
   const handleApprove = async (notificationId: string) => {
@@ -365,6 +435,14 @@ export function LeaveManagementClient({
         </Card>
       )}
 
+      {canUseStaffLeaveHub && !hasHodLinkage && (
+        <Alert className="border-amber-200 bg-amber-50">
+          <AlertDescription className="text-amber-800">
+            Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {isManagerView && (
         <Card className="border-blue-200 bg-blue-50/60 shadow-sm">
           <CardHeader className="pb-3">
@@ -463,7 +541,7 @@ export function LeaveManagementClient({
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {staffRequests.map((request) => (
-                    <LeaveRequestCard key={request.id} request={request} />
+                    <LeaveRequestCard key={request.id} request={request} canEdit={request.status === "pending"} onEdit={() => openEditRequest(request)} />
                   ))}
                 </div>
               )}
@@ -524,6 +602,43 @@ export function LeaveManagementClient({
           </>
         )}
       </Tabs>
+
+      <Dialog open={Boolean(editingRequest)} onOpenChange={(open) => { if (!open) closeEditDialog() }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Leave Request</DialogTitle>
+            <DialogDescription>
+              You can update this request only before HOD/manager review starts.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit_leave_type">Leave Type</Label>
+              <Input id="edit_leave_type" value={editLeaveType} onChange={(e) => setEditLeaveType(e.target.value)} placeholder="annual" />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit_start_date">Start Date</Label>
+                <Input id="edit_start_date" type="date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit_end_date">End Date</Label>
+                <Input id="edit_end_date" type="date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit_reason">Reason</Label>
+              <Textarea id="edit_reason" rows={4} value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Provide reason for leave" />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditDialog}>Cancel</Button>
+            <Button onClick={handleUpdateLeaveRequest}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -565,9 +680,13 @@ function LeaveMetricCard({
 function LeaveRequestCard({
   request,
   emphasizeApproved = false,
+  canEdit = false,
+  onEdit,
 }: {
   request: LeaveRequest
   emphasizeApproved?: boolean
+  canEdit?: boolean
+  onEdit?: () => void
 }) {
   const statusTone =
     request.status === "approved"
@@ -600,6 +719,11 @@ function LeaveRequestCard({
             <p className="mt-1 font-semibold text-slate-900">{format(new Date(request.end_date), "MMM dd, yyyy")}</p>
           </div>
         </div>
+        {canEdit && onEdit && (
+          <Button variant="outline" size="sm" onClick={onEdit} className="w-full">
+            Edit Before Review
+          </Button>
+        )}
       </CardContent>
     </Card>
   )

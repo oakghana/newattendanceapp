@@ -164,6 +164,9 @@ export function RequestLeaveButton() {
           <div>
             <Label htmlFor="reason">Reason</Label>
             <Textarea id="reason" placeholder="Provide a reason for your leave request..." value={formData.reason} onChange={(e) => setFormData({ ...formData, reason: e.target.value })} rows={4} />
+            <p className="text-xs text-amber-700 mt-2">
+              Please keep your Attendance check-in and check-out records current. Pending check-out or no recent attendance may block leave/loan requests.
+            </p>
           </div>
 
           <div>

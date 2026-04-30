@@ -17,7 +17,7 @@ export default async function LeaveManagementPage() {
   // Get user profile
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, department_id, departments(name, code)")
+    .select("role, department_id, assigned_location_id, departments(name, code)")
     .eq("id", user.id)
     .single()
 
@@ -27,6 +27,19 @@ export default async function LeaveManagementPage() {
 
   let staffRequests = []
   let managerNotifications = []
+  let hasHodLinkage = false
+
+  try {
+    const { data: linkage } = await admin
+      .from("loan_hod_linkages")
+      .select("id")
+      .eq("staff_user_id", user.id)
+      .limit(1)
+      .maybeSingle()
+    hasHodLinkage = Boolean((linkage as any)?.id)
+  } catch {
+    hasHodLinkage = false
+  }
 
   // Fetch staff's own leave requests
   if (["staff", "nsp", "intern", "it-admin"].includes(profile.role)) {
@@ -91,13 +104,14 @@ export default async function LeaveManagementPage() {
     if (requesterIds.length > 0) {
       const { data } = await admin
         .from("user_profiles")
-        .select("id, role, department_id, first_name, last_name")
+        .select("id, role, department_id, assigned_location_id, first_name, last_name")
         .in("id", requesterIds)
       requesterProfiles = data || []
     }
 
     const requesterMap = new Map(requesterProfiles.map((row: any) => [row.id, row]))
     const managerDepartmentId = (profile as any).department_id || null
+    const managerLocationId = (profile as any).assigned_location_id || null
 
     managerNotifications = (notifications || [])
       .filter((notification: any) => {
@@ -106,6 +120,17 @@ export default async function LeaveManagementPage() {
         if (!leave?.user_id) return false
         const requester = requesterMap.get(String(leave.user_id))
         if (!requester) return false
+
+        if (profile.role === "regional_manager") {
+          return Boolean(managerLocationId) && requester.assigned_location_id === managerLocationId
+        }
+
+        if (profile.role === "department_head") {
+          const sameDepartment = Boolean(requester.department_id) && requester.department_id === managerDepartmentId
+          const sameLocation = !managerLocationId || requester.assigned_location_id === managerLocationId
+          return sameDepartment && sameLocation
+        }
+
         return requester.department_id && requester.department_id === managerDepartmentId
       })
       .map((notification: any) => {
@@ -133,6 +158,7 @@ export default async function LeaveManagementPage() {
         inactivityDays={Math.max(1, inactivityDays)}
         userDepartmentName={(profile as any)?.departments?.name || null}
         userDepartmentCode={(profile as any)?.departments?.code || null}
+        hasHodLinkage={hasHodLinkage}
         initialStaffRequests={staffRequests}
         initialManagerNotifications={managerNotifications}
       />

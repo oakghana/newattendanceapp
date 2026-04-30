@@ -210,6 +210,40 @@ export async function GET() {
     const role = normalizeRole((profile as any).role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
+    const managerDepartmentId = String((profile as any)?.department_id || "")
+    const managerLocationId = String((profile as any)?.assigned_location_id || "")
+    const isRegionalManager = role === "regional_manager"
+    const isDepartmentHead = role === "department_head"
+
+    let scopedStaffIds: string[] = []
+    if (isRegionalManager || isDepartmentHead) {
+      let scopedStaffQuery = admin
+        .from("user_profiles")
+        .select("id")
+        .eq("is_active", true)
+
+      if (isRegionalManager) {
+        if (managerLocationId) {
+          scopedStaffQuery = scopedStaffQuery.eq("assigned_location_id", managerLocationId)
+        } else {
+          scopedStaffQuery = scopedStaffQuery.eq("id", "00000000-0000-0000-0000-000000000000")
+        }
+      }
+
+      if (isDepartmentHead) {
+        if (managerDepartmentId) {
+          scopedStaffQuery = scopedStaffQuery.eq("department_id", managerDepartmentId)
+          if (managerLocationId) {
+            scopedStaffQuery = scopedStaffQuery.eq("assigned_location_id", managerLocationId)
+          }
+        } else {
+          scopedStaffQuery = scopedStaffQuery.eq("id", "00000000-0000-0000-0000-000000000000")
+        }
+      }
+
+      const { data: scopedStaff } = await scopedStaffQuery.limit(5000)
+      scopedStaffIds = (scopedStaff || []).map((row: any) => row.id)
+    }
 
     const [typesRes, myRes, myHodLinkRes] = await Promise.all([
       admin
@@ -244,8 +278,7 @@ export async function GET() {
     }
 
     if (typesRes.error && isSchemaIssue(typesRes.error)) {
-      const viewAllTabs =
-        role === "admin" || role === "loan_officer" || role === "director_hr" || role === "hr_director"
+      const viewAllTabs = role === "admin"
       return NextResponse.json(
         {
           degraded: true,
@@ -286,9 +319,7 @@ export async function GET() {
     await autoAdvanceStaleHodRequests(admin)
     await broadcastDelayedPostLoanOfficeRequests(admin)
 
-    // viewAllTabs: admin, loan_officer (HR Loan Office), director_hr see all tabs
-    const viewAllTabs =
-      role === "admin" || role === "loan_officer" || role === "director_hr" || role === "hr_director"
+    const viewAllTabs = role === "admin"
 
     const permissions = {
       hod: ["department_head", "regional_manager", "admin"].includes(role),
@@ -311,36 +342,13 @@ export async function GET() {
           .order("created_at", { ascending: false })
       }
 
-      const [directRes, linkageRes] = await Promise.all([
-        admin
-          .from("loan_requests")
-          .select("*")
-          .eq("status", "pending_hod")
-          .eq("hod_reviewer_id", user.id)
-          .order("created_at", { ascending: false }),
-        admin.from("loan_hod_linkages").select("staff_user_id").eq("hod_user_id", user.id),
-      ])
-
-      if (directRes.error) return { data: null, error: directRes.error }
-      if (linkageRes.error) return { data: null, error: linkageRes.error }
-
-      const linkedStaffIds = Array.from(new Set((linkageRes.data || []).map((r: any) => r.staff_user_id).filter(Boolean)))
-      let linkedData: any[] = []
-      if (linkedStaffIds.length > 0) {
-        const linkedRes = await admin
-          .from("loan_requests")
-          .select("*")
-          .eq("status", "pending_hod")
-          .in("user_id", linkedStaffIds)
-          .order("created_at", { ascending: false })
-        if (linkedRes.error) return { data: null, error: linkedRes.error }
-        linkedData = linkedRes.data || []
-      }
-
-      const combined = [...(directRes.data || []), ...linkedData]
-      const unique = Array.from(new Map(combined.map((r: any) => [r.id, r])).values())
-      unique.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      return { data: unique, error: null }
+      if (scopedStaffIds.length === 0) return { data: [], error: null }
+      return admin
+        .from("loan_requests")
+        .select("*")
+        .eq("status", "pending_hod")
+        .in("user_id", scopedStaffIds)
+        .order("created_at", { ascending: false })
     })()
 
     const showHod = permissions.hod || viewAllTabs
@@ -389,7 +397,15 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       viewAllTabs
         ? admin.from("loan_requests").select("*").order("created_at", { ascending: false })
-        : Promise.resolve({ data: [], error: null } as any),
+        : isRegionalManager || isDepartmentHead
+          ? (scopedStaffIds.length > 0
+              ? admin
+                  .from("loan_requests")
+                  .select("*")
+                  .in("user_id", scopedStaffIds)
+                  .order("created_at", { ascending: false })
+              : Promise.resolve({ data: [], error: null } as any))
+            : Promise.resolve({ data: [], error: null } as any),
       myRequestIds.length > 0
         ? admin.from("loan_request_timeline").select("*").in("loan_request_id", myRequestIds).order("created_at", { ascending: true })
         : Promise.resolve({ data: [], error: null } as any),

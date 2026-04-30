@@ -3,13 +3,42 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workflow"
 
 function canManageLookups(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return role === "admin" || canDoHrOffice(role, deptName, deptCode) || canDoLoanOffice(role, deptName, deptCode)
+  return (
+    role === "admin" ||
+    role === "regional_manager" ||
+    role === "department_head" ||
+    canDoHrOffice(role, deptName, deptCode) ||
+    canDoLoanOffice(role, deptName, deptCode)
+  )
 }
 
-export async function GET() {
+async function fetchAllRows(queryFactory: (from: number, to: number) => any, chunkSize = 500) {
+  const rows: any[] = []
+  let from = 0
+
+  while (true) {
+    const to = from + chunkSize - 1
+    const { data, error } = await queryFactory(from, to)
+    if (error) throw error
+
+    const batch = data || []
+    rows.push(...batch)
+
+    if (batch.length < chunkSize) break
+    from += chunkSize
+  }
+
+  return rows
+}
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const admin = await createAdminClient()
+    const url = new URL(request.url)
+    const search = String(url.searchParams.get("search") || "").trim().toLowerCase()
+    const limitParam = Number(url.searchParams.get("limit") || 5000)
+    const requestedLimit = Number.isFinite(limitParam) ? Math.max(100, Math.min(limitParam, 20000)) : 5000
 
     const {
       data: { user },
@@ -20,53 +49,179 @@ export async function GET() {
 
     const { data: profile } = await admin
       .from("user_profiles")
-      .select("id, role, departments(name, code)")
+      .select("id, role, department_id, assigned_location_id, departments(name, code)")
       .eq("id", user.id)
       .maybeSingle()
 
     const role = normalizeRole((profile as any)?.role)
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
+    const departmentId = String((profile as any)?.department_id || "")
+    const assignedLocationId = String((profile as any)?.assigned_location_id || "")
 
     if (!canManageLookups(role, deptName, deptCode)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
-    const [loanTypesRes, locationsRes, staffRes, hodsRes, linkagesRes] = await Promise.all([
+    const [loanTypesRes, locationsRes, allStaff, allHods, allLinkages] = await Promise.all([
       admin
         .from("loan_types")
         .select("loan_key, loan_label, category, fixed_amount, max_amount, min_qualification_note, requires_committee, requires_fd_check, is_active, sort_order")
         .order("sort_order", { ascending: true }),
       admin.from("geofence_locations").select("id, name, address, districts(name)").eq("is_active", true).order("name", { ascending: true }),
-      admin
-        .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, role, department_id, departments(name, code), assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
-        .in("role", ["staff", "nsp", "intern", "contract", "it_admin", "department_head", "regional_manager", "loan_officer", "hr_officer", "accounts"])
-        .eq("is_active", true)
-        .order("first_name", { ascending: true }),
-      admin
-        .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, role, assigned_location_id")
-        .in("role", ["department_head", "regional_manager"])
-        .eq("is_active", true)
-        .order("first_name", { ascending: true }),
-      admin
-        .from("loan_hod_linkages")
-        .select("id, staff_user_id, hod_user_id, location_id, district_name, location_address, staff_rank, hod_rank, updated_at"),
+      fetchAllRows(
+        (from, to) =>
+          admin
+            .from("user_profiles")
+            .select("id, first_name, last_name, employee_id, position, role, department_id, departments(name, code), assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
+            .in("role", ["staff", "nsp", "intern", "contract", "it_admin", "department_head", "regional_manager", "loan_officer", "hr_officer", "accounts"])
+            .eq("is_active", true)
+            .order("first_name", { ascending: true })
+            .range(from, to),
+      ),
+      fetchAllRows(
+        (from, to) =>
+          admin
+            .from("user_profiles")
+            .select("id, first_name, last_name, employee_id, position, role, assigned_location_id")
+            .in("role", ["department_head", "regional_manager"])
+            .eq("is_active", true)
+            .order("first_name", { ascending: true })
+            .range(from, to),
+      ),
+      fetchAllRows(
+        (from, to) =>
+          admin
+            .from("loan_hod_linkages")
+            .select("id, staff_user_id, hod_user_id, location_id, district_name, location_address, staff_rank, hod_rank, updated_at")
+            .order("updated_at", { ascending: false })
+            .range(from, to),
+      ),
     ])
 
     if (loanTypesRes.error) throw loanTypesRes.error
     if (locationsRes.error) throw locationsRes.error
-    if (staffRes.error) throw staffRes.error
-    if (hodsRes.error) throw hodsRes.error
-    if (linkagesRes.error) throw linkagesRes.error
+
+    let staffRows = allStaff || []
+    let hodRows = allHods || []
+    let linkageRows = allLinkages || []
+    let linkageRequestRows: any[] = []
+
+    if (role === "regional_manager") {
+      if (assignedLocationId) {
+        staffRows = staffRows.filter((row: any) => String(row.assigned_location_id || "") === assignedLocationId)
+        hodRows = hodRows.filter((row: any) => String(row.assigned_location_id || "") === assignedLocationId || row.id === user.id)
+      } else {
+        staffRows = []
+      }
+    }
+
+    if (role === "department_head") {
+      staffRows = staffRows.filter((row: any) => {
+        const sameDepartment = departmentId && String(row.department_id || "") === departmentId
+        const sameLocation = !assignedLocationId || String(row.assigned_location_id || "") === assignedLocationId
+        return Boolean(sameDepartment && sameLocation)
+      })
+      hodRows = hodRows.filter((row: any) => String(row.id || "") === user.id || (assignedLocationId ? String(row.assigned_location_id || "") === assignedLocationId : true))
+    }
+
+    const staffIds = new Set(staffRows.map((row: any) => String(row.id)))
+    linkageRows = linkageRows.filter((row: any) => staffIds.has(String(row.staff_user_id || "")))
+
+    if (search) {
+      const matchesSearch = (text: string) => text.toLowerCase().includes(search)
+      staffRows = staffRows.filter((row: any) =>
+        matchesSearch(
+          `${row.first_name || ""} ${row.last_name || ""} ${row.employee_id || ""} ${row.position || ""} ${(row as any)?.departments?.name || ""}`,
+        ),
+      )
+      const filteredStaffIds = new Set(staffRows.map((row: any) => String(row.id)))
+      linkageRows = linkageRows.filter((row: any) => filteredStaffIds.has(String(row.staff_user_id || "")))
+    }
+
+    staffRows = staffRows.slice(0, requestedLimit)
+    const finalStaffIds = new Set(staffRows.map((row: any) => String(row.id)))
+    linkageRows = linkageRows.filter((row: any) => finalStaffIds.has(String(row.staff_user_id || "")))
+
+    if (role === "admin") {
+      const linkageNotifications = await fetchAllRows(
+        (from, to) =>
+          admin
+            .from("staff_notifications")
+            .select("id, user_id, title, message, type, data, is_read, read_at, created_at")
+            .eq("type", "hod_linkage_request")
+            .order("created_at", { ascending: false })
+            .range(from, to),
+        250,
+      )
+
+      const requestNotifications = (linkageNotifications || []).filter((row: any) => String(row.user_id || "") === String(user.id))
+      const referencedIds = Array.from(
+        new Set(
+          requestNotifications
+            .flatMap((row: any) => [
+              String((row as any)?.data?.requested_by || ""),
+              String((row as any)?.data?.staff_user_id || ""),
+              String((row as any)?.data?.requested_hod_user_id || ""),
+              String((row as any)?.data?.resolved_by || ""),
+            ])
+            .filter(Boolean),
+        ),
+      )
+
+      const { data: referencedProfiles } = referencedIds.length
+        ? await admin
+            .from("user_profiles")
+            .select("id, first_name, last_name, employee_id, position, role")
+            .in("id", referencedIds)
+        : ({ data: [] } as any)
+
+      const profileMap = new Map(
+        (referencedProfiles || []).map((row: any) => [
+          String(row.id),
+          {
+            id: row.id,
+            full_name: `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.role || "Unknown",
+            employee_id: row.employee_id || null,
+            position: row.position || null,
+            role: row.role || null,
+          },
+        ]),
+      )
+
+      linkageRequestRows = requestNotifications.map((row: any) => {
+        const payload = (row.data && typeof row.data === "object") ? row.data : {}
+        const requesterId = String(payload.requested_by || "")
+        const staffId = String(payload.staff_user_id || "")
+        const requestedHodId = String(payload.requested_hod_user_id || "")
+        const resolvedById = String(payload.resolved_by || "")
+
+        return {
+          id: row.id,
+          title: row.title,
+          message: row.message,
+          created_at: row.created_at,
+          is_read: row.is_read,
+          read_at: row.read_at || null,
+          request_status: payload.request_status || "pending",
+          request_note: payload.note || null,
+          resolution_note: payload.resolution_note || null,
+          resolved_at: payload.resolved_at || null,
+          requester: profileMap.get(requesterId) || null,
+          staff: profileMap.get(staffId) || null,
+          requested_hod: profileMap.get(requestedHodId) || null,
+          resolved_by: profileMap.get(resolvedById) || null,
+        }
+      })
+    }
 
     return NextResponse.json({
       loanTypes: loanTypesRes.data || [],
       locations: locationsRes.data || [],
-      staff: staffRes.data || [],
-      hods: hodsRes.data || [],
-      linkages: linkagesRes.data || [],
+      staff: staffRows,
+      hods: hodRows,
+      linkages: linkageRows,
+      linkageRequests: linkageRequestRows,
     })
   } catch (error: any) {
     console.error("loan lookups get error", error)
@@ -383,6 +538,165 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json({ success: true, updated })
+    }
+
+    if (action === "request_hod_linkage") {
+      const staffUserId = String(body?.staff_user_id || "")
+      const requestedHodUserId = String(body?.requested_hod_user_id || "")
+      const requestNote = String(body?.note || "").trim()
+
+      if (!staffUserId || !requestedHodUserId) {
+        return NextResponse.json({ error: "staff_user_id and requested_hod_user_id are required" }, { status: 400 })
+      }
+
+      const [{ data: staffProfile }, { data: hodProfile }, { data: requesterProfile }, { data: adminProfiles }] = await Promise.all([
+        admin.from("user_profiles").select("id, first_name, last_name, employee_id").eq("id", staffUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, role").eq("id", requestedHodUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, role").eq("id", user.id).maybeSingle(),
+        admin.from("user_profiles").select("id").eq("role", "admin").eq("is_active", true),
+      ])
+
+      if (!staffProfile || !hodProfile) {
+        return NextResponse.json({ error: "Staff or HOD profile not found" }, { status: 404 })
+      }
+
+      const adminIds = (adminProfiles || []).map((row: any) => row.id)
+      if (adminIds.length === 0) {
+        return NextResponse.json({ error: "No admin account available to review this linkage request" }, { status: 400 })
+      }
+
+      const requesterName = `${(requesterProfile as any)?.first_name || ""} ${(requesterProfile as any)?.last_name || ""}`.trim() || "Staff"
+      const staffName = `${(staffProfile as any)?.first_name || ""} ${(staffProfile as any)?.last_name || ""}`.trim()
+      const hodName = `${(hodProfile as any)?.first_name || ""} ${(hodProfile as any)?.last_name || ""}`.trim()
+
+      const notifications = adminIds.map((adminId) => ({
+        user_id: adminId,
+        title: "HOD Linkage Request",
+        message: `${requesterName} requested linkage: ${staffName} (${(staffProfile as any)?.employee_id || "N/A"}) -> ${hodName} (${(hodProfile as any)?.role || "HOD"}).`,
+        type: "hod_linkage_request",
+        data: {
+          requested_by: user.id,
+          staff_user_id: staffUserId,
+          requested_hod_user_id: requestedHodUserId,
+          note: requestNote || null,
+        },
+        is_read: false,
+      }))
+
+      const { error: notifError } = await admin.from("staff_notifications").insert(notifications)
+      if (notifError) throw notifError
+
+      return NextResponse.json({ success: true, requested: true })
+    }
+
+    if (action === "resolve_hod_linkage_request") {
+      if (role !== "admin") {
+        return NextResponse.json({ error: "Only admin can resolve linkage requests" }, { status: 403 })
+      }
+
+      const requestId = String(body?.request_id || "")
+      const decision = body?.decision === "reject" ? "reject" : "approve"
+      const resolutionNote = String(body?.note || "").trim() || null
+
+      if (!requestId) {
+        return NextResponse.json({ error: "request_id is required" }, { status: 400 })
+      }
+
+      const { data: notificationRow, error: notificationError } = await admin
+        .from("staff_notifications")
+        .select("id, user_id, title, message, type, data, is_read")
+        .eq("id", requestId)
+        .eq("type", "hod_linkage_request")
+        .maybeSingle()
+
+      if (notificationError) throw notificationError
+      if (!notificationRow) {
+        return NextResponse.json({ error: "Linkage request not found" }, { status: 404 })
+      }
+
+      const payload = ((notificationRow as any).data && typeof (notificationRow as any).data === "object") ? (notificationRow as any).data : {}
+      if (payload.request_status && payload.request_status !== "pending") {
+        return NextResponse.json({ error: "This linkage request has already been resolved" }, { status: 409 })
+      }
+
+      const staffUserId = String(payload.staff_user_id || "")
+      const requestedHodUserId = String(payload.requested_hod_user_id || "")
+      const requestedById = String(payload.requested_by || "")
+
+      if (!staffUserId || !requestedHodUserId) {
+        return NextResponse.json({ error: "Stored linkage request is incomplete" }, { status: 400 })
+      }
+
+      const [{ data: staffProfile }, { data: hodProfile }] = await Promise.all([
+        admin.from("user_profiles").select("id, first_name, last_name, employee_id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))").eq("id", staffUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, role, position").eq("id", requestedHodUserId).maybeSingle(),
+      ])
+
+      if (!staffProfile || !hodProfile) {
+        return NextResponse.json({ error: "Staff or requested HOD profile no longer exists" }, { status: 404 })
+      }
+
+      if (decision === "approve") {
+        const linkagePayload = {
+          staff_user_id: staffUserId,
+          hod_user_id: requestedHodUserId,
+          location_id: (staffProfile as any).assigned_location_id || null,
+          district_name: (staffProfile as any)?.geofence_locations?.districts?.name || null,
+          location_address: (staffProfile as any)?.geofence_locations?.address || null,
+          staff_rank: (staffProfile as any)?.position || null,
+          hod_rank: (hodProfile as any)?.position || (hodProfile as any)?.role || null,
+          created_by: requestedById || user.id,
+          updated_at: new Date().toISOString(),
+        }
+
+        const { error: upsertError } = await admin
+          .from("loan_hod_linkages")
+          .upsert(linkagePayload, { onConflict: "staff_user_id,hod_user_id" })
+
+        if (upsertError) throw upsertError
+      }
+
+      const updatedData = {
+        ...payload,
+        request_status: decision === "approve" ? "approved" : "rejected",
+        resolution_note: resolutionNote,
+        resolved_by: user.id,
+        resolved_at: new Date().toISOString(),
+      }
+
+      const { error: updateError } = await admin
+        .from("staff_notifications")
+        .update({
+          is_read: true,
+          read_at: new Date().toISOString(),
+          data: updatedData,
+        })
+        .eq("id", requestId)
+
+      if (updateError) throw updateError
+
+      const staffName = `${(staffProfile as any)?.first_name || ""} ${(staffProfile as any)?.last_name || ""}`.trim() || "Staff"
+      const hodName = `${(hodProfile as any)?.first_name || ""} ${(hodProfile as any)?.last_name || ""}`.trim() || "HOD"
+      const decisionLabel = decision === "approve" ? "approved" : "rejected"
+
+      const notifyIds = Array.from(new Set([requestedById, staffUserId].filter(Boolean)))
+      await admin.from("staff_notifications").insert(
+        notifyIds.map((recipientId) => ({
+          user_id: recipientId,
+          title: `HOD Linkage Request ${decision === "approve" ? "Approved" : "Rejected"}`,
+          message: `Admin ${decisionLabel} the linkage request for ${staffName} -> ${hodName}.${resolutionNote ? ` Note: ${resolutionNote}` : ""}`,
+          type: decision === "approve" ? "hod_linkage_request_approved" : "hod_linkage_request_rejected",
+          data: {
+            request_id: requestId,
+            staff_user_id: staffUserId,
+            requested_hod_user_id: requestedHodUserId,
+            resolution_note: resolutionNote,
+          },
+          is_read: false,
+        })),
+      )
+
+      return NextResponse.json({ success: true, resolved: true, decision: updatedData.request_status })
     }
 
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 })
