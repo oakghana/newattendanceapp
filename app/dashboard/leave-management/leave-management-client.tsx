@@ -43,6 +43,7 @@ interface LeaveNotification {
   leave_request_id?: string
   user_id?: string
   status: string
+  review_decision?: string
   leave_requests: LeaveRequest
   requester_role?: string
   requester_name?: string
@@ -294,7 +295,7 @@ export function LeaveManagementClient({
 
   const pendingRequests = staffRequests.filter((r) => pendingStatuses.has(String(r.status || "")))
   const approvedRequests = staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
-  const pendingNotifications = managerNotifications.filter((n) => pendingStatuses.has(String(n.status || "")))
+  const pendingNotifications = managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending")
   const adminAllPending = pendingNotifications
   const adminStaffQueue = pendingNotifications.filter((n) => {
     const role = String(n.requester_role || "").toLowerCase()
@@ -435,7 +436,7 @@ export function LeaveManagementClient({
               <LeaveMetricCard label="Pending" value={String(canUseStaffLeaveHub ? pendingRequests.length : pendingNotifications.length)} hint={canUseStaffLeaveHub ? "Awaiting decision" : "Need review"} tone="amber" icon={<FileClock className="h-4 w-4" />} />
               <LeaveMetricCard label="Approved" value={String(approvedRequests.length)} hint="Confirmed leave" tone="emerald" icon={<CheckCircle2 className="h-4 w-4" />} />
               <LeaveMetricCard label="Submitted" value={String(staffRequests.length)} hint="My requests" tone="cyan" icon={<Calendar className="h-4 w-4" />} />
-              <LeaveMetricCard label="Approvals" value={String(managerNotifications.length)} hint="Manager queue" tone="violet" icon={<ArrowUpRight className="h-4 w-4" />} />
+              <LeaveMetricCard label="Approvals" value={String(pendingNotifications.length)} hint="Manager queue" tone="violet" icon={<ArrowUpRight className="h-4 w-4" />} />
             </div>
           </div>
         </CardContent>

@@ -151,6 +151,7 @@ export default async function LeaveManagementPage() {
           id: String(review.id),
           leave_plan_request_id: String(leave?.id || ""),
           status: String(leave?.status || review.decision || "pending_manager_review"),
+          review_decision: String(review.decision || "pending"),
           requester_role: String(requester?.role || "staff"),
           requester_name: requester ? `${requester.first_name || ""} ${requester.last_name || ""}`.trim() : "Staff",
           waiting_days: waitingDays,
