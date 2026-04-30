@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { jsPDF } from "jspdf"
+import fs from "fs"
+import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   canDoAccounts,
@@ -34,82 +36,64 @@ function fmtDate(value?: string | null) {
   return date.toISOString().slice(0, 10)
 }
 
-function buildMemoLines(loan: any) {
+function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const amount = `GHc ${fmtAmount(loan.fixed_amount || loan.requested_amount)}`
 
   if (loan.status === "rejected_fd") {
-    return [
-      "RE: LOAN REQUEST FEEDBACK (FD REVIEW)",
-      "",
-      `Reference: ${loan.request_number}`,
-      `Loan Type: ${loan.loan_type_label}`,
-      `Requested Amount: ${amount}`,
-      "",
-      "Dear Staff,",
-      "",
-      "Following Accounts FD review, your request could not proceed at this time.",
-      `FD Score: ${loan.fd_score ?? "N/A"}`,
-      `Accounts Note: ${loan.fd_note || "FD value below required threshold."}`,
-      "",
-      "Please regularize your standing and submit again in a future cycle.",
-      "",
-      "Thank you.",
-    ]
+    return {
+      subject: "APPLICATION FOR LOAN — FD REVIEW FEEDBACK",
+      paragraphs: [
+        `We refer to your loan application dated ${fmtDate(loan.fd_checked_at)} on the above subject and wish to inform you that, following Accounts FD review, your request could not proceed at this time.`,
+        `FD Score: ${loan.fd_score ?? "N/A"}`,
+        `Accounts Note: ${loan.fd_note || "FD value below required threshold."}`,
+        "Please regularize your standing and submit again in a future cycle.",
+        "You can count on our co-operation.",
+      ],
+    }
   }
 
   if (loan.status === "director_rejected") {
-    return [
-      "RE: DIRECTOR HR DECISION ON LOAN REQUEST",
-      "",
-      `Reference: ${loan.request_number}`,
-      `Loan Type: ${loan.loan_type_label}`,
-      `Requested Amount: ${amount}`,
-      "",
-      "Dear Staff,",
-      "",
-      "After final management review, your loan request was not approved.",
-      `${loan.director_note ? `Director's Note: ${loan.director_note}` : "Director's Note: Not stated."}`,
-      "",
-      "For further guidance, kindly liaise with HR Office.",
-      "",
-      "Thank you.",
-    ]
+    return {
+      subject: `DIRECTOR HR DECISION ON LOAN REQUEST`,
+      paragraphs: [
+        `We refer to your loan application on the above subject and wish to inform you that, after final management review, your loan request was not approved.`,
+        `${loan.director_note ? `Director's Note: ${loan.director_note}` : "Director's Note: Not stated."}`,
+        "For further guidance, kindly liaise with HR Office.",
+        "You can count on our co-operation.",
+      ],
+    }
   }
 
   if (loan.status === "awaiting_director_hr") {
-    return [
-      "RE: LOAN TERMS SET BY HR OFFICE",
-      "",
-      `Reference: ${loan.request_number}`,
-      `Loan Type: ${loan.loan_type_label}`,
-      `Provisional Amount: ${amount}`,
-      "",
-      "Dear Staff,",
-      "",
-      "HR has prepared your loan terms and forwarded your request to Director HR for final decision.",
-      `Proposed Disbursement Date: ${loan.disbursement_date || "TBD"}`,
-      `Proposed Recovery Start Date: ${loan.recovery_start_date || "TBD"}`,
-      `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
-      `${loan.hr_note ? `HR Note: ${loan.hr_note}` : ""}`,
-      "",
-      "You will receive a final memo once Director HR concludes review.",
-    ]
+    return {
+      subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()} (TERMS SET)`,
+      paragraphs: [
+        `We refer to your loan application dated ${fmtDate(loan.hr_forwarded_at)} on the above subject and wish to inform you that HR has prepared your loan terms and forwarded your request to Director HR for final decision.`,
+        `Proposed Disbursement Date: ${fmtDate(loan.disbursement_date)}`,
+        `Proposed Recovery Start Date: ${fmtDate(loan.recovery_start_date)}`,
+        `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
+        ...(loan.hr_note ? [`HR Note: ${loan.hr_note}`] : []),
+        "You will receive a final memo once Director HR concludes review.",
+        "You can count on our co-operation.",
+      ],
+    }
   }
 
-  return [
-    "RE: LOAN APPROVAL MEMO",
-    "",
-    `Reference: ${loan.request_number}`,
-    `Loan Type: ${loan.loan_type_label}`,
-    `Approved Amount: ${amount}`,
-    `Disbursement Date: ${loan.disbursement_date || "TBD"}`,
-    `Recovery Start Date: ${loan.recovery_start_date || "TBD"}`,
-    `Recovery Months: ${loan.recovery_months || "TBD"}`,
-    "",
-    loan.director_letter || "Management has approved this loan under the stated terms and conditions.",
-    "",
-    "Please proceed with HR/Accounts for implementation.",
-  ]
+  const disbMonth = loan.disbursement_date
+    ? new Date(loan.disbursement_date).toLocaleString("en-GH", { month: "long", year: "numeric" })
+    : "TBD"
+  const recovStart = loan.recovery_start_date
+    ? new Date(loan.recovery_start_date).toLocaleString("en-GH", { month: "long", year: "numeric" })
+    : "TBD"
+  return {
+    subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()}`,
+    paragraphs: [
+      `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loan.loan_type_label || "Loan"} of ${amount}.`,
+      `The loan would be recovered in ${loan.recovery_months || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`,
+      `By a copy of this letter, the Accounts Manager is been advised to release the said amount to you effective, ${disbMonth}.`,
+      "You can count on our co-operation.",
+    ],
+  }
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -173,22 +157,36 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       return NextResponse.json({ error: "Memo is not available for this current stage" }, { status: 400 })
     }
 
-    const approverIds = Array.from(
-      new Set([loan.hod_reviewer_id, loan.hr_officer_id, loan.director_hr_id].filter(Boolean).map((value: any) => String(value))),
-    )
+    // Fetch applicant, director HR profile + signature only
+    const applicantId = String(loan.user_id || "")
+    const directorHrId = loan.director_hr_id ? String(loan.director_hr_id) : null
 
-    const [{ data: approverProfiles }, { data: registrySignatures, error: signatureError }] = await Promise.all([
-      approverIds.length > 0
-        ? admin.from("user_profiles").select("id, first_name, last_name, position, role").in("id", approverIds)
-        : Promise.resolve({ data: [], error: null } as any),
-      approverIds.length > 0
+    const [
+      { data: applicantProfile },
+      { data: directorProfile },
+      { data: directorSignature, error: signatureError },
+    ] = await Promise.all([
+      admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, role, employee_id, staff_number")
+        .eq("id", applicantId)
+        .single() as any,
+      directorHrId
+        ? admin
+            .from("user_profiles")
+            .select("id, first_name, last_name, position, role")
+            .eq("id", directorHrId)
+            .single()
+        : Promise.resolve({ data: null } as any),
+      directorHrId
         ? admin
             .from("approval_signature_registry")
             .select("user_id, approval_stage, signature_mode, signature_text, signature_data_url")
             .eq("workflow_domain", "loan")
-            .in("user_id", approverIds)
-            .in("approval_stage", ["hod_review", "hr_terms", "director_hr"])
-        : Promise.resolve({ data: [], error: null } as any),
+            .eq("user_id", directorHrId)
+            .eq("approval_stage", "director_hr")
+            .maybeSingle()
+        : Promise.resolve({ data: null } as any),
     ])
 
     if (signatureError) {
@@ -198,16 +196,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       }
     }
 
-    const profileMap = new Map((approverProfiles || []).map((row: any) => [row.id, row]))
-    const signatureMap = new Map(
-      ((registrySignatures as any[]) || []).map((row: any) => [`${row.user_id}:${row.approval_stage}`, row]),
-    )
+    // Load QCC logo
+    let logoBase64: string | null = null
+    try {
+      const logoPath = path.join(process.cwd(), "public", "images", "qcc-logo.png")
+      logoBase64 = fs.readFileSync(logoPath).toString("base64")
+    } catch {
+      // logo unavailable, continue without it
+    }
 
-    const signatureBlocks = [
-      { stage: "hod_review", label: "HOD Review", userId: loan.hod_reviewer_id },
-      { stage: "hr_terms", label: "HR Terms", userId: loan.hr_officer_id },
-      { stage: "director_hr", label: "Director HR Approval", userId: loan.director_hr_id },
-    ].filter((block) => Boolean(block.userId))
+    const { subject, paragraphs } = buildMemoBody(loan)
+    const memoDate = fmtDate(
+      loan.director_decision_at || loan.hr_forwarded_at || loan.fd_checked_at || loan.created_at,
+    )
 
     const doc = new jsPDF({ unit: "mm", format: "a4" })
     const pageWidth = doc.internal.pageSize.getWidth()
@@ -216,84 +217,191 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const marginRight = 20
     const contentWidth = pageWidth - marginLeft - marginRight
 
+    // ─── Page border ─────────────────────────────────────────────────
     doc.setDrawColor(210, 210, 210)
     doc.setLineWidth(0.2)
     doc.rect(10, 10, pageWidth - 20, pageHeight - 20)
 
+    // ─── Header: Logo + Company Name + Address ────────────────────────
+    if (logoBase64) {
+      try {
+        doc.addImage(`data:image/png;base64,${logoBase64}`, "PNG", marginLeft, 13, 22, 22)
+      } catch {
+        // skip logo render failure
+      }
+    }
+
     doc.setTextColor(44, 98, 22)
     doc.setFont("times", "bold")
-    doc.setFontSize(14)
-    doc.text("QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, 22, { align: "center" })
-    doc.text("(COCOBOD)", pageWidth / 2, 29, { align: "center" })
+    doc.setFontSize(15)
+    doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, 20, { align: "center" })
+    doc.setFontSize(13)
+    doc.text("(COCOBOD)", pageWidth / 2, 28, { align: "center" })
 
     doc.setFont("times", "italic")
     doc.setFontSize(8)
     doc.setTextColor(70, 70, 70)
-    doc.text("P.O Box M14", pageWidth - 42, 22)
-    doc.text("Accra Ghana", pageWidth - 42, 27)
-    doc.setFont("times", "normal")
-    doc.setFontSize(8.4)
-    doc.text(`Date: ${fmtDate(loan.director_decision_at || loan.hr_forwarded_at || loan.fd_checked_at)}`, pageWidth - 42, 33)
+    doc.text("P.O Box M14", pageWidth - marginRight - 14, 19)
+    doc.text("Accra Ghana", pageWidth - marginRight - 14, 24)
 
+    // Green separator under header
+    doc.setDrawColor(44, 98, 22)
+    doc.setLineWidth(0.5)
+    doc.line(marginLeft, 33, pageWidth - marginRight, 33)
+    doc.setLineWidth(0.2)
+    doc.setDrawColor(210, 210, 210)
+
+    let y = 41
+
+    // ─── Our Ref No + Date ────────────────────────────────────────────
     doc.setTextColor(0, 0, 0)
-    doc.setFont("times", "bold")
-    doc.setFontSize(9)
-    doc.text(`Our Ref No: ${loan.request_number}`, marginLeft, 40)
-
-    let y = 50
     doc.setFont("times", "normal")
-    doc.setFontSize(9.2)
-    const lines = buildMemoLines(loan)
-    for (const line of lines) {
-      const wrapped = doc.splitTextToSize(line, contentWidth)
-      doc.text(wrapped, marginLeft, y)
-      y += wrapped.length * 5
-      if (y > pageHeight - 55) {
+    doc.setFontSize(9)
+    doc.text(`Our Ref No:  ${loan.request_number || ""}`, marginLeft, y)
+    doc.text(`Date:  ${memoDate}`, pageWidth - marginRight - 42, y)
+    y += 5.5
+    doc.text("Your Ref No:  ____________________________", marginLeft, y)
+    y += 10
+
+    // ─── Applicant block ──────────────────────────────────────────────
+    const applicantFullName = fmtName(applicantProfile).toUpperCase()
+    const applicantStaffNo =
+      String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || loan.staff_number || "")
+    const applicantPosition = String((applicantProfile as any)?.position || loan.staff_rank || "STAFF").toUpperCase()
+
+    doc.setFont("times", "bold")
+    doc.setFontSize(9.5)
+    doc.text(
+      applicantStaffNo
+        ? `${applicantFullName}  (S/No.:  ${applicantStaffNo})`
+        : applicantFullName,
+      marginLeft,
+      y,
+    )
+    y += 5.5
+    doc.text(applicantPosition, marginLeft, y)
+    y += 10
+
+    // ─── THRO section ─────────────────────────────────────────────────
+    const hodName = String(loan.hod_name || "").toUpperCase().trim()
+    const hodLocation = String(loan.hod_location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
+    if (hodName) {
+      doc.setFont("times", "normal")
+      doc.setFontSize(9.2)
+      doc.text("THRO:", marginLeft, y)
+      doc.text(hodName, marginLeft + 14, y)
+      y += 5.5
+      doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
+      y += 5.5
+      doc.text(hodLocation, marginLeft + 14, y)
+      y += 10
+    }
+
+    // ─── RE: Subject ──────────────────────────────────────────────────
+    doc.setFont("times", "bold")
+    doc.setFontSize(9.5)
+    const reText = `RE:  ${subject}`
+    const reLines = doc.splitTextToSize(reText, contentWidth)
+    doc.text(reLines, marginLeft, y)
+    // underline
+    const underlineW = Math.min(doc.getTextWidth(reText), contentWidth)
+    doc.setDrawColor(0, 0, 0)
+    doc.setLineWidth(0.3)
+    doc.line(marginLeft, y + 1.2, marginLeft + underlineW, y + 1.2)
+    y += reLines.length * 6 + 6
+
+    // ─── Body paragraphs ──────────────────────────────────────────────
+    doc.setFont("times", "normal")
+    doc.setFontSize(9.5)
+    for (const para of paragraphs) {
+      if (!para.trim()) { y += 3; continue }
+      const wrapped = doc.splitTextToSize(para, contentWidth)
+      if (y + wrapped.length * 5.5 > pageHeight - 65) {
         doc.addPage()
         y = 24
       }
+      doc.text(wrapped, marginLeft, y)
+      y += wrapped.length * 5.5 + 4
     }
 
-    if (signatureBlocks.length > 0) {
-      y += 10
+    y += 8
+
+    // ─── Director HR Signature ────────────────────────────────────────
+    if (y + 50 > pageHeight - 20) {
+      doc.addPage()
+      y = 24
+    }
+
+    const sigRecord = directorSignature as any
+    if (sigRecord?.signature_data_url) {
+      try {
+        doc.addImage(sigRecord.signature_data_url, "PNG", marginLeft, y, 50, 18)
+        y += 20
+      } catch {
+        y += 20
+      }
+    } else if (sigRecord?.signature_text) {
+      doc.setFont("times", "italic")
       doc.setFontSize(12)
-      doc.setTextColor(30, 41, 59)
-      doc.text("Approval Signatures", marginLeft, y)
-      y += 10
-
-      signatureBlocks.forEach((block, index) => {
-        const x = marginLeft + index * 56
-        const profile = profileMap.get(String(block.userId))
-        const signature = signatureMap.get(`${block.userId}:${block.stage}`)
-        doc.setDrawColor(203, 213, 225)
-        doc.roundedRect(x, y, 52, 35, 2, 2)
-        doc.setFontSize(7.5)
-        doc.setTextColor(71, 85, 105)
-        doc.text(block.label, x + 3, y + 5)
-
-        if (signature?.signature_data_url) {
-          try {
-            doc.addImage(signature.signature_data_url, "PNG", x + 3, y + 8, 26, 10)
-          } catch {
-            doc.setFontSize(8.5)
-            doc.setTextColor(15, 23, 42)
-            doc.text(signature.signature_text || fmtName(profile), x + 3, y + 16)
-          }
-        } else {
-          doc.setFontSize(8.5)
-          doc.setTextColor(15, 23, 42)
-          doc.text(signature?.signature_text || fmtName(profile), x + 3, y + 16)
-        }
-
-        doc.setFontSize(6.8)
-        doc.setTextColor(100, 116, 139)
-        doc.text(fmtName(profile), x + 3, y + 25)
-        doc.text(String(profile?.position || profile?.role || "Approver"), x + 3, y + 30)
-      })
-
-      y += 42
+      doc.setTextColor(30, 60, 100)
+      doc.text(sigRecord.signature_text, marginLeft, y + 14)
+      y += 20
+      doc.setTextColor(0, 0, 0)
+    } else {
+      // blank space for signature
+      y += 20
     }
 
+    // Signature line
+    doc.setTextColor(0, 0, 0)
+    doc.setDrawColor(0, 0, 0)
+    doc.setLineWidth(0.4)
+    doc.line(marginLeft, y, marginLeft + 65, y)
+    y += 5.5
+
+    // Name (bold)
+    const dirName = fmtName(directorProfile).toUpperCase()
+    const dirTitle = String((directorProfile as any)?.position || "DEPUTY DIRECTOR HUMAN RESOURCE").toUpperCase()
+    doc.setFont("times", "bold")
+    doc.setFontSize(10)
+    doc.text(dirName || "OHENEBA BOAMAH", marginLeft, y)
+    y += 5.5
+
+    // Title
+    doc.setFont("times", "normal")
+    doc.setFontSize(9.5)
+    doc.text(dirTitle, marginLeft, y)
+    y += 5.5
+
+    // FOR: MANAGING DIRECTOR
+    doc.setFont("times", "bold")
+    doc.text("FOR:  MANAGING DIRECTOR", marginLeft, y)
+    y += 12
+
+    // ─── cc section ───────────────────────────────────────────────────
+    if (y + 40 > pageHeight - 16) {
+      doc.addPage()
+      y = 24
+    }
+    doc.setFont("times", "normal")
+    doc.setFontSize(8.5)
+    doc.setTextColor(60, 60, 60)
+    const ccList = [
+      "Managing Director",
+      "Deputy Managing Director",
+      "Deputy Director Finance",
+      "Deputy Director Human Resource",
+      "Audit Manager",
+      "Registry Unit",
+      "Records Unit",
+    ]
+    doc.text("cc:", marginLeft, y)
+    ccList.forEach((entry, i) => {
+      doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
+    })
+    y += (ccList.length + 1) * 4.5 + 4
+
+    // ─── Watermark + footer ───────────────────────────────────────────
     doc.setFontSize(38)
     doc.setTextColor(235, 235, 235)
     doc.setFont("times", "bold")
@@ -301,6 +409,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     doc.setTextColor(140, 140, 140)
     doc.setFontSize(7)
+    doc.setFont("times", "normal")
     doc.text(`Secure Memo ID: ${loan.id}`, marginLeft, pageHeight - 14)
     doc.text(`Generated For User: ${user.id}`, pageWidth - 70, pageHeight - 14)
 

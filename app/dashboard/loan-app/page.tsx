@@ -2647,7 +2647,7 @@ export default function LoanAppPage() {
                           <TableCell>
                             <div className="flex flex-col gap-1">
                               <Button size="sm" className="text-xs whitespace-nowrap bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
-                              {row.status === "approved_director" && <Button variant="outline" size="sm" className="text-xs whitespace-nowrap" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>}
+                              {["approved_director", "director_rejected"].includes(row.status) && <Button variant="outline" size="sm" className="text-xs whitespace-nowrap" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>}
                             </div>
                           </TableCell>
                         )}
@@ -2664,7 +2664,7 @@ export default function LoanAppPage() {
               {p?.directorHr && (
                 <Button size="sm" className="bg-green-700 hover:bg-green-800 text-white" onClick={() => openActionModal(row, "director")}>Review &amp; Sign Memo</Button>
               )}
-              {row.status === "approved_director" && (
+              {["approved_director", "director_rejected"].includes(row.status) && (
                 <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Download PDF</Button>
               )}
             </StageCard>
@@ -2885,7 +2885,7 @@ export default function LoanAppPage() {
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div className="text-muted-foreground">Address: {row.staff_location_address || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Status: {statusText(row.status)}</div>
-                  {row.status === "approved_director" && (
+                  {["approved_director", "director_rejected", "rejected_fd"].includes(row.status) && (
                     <div className="mt-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Secure Memo PDF</Button>
                     </div>
