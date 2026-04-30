@@ -346,13 +346,25 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Derived lists ────────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
 
-  const hodReviews: any[] = useMemo(() => {
+  const hodAssignedReviews: any[] = useMemo(() => {
+    if (!data) return []
+    return data.reviews || []
+  }, [data])
+
+  const hodPendingReviews: any[] = useMemo(() => {
     if (!data) return []
     return (data.reviews || []).filter((r: any) => {
       const status = String(r?.leave_plan_request?.status || "")
       return (HOD_PENDING_STATUSES as string[]).includes(status) && r.decision === "pending"
     })
   }, [data])
+
+  const hodWorkedOnReviews: any[] = useMemo(() => {
+    return hodAssignedReviews.filter((r: any) => {
+      const status = String(r?.leave_plan_request?.status || "")
+      return r.decision !== "pending" || !(HOD_PENDING_STATUSES as string[]).includes(status)
+    })
+  }, [hodAssignedReviews])
 
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
@@ -364,7 +376,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
     return (data.requests || []).filter((r: any) =>
-      (HR_APPROVER_PENDING_STATUSES as string[]).includes(String(r?.status || "")),
+      ["hod_approved", "manager_confirmed", ...(HR_APPROVER_PENDING_STATUSES as string[])].includes(String(r?.status || "")),
     )
   }, [data])
 
@@ -538,11 +550,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
     if (canSelfApply) t.push({ value: "my-leaves", label: "My Leaves", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
-    if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviews.length })
+    if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, editingId, myRequests.length, hodReviews.length, hrOfficeQueue.length, hrApproverQueue.length])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length])
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -595,14 +607,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
       {data && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 p-1 rounded-xl mb-2">
+          <TabsList className="flex flex-wrap h-auto gap-1.5 rounded-xl mb-2 border border-blue-100 bg-blue-50/60 p-1.5">
             {tabs.map(({ value, label, Icon, count }) => (
               <TabsTrigger key={value} value={value}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-green-800 data-[state=active]:font-semibold">
+                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-800 transition-colors hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:font-semibold">
                 <Icon className="w-4 h-4" />
                 {label}
                 {count != null && count > 0 && (
-                  <span className="ml-1 bg-green-700 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                  <span className="ml-1 rounded-full bg-blue-700 px-1.5 py-0.5 text-[10px] font-bold text-white min-w-[18px] text-center data-[state=active]:bg-white/20">
                     {count}
                   </span>
                 )}
@@ -758,15 +770,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
           {/* ── HOD Review ──────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
-            {hodReviews.length === 0 ? (
+            {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <UserCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                <p className="font-medium">No pending reviews</p>
-                <p className="text-sm mt-1">All assigned leave requests have been reviewed.</p>
+                <p className="font-medium">No assigned reviews</p>
+                <p className="text-sm mt-1">No leave requests are currently assigned to you.</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {hodReviews.map((review: any) => {
+                {hodPendingReviews.length > 0 && hodPendingReviews.map((review: any) => {
                   const req = review.leave_plan_request
                   if (!req) return null
                   const rId = review.id
@@ -847,6 +859,34 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     </Card>
                   )
                 })}
+
+                {hodWorkedOnReviews.length > 0 && (
+                  <Card className="border border-blue-200 bg-blue-50/40">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm text-blue-900">Worked On Requests</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {hodWorkedOnReviews.map((review: any) => {
+                        const req = review.leave_plan_request
+                        if (!req) return null
+                        return (
+                          <div key={review.id} className="rounded-lg border border-blue-100 bg-white p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">{fmtName(req.user)}</p>
+                                <p className="text-xs text-slate-500">{leaveTypeLabelShort(req.leave_type_key)} · {fmtDate(req.preferred_start_date)} to {fmtDate(req.preferred_end_date)}</p>
+                              </div>
+                              <Badge className={`text-xs border ${getStatusColor(req.status)}`}>{getStatusLabel(req.status)}</Badge>
+                            </div>
+                            {review.recommendation && (
+                              <p className="mt-2 text-xs text-slate-600"><strong>Your note:</strong> {review.recommendation}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
           </TabsContent>

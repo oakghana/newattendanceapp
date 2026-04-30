@@ -50,9 +50,12 @@ function getSchemaIssueMessage(error: any) {
   return "Leave planning schema is initializing. The module is running in compatibility mode."
 }
 
-function buildDegradedModeResponse(mode: "staff" | "manager" | "hr", warning: string) {
+function buildDegradedModeResponse(mode: "staff" | "manager" | "hr" | "hr_office", warning: string) {
   if (mode === "manager") {
     return NextResponse.json({ mode: "manager", reviews: [], staggerReviews: [], degraded: true, warning }, { status: 200 })
+  }
+  if (mode === "hr_office") {
+    return NextResponse.json({ mode: "hr_office", requests: [], myRequests: [], degraded: true, warning }, { status: 200 })
   }
   if (mode === "hr") {
     return NextResponse.json({ mode: "hr", requests: [], staggerRequests: [], degraded: true, warning }, { status: 200 })
@@ -251,7 +254,7 @@ export async function GET() {
         .order("created_at", { ascending: false })
 
       if (reqError) {
-        if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr", getSchemaIssueMessage(reqError))
+        if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr_office", getSchemaIssueMessage(reqError))
         throw reqError
       }
 
@@ -411,7 +414,7 @@ export async function GET() {
             departments(name, code)
           )
         `)
-        .in("status", ["hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
+        .in("status", ["hod_approved", "hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -456,7 +459,7 @@ export async function GET() {
             departments(name, code)
           )
         `)
-        .in("status", ["hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
+        .in("status", ["hod_approved", "hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
         .order("created_at", { ascending: false })
 
       if (staggerError) {

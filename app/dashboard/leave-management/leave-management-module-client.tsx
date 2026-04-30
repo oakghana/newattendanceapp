@@ -31,14 +31,14 @@ export function LeaveManagementModuleClient({
   return (
     <div className="space-y-6">
       <Tabs defaultValue="leave-management" className="space-y-6">
-        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-slate-200 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96)_0%,_rgba(248,250,252,0.92)_100%)] p-2 shadow-sm">
-          <TabsTrigger value="leave-management" className="gap-2 rounded-2xl px-5 py-3 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-blue-100 bg-blue-50/60 p-2 shadow-sm">
+          <TabsTrigger value="leave-management" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
             <LayoutPanelTop className="h-4 w-4" /> Leave Management
           </TabsTrigger>
-          <TabsTrigger value="leave-planning" className="gap-2 rounded-2xl px-5 py-3 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+          <TabsTrigger value="leave-planning" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
             <CalendarRange className="h-4 w-4" /> Leave Planning
           </TabsTrigger>
-          <TabsTrigger value="insights" className="gap-2 rounded-2xl px-5 py-3 data-[state=active]:bg-cyan-700 data-[state=active]:text-white">
+          <TabsTrigger value="insights" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
             <BarChart3 className="h-4 w-4" /> Balance & Calendar
           </TabsTrigger>
         </TabsList>
