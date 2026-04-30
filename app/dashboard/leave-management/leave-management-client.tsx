@@ -67,9 +67,27 @@ export function LeaveManagementClient({
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementClientProps) {
-    const pendingStatuses = new Set(["pending", "pending_hod", "pending_hr", "pending_manager_review", "manager_confirmed"])
+    const pendingStatuses = new Set([
+      "pending",
+      "pending_hod",
+      "pending_hr",
+      "pending_manager_review",
+      "pending_hod_review",
+      "manager_confirmed",
+      "hod_approved",
+      "hr_office_forwarded",
+    ])
     const approvedStatuses = new Set(["approved", "hr_approved"])
-    const editableStatuses = new Set(["pending", "pending_manager_review", "manager_changes_requested", "manager_rejected", "hr_rejected"])
+    const editableStatuses = new Set([
+      "pending",
+      "pending_manager_review",
+      "pending_hod_review",
+      "manager_changes_requested",
+      "manager_rejected",
+      "hod_changes_requested",
+      "hod_rejected",
+      "hr_rejected",
+    ])
 
   const { toast } = useToast()
   const [staffRequests, setStaffRequests] = useState<LeaveRequest[]>(initialStaffRequests)
@@ -182,7 +200,7 @@ export function LeaveManagementClient({
               end_date: editEndDate,
               reason: editReason.trim(),
               leave_type: editLeaveType,
-              status: "pending_manager_review",
+              status: "pending_hod_review",
             }
           : row,
       ),
@@ -694,7 +712,16 @@ function LeaveRequestCard({
 }) {
   const normalizedStatus = String(request.status || "").toLowerCase()
   const isApproved = ["approved", "hr_approved"].includes(normalizedStatus)
-  const isPending = ["pending", "pending_hod", "pending_hr", "pending_manager_review", "manager_confirmed"].includes(normalizedStatus)
+  const isPending = [
+    "pending",
+    "pending_hod",
+    "pending_hr",
+    "pending_manager_review",
+    "pending_hod_review",
+    "manager_confirmed",
+    "hod_approved",
+    "hr_office_forwarded",
+  ].includes(normalizedStatus)
 
   const statusTone =
     isApproved

@@ -48,8 +48,6 @@ import {
   Trash2,
 } from "lucide-react"
 
-} from "lucide-react"
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 type SignatureMode = "typed" | "upload" | "draw"

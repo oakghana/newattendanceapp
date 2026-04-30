@@ -150,7 +150,7 @@ export default async function LeaveManagementPage() {
         return {
           id: String(review.id),
           leave_plan_request_id: String(leave?.id || ""),
-          status: String(leave?.status || review.decision || "pending_manager_review"),
+          status: String(leave?.status || review.decision || "pending_hod_review"),
           review_decision: String(review.decision || "pending"),
           requester_role: String(requester?.role || "staff"),
           requester_name: requester ? `${requester.first_name || ""} ${requester.last_name || ""}`.trim() : "Staff",
@@ -162,7 +162,7 @@ export default async function LeaveManagementPage() {
             end_date: leave?.preferred_end_date,
             reason: leave?.reason || "",
             leave_type: leave?.leave_type_key || "annual",
-            status: String(leave?.status || "pending_manager_review"),
+            status: String(leave?.status || "pending_hod_review"),
             created_at: leave?.created_at,
           },
         }
