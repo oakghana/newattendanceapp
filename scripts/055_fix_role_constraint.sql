@@ -22,6 +22,8 @@ ALTER TABLE public.user_profiles
       'loan_office',
       'director_hr',
       'manager_hr',
-      'hr_office'
+      'hr_office',
+      'loan_committee',
+      'committee'
     )
   );

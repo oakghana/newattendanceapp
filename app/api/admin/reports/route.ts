@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const pageParam = searchParams.get("page")
     const pageSizeParam = searchParams.get("page_size")
     const page = pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1
-    const pageSize = pageSizeParam ? Math.max(1, parseInt(pageSizeParam, 10) || 50) : 50
+    const pageSize = pageSizeParam ? Math.max(1, parseInt(pageSizeParam, 10) || 1050) : 1050
     const startIndex = (page - 1) * pageSize
     const endIndex = startIndex + pageSize - 1
 

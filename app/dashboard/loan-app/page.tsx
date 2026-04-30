@@ -3093,7 +3093,7 @@ export default function LoanAppPage() {
                     {(lookupData?.hods || []).map((h) => {
                       const checked = selectedHodsForLink.includes(h.id)
                       return (
-                        <label key={h.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm shadow-sm">
+                        <label key={h.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm">
                           <span>{`${h.first_name} ${h.last_name} (${h.role})`}</span>
                           <input type="checkbox" checked={checked} onChange={() => toggleHodSelection(h.id)} />
                         </label>
@@ -3235,7 +3235,7 @@ export default function LoanAppPage() {
 
                 <div className="max-h-72 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
                   {filteredStaffCandidates.map((staff) => (
-                    <label key={`batch-staff-${staff.id}`} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm shadow-sm">
+                    <label key={`batch-staff-${staff.id}`} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm">
                       <span>{`${staff.first_name} ${staff.last_name} (${staff.employee_id || "N/A"})`}</span>
                       <input
                         type="checkbox"
@@ -3361,12 +3361,12 @@ export default function LoanAppPage() {
                   const staff = (lookupData?.staff || []).find((s) => s.id === link.staff_user_id)
                   const hod = (lookupData?.hods || []).find((h) => h.id === link.hod_user_id)
                   return (
-                    <div key={link.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-xs shadow-sm">
+                    <div key={link.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-900 shadow-sm">
                       <div><strong>Staff:</strong> {staff ? `${staff.first_name} ${staff.last_name}` : link.staff_user_id} ({staff?.position || "N/A"})</div>
                       <div className="mt-1"><strong>HOD:</strong> {hod ? `${hod.first_name} ${hod.last_name}` : link.hod_user_id} ({hod?.position || "N/A"})</div>
-                      <div className="mt-1"><strong>Location:</strong> {staff?.geofence_locations?.name || "N/A"}</div>
-                      <div className="mt-1"><strong>District:</strong> {staff?.geofence_locations?.districts?.name || "N/A"}</div>
-                      <div className="mt-1"><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
+                      <div className="mt-1 text-slate-700"><strong>Location:</strong> {staff?.geofence_locations?.name || "N/A"}</div>
+                      <div className="mt-1 text-slate-700"><strong>District:</strong> {staff?.geofence_locations?.districts?.name || "N/A"}</div>
+                      <div className="mt-1 text-slate-700"><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
                       {canDirectLinkageUpdate && (
                         <div className="mt-3">
                           <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>

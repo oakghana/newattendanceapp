@@ -285,7 +285,7 @@ export function LeaveManagementClient({
   const adminRegionalQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager")
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin"].includes(userRole || "")
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "audit_staff", "contract", "loan_committee", "committee"].includes(userRole || "")
   const isManagerView = ["admin", "regional_manager", "department_head", "it-admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(userRole || "")
   const isAdminView = String(userRole || "").toLowerCase() === "admin"
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")

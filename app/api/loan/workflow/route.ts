@@ -333,7 +333,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs,
-            allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr"].includes(role),
+            allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },
@@ -356,7 +356,7 @@ export async function GET() {
       hrOffice: canDoHrOffice(role, deptName, deptCode),
       directorHr: canDoDirectorHr(role, deptName, deptCode),
       viewAllTabs,
-      allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr"].includes(role),
+      allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
     }
 
     // HOD query: linked HODs can review linked staff requests; first approval is enough to move forward.
@@ -423,17 +423,15 @@ export async function GET() {
             .in("status", ["awaiting_hr_terms", "awaiting_director_hr"])
             .order("updated_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
-      viewAllTabs
+      (viewAllTabs || permissions.allLoans)
         ? admin.from("loan_requests").select("*").order("created_at", { ascending: false })
-        : isRegionalManager || isDepartmentHead
-          ? (reviewerScopedStaffIds.length > 0
-              ? admin
-                  .from("loan_requests")
-                  .select("*")
-                  .in("user_id", reviewerScopedStaffIds)
-                  .order("created_at", { ascending: false })
-              : Promise.resolve({ data: [], error: null } as any))
-            : Promise.resolve({ data: [], error: null } as any),
+        : (isRegionalManager || isDepartmentHead) && reviewerScopedStaffIds.length > 0
+          ? admin
+              .from("loan_requests")
+              .select("*")
+              .in("user_id", reviewerScopedStaffIds)
+              .order("created_at", { ascending: false })
+          : Promise.resolve({ data: [], error: null } as any),
       myRequestIds.length > 0
         ? admin.from("loan_request_timeline").select("*").in("loan_request_id", myRequestIds).order("created_at", { ascending: true })
         : Promise.resolve({ data: [], error: null } as any),

@@ -103,14 +103,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "checkout") {
-      // Find today's open check-in (no checkout)
+      // Find latest open check-in (no checkout), regardless of day.
+      // This avoids timezone/day-boundary misses and handles stale open records safely.
       const { data: openRecord } = await admin
         .from("attendance_records")
         .select("id, check_in_time, check_out_time")
         .eq("user_id", userId)
-        .gte("check_in_time", `${today}T00:00:00`)
-        .lt("check_in_time", `${today}T23:59:59`)
         .is("check_out_time", null)
+        .order("check_in_time", { ascending: false })
+        .limit(1)
         .maybeSingle()
 
       if (!openRecord) {
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
         if (completedRecord) {
           return NextResponse.json({ error: "User already checked out today." }, { status: 409 })
         }
-        return NextResponse.json({ error: "No open check-in found for this user today." }, { status: 404 })
+        return NextResponse.json({ error: "No open check-in found for this user." }, { status: 404 })
       }
 
       const checkInTime = new Date(openRecord.check_in_time)
@@ -172,6 +173,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
   } catch (err) {
     console.error("[force-attendance]", err)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Internal server error" }, { status: 500 })
   }
 }
