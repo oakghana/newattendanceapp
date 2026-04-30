@@ -16,6 +16,38 @@ function canManageLookups(role: string, deptName?: string | null, deptCode?: str
   )
 }
 
+function isHeadOfficeStaff(staff: any): boolean {
+  const locationName = String(staff?.geofence_locations?.name || "").toLowerCase()
+  if (!staff?.assigned_location_id) return true
+  return locationName.includes("head office")
+}
+
+function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: string } {
+  const staffDept = String(staff?.department_id || "")
+  const staffLoc = String(staff?.assigned_location_id || "")
+  const hodDept = String(hod?.department_id || "")
+  const hodLoc = String(hod?.assigned_location_id || "")
+  const hodRole = normalizeRole(String(hod?.role || ""))
+
+  if (isHeadOfficeStaff(staff)) {
+    if (hodRole !== "department_head") {
+      return { ok: false, reason: "Head-office staff can only be linked to Department Heads." }
+    }
+    if (!staffDept || !hodDept || staffDept !== hodDept) {
+      return { ok: false, reason: "Head-office staff can only be linked to Department Heads in the same department." }
+    }
+    return { ok: true }
+  }
+
+  if (hodRole !== "regional_manager") {
+    return { ok: false, reason: "Regional staff can only be linked to Regional Managers." }
+  }
+  if (!staffLoc || !hodLoc || staffLoc !== hodLoc) {
+    return { ok: false, reason: "Regional staff can only be linked to Regional Managers in the same location." }
+  }
+  return { ok: true }
+}
+
 async function fetchAllRows(queryFactory: (from: number, to: number) => any, chunkSize = 500) {
   const rows: any[] = []
   let from = 0
@@ -87,7 +119,7 @@ export async function GET(request: NextRequest) {
         (from, to) =>
           admin
             .from("user_profiles")
-            .select("id, first_name, last_name, employee_id, position, role, assigned_location_id")
+            .select("id, first_name, last_name, employee_id, position, role, department_id, assigned_location_id, geofence_locations!assigned_location_id(name)")
             .in("role", ["department_head", "regional_manager"])
             .eq("is_active", true)
             .order("first_name", { ascending: true })
@@ -129,8 +161,16 @@ export async function GET(request: NextRequest) {
       hodRows = hodRows.filter((row: any) => String(row.id || "") === user.id || (assignedLocationId ? String(row.assigned_location_id || "") === assignedLocationId : true))
     }
 
+    const staffById = new Map((staffRows || []).map((row: any) => [String(row.id), row]))
+    const hodById = new Map((hodRows || []).map((row: any) => [String(row.id), row]))
+
     const staffIds = new Set(staffRows.map((row: any) => String(row.id)))
-    linkageRows = linkageRows.filter((row: any) => staffIds.has(String(row.staff_user_id || "")))
+    linkageRows = linkageRows.filter((row: any) => {
+      const staff = staffById.get(String(row.staff_user_id || ""))
+      const hod = hodById.get(String(row.hod_user_id || ""))
+      if (!staff || !hod) return false
+      return validateStaffHodRule(staff, hod).ok
+    })
 
     if (search) {
       const matchesSearch = (text: string) => text.toLowerCase().includes(search)
@@ -316,7 +356,7 @@ export async function POST(request: NextRequest) {
 
       const { data: staffProfile, error: staffError } = await admin
         .from("user_profiles")
-        .select("id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))")
+        .select("id, role, department_id, position, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
         .eq("id", staffUserId)
         .single()
 
@@ -326,12 +366,17 @@ export async function POST(request: NextRequest) {
 
       const { data: hodProfile, error: hodError } = await admin
         .from("user_profiles")
-        .select("id, position")
+        .select("id, role, department_id, assigned_location_id, position")
         .eq("id", hodUserId)
         .single()
 
       if (hodError || !hodProfile) {
         return NextResponse.json({ error: "HOD profile not found" }, { status: 404 })
+      }
+
+      const ruleCheck = validateStaffHodRule(staffProfile, hodProfile)
+      if (!ruleCheck.ok) {
+        return NextResponse.json({ error: ruleCheck.reason || "Invalid staff-to-HOD linkage." }, { status: 400 })
       }
 
       const payload = {
@@ -368,7 +413,7 @@ export async function POST(request: NextRequest) {
 
       const { data: staffProfile, error: staffError } = await admin
         .from("user_profiles")
-        .select("id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))")
+        .select("id, role, department_id, position, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
         .eq("id", staffUserId)
         .single()
 
@@ -378,12 +423,30 @@ export async function POST(request: NextRequest) {
 
       const { data: hodRows, error: hodRowsError } = await admin
         .from("user_profiles")
-        .select("id, position")
+        .select("id, role, department_id, assigned_location_id, position")
         .in("id", hodUserIds)
 
       if (hodRowsError) throw hodRowsError
 
-      const positionByHod = new Map((hodRows || []).map((r: any) => [r.id, r.position || null]))
+      const byHod = new Map((hodRows || []).map((r: any) => [String(r.id), r]))
+
+      const invalidPairs: string[] = []
+      for (const hodId of hodUserIds) {
+        const hod = byHod.get(String(hodId))
+        if (!hod) {
+          invalidPairs.push(`${hodId}: HOD profile not found`)
+          continue
+        }
+        const rule = validateStaffHodRule(staffProfile, hod)
+        if (!rule.ok) invalidPairs.push(`${hodId}: ${rule.reason}`)
+      }
+
+      if (invalidPairs.length > 0) {
+        return NextResponse.json({
+          error: "One or more selected HOD assignments are invalid for this staff.",
+          details: invalidPairs,
+        }, { status: 400 })
+      }
 
       const rows = hodUserIds.map((hodId) => ({
         staff_user_id: staffUserId,
@@ -392,7 +455,7 @@ export async function POST(request: NextRequest) {
         district_name: (staffProfile as any)?.geofence_locations?.districts?.name || null,
         location_address: (staffProfile as any)?.geofence_locations?.address || null,
         staff_rank: (staffProfile as any)?.position || null,
-        hod_rank: positionByHod.get(hodId) || null,
+        hod_rank: byHod.get(String(hodId))?.position || null,
         created_by: user.id,
         updated_at: new Date().toISOString(),
       }))
@@ -419,14 +482,30 @@ export async function POST(request: NextRequest) {
       const [{ data: staffRows, error: staffRowsError }, { data: hodProfile, error: hodError }] = await Promise.all([
         admin
           .from("user_profiles")
-          .select("id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))")
+          .select("id, role, department_id, position, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
           .in("id", staffUserIds),
-        admin.from("user_profiles").select("id, position").eq("id", hodUserId).single(),
+        admin.from("user_profiles").select("id, role, department_id, assigned_location_id, position").eq("id", hodUserId).single(),
       ])
 
       if (staffRowsError) throw staffRowsError
       if (hodError || !hodProfile) {
         return NextResponse.json({ error: "HOD profile not found" }, { status: 404 })
+      }
+
+      const invalidStaff: string[] = []
+      for (const staff of staffRows || []) {
+        const rule = validateStaffHodRule(staff, hodProfile)
+        if (!rule.ok) {
+          const staffLabel = `${staff?.id || "unknown"}`
+          invalidStaff.push(`${staffLabel}: ${rule.reason}`)
+        }
+      }
+
+      if (invalidStaff.length > 0) {
+        return NextResponse.json({
+          error: "One or more staff cannot be linked to this HOD by current policy.",
+          details: invalidStaff,
+        }, { status: 400 })
       }
 
       const rows = (staffRows || []).map((staff: any) => ({
@@ -478,7 +557,7 @@ export async function POST(request: NextRequest) {
     if (action === "auto_link_by_location") {
       const { data: staffRows, error: staffError } = await admin
         .from("user_profiles")
-        .select("id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))")
+        .select("id, role, department_id, position, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
         .in("role", ["staff", "nsp", "intern", "contract", "it_admin"])
         .eq("is_active", true)
 
@@ -486,16 +565,23 @@ export async function POST(request: NextRequest) {
 
       let updated = 0
       for (const staff of staffRows || []) {
-        const locationId = (staff as any).assigned_location_id
-        if (!locationId) continue
-
-        const { data: hodRows } = await admin
+        let hodQuery = admin
           .from("user_profiles")
-          .select("id, position")
-          .eq("assigned_location_id", locationId)
-          .in("role", ["regional_manager", "department_head"])
+          .select("id, role, department_id, assigned_location_id, position")
           .eq("is_active", true)
           .limit(20)
+
+        if (isHeadOfficeStaff(staff)) {
+          const deptId = String((staff as any)?.department_id || "")
+          if (!deptId) continue
+          hodQuery = hodQuery.eq("department_id", deptId).eq("role", "department_head")
+        } else {
+          const locationId = (staff as any).assigned_location_id
+          if (!locationId) continue
+          hodQuery = hodQuery.eq("assigned_location_id", locationId).eq("role", "regional_manager")
+        }
+
+        const { data: hodRows } = await hodQuery
 
         if (!hodRows || hodRows.length === 0) continue
 
@@ -568,14 +654,19 @@ export async function POST(request: NextRequest) {
       }
 
       const [{ data: staffProfile }, { data: hodProfile }, { data: requesterProfile }, { data: adminProfiles }] = await Promise.all([
-        admin.from("user_profiles").select("id, first_name, last_name, employee_id").eq("id", staffUserId).maybeSingle(),
-        admin.from("user_profiles").select("id, first_name, last_name, role").eq("id", requestedHodUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, employee_id, department_id, assigned_location_id, geofence_locations!assigned_location_id(name)").eq("id", staffUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, role, department_id, assigned_location_id").eq("id", requestedHodUserId).maybeSingle(),
         admin.from("user_profiles").select("id, first_name, last_name, role").eq("id", user.id).maybeSingle(),
         admin.from("user_profiles").select("id").eq("role", "admin").eq("is_active", true),
       ])
 
       if (!staffProfile || !hodProfile) {
         return NextResponse.json({ error: "Staff or HOD profile not found" }, { status: 404 })
+      }
+
+      const ruleCheck = validateStaffHodRule(staffProfile, hodProfile)
+      if (!ruleCheck.ok) {
+        return NextResponse.json({ error: ruleCheck.reason || "Invalid staff-to-HOD linkage request." }, { status: 400 })
       }
 
       const adminIds = (adminProfiles || []).map((row: any) => row.id)
@@ -646,12 +737,17 @@ export async function POST(request: NextRequest) {
       }
 
       const [{ data: staffProfile }, { data: hodProfile }] = await Promise.all([
-        admin.from("user_profiles").select("id, first_name, last_name, employee_id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))").eq("id", staffUserId).maybeSingle(),
-        admin.from("user_profiles").select("id, first_name, last_name, role, position").eq("id", requestedHodUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, employee_id, department_id, position, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))").eq("id", staffUserId).maybeSingle(),
+        admin.from("user_profiles").select("id, first_name, last_name, role, department_id, assigned_location_id, position").eq("id", requestedHodUserId).maybeSingle(),
       ])
 
       if (!staffProfile || !hodProfile) {
         return NextResponse.json({ error: "Staff or requested HOD profile no longer exists" }, { status: 404 })
+      }
+
+      const ruleCheck = validateStaffHodRule(staffProfile, hodProfile)
+      if (!ruleCheck.ok) {
+        return NextResponse.json({ error: ruleCheck.reason || "Invalid staff-to-HOD linkage approval." }, { status: 400 })
       }
 
       if (decision === "approve") {
