@@ -258,7 +258,7 @@ export function AttendanceReports({
     setColFilter((prev) => ({ ...prev, [key]: val }))
 
   const [page, setPage] = useState<number>(1)
-  const [pageSize, setPageSize] = useState<number>(50)
+  const [pageSize, setPageSize] = useState<number>(1000)
   const [totalRecords, setTotalRecords] = useState<number>(0)
   const [reasonsPage, setReasonsPage] = useState<number>(1)
   const reasonsPageSize = 20
@@ -1872,6 +1872,7 @@ export function AttendanceReports({
                         <SelectItem value="100">100</SelectItem>
                         <SelectItem value="200">200</SelectItem>
                         <SelectItem value="500">500</SelectItem>
+                        <SelectItem value="1000">1000</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
