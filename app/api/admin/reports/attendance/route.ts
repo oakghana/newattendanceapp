@@ -80,11 +80,18 @@ export async function GET(request: NextRequest) {
     } else if (userId) {
       query = query.eq("user_id", userId)
     }
-    // department_head, regional_manager, admin: department/location filtering handled below via
-    // user_profiles subquery so we always get accurate results regardless of pagination.
 
-    // If a location filter is selected, scope records by check_in_location_id
-    if (safeLocationId) {
+    // ── Role-based data scoping ─────────────────────────────────────────────
+    // admin          → no automatic restriction (sees all)
+    // regional_manager → restricted to their own assigned_location_id
+    // department_head  → restricted to their own department_id
+
+    if (profile.role === "regional_manager" && profile.assigned_location_id) {
+      // Regional manager can only see records where the check-in location matches
+      // their assigned location, regardless of any user-supplied location filter.
+      query = query.eq("check_in_location_id", profile.assigned_location_id)
+    } else if (safeLocationId) {
+      // Admin (or future roles): honour the explicit location filter
       query = query.eq("check_in_location_id", safeLocationId)
     }
 
@@ -93,36 +100,25 @@ export async function GET(request: NextRequest) {
       query = query.eq("status", safeStatus)
     }
 
-    // If a department filter is provided, resolve the matching user IDs first,
-    // then restrict the attendance query to those users. This works for all roles
-    // (admin, regional_manager, department_head) and ensures location+dept filters combine correctly.
-    if (safeDepartmentId && profile.role !== "staff") {
-      let deptUsersQuery = supabase
-        .from("user_profiles")
-        .select("id")
-        .eq("department_id", safeDepartmentId)
-
-      // Department heads are further restricted to their own department (enforced above already
-      // via profile.department_id check). For regional_manager we don't restrict by location here
-      // because they can now see all locations.
-      if (profile.role === "department_head") {
-        deptUsersQuery = deptUsersQuery.eq("department_id", profile.department_id)
-      }
-
-      const { data: deptUsers } = await deptUsersQuery
-      const deptUserIds = (deptUsers || []).map((u: any) => u.id)
-      if (deptUserIds.length > 0) {
-        query = query.in("user_id", deptUserIds)
-      } else {
-        // No users in this department → return empty result set
-        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
-      }
-    } else if (profile.role === "department_head" && !safeDepartmentId) {
-      // Department head with no specific department filter: scope to their own department
+    // Department scoping via user_profiles sub-query
+    if (profile.role === "department_head") {
+      // Department heads always see their own department only — ignore any dept filter param
       const { data: deptUsers } = await supabase
         .from("user_profiles")
         .select("id")
         .eq("department_id", profile.department_id)
+      const deptUserIds = (deptUsers || []).map((u: any) => u.id)
+      if (deptUserIds.length > 0) {
+        query = query.in("user_id", deptUserIds)
+      } else {
+        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
+      }
+    } else if (safeDepartmentId && profile.role !== "staff") {
+      // Admin / regional_manager with an explicit dept filter
+      const { data: deptUsers } = await supabase
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", safeDepartmentId)
       const deptUserIds = (deptUsers || []).map((u: any) => u.id)
       if (deptUserIds.length > 0) {
         query = query.in("user_id", deptUserIds)

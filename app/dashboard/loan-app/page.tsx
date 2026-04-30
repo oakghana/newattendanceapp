@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { SignaturePad } from "@/components/leave/signature-pad"
@@ -1540,14 +1541,17 @@ export default function LoanAppPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Loan Type</Label>
-                  <Select value={loanTypeKey} onValueChange={setLoanTypeKey}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {filteredLoanTypes.map((type) => (
-                        <SelectItem key={type.loan_key} value={type.loan_key}>{type.loan_label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={loanTypeKey}
+                    onChange={setLoanTypeKey}
+                    placeholder="Select loan type"
+                    searchPlaceholder="Search loan type..."
+                    options={filteredLoanTypes.map((type) => ({
+                      value: type.loan_key,
+                      label: type.loan_label,
+                      keywords: `${type.category || ""} ${type.min_qualification_note || ""}`,
+                    }))}
+                  />
                   {selectedType && (
                     <p className="text-xs text-muted-foreground mt-1">
                       Fixed amount: GHc {fmtAmount(selectedType.fixed_amount)} | FD check: {selectedType.requires_fd_check ? "Required" : "Not required"} | Committee: {selectedType.requires_committee ? "Required" : "Not required"} | Qualification: {selectedType.min_qualification_note || "By staff grade"}
@@ -2701,23 +2705,19 @@ export default function LoanAppPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Loan Type</Label>
-                    <Select
+                    <SearchableSelect
                       value={selectedLoanType}
-                      onValueChange={(v) => {
+                      onChange={(v) => {
                         setSelectedLoanType(v)
                         const found = (lookupData?.loanTypes || []).find((t) => t.loan_key === v)
                         setSetupFixedAmount(String(found?.fixed_amount || ""))
                         setSetupMaxAmount(String(found?.max_amount || found?.fixed_amount || ""))
                         setSetupQualification(String(found?.min_qualification_note || ""))
                       }}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Choose loan type" /></SelectTrigger>
-                      <SelectContent>
-                        {(lookupData?.loanTypes || []).map((lt) => (
-                          <SelectItem key={lt.loan_key} value={lt.loan_key}>{lt.loan_label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Choose loan type"
+                      searchPlaceholder="Search loan type..."
+                      options={(lookupData?.loanTypes || []).map((lt) => ({ value: lt.loan_key, label: lt.loan_label }))}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Fixed Amount (GHc)</Label>
@@ -2755,14 +2755,17 @@ export default function LoanAppPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Staff for HOD Linkage</Label>
-                  <Select value={selectedStaffForLink} onValueChange={setSelectedStaffForLink}>
-                    <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
-                    <SelectContent>
-                      {filteredStaffCandidates.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{`${s.first_name} ${s.last_name} (${s.employee_id || "N/A"})`}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={selectedStaffForLink}
+                    onChange={setSelectedStaffForLink}
+                    placeholder="Select staff"
+                    searchPlaceholder="Search staff..."
+                    options={filteredStaffCandidates.map((s) => ({
+                      value: s.id,
+                      label: `${s.first_name} ${s.last_name} (${s.employee_id || "N/A"})`,
+                      keywords: `${s.position || ""} ${(s as any)?.departments?.name || ""}`,
+                    }))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Select One or More HOD / Regional Managers</Label>
@@ -2863,14 +2866,17 @@ export default function LoanAppPage() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Select HOD</Label>
-                    <Select value={selectedHodForBatchLink} onValueChange={setSelectedHodForBatchLink}>
-                      <SelectTrigger><SelectValue placeholder="Select HOD" /></SelectTrigger>
-                      <SelectContent>
-                        {(lookupData?.hods || []).map((h) => (
-                          <SelectItem key={`batch-hod-${h.id}`} value={h.id}>{`${h.first_name} ${h.last_name} (${h.role})`}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={selectedHodForBatchLink}
+                      onChange={setSelectedHodForBatchLink}
+                      placeholder="Select HOD"
+                      searchPlaceholder="Search HOD..."
+                      options={(lookupData?.hods || []).map((h) => ({
+                        value: h.id,
+                        label: `${h.first_name} ${h.last_name} (${h.role})`,
+                        keywords: `${h.position || ""}`,
+                      }))}
+                    />
                   </div>
                   <p className="text-sm text-muted-foreground">Selected staff: {selectedStaffsForBatchLink.length}</p>
                   <Button
@@ -2890,14 +2896,17 @@ export default function LoanAppPage() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Staff Member</Label>
-                    <Select value={selectedStaffForRank} onValueChange={setSelectedStaffForRank}>
-                      <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
-                      <SelectContent>
-                        {(lookupData?.staff || []).map((s) => (
-                          <SelectItem key={`rank-${s.id}`} value={s.id}>{`${s.first_name} ${s.last_name} (${s.position || "N/A"})`}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={selectedStaffForRank}
+                      onChange={setSelectedStaffForRank}
+                      placeholder="Select staff"
+                      searchPlaceholder="Search staff..."
+                      options={(lookupData?.staff || []).map((s) => ({
+                        value: s.id,
+                        label: `${s.first_name} ${s.last_name} (${s.position || "N/A"})`,
+                        keywords: `${s.employee_id || ""}`,
+                      }))}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Rank Level</Label>

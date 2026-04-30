@@ -35,7 +35,10 @@ function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boo
   const key = String(loanTypeKey || "").toLowerCase()
   const rank = String(staffRank || "").toLowerCase()
 
-  const isSeniorOrAbove = /senior|\bsr\b|sr\.|manager|head|director|regional/.test(rank)
+  // Officer rank and above qualifies for Senior loans
+  // Manager rank and above qualifies for Manager loans
+  // All other ranks (junior, nsp, intern, etc.) qualify for Junior loans only
+  const isSeniorOrAbove = /senior|\bsr\b|sr\.|officer|\bofc\b|manager|head|director|regional/.test(rank)
   const isManagerOrAbove = /manager|head|director|regional/.test(rank)
 
   if (key.includes("_manager")) return isManagerOrAbove

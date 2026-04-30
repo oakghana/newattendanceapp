@@ -11,11 +11,19 @@ export default async function ReportsPage() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role, department_id, assigned_location_id")
+    .eq("id", user.id)
+    .single()
 
   if (!profile || !["admin", "regional_manager", "department_head"].includes(profile.role)) {
     redirect("/dashboard")
   }
+
+  const scopeRole = profile.role as "admin" | "regional_manager" | "department_head"
+  const scopeDepartmentId = profile.department_id ?? null
+  const scopeLocationId = profile.assigned_location_id ?? null
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_35%),radial-gradient(circle_at_85%_10%,_rgba(236,72,153,0.12),_transparent_30%),linear-gradient(to_bottom_right,_#020617,_#0f172a,_#020617)]">
@@ -41,7 +49,11 @@ export default async function ReportsPage() {
       </div>
 
       <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-5 sm:py-6">
-        <AttendanceReports />
+        <AttendanceReports
+          scopeRole={scopeRole}
+          scopeDepartmentId={scopeDepartmentId}
+          scopeLocationId={scopeLocationId}
+        />
       </div>
     </div>
   )

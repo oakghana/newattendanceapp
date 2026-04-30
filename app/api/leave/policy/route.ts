@@ -27,6 +27,24 @@ function fallbackPolicy() {
   }
 }
 
+function ensurePartLeaveOption<T extends { leaveTypeKey: string; leaveTypeLabel: string; entitlementDays: number; leaveYearPeriod: string }>(
+  leaveTypes: T[],
+  activePeriod: string,
+): T[] {
+  const hasPartLeave = leaveTypes.some((type) => String(type.leaveTypeKey || "").toLowerCase() === "part_leave")
+  if (hasPartLeave) return leaveTypes
+
+  return [
+    ...leaveTypes,
+    {
+      leaveTypeKey: "part_leave",
+      leaveTypeLabel: "Part Leave",
+      entitlementDays: 15,
+      leaveYearPeriod: activePeriod,
+    } as T,
+  ]
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -65,7 +83,7 @@ export async function GET() {
     return NextResponse.json({
       activePeriod: activePeriodFromDb,
       periods: Array.from(periodMap.values()),
-      leaveTypes,
+      leaveTypes: ensurePartLeaveOption(leaveTypes, activePeriodFromDb),
       readOnly: false,
     })
   } catch (error) {

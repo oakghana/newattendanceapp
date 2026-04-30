@@ -21,12 +21,12 @@ function getSchemaIssueMessage(error: any) {
   const code = error?.code || ""
   const message = String(error?.message || "")
   if (code === "PGRST205") {
-    return "Leave planning tables are not visible in API schema cache yet. Reload Supabase API schema cache and refresh this page."
+    return "Leave planning advanced tables are still initializing. The module is running in compatibility mode."
   }
   if (code === "PGRST108") {
-    return `Leave planning relationship metadata is not visible in API schema cache yet (${message}). Reload Supabase API schema cache and refresh this page.`
+    return `Leave planning relationship metadata is still initializing (${message}). The module is running in compatibility mode.`
   }
-  return "Leave planning schema is not fully available yet. Run scripts 038/039 and reload Supabase API schema cache."
+  return "Leave planning schema is initializing. The module is running in compatibility mode."
 }
 
 function buildDegradedModeResponse(mode: "staff" | "manager" | "hr", warning: string) {
@@ -416,7 +416,10 @@ export async function POST(request: NextRequest) {
           entitlementDays = fallback ? fallback.entitlementDays : null
         }
 
-        if (entitlementDays !== null && requestedDays > entitlementDays) {
+        const canSubmitBeyondEntitlementForHrAdjustment =
+          role === "admin" || role === "regional_manager" || role === "department_head" || role.includes("manager")
+
+        if (entitlementDays !== null && requestedDays > entitlementDays && !canSubmitBeyondEntitlementForHrAdjustment) {
           return NextResponse.json(
             {
               error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type.`,

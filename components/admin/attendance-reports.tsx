@@ -138,7 +138,20 @@ const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = 
   })
 }
 
-export function AttendanceReports() {
+interface AttendanceReportsProps {
+  /** Server-resolved role so the component knows immediately which filters to lock */
+  scopeRole?: "admin" | "regional_manager" | "department_head"
+  /** For department_head: their own department_id (all other depts hidden) */
+  scopeDepartmentId?: string | null
+  /** For regional_manager: their own location_id (all other locations hidden) */
+  scopeLocationId?: string | null
+}
+
+export function AttendanceReports({
+  scopeRole,
+  scopeDepartmentId,
+  scopeLocationId,
+}: AttendanceReportsProps = {}) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [summary, setSummary] = useState<ReportSummary | null>(null)
   const [loading, setLoading] = useState(false)
@@ -149,6 +162,11 @@ export function AttendanceReports() {
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+
+  // Derived scope flags (server props take precedence once available)
+  const isDeptHead = scopeRole === "department_head"
+  const isRegionalManager = scopeRole === "regional_manager"
+  const isAdmin = scopeRole === "admin" || (!scopeRole)
   
   // Auto-enable compact mode on small screens for denser layout
   useEffect(() => {
@@ -212,10 +230,14 @@ export function AttendanceReports() {
   const [endDate, setEndDate] = useState(() => {
     return new Date().toISOString().split("T")[0]
   })
-  const [selectedDepartment, setSelectedDepartment] = useState("all")
+  const [selectedDepartment, setSelectedDepartment] = useState(() =>
+    scopeDepartmentId ? scopeDepartmentId : "all"
+  )
   const [locations, setLocations] = useState<Location[]>([])
   const [districts, setDistricts] = useState<District[]>([])
-  const [selectedLocation, setSelectedLocation] = useState("all")
+  const [selectedLocation, setSelectedLocation] = useState(() =>
+    scopeLocationId ? scopeLocationId : "all"
+  )
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -1067,9 +1089,16 @@ export function AttendanceReports() {
               <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-green-600" />
                 Location
+                {isRegionalManager && (
+                  <span className="ml-1 text-xs text-amber-600 font-normal">(your location)</span>
+                )}
               </label>
-              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-                <SelectTrigger className={`w-full border border-gray-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-150 bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-gray-900 dark:text-slate-100 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}`}>
+              <Select
+                value={selectedLocation}
+                onValueChange={isRegionalManager ? undefined : setSelectedLocation}
+                disabled={isRegionalManager}
+              >
+                <SelectTrigger className={`w-full border border-gray-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-150 bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-gray-900 dark:text-slate-100 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} ${isRegionalManager ? 'opacity-70 cursor-not-allowed' : ''}`}>
                   <SelectValue placeholder="All Locations" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1087,9 +1116,16 @@ export function AttendanceReports() {
               <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
                 <Users className="h-4 w-4 text-purple-600" />
                 Department
+                {isDeptHead && (
+                  <span className="ml-1 text-xs text-amber-600 font-normal">(your department)</span>
+                )}
               </label>
-              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className={`w-full border border-gray-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-150 bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-gray-900 dark:text-slate-100 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}`}>
+              <Select
+                value={selectedDepartment}
+                onValueChange={isDeptHead ? undefined : setSelectedDepartment}
+                disabled={isDeptHead}
+              >
+                <SelectTrigger className={`w-full border border-gray-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-150 bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-gray-900 dark:text-slate-100 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} ${isDeptHead ? 'opacity-70 cursor-not-allowed' : ''}`}>
                   <SelectValue placeholder="All Departments" />
                 </SelectTrigger>
                 <SelectContent>

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
@@ -52,6 +52,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
 
+    const { data: roleProfile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const normalizedRole = String((roleProfile as any)?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+    const canSubmitBeyondEntitlementForHrAdjustment =
+      normalizedRole === "admin" ||
+      normalizedRole === "regional_manager" ||
+      normalizedRole === "department_head" ||
+      normalizedRole.includes("manager")
+
     const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
 
     if (NON_ANNUAL_REQUIRES_APPROVED_ANNUAL.has(leaveTypeKey)) {
@@ -97,7 +110,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Selected leave type is currently disabled by policy." }, { status: 400 })
         }
 
-        if (requestedDays > Number(policy.entitlement_days || 0)) {
+        if (requestedDays > Number(policy.entitlement_days || 0) && !canSubmitBeyondEntitlementForHrAdjustment) {
           return NextResponse.json(
             {
               error: `Requested ${requestedDays} day(s) exceeds entitlement of ${policy.entitlement_days} for this leave type.`,
@@ -162,15 +175,8 @@ export async function POST(request: NextRequest) {
       document_url = uploadResult.data?.path || null
     }
 
-    // Determine creator role to decide auto-approval
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle()
-
     const autoApproveRoles = ["admin", "regional_manager", "department_head"]
-    const shouldAutoApprove = profile && autoApproveRoles.includes(profile.role)
+    const shouldAutoApprove = normalizedRole ? autoApproveRoles.includes(normalizedRole) : false
 
     // Create leave request (status depends on role)
     const payload: any = {
@@ -247,6 +253,92 @@ export async function POST(request: NextRequest) {
     if (notificationError) {
       console.warn("Failed to create leave notification:", notificationError.message)
     }
+
+    // ── HOD notification via loan_hod_linkages ──────────────────────────────
+    // Resolve the staff's HOD using the same linkage table as the loan system,
+    // then notify them so they can approve in the leave management queue.
+    if (!shouldAutoApprove) {
+      try {
+        const admin = await createAdminClient()
+        const hodIds: string[] = []
+
+        // 1. Primary: explicit linkage table (same as loan workflow)
+        const { data: linkageRows } = await admin
+          .from("loan_hod_linkages")
+          .select("hod_user_id")
+          .eq("staff_user_id", user.id)
+          .limit(20)
+
+        for (const row of linkageRows || []) {
+          const id = (row as any)?.hod_user_id
+          if (id && !hodIds.includes(id)) hodIds.push(id)
+        }
+
+        // 2. Fallback: department_head in same department
+        if (hodIds.length === 0) {
+          const { data: staffProfile } = await admin
+            .from("user_profiles")
+            .select("department_id, first_name, last_name, assigned_location_id")
+            .eq("id", user.id)
+            .maybeSingle()
+
+          if ((staffProfile as any)?.department_id) {
+            const { data: deptHods } = await admin
+              .from("user_profiles")
+              .select("id")
+              .eq("department_id", (staffProfile as any).department_id)
+              .eq("role", "department_head")
+              .eq("is_active", true)
+              .limit(10)
+
+            for (const hod of deptHods || []) {
+              const id = (hod as any)?.id
+              if (id && !hodIds.includes(id)) hodIds.push(id)
+            }
+          }
+
+          // 3. Further fallback: regional_manager at same location
+          if (hodIds.length === 0 && (staffProfile as any)?.assigned_location_id) {
+            const { data: rmList } = await admin
+              .from("user_profiles")
+              .select("id")
+              .eq("assigned_location_id", (staffProfile as any).assigned_location_id)
+              .eq("role", "regional_manager")
+              .eq("is_active", true)
+              .limit(5)
+
+            for (const rm of rmList || []) {
+              const id = (rm as any)?.id
+              if (id && !hodIds.includes(id)) hodIds.push(id)
+            }
+          }
+        }
+
+        if (hodIds.length > 0) {
+          const { data: staffProfile } = await admin
+            .from("user_profiles")
+            .select("first_name, last_name")
+            .eq("id", user.id)
+            .maybeSingle()
+          const staffName = staffProfile
+            ? `${(staffProfile as any).first_name || ""} ${(staffProfile as any).last_name || ""}`.trim()
+            : "A staff member"
+          const notifRows = hodIds.map((hodId) => ({
+            user_id: hodId,
+            title: "New Leave Request",
+            message: `${staffName} has submitted a leave request from ${start_date} to ${end_date}. Please review in Leave Management.`,
+            type: "leave_request",
+            data: { leave_request_id: leaveRequest.id, staff_user_id: user.id },
+            is_read: false,
+          }))
+          await admin.from("staff_notifications").insert(notifRows)
+        }
+      } catch (hodErr) {
+        // Non-fatal: HOD notification failure should not block the leave submission.
+        console.warn("HOD leave notification failed:", hodErr)
+      }
+    }
+    // ── end HOD notification ────────────────────────────────────────────────
 
     // If auto-approved, also populate per-day leave_status rows (trigger only handles updates)
     if (shouldAutoApprove) {

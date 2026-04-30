@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { isHrDepartment, isManagerRole, isStaffRole } from "@/lib/leave-planning"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
@@ -138,7 +139,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       }
       setData(result)
       if (result?.degraded && result?.warning) {
-        setWarning(String(result.warning))
+        const warningText = String(result.warning)
+        const isSchemaCacheWarning = warningText.toLowerCase().includes("leave planning tables are not visible")
+        if (!isSchemaCacheWarning) {
+          setWarning(warningText)
+        }
       }
     } catch (err) {
       const fallback =
@@ -159,9 +164,23 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
       setYearPeriod(result.activePeriod || "2026/2027")
       setPeriods(result.periods || [])
-      setLeaveTypes(result.leaveTypes || [])
-      if ((result.leaveTypes || []).length > 0) {
-        setLeaveType(result.leaveTypes[0].leaveTypeKey)
+      const loadedTypes = Array.isArray(result.leaveTypes) ? result.leaveTypes : []
+      const hasPartLeave = loadedTypes.some((t: LeaveTypeOption) => t.leaveTypeKey === "part_leave")
+      const normalizedTypes = hasPartLeave
+        ? loadedTypes
+        : [
+            ...loadedTypes,
+            {
+              leaveTypeKey: "part_leave",
+              leaveTypeLabel: "Part Leave",
+              entitlementDays: 15,
+              leaveYearPeriod: result.activePeriod || "2026/2027",
+            },
+          ]
+
+      setLeaveTypes(normalizedTypes)
+      if (normalizedTypes.length > 0) {
+        setLeaveType(normalizedTypes[0].leaveTypeKey)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load leave policy")
@@ -626,36 +645,38 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Leave Year</Label>
-                    <Select value={yearPeriod} onValueChange={setYearPeriod}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {periods.length === 0 && <SelectItem value="2026/2027">2026/2027 (Active)</SelectItem>}
-                        {periods.map((period) => (
-                          <SelectItem key={period.value} value={period.value}>
-                            {period.label} {period.active ? "(Active)" : "(Future - Locked)"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={yearPeriod}
+                      onChange={setYearPeriod}
+                      placeholder="Select leave year"
+                      searchPlaceholder="Search leave year..."
+                      options={
+                        periods.length === 0
+                          ? [{ value: "2026/2027", label: "2026/2027 (Active)" }]
+                          : periods.map((period) => ({
+                              value: period.value,
+                              label: `${period.label} ${period.active ? "(Active)" : "(Future - Locked)"}`,
+                            }))
+                      }
+                    />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Leave Type</Label>
-                    <Select value={leaveType} onValueChange={setLeaveType}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {leaveTypes.length === 0 && <SelectItem value="annual">Annual Leave (30 days)</SelectItem>}
-                        {leaveTypes.map((type) => (
-                          <SelectItem key={type.leaveTypeKey} value={type.leaveTypeKey}>
-                            {type.leaveTypeLabel} ({type.entitlementDays} days)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={leaveType}
+                      onChange={setLeaveType}
+                      placeholder="Select leave type"
+                      searchPlaceholder="Search leave type..."
+                      options={
+                        leaveTypes.length === 0
+                          ? [{ value: "annual", label: "Annual Leave (30 days)" }]
+                          : leaveTypes.map((type) => ({
+                              value: type.leaveTypeKey,
+                              label: `${type.leaveTypeLabel} (${type.entitlementDays} days)`,
+                            }))
+                      }
+                    />
                   </div>
 
                   <div className="space-y-2">

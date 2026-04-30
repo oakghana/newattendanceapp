@@ -20,6 +20,7 @@ export const DEFAULT_LEAVE_TYPES: LeaveTypePolicy[] = [
   { leaveTypeKey: "study_with_pay", leaveTypeLabel: "Study Leave (With Pay)", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "study_without_pay", leaveTypeLabel: "Study Leave (Without Pay)", entitlementDays: 180, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "casual", leaveTypeLabel: "Casual Leave", entitlementDays: 10, leaveYearPeriod: "2026/2027", isEnabled: true },
+  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "compassionate", leaveTypeLabel: "Compassionate Leave", entitlementDays: 7, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "special_unpaid", leaveTypeLabel: "Special / Leave Without Pay", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
 ]

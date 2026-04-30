@@ -13,13 +13,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Calendar, Loader2 } from "lucide-react"
 import { useEffect } from "react"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
@@ -48,9 +42,21 @@ export function RequestLeaveButton() {
 
         setActivePeriod(result.activePeriod || "2026/2027")
         const options = (result.leaveTypes || []) as LeaveTypeOption[]
-        setLeaveTypes(options)
-        if (options.length > 0 && !options.some((opt) => opt.leaveTypeKey === formData.leave_type)) {
-          setFormData((prev) => ({ ...prev, leave_type: options[0].leaveTypeKey }))
+        const hasPartLeave = options.some((opt) => opt.leaveTypeKey === "part_leave")
+        const normalizedOptions = hasPartLeave
+          ? options
+          : [
+              ...options,
+              {
+                leaveTypeKey: "part_leave",
+                leaveTypeLabel: "Part Leave",
+                entitlementDays: 15,
+                leaveYearPeriod: result.activePeriod || "2026/2027",
+              },
+            ]
+        setLeaveTypes(normalizedOptions)
+        if (normalizedOptions.length > 0 && !normalizedOptions.some((opt) => opt.leaveTypeKey === formData.leave_type)) {
+          setFormData((prev) => ({ ...prev, leave_type: normalizedOptions[0].leaveTypeKey }))
         }
       } catch {
         // Keep fallback defaults when policy endpoint is unavailable.
@@ -128,19 +134,20 @@ export function RequestLeaveButton() {
         <div className="space-y-4">
           <div>
             <Label htmlFor="leave_type">Leave Type</Label>
-            <Select value={formData.leave_type} onValueChange={(value) => setFormData({ ...formData, leave_type: value })}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {leaveTypes.length === 0 && <SelectItem value="annual">Annual Leave (30 days)</SelectItem>}
-                {leaveTypes.map((type) => (
-                  <SelectItem key={type.leaveTypeKey} value={type.leaveTypeKey}>
-                    {type.leaveTypeLabel} ({type.entitlementDays} days)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={formData.leave_type}
+              onChange={(value) => setFormData({ ...formData, leave_type: value })}
+              placeholder="Select leave type"
+              searchPlaceholder="Search leave type..."
+              options={
+                leaveTypes.length === 0
+                  ? [{ value: "annual", label: "Annual Leave (30 days)" }]
+                  : leaveTypes.map((type) => ({
+                      value: type.leaveTypeKey,
+                      label: `${type.leaveTypeLabel} (${type.entitlementDays} days)`,
+                    }))
+              }
+            />
             <p className="text-xs text-muted-foreground mt-1">Active Leave Period: {activePeriod}</p>
           </div>
 
