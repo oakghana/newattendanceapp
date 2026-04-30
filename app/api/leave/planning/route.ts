@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   buildHologramCode,
   calculateRequestedDays,
@@ -401,6 +401,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -409,7 +410,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, role, department_id")
       .eq("id", user.id)
@@ -437,7 +438,7 @@ export async function POST(request: NextRequest) {
       "manager_hr",
     ].includes(role)
     if (shouldEnforceAttendance) {
-      const attendanceCheck = await validateAttendanceEngagementForRequest(supabase, user.id)
+      const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
       if (!attendanceCheck.ok) {
         return NextResponse.json({ error: attendanceCheck.error }, { status: attendanceCheck.status })
       }
@@ -468,7 +469,7 @@ export async function POST(request: NextRequest) {
         let entitlementDays: number | null = null
         let leaveTypeKey = String(leave_type || "annual").toLowerCase()
         try {
-          const { data: policyRows, error: policyError } = await supabase
+          const { data: policyRows, error: policyError } = await admin
             .from("leave_policy_catalog")
             .select("leave_type_key, entitlement_days, is_enabled")
             .eq("leave_year_period", YEAR_PERIOD)
@@ -517,7 +518,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A staff signature is required (typed, uploaded, or on-screen draw)." }, { status: 400 })
     }
 
-    const { data: requestRow, error: requestError } = await supabase
+    const { data: requestRow, error: requestError } = await admin
       .from("leave_plan_requests")
       .insert({
         user_id: user.id,
@@ -544,7 +545,7 @@ export async function POST(request: NextRequest) {
       throw requestError
     }
 
-    const { data: reviewers, error: reviewerError } = await supabase
+    const { data: reviewers, error: reviewerError } = await admin
       .from("user_profiles")
       .select("id, role, department_id")
       .in("role", ["regional_manager", "department_head"])
@@ -578,7 +579,7 @@ export async function POST(request: NextRequest) {
       decision: "pending",
     }))
 
-    const { error: reviewInsertError } = await supabase.from("leave_plan_reviews").insert(reviewRows)
+    const { error: reviewInsertError } = await admin.from("leave_plan_reviews").insert(reviewRows)
     if (reviewInsertError) {
       const migrationError = handleMissingSchema(reviewInsertError)
       if (migrationError) return migrationError
@@ -588,6 +589,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, request: requestRow }, { status: 201 })
   } catch (error) {
     console.error("[v0] Leave planning POST error:", error)
-    return NextResponse.json({ error: "Failed to submit leave planning request." }, { status: 500 })
+    const errMsg =
+      error instanceof Error
+        ? error.message
+        : (() => {
+            try {
+              return JSON.stringify(error)
+            } catch {
+              return String(error)
+            }
+          })() || "Unknown error"
+    return NextResponse.json({ error: `Failed to submit leave planning request: ${errMsg}` }, { status: 500 })
   }
 }

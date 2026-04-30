@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     const [loanTypesRes, locationsRes, allStaff, allHods, allLinkages] = await Promise.all([
       admin
         .from("loan_types")
-        .select("loan_key, loan_label, category, fixed_amount, max_amount, min_qualification_note, requires_committee, requires_fd_check, is_active, sort_order")
+        .select("loan_key, loan_label, category, fixed_amount, max_amount, min_qualification_note, loan_terms, default_recovery_months, requires_committee, requires_fd_check, is_active, sort_order")
         .order("sort_order", { ascending: true }),
       admin.from("geofence_locations").select("id, name, address, districts(name)").order("name", { ascending: true }),
       fetchAllRows(
@@ -320,6 +320,11 @@ export async function POST(request: NextRequest) {
       const fixedAmount = Number(body?.fixed_amount)
       const maxAmount = Number(body?.max_amount)
       const minQualification = String(body?.min_qualification_note || "").trim() || null
+      const loanTerms = String(body?.loan_terms || "").trim() || null
+      const parsedDefaultRecoveryMonths = Number(body?.default_recovery_months)
+      const defaultRecoveryMonths = Number.isFinite(parsedDefaultRecoveryMonths) && parsedDefaultRecoveryMonths > 0
+        ? Math.trunc(parsedDefaultRecoveryMonths)
+        : null
       const requiresCommittee = Boolean(body?.requires_committee)
       const requiresFdCheck = body?.requires_fd_check !== false
 
@@ -333,6 +338,8 @@ export async function POST(request: NextRequest) {
           fixed_amount: fixedAmount,
           max_amount: maxAmount,
           min_qualification_note: minQualification,
+          loan_terms: loanTerms,
+          default_recovery_months: defaultRecoveryMonths,
           requires_committee: requiresCommittee,
           requires_fd_check: requiresFdCheck,
           updated_at: new Date().toISOString(),

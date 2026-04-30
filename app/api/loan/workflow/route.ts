@@ -229,7 +229,7 @@ export async function GET() {
     const [typesRes, myRes, myHodLinkRes] = await Promise.all([
       admin
         .from("loan_types")
-        .select("loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, fixed_amount, max_amount, sort_order")
+        .select("loan_key, loan_label, category, requires_committee, requires_fd_check, min_fd_score, min_qualification_note, fixed_amount, max_amount, loan_terms, default_recovery_months, sort_order")
         .eq("is_active", true)
         .order("sort_order", { ascending: true }),
       admin

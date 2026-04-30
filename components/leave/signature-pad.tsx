@@ -12,7 +12,7 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawingRef = useRef(false)
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
-  const [hologram] = useState(() => `QCC-HOLO-${Date.now().toString(36).toUpperCase()}`)
+  const [hologram] = useState("QCC-LOAN-APP")
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -120,6 +120,7 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
 
   return (
     <div className="space-y-2">
+      <div className="text-xs text-muted-foreground">Hologram: {hologram}</div>
       <canvas
         ref={canvasRef}
         className="h-[140px] w-full rounded border bg-white touch-none"
@@ -129,7 +130,7 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
         onPointerCancel={endDraw}
       />
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Hologram: {hologram}</span>
+        <span />
         <Button type="button" variant="outline" size="sm" onClick={clearCanvas}>
           Clear Signature
         </Button>

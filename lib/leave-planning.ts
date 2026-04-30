@@ -47,9 +47,8 @@ export function isHrDepartment(departmentName?: string | null, departmentCode?: 
 }
 
 export function buildHologramCode(prefix: "USR" | "HR"): string {
-  const random = Math.random().toString(36).slice(2, 8).toUpperCase()
-  const stamp = Date.now().toString(36).slice(-6).toUpperCase()
-  return `${prefix}-${stamp}-${random}`
+  void prefix
+  return "QCC-LOAN-APP"
 }
 
 export function calculateRequestedDays(startDate: string, endDate: string): number {

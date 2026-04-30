@@ -22,14 +22,21 @@ function genRequestNumber() {
   return `LN-${stamp}-${rand}`
 }
 
-function requiresProofAttachment(loanTypeKey: string): boolean {
-  const key = String(loanTypeKey || "").toLowerCase()
-  return key.includes("funeral") || key.includes("insurance")
+function isInsuranceOrFuneralText(value: string | null | undefined): boolean {
+  const text = String(value || "").toLowerCase()
+  return text.includes("funeral") || text.includes("insurance")
+}
+
+function requiresProofAttachment(loanType: { loan_key?: string | null; loan_label?: string | null; category?: string | null }): boolean {
+  return (
+    isInsuranceOrFuneralText(loanType?.loan_key) ||
+    isInsuranceOrFuneralText(loanType?.loan_label) ||
+    isInsuranceOrFuneralText(loanType?.category)
+  )
 }
 
 function isInsuranceOrFuneralLoan(loanTypeKey: string): boolean {
-  const key = String(loanTypeKey || "").toLowerCase()
-  return key.includes("funeral") || key.includes("insurance")
+  return isInsuranceOrFuneralText(loanTypeKey)
 }
 
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
@@ -222,7 +229,7 @@ export async function POST(request: NextRequest) {
 
     const { data: loanType, error: typeError } = await admin
       .from("loan_types")
-      .select("loan_key, loan_label, requires_committee, requires_fd_check, fixed_amount")
+      .select("loan_key, loan_label, category, requires_committee, requires_fd_check, fixed_amount, loan_terms, default_recovery_months")
       .eq("loan_key", loan_type_key)
       .eq("is_active", true)
       .single()
@@ -276,7 +283,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (requiresProofAttachment(loanType.loan_key) && !supporting_document_url) {
+    if (requiresProofAttachment(loanType as any) && !supporting_document_url) {
       return NextResponse.json(
         {
           error: "Proof attachment is required for funeral and insurance loan requests.",
@@ -391,6 +398,8 @@ export async function POST(request: NextRequest) {
       loan_type_label: loanType.loan_label,
       fixed_amount: (loanType as any).fixed_amount || null,
       requested_amount: (loanType as any).fixed_amount || Number(requested_amount || 0) || null,
+      hr_note: (loanType as any).loan_terms || null,
+      recovery_months: (loanType as any).default_recovery_months || null,
       reason: normalizedReason || null,
       supporting_document_url: supporting_document_url || null,
       committee_required: Boolean(loanType.requires_committee),
@@ -534,7 +543,7 @@ export async function PUT(request: NextRequest) {
     if (loan_type_key) {
       const { data: loanType } = await admin
         .from("loan_types")
-        .select("loan_key, loan_label, requires_committee, requires_fd_check, fixed_amount")
+        .select("loan_key, loan_label, category, requires_committee, requires_fd_check, fixed_amount, loan_terms, default_recovery_months")
         .eq("loan_key", loan_type_key)
         .eq("is_active", true)
         .single()
@@ -558,11 +567,18 @@ export async function PUT(request: NextRequest) {
         updatePayload.requires_fd_check = loanType.requires_fd_check !== false
         updatePayload.fixed_amount = (loanType as any).fixed_amount || null
         updatePayload.requested_amount = (loanType as any).fixed_amount || null
+        updatePayload.hr_note = (loanType as any).loan_terms || null
+        updatePayload.recovery_months = (loanType as any).default_recovery_months || null
       }
     }
 
     const finalLoanTypeKey = String(updatePayload.loan_type_key || existing.loan_type_key || "")
-    if (requiresProofAttachment(finalLoanTypeKey) && !updatePayload.supporting_document_url) {
+    const finalLoanTypeForAttachment = {
+      loan_key: finalLoanTypeKey,
+      loan_label: String(updatePayload.loan_type_label || ""),
+      category: null,
+    }
+    if (requiresProofAttachment(finalLoanTypeForAttachment) && !updatePayload.supporting_document_url) {
       return NextResponse.json(
         {
           error: "Proof attachment is required for funeral and insurance loan requests.",

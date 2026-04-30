@@ -24,9 +24,13 @@ function fmtAmount(value?: number | null) {
 }
 
 function fmtName(profile?: any) {
-  const first = String(profile?.first_name || "").trim()
-  const last = String(profile?.last_name || "").trim()
-  return [first, last].filter(Boolean).join(" ")
+  const direct = String(profile?.full_name || profile?.display_name || profile?.name || "").trim()
+  if (direct) return direct
+
+  const first = String(profile?.first_name || profile?.firstname || "").trim()
+  const middle = String(profile?.middle_name || profile?.other_name || "").trim()
+  const last = String(profile?.last_name || profile?.lastname || profile?.surname || "").trim()
+  return [first, middle, last].filter(Boolean).join(" ")
 }
 
 function canonicalReference(referenceNumber?: string | null, requestNumber?: string | null) {
@@ -261,7 +265,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     ] = await Promise.all([
       admin
         .from("user_profiles")
-        .select("id, first_name, last_name, position, role, employee_id, staff_number")
+        .select("*")
         .eq("id", applicantId)
         .single() as any,
       directorHrId
@@ -353,7 +357,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += 10
 
     // ─── Applicant block ──────────────────────────────────────────────
-    const applicantFullName = (fmtName(applicantProfile) || "REQUESTING STAFF").toUpperCase()
+    const applicantFullName = (
+      fmtName(applicantProfile) ||
+      String((loan as any)?.staff_full_name || "").trim() ||
+      "REQUESTING STAFF"
+    ).toUpperCase()
     const applicantStaffNo =
       String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || loan.staff_number || "")
     const applicantPosition = String((applicantProfile as any)?.position || loan.staff_rank || "STAFF").toUpperCase()

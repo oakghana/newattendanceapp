@@ -26,6 +26,8 @@ type LoanType = {
   requires_fd_check: boolean
   min_fd_score: number
   min_qualification_note?: string | null
+  loan_terms?: string | null
+  default_recovery_months?: number | null
   fixed_amount: number
   max_amount?: number | null
 }
@@ -79,6 +81,7 @@ type LoanRequest = {
   created_at: string
   submitted_at: string
   updated_at?: string
+  hr_note?: string | null
 }
 
 type WorkflowResponse = {
@@ -293,9 +296,22 @@ function stageOwner(status: string) {
   return map[status] || "In progress"
 }
 
-function requiresProofAttachment(loanTypeKey: string): boolean {
+function requiresProofAttachment(
+  loanTypeKey: string,
+  loanTypeLabel?: string | null,
+  loanTypeCategory?: string | null,
+): boolean {
   const key = String(loanTypeKey || "").toLowerCase()
-  return key.includes("funeral") || key.includes("insurance")
+  const label = String(loanTypeLabel || "").toLowerCase()
+  const category = String(loanTypeCategory || "").toLowerCase()
+  return (
+    key.includes("funeral") ||
+    key.includes("insurance") ||
+    label.includes("funeral") ||
+    label.includes("insurance") ||
+    category.includes("funeral") ||
+    category.includes("insurance")
+  )
 }
 
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
@@ -615,6 +631,8 @@ export default function LoanAppPage() {
   const [selectedLoanType, setSelectedLoanType] = useState("")
   const [setupFixedAmount, setSetupFixedAmount] = useState("")
   const [setupMaxAmount, setSetupMaxAmount] = useState("")
+    const [setupLoanTerms, setSetupLoanTerms] = useState("")
+    const [setupDefaultRecoveryMonths, setSetupDefaultRecoveryMonths] = useState("")
   const [setupQualification, setSetupQualification] = useState("")
   const [selectedTemplateDomain, setSelectedTemplateDomain] = useState<"loan" | "leave">("loan")
   const [selectedTemplateKey, setSelectedTemplateKey] = useState("loan_approval")
@@ -696,7 +714,10 @@ export default function LoanAppPage() {
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
-  const needsAttachment = useMemo(() => requiresProofAttachment(loanTypeKey), [loanTypeKey])
+  const needsAttachment = useMemo(
+    () => requiresProofAttachment(loanTypeKey, selectedType?.loan_label, selectedType?.category),
+    [loanTypeKey, selectedType],
+  )
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = normalizedRole === "admin" || normalizedRole === "it_admin"
@@ -1561,10 +1582,13 @@ export default function LoanAppPage() {
         }
         if (actionType === "hr_terms") {
           const entry = hrInputs[row.id]
+          const configuredLoanType = (lookupData?.loanTypes || []).find((loanType) => loanType.loan_key === row.loan_type_key)
+          const fallbackMonths = configuredLoanType?.default_recovery_months ? String(configuredLoanType.default_recovery_months) : ""
+          const fallbackTerms = String(configuredLoanType?.loan_terms || "").trim()
           setModalDisbursement(entry?.disbursement || "")
           setModalRecovery(entry?.recovery || "")
-          setModalMonths(entry?.months || "")
-          setModalNote(entry?.note || "")
+          setModalMonths(entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths))
+          setModalNote(entry?.note || row.hr_note || fallbackTerms || "")
           setModalHodName(entry?.hodName || row.hod_name || "")
           setModalHodLocation(entry?.hodLocation || row.hod_location || row.staff_location_name || "")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
@@ -1928,9 +1952,6 @@ export default function LoanAppPage() {
                       Attachment: <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="underline">View supporting document</a>
                     </div>
                   )}
-                  {row.director_letter && (
-                    <div className="text-sm bg-muted p-2 rounded"><strong>Director Letter:</strong><br />{row.director_letter}</div>
-                  )}
                   <div className="flex gap-2 flex-wrap">
                     {["pending_hod", "hod_rejected"].includes(row.status) && (
                       <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
@@ -1939,9 +1960,6 @@ export default function LoanAppPage() {
                     )}
                     {row.status === "approved_director" && (
                       <>
-                        <Button variant="outline" size="sm" onClick={() => downloadApprovalLetter(row, data!.profile)}>
-                          <Download className="h-4 w-4 mr-1" /> Download Final Approval
-                        </Button>
                         <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>
                           <FileText className="h-4 w-4 mr-1" /> Secure Memo PDF
                         </Button>
@@ -3032,6 +3050,8 @@ export default function LoanAppPage() {
                         setSetupFixedAmount(String(found?.fixed_amount || ""))
                         setSetupMaxAmount(String(found?.max_amount || found?.fixed_amount || ""))
                         setSetupQualification(String(found?.min_qualification_note || ""))
+                        setSetupLoanTerms(String(found?.loan_terms || ""))
+                        setSetupDefaultRecoveryMonths(String(found?.default_recovery_months || ""))
                       }}
                       placeholder="Choose loan type"
                       searchPlaceholder="Search loan type..."
@@ -3050,6 +3070,24 @@ export default function LoanAppPage() {
                     <Label>Qualification Note</Label>
                     <Input value={setupQualification} onChange={(e) => setSetupQualification(e.target.value)} placeholder="e.g. Senior and above" />
                   </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Loan Terms (Default HR Note)</Label>
+                    <Textarea
+                      value={setupLoanTerms}
+                      onChange={(e) => setSetupLoanTerms(e.target.value)}
+                      placeholder="e.g. Recovery in equal monthly instalments from salary"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Default Recovery Months</Label>
+                    <Input
+                      value={setupDefaultRecoveryMonths}
+                      onChange={(e) => setSetupDefaultRecoveryMonths(e.target.value)}
+                      type="number"
+                      min={1}
+                    />
+                  </div>
                 </div>
                 <Button
                   onClick={() => runLookupAction({
@@ -3058,6 +3096,8 @@ export default function LoanAppPage() {
                     fixed_amount: Number(setupFixedAmount || 0),
                     max_amount: Number(setupMaxAmount || 0),
                     min_qualification_note: setupQualification,
+                    loan_terms: setupLoanTerms,
+                    default_recovery_months: Number(setupDefaultRecoveryMonths || 0),
                   }, "Loan type setup saved")}
                   disabled={!selectedLoanType}
                 >
