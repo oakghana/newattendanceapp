@@ -56,11 +56,11 @@ export function isTransportDept(dept?: DeptInfo): boolean {
 }
 
 export function isExemptFromTimeRestrictions(dept?: DeptInfo, role?: string | null): boolean {
-  return false
+  return isManagerOrAdminRole(role) || isSecurityDept(dept) || isOperationalDept(dept) || isTransportDept(dept)
 }
 
 export function isExemptFromAttendanceReasons(role?: string | null): boolean {
-  return false
+  return isManagerOrAdminRole(role)
 }
 
 /**
@@ -76,6 +76,8 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
+  if (isSecurityDept(dept) || isTransportDept(dept)) return false
+  if (config?.exemptPrivilegedRolesFromReason !== false && isExemptFromAttendanceReasons(role)) return false
   // Check if current time is past the configured lateness deadline
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
   const [deadlineHour, deadlineMin] = deadlineStr.split(":").map(Number)
@@ -93,6 +95,8 @@ export function requiresLatenessReason(
 export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null, dept?: DeptInfo): boolean {
   if (!locationRequires) return false
   if (isWeekend(date)) return false
+  if (isSecurityDept(dept) || isTransportDept(dept)) return false
+  if (isExemptFromAttendanceReasons(role)) return false
   return true
 }
 

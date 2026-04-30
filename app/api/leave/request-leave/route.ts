@@ -20,47 +20,24 @@ async function validateAttendanceEngagementForRequest(admin: any, userId: string
     .from("attendance_records")
     .select("id, check_in_time, check_out_time")
     .eq("user_id", userId)
+    .gte("check_in_time", `${new Date().toISOString().slice(0, 10)}T00:00:00`)
+    .lt("check_in_time", `${new Date().toISOString().slice(0, 10)}T23:59:59`)
     .order("check_in_time", { ascending: false })
-    .limit(60)
+    .limit(5)
 
   if (error) return { ok: true as const }
 
   const rows = attendanceRows || []
-  const now = new Date()
-  const sevenDaysAgo = new Date(now)
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  const hasTodayCheckIn = rows.some((row: any) => Boolean(row?.check_in_time))
 
-  const staleOpenCheckout = rows.find((row: any) => {
-    if (!row?.check_in_time || row?.check_out_time) return false
-    const checkInDate = new Date(row.check_in_time)
-    return checkInDate.toDateString() !== now.toDateString()
-  })
-
-  if (staleOpenCheckout) {
+  if (!hasTodayCheckIn) {
     return {
       ok: false as const,
       status: 403,
       error:
-        "Please complete your pending check-out first in Attendance before submitting a leave request.",
+        "Attendance check-in for today is required before requesting leave. Please check in first using the Attendance module.",
       message:
-        "Kindly pass through Attendance and complete your check-out. It helps HR process your leave quickly and keeps your records clean.",
-    }
-  }
-
-  const hasRecentAttendance = rows.some((row: any) => {
-    if (!row?.check_in_time) return false
-    const checkInDate = new Date(row.check_in_time)
-    return checkInDate >= sevenDaysAgo
-  })
-
-  if (!hasRecentAttendance) {
-    return {
-      ok: false as const,
-      status: 403,
-      error:
-        "Attendance activity is required before requesting leave. Please check in and check out properly using the Attendance module.",
-      message:
-        "Please use the Attendance module consistently. If attendance usage is repeatedly missing, future leave and loan requests may be restricted.",
+        "Please check in for today in Attendance first, then submit your leave request.",
     }
   }
 
