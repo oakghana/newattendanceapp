@@ -160,10 +160,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <div>
                     <p className="inline-flex items-center gap-2 text-sm font-semibold text-rose-900">
                       <span className="inline-block h-2 w-2 rounded-full bg-pink-600 animate-pulse" />
-                      News Flash: Loan & Leave Admin Upgrade
+                      News Flash: Loan & Leave Administration Upgrade
                     </p>
                     <p className="mt-1 text-xs font-medium text-rose-800">
-                      TO STAY GLUED TO THE ANNOUCEMENT WE ARE DEVELOPING A professional,stronger approval tracking, and smarter manager notifications FOR OUR LOAN AND LEAVE ADMINISTRATION SOON.
+                      We&apos;re introducing a smarter system with stronger approval tracking and improved manager notifications to enhance loan and leave administration. Stay tuned for the rollout soon.
                     </p>
                   </div>
                   <button
