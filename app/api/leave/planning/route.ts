@@ -4,15 +4,26 @@ import {
   buildHologramCode,
   calculateRequestedDays,
   isHrPlanningRole,
+  isHrApproverRole,
+  isHrLeaveOfficeRole,
   isHrDepartment,
   isManagerRole,
   isStaffRole,
+  HR_OFFICE_PENDING_STATUSES,
 } from "@/lib/leave-planning"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
 
 const YEAR_PERIOD = "2026/2027"
 
-const EDITABLE_STATUSES = ["pending_manager_review", "manager_changes_requested", "manager_rejected", "hr_rejected"] as const
+const EDITABLE_STATUSES = [
+  "pending_manager_review",
+  "manager_changes_requested",
+  "manager_rejected",
+  "pending_hod_review",
+  "hod_changes_requested",
+  "hod_rejected",
+  "hr_rejected",
+] as const
 
 function normalizeRoleValue(role: string | null | undefined) {
   return String(role || "")
@@ -221,7 +232,41 @@ export async function GET() {
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
-    const isHr = isHrPlanningRole(role, departmentName, departmentCode)
+    const isHrOffice = isHrLeaveOfficeRole(role)
+    const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
+    const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
+
+    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ──
+    if (isHrOffice && !isHrApprover) {
+      const { data: requests, error: reqError } = await admin
+        .from("leave_plan_requests")
+        .select(`
+          *,
+          user:user_profiles!leave_plan_requests_user_id_fkey (
+            id, first_name, last_name, employee_id,
+            departments(name, code)
+          )
+        `)
+        .in("status", [...HR_OFFICE_PENDING_STATUSES])
+        .order("created_at", { ascending: false })
+
+      if (reqError) {
+        if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr", getSchemaIssueMessage(reqError))
+        throw reqError
+      }
+
+      const { data: myRequests } = await admin
+        .from("leave_plan_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+
+      return NextResponse.json({
+        mode: "hr_office",
+        requests: requests || [],
+        myRequests: myRequests || [],
+      })
+    }
 
     if (isStaffRole(role)) {
       const { data, error } = await admin
@@ -357,31 +402,7 @@ export async function GET() {
       const { data, error } = await admin
         .from("leave_plan_requests")
         .select(`
-          id,
-          user_id,
-          leave_year_period,
-          preferred_start_date,
-          preferred_end_date,
-          leave_type_key,
-          entitlement_days,
-          requested_days,
-          reason,
-          status,
-          manager_recommendation,
-          hr_response_letter,
-          user_signature_mode,
-          user_signature_text,
-          user_signature_image_url,
-          user_signature_data_url,
-          user_signature_hologram_code,
-          hr_signature_mode,
-          hr_signature_text,
-          hr_signature_image_url,
-          hr_signature_data_url,
-          hr_signature_hologram_code,
-          submitted_at,
-          created_at,
-          updated_at,
+          *,
           user:user_profiles!leave_plan_requests_user_id_fkey (
             id,
             first_name,
@@ -390,7 +411,7 @@ export async function GET() {
             departments(name, code)
           )
         `)
-        .in("status", ["manager_confirmed", "hr_approved", "hr_rejected"])
+        .in("status", ["hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -435,7 +456,7 @@ export async function GET() {
             departments(name, code)
           )
         `)
-        .in("status", ["manager_confirmed", "hr_approved", "hr_rejected"])
+        .in("status", ["hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
         .order("created_at", { ascending: false })
 
       if (staggerError) {
@@ -597,7 +618,7 @@ export async function POST(request: NextRequest) {
         entitlement_days: entitlementDays,
         requested_days: requestedDays,
         reason: reason || null,
-        status: "pending_manager_review",
+        status: "pending_hod_review",
         user_signature_mode: user_signature_mode || "typed",
         user_signature_text: user_signature_text || null,
         user_signature_image_url: user_signature_image_url || null,

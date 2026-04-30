@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { buildHologramCode, isHrDepartment } from "@/lib/leave-planning"
 import { computeReturnToWorkDate } from "@/lib/leave-policy"
 
@@ -24,6 +24,7 @@ function schemaIssueResponse() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, role, departments(name, code)")
       .eq("id", user.id)
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     const hasSignature = Boolean(hr_signature_text || hr_signature_image_url || hr_signature_data_url)
 
-    const { data: stagger, error: staggerError } = await supabase
+    const { data: stagger, error: staggerError } = await admin
       .from("leave_plan_stagger_requests")
       .select("id, user_id, leave_plan_request_id, requested_start_date, requested_end_date, reason, status")
       .eq("id", leave_plan_stagger_request_id)
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     const finalStatus = action === "approve" ? "hr_approved" : "hr_rejected"
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await admin
       .from("leave_plan_stagger_requests")
       .update({
         status: finalStatus,
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
           leave_request_id: stagger.leave_plan_request_id,
         }))
 
-        const { error: leaveStatusError } = await supabase.from("leave_status").upsert(rows)
+        const { error: leaveStatusError } = await admin.from("leave_status").upsert(rows)
         if (leaveStatusError) {
           console.error("[v0] Failed to upsert leave_status for approved stagger request:", leaveStatusError)
         }
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
         const effectiveStatus =
           today >= stagger.requested_start_date && today <= stagger.requested_end_date ? "on_leave" : "active"
 
-        const { error: profileUpdateError } = await supabase
+        const { error: profileUpdateError } = await admin
           .from("user_profiles")
           .update({
             leave_status: effectiveStatus,
@@ -174,7 +175,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await supabase.from("staff_notifications").insert({
+    await admin.from("staff_notifications").insert({
       recipient_id: stagger.user_id,
       type: "leave_plan_stagger_final_status",
       title: finalStatus === "hr_approved" ? "Stagger Request Approved" : "Stagger Request Rejected",

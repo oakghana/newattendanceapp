@@ -181,6 +181,16 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
+    if (decision === "approved" && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
+      requestUpdatePayload.hod_reviewer_id = user.id
+      requestUpdatePayload.hod_reviewed_at = new Date().toISOString()
+      requestUpdatePayload.hod_decision = "approved"
+    } else if (decision === "rejected") {
+      requestUpdatePayload.hod_decision = "rejected"
+    } else if (decision === "recommend_change") {
+      requestUpdatePayload.hod_decision = "changes_requested"
+    }
+
     if (decision === "recommend_change") {
       requestUpdatePayload.preferred_start_date = nextStartDate
       requestUpdatePayload.preferred_end_date = nextEndDate
