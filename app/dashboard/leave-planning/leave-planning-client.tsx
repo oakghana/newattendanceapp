@@ -88,14 +88,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const previousReviewCountRef = useRef<number | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
 
-  const [hrAction, setHrAction] = useState<"approve" | "reject">("approve")
   const [hrLetter, setHrLetter] = useState("")
   const [selectedHrRequestId, setSelectedHrRequestId] = useState<string | null>(null)
   const [selectedHrStaggerRequestId, setSelectedHrStaggerRequestId] = useState<string | null>(null)
-  const [hrSignatureMode, setHrSignatureMode] = useState<SignatureMode>("typed")
-  const [hrTypedSignature, setHrTypedSignature] = useState("")
-  const [hrUploadedSignatureDataUrl, setHrUploadedSignatureDataUrl] = useState<string | null>(null)
-  const [hrDrawnSignatureDataUrl, setHrDrawnSignatureDataUrl] = useState<string | null>(null)
 
   const staff = isStaffRole(normalizedRole)
   const hr = isHrPlanningRole(normalizedRole, profile.departmentName, profile.departmentCode)
@@ -127,12 +122,6 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSignatureDataUrl }
     return { text: null, dataUrl: drawnSignatureDataUrl }
   }, [signatureMode, typedSignature, uploadedSignatureDataUrl, drawnSignatureDataUrl])
-
-  const hrSignaturePayload = useMemo(() => {
-    if (hrSignatureMode === "typed") return { text: hrTypedSignature || null, dataUrl: null }
-    if (hrSignatureMode === "upload") return { text: null, dataUrl: hrUploadedSignatureDataUrl }
-    return { text: null, dataUrl: hrDrawnSignatureDataUrl }
-  }, [hrSignatureMode, hrTypedSignature, hrUploadedSignatureDataUrl, hrDrawnSignatureDataUrl])
 
   const loadPlanningData = async () => {
     setLoading(true)
@@ -302,7 +291,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     }
   }
 
-  const submitHrDecision = async (requestId: string) => {
+  const submitHrDecision = async (requestId: string, action: "approve" | "reject", row: any) => {
     if (!canHrFinalizeAction) {
       showUnderReviewToast()
       return
@@ -311,16 +300,19 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     setLoading(true)
     setError(null)
     try {
+      const staffName = `${row?.user?.first_name || ""} ${row?.user?.last_name || ""}`.trim() || "Staff"
+      const isSelectedRow = selectedHrRequestId === requestId
+      const letterToSend = isSelectedRow && hrLetter.trim()
+        ? hrLetter.trim()
+        : buildFormalResponse(staffName, row?.preferred_start_date, row?.preferred_end_date, action === "approve", false)
+
       const response = await fetch("/api/leave/planning/hr-finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leave_plan_request_id: requestId,
-          action: hrAction,
-          hr_response_letter: hrLetter,
-          hr_signature_mode: hrSignatureMode,
-          hr_signature_text: hrSignaturePayload.text,
-          hr_signature_data_url: hrSignaturePayload.dataUrl,
+          action,
+          hr_response_letter: letterToSend,
         }),
       })
       const result = await response.json()
@@ -451,7 +443,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     }
   }
 
-  const submitStaggerHrDecision = async (requestId: string) => {
+  const submitStaggerHrDecision = async (requestId: string, action: "approve" | "reject", row: any) => {
     if (!canHrFinalizeAction) {
       showUnderReviewToast()
       return
@@ -460,16 +452,19 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     setLoading(true)
     setError(null)
     try {
+      const staffName = `${row?.user?.first_name || ""} ${row?.user?.last_name || ""}`.trim() || "Staff"
+      const isSelectedRow = selectedHrStaggerRequestId === requestId
+      const letterToSend = isSelectedRow && hrLetter.trim()
+        ? hrLetter.trim()
+        : buildFormalResponse(staffName, row?.requested_start_date, row?.requested_end_date, action === "approve", true)
+
       const response = await fetch("/api/leave/planning/stagger/hr-finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leave_plan_stagger_request_id: requestId,
-          action: hrAction,
-          hr_response_letter: hrLetter,
-          hr_signature_mode: hrSignatureMode,
-          hr_signature_text: hrSignaturePayload.text,
-          hr_signature_data_url: hrSignaturePayload.dataUrl,
+          action,
+          hr_response_letter: letterToSend,
         }),
       })
       const result = await response.json()
@@ -1202,55 +1197,27 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Decision</Label>
-                    <Select value={hrAction} onValueChange={(value: any) => setHrAction(value)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="approve">Approve</SelectItem>
-                        <SelectItem value="reject">Reject</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Official Response Letter</Label>
-                    <Textarea value={hrLetter} onChange={(e) => setHrLetter(e.target.value)} placeholder="Write your official response here, or use the template button below per request" />
+                    <Label>Optional Custom HR Letter</Label>
+                    <Textarea value={hrLetter} onChange={(e) => setHrLetter(e.target.value)} placeholder="Optional: edit the HR response letter for the selected request. Leave blank to use the automatic system letter." />
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         type="button"
-                        onClick={() =>
-                          setHrLetter(
-                            buildFormalResponse(
-                              "[Staff Full Name]",
-                              "[Start Date]",
-                              "[End Date]",
-                              hrAction === "approve",
-                              false,
-                            ),
-                          )
-                        }
+                        onClick={() => {
+                          setHrLetter("")
+                          setSelectedHrRequestId(null)
+                          setSelectedHrStaggerRequestId(null)
+                        }}
                       >
-                        Generate Template Letter
+                        Use Automatic Letter
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Click "Generate Template Letter" to pre-fill a formal letter, then edit as needed. Or click "Use Template" on any request below to auto-fill with that request's details.
+                      HR can now approve or reject directly from each request. Use the custom letter box only when you want to override the automatic letter for a selected request.
                     </p>
                   </div>
                 </div>
-
-                {renderSignatureInput(
-                  hrSignatureMode,
-                  setHrSignatureMode,
-                  hrTypedSignature,
-                  setHrTypedSignature,
-                  setHrUploadedSignatureDataUrl,
-                  hrDrawnSignatureDataUrl,
-                  setHrDrawnSignatureDataUrl,
-                )}
 
                 {hrRows.length === 0 && <p className="text-sm text-muted-foreground">No requests waiting for HR approval right now. All done! 🎉</p>}
                 {hrRows.map((row: any) => (
@@ -1283,21 +1250,24 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                 `${row.user?.first_name || ""} ${row.user?.last_name || ""}`.trim(),
                                 row.preferred_start_date,
                                 row.preferred_end_date,
-                                hrAction === "approve",
+                                true,
                                 false,
                               ),
                             )
                           }}
                         >
-                          Use Template
+                          Customize Letter
                         </Button>
-                        <Button onClick={() => submitHrDecision(row.id)} disabled={loading} size="sm">
-                          {loading ? "Processing..." : "Issue Decision & Letter"}
+                        <Button onClick={() => submitHrDecision(row.id, "approve", row)} disabled={loading} size="sm">
+                          {loading ? "Processing..." : "Approve"}
+                        </Button>
+                        <Button variant="destructive" onClick={() => submitHrDecision(row.id, "reject", row)} disabled={loading} size="sm">
+                          {loading ? "Processing..." : "Reject"}
                         </Button>
                       </div>
                     )}
                     {selectedHrRequestId === row.id && (
-                      <p className="text-xs text-emerald-600">✅ Template loaded! Edit the letter above if needed, then issue your decision.</p>
+                      <p className="text-xs text-emerald-600">Custom letter loaded for this request. Approve or reject when ready, or use automatic letter instead.</p>
                     )}
                   </div>
                 ))}
@@ -1334,21 +1304,24 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                 `${row.user?.first_name || ""} ${row.user?.last_name || ""}`.trim(),
                                 row.requested_start_date,
                                 row.requested_end_date,
-                                hrAction === "approve",
+                                true,
                                 true,
                               ),
                             )
                           }}
                         >
-                          Use Formal Template
+                          Customize Letter
                         </Button>
-                        <Button onClick={() => submitStaggerHrDecision(row.id)} disabled={loading} size="sm">
-                          Finalize Stagger Request
+                        <Button onClick={() => submitStaggerHrDecision(row.id, "approve", row)} disabled={loading} size="sm">
+                          {loading ? "Processing..." : "Approve"}
+                        </Button>
+                        <Button variant="destructive" onClick={() => submitStaggerHrDecision(row.id, "reject", row)} disabled={loading} size="sm">
+                          {loading ? "Processing..." : "Reject"}
                         </Button>
                       </div>
                     )}
                     {selectedHrStaggerRequestId === row.id && (
-                      <p className="text-xs text-emerald-600">Template loaded for this stagger request. You can edit before finalizing.</p>
+                      <p className="text-xs text-emerald-600">Custom letter loaded for this stagger request. Approve or reject when ready, or use automatic letter instead.</p>
                     )}
                   </div>
                 ))}

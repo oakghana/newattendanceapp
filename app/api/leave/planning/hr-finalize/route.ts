@@ -84,9 +84,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid action. Use approve or reject." }, { status: 400 })
     }
 
-    if (!hr_signature_text && !hr_signature_image_url && !hr_signature_data_url) {
-      return NextResponse.json({ error: "HR signature is required (typed, uploaded, or on-screen draw)." }, { status: 400 })
-    }
+    const hasSignature = Boolean(hr_signature_text || hr_signature_image_url || hr_signature_data_url)
 
     const { data: leavePlan, error: leavePlanError } = await supabase
       .from("leave_plan_requests")
@@ -119,11 +117,11 @@ export async function POST(request: NextRequest) {
       .update({
         status: finalStatus,
         hr_response_letter: hr_response_letter || null,
-        hr_signature_mode: hr_signature_mode || "typed",
-        hr_signature_text: hr_signature_text || null,
-        hr_signature_image_url: hr_signature_image_url || null,
-        hr_signature_data_url: hr_signature_data_url || null,
-        hr_signature_hologram_code: buildHologramCode("HR"),
+        hr_signature_mode: hasSignature ? hr_signature_mode || "typed" : null,
+        hr_signature_text: hasSignature ? hr_signature_text || null : null,
+        hr_signature_image_url: hasSignature ? hr_signature_image_url || null : null,
+        hr_signature_data_url: hasSignature ? hr_signature_data_url || null : null,
+        hr_signature_hologram_code: hasSignature ? buildHologramCode("HR") : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", leave_plan_request_id)
