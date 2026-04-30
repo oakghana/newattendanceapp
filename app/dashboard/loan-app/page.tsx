@@ -1438,6 +1438,28 @@ export default function LoanAppPage() {
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }))
   }, [lookupData?.staff])
 
+  const staffLocationOptions = useMemo(() => {
+    const map = new Map<string, string>()
+
+    for (const loc of lookupData?.locations || []) {
+      if (!loc?.id) continue
+      map.set(String(loc.id), loc.name || String(loc.id))
+    }
+
+    for (const staff of lookupData?.staff || []) {
+      const locId = String(staff.assigned_location_id || "")
+      if (!locId) continue
+      if (!map.has(locId)) {
+        const label = staff?.geofence_locations?.name || "Unlabeled Location"
+        map.set(locId, label)
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [lookupData?.locations, lookupData?.staff])
+
   const filteredLinkageRows = useMemo(() => {
     const q = linkageSearch.trim().toLowerCase()
     if (!q) return lookupData?.linkages || []
@@ -1558,6 +1580,15 @@ export default function LoanAppPage() {
         }
         setActionModal({ open: true, row, actionType })
       }
+
+  const editLinkageFromCard = (staffUserId: string, hodUserId: string) => {
+    setStaffLocationFilter("all")
+    setStaffDepartmentFilter("all")
+    setStaffSearchFilter("")
+    setSelectedStaffForLink(staffUserId)
+    setSelectedHodsForLink([hodUserId])
+    toast({ title: "Linkage loaded", description: "You can now edit this linkage in the Single Staff HOD Linkage form." })
+  }
 
       const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string) => {
         const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
@@ -3185,8 +3216,8 @@ export default function LoanAppPage() {
                     <SelectTrigger><SelectValue placeholder="Filter by location" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All locations</SelectItem>
-                      {(lookupData?.locations || []).map((loc) => (
-                        <SelectItem key={`filter-loc-${loc.id}`} value={loc.id}>{loc.name}</SelectItem>
+                      {staffLocationOptions.map((loc) => (
+                        <SelectItem key={`filter-loc-${loc.id}`} value={loc.id}>{loc.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -3336,6 +3367,13 @@ export default function LoanAppPage() {
                       <div className="mt-1"><strong>Location:</strong> {staff?.geofence_locations?.name || "N/A"}</div>
                       <div className="mt-1"><strong>District:</strong> {staff?.geofence_locations?.districts?.name || "N/A"}</div>
                       <div className="mt-1"><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
+                      {canDirectLinkageUpdate && (
+                        <div className="mt-3">
+                          <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>
+                            Edit This Linkage
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

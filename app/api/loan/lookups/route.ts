@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
         .from("loan_types")
         .select("loan_key, loan_label, category, fixed_amount, max_amount, min_qualification_note, requires_committee, requires_fd_check, is_active, sort_order")
         .order("sort_order", { ascending: true }),
-      admin.from("geofence_locations").select("id, name, address, districts(name)").eq("is_active", true).order("name", { ascending: true }),
+      admin.from("geofence_locations").select("id, name, address, districts(name)").order("name", { ascending: true }),
       fetchAllRows(
         (from, to) =>
           admin
