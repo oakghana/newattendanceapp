@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2 } from "lucide-react"
+import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2 } from "lucide-react"
 import { PasswordManagement } from "./password-management"
 import { useNotifications } from "@/components/ui/notification-system"
 
@@ -503,7 +503,57 @@ export function StaffManagement() {
     }
   }
 
+  // ── HOD Linkage ─────────────────────────────────────────────
+  const [hodLinkStaff, setHodLinkStaff] = useState<StaffMember | null>(null)
+  const [hodLinkHodId, setHodLinkHodId] = useState<string>("")
+  const [hodLinkLoading, setHodLinkLoading] = useState(false)
+  const [hodLinkError, setHodLinkError] = useState<string | null>(null)
+  const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
+
+  const openHodLinkDialog = async (member: StaffMember) => {
+    setHodLinkStaff(member)
+    setHodLinkHodId("")
+    setHodLinkError(null)
+    try {
+      const res = await authenticatedFetch("/api/admin/staff?role=department_head&limit=200")
+      const data = await res.json()
+      const dh: StaffMember[] = data.data || []
+      // Also fetch regional managers
+      const res2 = await authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200")
+      const data2 = await res2.json()
+      const rm: StaffMember[] = data2.data || []
+      setHodCandidates([...dh, ...rm])
+    } catch {
+      setHodCandidates([])
+    }
+  }
+
+  const handleHodLink = async () => {
+    if (!hodLinkStaff || !hodLinkHodId) return
+    setHodLinkLoading(true)
+    setHodLinkError(null)
+    try {
+      const res = await authenticatedFetch("/api/loan/lookups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "upsert_hod_linkage", staff_user_id: hodLinkStaff.id, hod_user_id: hodLinkHodId }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        showSuccess(`${hodLinkStaff.first_name} ${hodLinkStaff.last_name} linked successfully`, "HOD Linked")
+        setHodLinkStaff(null)
+      } else {
+        setHodLinkError(result.error || "Failed to link")
+      }
+    } catch (e: any) {
+      setHodLinkError(e?.message || "Network error")
+    } finally {
+      setHodLinkLoading(false)
+    }
+  }
+
   return (
+    <>
     <div className="space-y-8">
       <Card className="shadow-sm border-0 bg-gradient-to-br from-card to-card/50">
         <CardHeader className="pb-6">
@@ -1100,6 +1150,17 @@ export function StaffManagement() {
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
+                          {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              title="Link to HOD"
+                              onClick={() => openHodLinkDialog(member)}
+                              className="h-8 w-8 p-0 hover:bg-blue-50 hover:border-blue-300"
+                            >
+                              <Link2 className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1122,5 +1183,47 @@ export function StaffManagement() {
         </CardContent>
       </Card>
     </div>
+
+      {/* HOD Linkage Dialog */}
+      <Dialog open={!!hodLinkStaff} onOpenChange={(open) => { if (!open) setHodLinkStaff(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link Staff to HOD</DialogTitle>
+            <DialogDescription>
+              Assign <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong> to a Department Head or Regional Manager for loan routing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {hodLinkError && (
+              <Alert variant="destructive"><AlertDescription>{hodLinkError}</AlertDescription></Alert>
+            )}
+            <div className="space-y-1">
+              <Label>Select HOD / Regional Manager</Label>
+              <Select value={hodLinkHodId} onValueChange={setHodLinkHodId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a HOD or Regional Manager..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {hodCandidates.map((hod) => (
+                    <SelectItem key={hod.id} value={hod.id}>
+                      {hod.first_name} {hod.last_name} — {hod.role.replace("_", " ")} {hod.departments?.name ? `(${hod.departments.name})` : ""}
+                    </SelectItem>
+                  ))}
+                  {hodCandidates.length === 0 && (
+                    <SelectItem value="__none__" disabled>No HODs found</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHodLinkStaff(null)}>Cancel</Button>
+            <Button onClick={handleHodLink} disabled={!hodLinkHodId || hodLinkLoading}>
+              {hodLinkLoading ? "Linking..." : "Link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

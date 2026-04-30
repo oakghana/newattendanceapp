@@ -5,6 +5,7 @@ import { canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workfl
 function canManageLookups(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   return (
     role === "admin" ||
+    role === "it-admin" ||
     role === "loan_office" ||
     role === "manager_hr" ||
     role === "director_hr" ||
