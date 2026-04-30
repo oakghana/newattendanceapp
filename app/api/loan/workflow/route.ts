@@ -215,36 +215,6 @@ export async function GET() {
     const isRegionalManager = role === "regional_manager"
     const isDepartmentHead = role === "department_head"
 
-    let scopedStaffIds: string[] = []
-    if (isRegionalManager || isDepartmentHead) {
-      let scopedStaffQuery = admin
-        .from("user_profiles")
-        .select("id")
-        .eq("is_active", true)
-
-      if (isRegionalManager) {
-        if (managerLocationId) {
-          scopedStaffQuery = scopedStaffQuery.eq("assigned_location_id", managerLocationId)
-        } else {
-          scopedStaffQuery = scopedStaffQuery.eq("id", "00000000-0000-0000-0000-000000000000")
-        }
-      }
-
-      if (isDepartmentHead) {
-        if (managerDepartmentId) {
-          scopedStaffQuery = scopedStaffQuery.eq("department_id", managerDepartmentId)
-          if (managerLocationId) {
-            scopedStaffQuery = scopedStaffQuery.eq("assigned_location_id", managerLocationId)
-          }
-        } else {
-          scopedStaffQuery = scopedStaffQuery.eq("id", "00000000-0000-0000-0000-000000000000")
-        }
-      }
-
-      const { data: scopedStaff } = await scopedStaffQuery.limit(5000)
-      scopedStaffIds = (scopedStaff || []).map((row: any) => row.id)
-    }
-
     let linkedStaffIds: string[] = []
     if (isRegionalManager || isDepartmentHead) {
       const { data: linkageRows } = await admin
@@ -254,7 +224,7 @@ export async function GET() {
         .limit(5000)
       linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
     }
-    const reviewerScopedStaffIds = Array.from(new Set([...scopedStaffIds, ...linkedStaffIds]))
+    const reviewerScopedStaffIds = Array.from(new Set(linkedStaffIds))
 
     const [typesRes, myRes, myHodLinkRes] = await Promise.all([
       admin

@@ -729,7 +729,7 @@ export default function LoanAppPage() {
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Director HR (${c.director})` })
-    if (p?.hod || p?.hrOffice || p?.loanOffice || p?.viewAllTabs) tabs.push({ key: "setup", label: "Setup & Linkage" })
+    if (p?.hrOffice || p?.loanOffice || p?.viewAllTabs) tabs.push({ key: "setup", label: "Setup & Linkage" })
     if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
