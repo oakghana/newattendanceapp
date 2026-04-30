@@ -70,7 +70,7 @@ export function canDoHrOffice(role: string, deptName?: string | null, deptCode?:
 }
 
 export function canDoDirectorHr(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return role === "admin" || role === "director_hr" || role === "hr_director" || (role === "department_head" && isHrDepartment(deptName, deptCode))
+  return role === "admin" || role === "director_hr" || role === "manager_hr" || role === "hr_director" || (role === "department_head" && isHrDepartment(deptName, deptCode))
 }
 
 export function requestIsEditable(status: string): boolean {

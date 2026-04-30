@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS public.loan_types (
 CREATE TABLE IF NOT EXISTS public.loan_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_number VARCHAR(40) UNIQUE,
+  reference_number VARCHAR(80) UNIQUE,
   user_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
   department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
   corporate_email VARCHAR(200),

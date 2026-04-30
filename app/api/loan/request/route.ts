@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-workflow"
+import { getNextQccReference } from "@/lib/reference-number"
 
 const LOAN_REQUEST_SUBMISSION_ENABLED = true
 
@@ -381,8 +382,11 @@ export async function POST(request: NextRequest) {
 
     const assignedHodId = assignedHodIds[0] || null
 
+    const referenceNumber = await getNextQccReference(admin)
+
     const payload = {
       request_number: genRequestNumber(),
+      reference_number: referenceNumber,
       user_id: user.id,
       department_id: (profile as any).department_id || null,
       corporate_email: (profile as any).email || user.email || null,
@@ -407,6 +411,7 @@ export async function POST(request: NextRequest) {
     if (insertError && isSchemaIssue(insertError) && shouldRetryWithoutLocationColumns(insertError)) {
       const fallbackPayload = {
         ...payload,
+        reference_number: undefined,
         staff_location_id: undefined,
         staff_location_name: undefined,
         staff_location_address: undefined,

@@ -159,7 +159,31 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Fetch applicant, director HR profile + signature only
     const applicantId = String(loan.user_id || "")
-    const directorHrId = loan.director_hr_id ? String(loan.director_hr_id) : null
+    let directorHrId = loan.director_hr_id ? String(loan.director_hr_id) : null
+
+    // Fallback for legacy rows: use the latest workflow actor who handled director finalization/terms.
+    if (!directorHrId) {
+      const { data: actorRow } = await admin
+        .from("loan_request_timeline")
+        .select("actor_id, action_key")
+        .eq("loan_request_id", loan.id)
+        .in("action_key", ["director_finalize", "hr_set_terms"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if ((actorRow as any)?.actor_id) {
+        const fallbackActorId = String((actorRow as any).actor_id)
+        const { data: fallbackActor } = await admin
+          .from("user_profiles")
+          .select("id, role")
+          .eq("id", fallbackActorId)
+          .maybeSingle()
+        const fallbackRole = normalizeRole((fallbackActor as any)?.role)
+        if (["director_hr", "manager_hr", "hr_director"].includes(fallbackRole)) {
+          directorHrId = fallbackActorId
+        }
+      }
+    }
 
     const [
       { data: applicantProfile },
@@ -209,6 +233,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const memoDate = fmtDate(
       loan.director_decision_at || loan.hr_forwarded_at || loan.fd_checked_at || loan.created_at,
     )
+    const refNumber = String((loan as any).reference_number || loan.request_number || "")
 
     const doc = new jsPDF({ unit: "mm", format: "a4" })
     const pageWidth = doc.internal.pageSize.getWidth()
@@ -216,11 +241,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const marginLeft = 24
     const marginRight = 20
     const contentWidth = pageWidth - marginLeft - marginRight
-
-    // ─── Page border ─────────────────────────────────────────────────
-    doc.setDrawColor(210, 210, 210)
-    doc.setLineWidth(0.2)
-    doc.rect(10, 10, pageWidth - 20, pageHeight - 20)
 
     // ─── Header: Logo + Company Name + Address ────────────────────────
     if (logoBase64) {
@@ -257,7 +277,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
-    doc.text(`Our Ref No:  ${loan.request_number || ""}`, marginLeft, y)
+    doc.text(`Our Ref No:  ${refNumber}`, marginLeft, y)
     doc.text(`Date:  ${memoDate}`, pageWidth - marginRight - 42, y)
     y += 5.5
     doc.text("Your Ref No:  ____________________________", marginLeft, y)
@@ -361,10 +381,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Name (bold)
     const dirName = fmtName(directorProfile).toUpperCase()
-    const dirTitle = String((directorProfile as any)?.position || "DEPUTY DIRECTOR HUMAN RESOURCE").toUpperCase()
+    const dirTitle = String((directorProfile as any)?.position || (directorProfile as any)?.role || "APPROVING AUTHORITY").replace(/_/g, " ").toUpperCase()
     doc.setFont("times", "bold")
     doc.setFontSize(10)
-    doc.text(dirName || "OHENEBA BOAMAH", marginLeft, y)
+    doc.text(dirName || "APPROVING AUTHORITY", marginLeft, y)
     y += 5.5
 
     // Title
@@ -400,18 +420,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
     })
     y += (ccList.length + 1) * 4.5 + 4
-
-    // ─── Watermark + footer ───────────────────────────────────────────
-    doc.setFontSize(38)
-    doc.setTextColor(235, 235, 235)
-    doc.setFont("times", "bold")
-    doc.text("Loan App", pageWidth / 2 - 20, pageHeight / 2 + 8, { angle: -28 })
-
-    doc.setTextColor(140, 140, 140)
-    doc.setFontSize(7)
-    doc.setFont("times", "normal")
-    doc.text(`Secure Memo ID: ${loan.id}`, marginLeft, pageHeight - 14)
-    doc.text(`Generated For User: ${user.id}`, pageWidth - 70, pageHeight - 14)
 
     const pdfBytes = Buffer.from(doc.output("arraybuffer"))
 

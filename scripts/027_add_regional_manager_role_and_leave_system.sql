@@ -11,6 +11,7 @@ ADD COLUMN IF NOT EXISTS region_id UUID REFERENCES regions(id) ON DELETE SET NUL
 CREATE TABLE IF NOT EXISTS leave_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  reference_number VARCHAR(80) UNIQUE,
     leave_type VARCHAR(50) NOT NULL, -- 'annual', 'sick', 'personal', 'emergency', 'other'
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,

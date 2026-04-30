@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
         const { data: hrUsers } = await admin
           .from("user_profiles")
           .select("id")
-          .in("role", ["hr_officer", "director_hr", "hr_director", "admin", "department_head"])
+          .in("role", ["hr_officer", "director_hr", "manager_hr", "hr_director", "admin", "department_head"])
           .eq("is_active", true)
         await notifyUsers(
           admin,
@@ -418,6 +418,30 @@ export async function POST(request: NextRequest) {
       update.recovery_months = recoveryMonths
       update.hr_forwarded_at = new Date().toISOString()
 
+      // Track who is expected to sign/finalize the memo.
+      if (role === "director_hr" || role === "manager_hr" || role === "hr_director") {
+        update.director_hr_id = user.id
+      } else if (!req.director_hr_id) {
+        const { data: directorCandidates } = await admin
+          .from("user_profiles")
+          .select("id, role")
+          .in("role", ["director_hr", "manager_hr", "hr_director"])
+          .eq("is_active", true)
+          .limit(10)
+
+        const ordered = (directorCandidates || []).sort((a: any, b: any) => {
+          const rank = (value: string) => {
+            if (value === "director_hr") return 1
+            if (value === "manager_hr") return 2
+            if (value === "hr_director") return 3
+            return 9
+          }
+          return rank(String(a.role || "")) - rank(String(b.role || ""))
+        })
+
+        if (ordered[0]?.id) update.director_hr_id = ordered[0].id
+      }
+
       // Notify staff that terms are set and awaiting Director HR
       const hrMemo = buildHrTermsMemo(req, disbursementDate, recoveryStartDate, recoveryMonths, note)
       const hrMemoPath = buildMemoPath(req.id, req.user_id)
@@ -434,7 +458,7 @@ export async function POST(request: NextRequest) {
       const { data: directorUsers } = await admin
         .from("user_profiles")
         .select("id")
-        .in("role", ["director_hr", "hr_director", "admin"])
+        .in("role", ["director_hr", "manager_hr", "hr_director", "admin"])
         .eq("is_active", true)
       await notifyUsers(
         admin,

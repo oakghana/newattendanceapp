@@ -2,6 +2,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
+import { getNextQccReference } from "@/lib/reference-number"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -111,9 +112,11 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const normalizedRole = String((roleProfile as any)?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+    const admin = await createAdminClient()
+    const referenceNumber = await getNextQccReference(admin)
+
     const shouldEnforceAttendance = !["admin", "regional_manager", "department_head"].includes(normalizedRole)
     if (shouldEnforceAttendance) {
-      const admin = await createAdminClient()
       const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
       if (!attendanceCheck.ok) {
         return NextResponse.json(
@@ -248,6 +251,7 @@ export async function POST(request: NextRequest) {
     // Create leave request (status depends on role)
     const payload: any = {
       user_id: user.id,
+      reference_number: referenceNumber,
       start_date,
       end_date,
       reason: reasonValidation.normalized,
@@ -283,6 +287,7 @@ export async function POST(request: NextRequest) {
         const altPayload = { ...payload }
         delete altPayload.leave_type
         delete altPayload.leave_year_period
+        delete altPayload.reference_number
         try {
           const res2 = await supabase.from("leave_requests").insert(altPayload).select().single()
           leaveRequest = res2.data

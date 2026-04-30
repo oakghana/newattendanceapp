@@ -460,7 +460,7 @@ export async function GET() {
       if (res?.error) throw res.error
     }
 
-    // Build a name lookup map for all staff who appear in any inbox list
+    // Build a staff profile map for everyone appearing in workflow rows.
     const allInboxRows: any[] = [
       ...(hodRes.data || []),
       ...(loanOfficeRes.data || []),
@@ -474,18 +474,32 @@ export async function GET() {
       ...(myRes.data || []),
     ]
     const uniqueUserIds = Array.from(new Set(allInboxRows.map((r: any) => r.user_id).filter(Boolean))) as string[]
-    let staffNameMap: Map<string, string> = new Map()
+    let staffProfileMap: Map<string, any> = new Map()
     if (uniqueUserIds.length > 0) {
       const { data: staffProfiles } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, employee_id, position, email, assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
         .in("id", uniqueUserIds)
       for (const sp of staffProfiles || []) {
-        staffNameMap.set(sp.id, `${sp.first_name || ""} ${sp.last_name || ""}`.trim() || "—")
+        staffProfileMap.set(sp.id, sp)
       }
     }
     const attachName = (rows: any[]) =>
-      rows.map((r: any) => ({ ...r, staff_full_name: staffNameMap.get(r.user_id) || null }))
+      rows.map((r: any) => {
+        const sp = staffProfileMap.get(r.user_id)
+        const fullName = sp ? `${sp.first_name || ""} ${sp.last_name || ""}`.trim() : null
+        return {
+          ...r,
+          staff_full_name: fullName || null,
+          corporate_email: sp?.email || r.corporate_email || null,
+          staff_number: sp?.employee_id || r.staff_number || null,
+          staff_rank: sp?.position || r.staff_rank || null,
+          staff_location_id: sp?.assigned_location_id || r.staff_location_id || null,
+          staff_location_name: (sp as any)?.geofence_locations?.name || r.staff_location_name || null,
+          staff_location_address: (sp as any)?.geofence_locations?.address || r.staff_location_address || null,
+          staff_district_name: (sp as any)?.geofence_locations?.districts?.name || r.staff_district_name || null,
+        }
+      })
 
     // Build HOD info map for HR and Director queue rows
     const hrAndDirectorRows: any[] = [
