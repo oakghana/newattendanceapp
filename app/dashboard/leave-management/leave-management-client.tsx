@@ -274,9 +274,11 @@ export function LeaveManagementClient({
   const adminRegionalQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager")
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it-admin"].includes(userRole || "")
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin"].includes(userRole || "")
   const isManagerView = ["admin", "regional_manager", "department_head", "it-admin"].includes(userRole || "")
   const isAdminView = String(userRole || "").toLowerCase() === "admin"
+  const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalizedRole)
 
   const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string) => {
     if (rows.length === 0) {
@@ -443,7 +445,7 @@ export function LeaveManagementClient({
         </Alert>
       )}
 
-      {isManagerView && (
+      {canViewHrTemplates && (
         <Card className="border-blue-200 bg-blue-50/60 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-blue-900">HR Response Templates</CardTitle>
@@ -488,19 +490,17 @@ export function LeaveManagementClient({
         </Card>
       )}
 
-      <Tabs defaultValue={canUseStaffLeaveHub ? "my-requests" : "pending-approvals"} className="space-y-6">
+      <Tabs defaultValue="my-requests" className="space-y-6">
         <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
-          {canUseStaffLeaveHub ? (
-            <>
-              <TabsTrigger value="my-requests" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
-                My Requests ({staffRequests.length})
-              </TabsTrigger>
-              <TabsTrigger value="approved" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
-                Approved ({approvedRequests.length})
-              </TabsTrigger>
-            </>
-          ) : (
-            <>
+          <>
+            <TabsTrigger value="my-requests" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
+              My Requests ({staffRequests.length})
+            </TabsTrigger>
+            <TabsTrigger value="approved" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
+              Approved ({approvedRequests.length})
+            </TabsTrigger>
+            {isManagerView && (
+              <>
               <TabsTrigger value="pending-approvals" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=inactive]:text-amber-700">
                 Pending ({pendingNotifications.length})
               </TabsTrigger>
@@ -523,12 +523,12 @@ export function LeaveManagementClient({
               <TabsTrigger value="history" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
                 History
               </TabsTrigger>
-            </>
-          )}
+              </>
+            )}
+          </>
         </TabsList>
 
-        {canUseStaffLeaveHub && (
-          <>
+        <>
             <TabsContent value="my-requests" className="space-y-4">
               {staffRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
@@ -564,7 +564,6 @@ export function LeaveManagementClient({
               )}
             </TabsContent>
           </>
-        )}
 
         {isManagerView && (
           <>

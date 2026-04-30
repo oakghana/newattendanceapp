@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 type FailureRow = {
   id: string
@@ -24,6 +24,7 @@ const FAILURE_ACTIONS = [
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const {
       data: { user },
       error: authError,
@@ -48,7 +49,7 @@ export async function DELETE(request: NextRequest) {
 
     if (clearAll) {
       // Delete all failure audit_log rows (optionally within date range)
-      let q = supabase.from("audit_logs").delete().in("action", FAILURE_ACTIONS)
+      let q = admin.from("audit_logs").delete().in("action", FAILURE_ACTIONS)
       if (startDate) q = q.gte("created_at", `${startDate}T00:00:00`)
       if (endDate) q = q.lte("created_at", `${endDate}T23:59:59`)
       const { error } = await q
@@ -57,7 +58,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (ids && ids.length > 0) {
-      const { error } = await supabase
+      const { error } = await admin
         .from("audit_logs")
         .delete()
         .in("id", ids)
@@ -76,6 +77,7 @@ export async function DELETE(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
 
     const {
       data: { user },
@@ -105,7 +107,7 @@ export async function GET(request: NextRequest) {
     const typeFilter = searchParams.get("type") || "all"
     const departmentFilter = searchParams.get("department_id") || "all"
 
-    let query = supabase
+    let query = admin
       .from("audit_logs")
       .select("id, user_id, action, created_at, ip_address, new_values", { count: "exact" })
       .in("action", FAILURE_ACTIONS)
@@ -133,7 +135,7 @@ export async function GET(request: NextRequest) {
     const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean) as string[])]
 
     const { data: users } = userIds.length
-      ? await supabase
+        ? await admin
           .from("user_profiles")
           .select("id, employee_id, first_name, last_name, role, department_id, departments(id, name, code)")
           .in("id", userIds)

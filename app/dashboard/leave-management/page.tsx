@@ -41,8 +41,8 @@ export default async function LeaveManagementPage() {
     hasHodLinkage = false
   }
 
-  // Fetch staff's own leave requests
-  if (["staff", "nsp", "intern", "it-admin"].includes(profile.role)) {
+  // Fetch user's own leave requests for personal tracking (including managers)
+  {
     const { data: requests } = await supabase
       .from("leave_requests")
       .select("*")

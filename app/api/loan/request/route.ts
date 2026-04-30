@@ -149,7 +149,13 @@ async function validateAttendanceEngagementForRequest(admin: any, userId: string
 
 function shouldRetryWithoutLocationColumns(error: any): boolean {
   const msg = String(error?.message || "").toLowerCase()
-  return msg.includes("staff_location_id") || msg.includes("staff_location_name") || msg.includes("staff_district_name") || msg.includes("staff_location_address")
+  return (
+    msg.includes("staff_location_id") ||
+    msg.includes("staff_location_name") ||
+    msg.includes("staff_district_name") ||
+    msg.includes("staff_location_address") ||
+    msg.includes("reference_number")
+  )
 }
 
 async function addTimeline(admin: any, loanRequestId: string, actorId: string, actorRole: string, actionKey: string, fromStatus: string | null, toStatus: string | null, note?: string | null) {
@@ -381,6 +387,17 @@ export async function POST(request: NextRequest) {
     }
 
     const assignedHodId = assignedHodIds[0] || null
+
+    if (!assignedHodId) {
+      return NextResponse.json(
+        {
+          error: "No HOD reviewer found",
+          message:
+            "This loan cannot be submitted until a Department Head, Regional Manager, or linked HOD is assigned for first-level review.",
+        },
+        { status: 400 },
+      )
+    }
 
     const referenceNumber = await getNextQccReference(admin)
 

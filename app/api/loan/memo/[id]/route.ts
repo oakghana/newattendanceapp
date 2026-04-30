@@ -36,6 +36,52 @@ function fmtDate(value?: string | null) {
   return date.toISOString().slice(0, 10)
 }
 
+async function resolveThroRecipient(admin: any, loan: any, applicantId: string) {
+  let reviewerId = loan.hod_reviewer_id ? String(loan.hod_reviewer_id) : ""
+
+  if (!reviewerId) {
+    const { data: linkage } = await admin
+      .from("loan_hod_linkages")
+      .select("hod_user_id")
+      .eq("staff_user_id", applicantId)
+      .limit(1)
+      .maybeSingle()
+    if ((linkage as any)?.hod_user_id) reviewerId = String((linkage as any).hod_user_id)
+  }
+
+  if (!reviewerId) {
+    const { data: fallbackReviewer } = await admin
+      .from("user_profiles")
+      .select("id")
+      .in("role", ["department_head", "regional_manager"])
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle()
+    if ((fallbackReviewer as any)?.id) reviewerId = String((fallbackReviewer as any).id)
+  }
+
+  if (!reviewerId) return null
+
+  const { data: reviewerProfile } = await admin
+    .from("user_profiles")
+    .select("id, first_name, last_name, position, geofence_locations!assigned_location_id(name)")
+    .eq("id", reviewerId)
+    .maybeSingle()
+
+  if (!reviewerProfile) return null
+
+  const name = `${(reviewerProfile as any).first_name || ""} ${(reviewerProfile as any).last_name || ""}`.trim()
+  const position = String((reviewerProfile as any).position || "").trim()
+  const locationName = String((reviewerProfile as any)?.geofence_locations?.name || loan.staff_location_name || "HEAD OFFICE").trim()
+
+  return {
+    name: name || "",
+    position,
+    location: locationName,
+    display: [name.toUpperCase(), position.toUpperCase()].filter(Boolean).join(" - "),
+  }
+}
+
 function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const amount = `GHc ${fmtAmount(loan.fixed_amount || loan.requested_amount)}`
 
@@ -185,6 +231,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       }
     }
 
+    if (!directorHrId) {
+      const { data: assignedApprover } = await admin
+        .from("user_profiles")
+        .select("id, role")
+        .in("role", ["director_hr", "manager_hr", "hr_director"])
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle()
+      if ((assignedApprover as any)?.id) {
+        directorHrId = String((assignedApprover as any).id)
+      }
+    }
+
+    const throRecipient = await resolveThroRecipient(admin, loan, applicantId)
+
     const [
       { data: applicantProfile },
       { data: directorProfile },
@@ -303,8 +364,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += 10
 
     // ─── THRO section ─────────────────────────────────────────────────
-    const hodName = String(loan.hod_name || "").toUpperCase().trim()
-    const hodLocation = String(loan.hod_location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
+    const hodName = String(throRecipient?.display || loan.hod_name || "").toUpperCase().trim()
+    const hodLocation = String(throRecipient?.location || loan.hod_location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
     if (hodName) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)
