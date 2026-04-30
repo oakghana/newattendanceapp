@@ -303,6 +303,10 @@ export function StaffManagement() {
           assigned_location_id: "",
         })
         fetchStaff()
+        // Auto-open HOD linkage dialog after creating staff (admin / it-admin)
+        if ((currentUserRole === "admin" || currentUserRole === "it-admin") && result.data) {
+          openHodLinkDialog(result.data)
+        }
       } else {
         // Detect DB role enumeration error and show actionable guidance
         if (result.error && String(result.error).toLowerCase().includes("database constraint prevents the 'audit_staff'")) {
@@ -1015,6 +1019,19 @@ export function StaffManagement() {
                   <Button variant="outline" onClick={() => setEditingStaff(null)}>
                     Cancel
                   </Button>
+                  {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const staff = editingStaff
+                        setEditingStaff(null)
+                        if (staff) openHodLinkDialog(staff)
+                      }}
+                    >
+                      <Link2 className="mr-2 h-3 w-3" />
+                      Link to HOD
+                    </Button>
+                  )}
                   <Button onClick={handleEditStaff}>Update Staff</Button>
                 </DialogFooter>
               </DialogContent>
