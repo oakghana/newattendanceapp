@@ -624,6 +624,48 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     [leaveTypes, leaveType],
   )
 
+  // ── Real-time same-month conflict warning ────────────────────────────
+  const sameMonthConflict = useMemo(() => {
+    if (!startDate || !leaveType || !data?.myRequests) return null
+    const newStart = new Date(startDate)
+    if (Number.isNaN(newStart.getTime())) return null
+    const newYear = newStart.getFullYear()
+    const newMonth = newStart.getMonth()
+    const BLOCKING = [
+      "pending",
+      "pending_hod",
+      "pending_hr",
+      "pending_manager_review",
+      "pending_hod_review",
+      "manager_changes_requested",
+      "hod_changes_requested",
+      "manager_confirmed",
+      "hod_approved",
+      "hr_office_forwarded",
+      "approved",
+      "hr_approved",
+    ]
+
+    return (data.myRequests as any[]).find((r: any) => {
+      if (r.leave_type_key !== leaveType) return false
+      if (r.is_archived) return false
+      if (editingId && r.id === editingId) return false
+      if (!BLOCKING.includes(String(r.status || ""))) return false
+
+      const rStart = new Date(r.preferred_start_date)
+      const rEnd = new Date(r.preferred_end_date)
+      if (Number.isNaN(rStart.getTime()) || Number.isNaN(rEnd.getTime())) return false
+
+      let cursor = new Date(rStart.getFullYear(), rStart.getMonth(), 1)
+      const rEndMonth = new Date(rEnd.getFullYear(), rEnd.getMonth(), 1)
+      while (cursor <= rEndMonth) {
+        if (cursor.getFullYear() === newYear && cursor.getMonth() === newMonth) return true
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+      }
+      return false
+    }) || null
+  }, [startDate, leaveType, data?.myRequests, editingId])
+
   // ── Loaders ─────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -862,6 +904,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
             setEndDate(json.suggested_end_date)
           }
           throw new Error(json.error || "Selected dates overlap with an existing leave request")
+        }
+        if (json?.code === "SAME_MONTH_LEAVE_REQUEST") {
+          throw new Error(json.error || "You already have a leave request of this type in the selected month.")
         }
         throw new Error(json.error || "Submission failed")
       }
@@ -1182,6 +1227,16 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
                     <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
+
+                                  {sameMonthConflict && (
+                                    <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-700">
+                                      <span className="mt-0.5 text-lg leading-none">🚫</span>
+                                      <div className="text-sm">
+                                        <p className="font-semibold">Duplicate leave request detected</p>
+                                        <p className="mt-0.5">You already have an active <strong>{leaveTypeLabelShort(sameMonthConflict.leave_type_key)}</strong> request for this month ({sameMonthConflict.preferred_start_date} to {sameMonthConflict.preferred_end_date}, status: <strong>{sameMonthConflict.status}</strong>). Only one request per leave type per month is allowed. Please choose a different month or leave type.</p>
+                                      </div>
+                                    </div>
+                                  )}
                   </div>
                 </div>
 

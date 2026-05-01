@@ -122,7 +122,7 @@ const navigationItems = [
     title: "Loan Application",
     href: "/dashboard/loan-app",
     icon: Banknote,
-    roles: ["admin", "loan_office", "director_hr", "manager_hr"],
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
     category: "main",
   },
   {

@@ -389,6 +389,75 @@ async function findDuplicateLeaveRequest(
   }
 }
 
+async function findSameMonthSameTypeRequest(
+  admin: any,
+  userId: string,
+  leaveTypeKey: string,
+  preferredStartDate: string,
+  excludeRequestId?: string,
+) {
+  // Fetch all active requests of this leave type for this user (not archived)
+  let query = admin
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, preferred_start_date, preferred_end_date, status, submitted_at")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .eq("leave_type_key", leaveTypeKey)
+    .in("status", [...DUPLICATE_BLOCKING_STATUSES])
+    .order("submitted_at", { ascending: false })
+
+  if (excludeRequestId) {
+    query = query.neq("id", excludeRequestId)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  if (!Array.isArray(data) || data.length === 0) return null
+
+  const newStart = new Date(preferredStartDate)
+  if (Number.isNaN(newStart.getTime())) return null
+
+  const newYear = newStart.getFullYear()
+  const newMonth = newStart.getMonth()
+
+  // Check if any existing request of the same type starts or ends in the same calendar month
+  for (const row of data) {
+    const rowStart = new Date(row.preferred_start_date)
+    const rowEnd = new Date(row.preferred_end_date)
+    if (Number.isNaN(rowStart.getTime())) continue
+
+    const rowStartYear = rowStart.getFullYear()
+    const rowStartMonth = rowStart.getMonth()
+    const rowEndYear = rowEnd.getFullYear()
+    const rowEndMonth = rowEnd.getMonth()
+
+    // Conflict if the new request's month overlaps with any month the existing request spans
+    const requestedYear = newStart.getFullYear()
+    const requestedMonth = newStart.getMonth()
+
+    // Build a set of months the existing request covers
+    const existingStart = new Date(rowStart.getFullYear(), rowStart.getMonth(), 1)
+    const existingEnd = new Date(rowEnd.getFullYear(), rowEnd.getMonth(), 1)
+    let cursor = existingStart
+    while (cursor <= existingEnd) {
+      if (cursor.getFullYear() === requestedYear && cursor.getMonth() === requestedMonth) {
+        return {
+          id: String(row.id),
+          status: String(row.status || ""),
+          leave_type_key: String(row.leave_type_key || leaveTypeKey),
+          start_date: String(row.preferred_start_date),
+          end_date: String(row.preferred_end_date),
+          submitted_at: row.submitted_at || null,
+        }
+      }
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    }
+  }
+
+  return null
+}
+
 async function fetchStaffLeaveHistory(admin: any, userIds: string[]) {
   const uniqueUserIds = [...new Set(userIds.filter(Boolean))]
   if (uniqueUserIds.length === 0) return {}
@@ -1004,6 +1073,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const sameMonthRequest = await findSameMonthSameTypeRequest(
+      admin,
+      user.id,
+      leaveTypeKey,
+      preferred_start_date,
+    )
+    if (sameMonthRequest) {
+      const monthName = new Date(preferred_start_date).toLocaleString("default", { month: "long", year: "numeric" })
+      return NextResponse.json(
+        {
+          error: `You already have an active ${leaveTypeKey.replace(/_/g, " ")} request for ${monthName} (${sameMonthRequest.start_date} to ${sameMonthRequest.end_date}). Only one request per leave type per month is allowed.`,
+          code: "SAME_MONTH_LEAVE_REQUEST",
+          existing: sameMonthRequest,
+        },
+        { status: 409 },
+      )
+    }
+
     const overlapSuggestion = await findOverlapSuggestion(
       admin,
       user.id,
@@ -1255,6 +1342,25 @@ export async function PUT(request: NextRequest) {
           error: "This leave request has already been submitted with the same leave type and date range.",
           code: "DUPLICATE_LEAVE_REQUEST",
           duplicate: duplicateRequest,
+        },
+        { status: 409 },
+      )
+    }
+
+    const sameMonthRequestEdit = await findSameMonthSameTypeRequest(
+      admin,
+      user.id,
+      leaveTypeKey,
+      preferred_start_date,
+      id,
+    )
+    if (sameMonthRequestEdit) {
+      const monthName = new Date(preferred_start_date).toLocaleString("default", { month: "long", year: "numeric" })
+      return NextResponse.json(
+        {
+          error: `You already have an active ${leaveTypeKey.replace(/_/g, " ")} request for ${monthName} (${sameMonthRequestEdit.start_date} to ${sameMonthRequestEdit.end_date}). Only one request per leave type per month is allowed.`,
+          code: "SAME_MONTH_LEAVE_REQUEST",
+          existing: sameMonthRequestEdit,
         },
         { status: 409 },
       )

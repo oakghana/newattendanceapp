@@ -50,6 +50,7 @@ export function SmtpSettingsPanel() {
   const [testing, setTesting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   useEffect(() => {
     void loadSettings()
@@ -131,6 +132,7 @@ export function SmtpSettingsPanel() {
     setTesting(true)
     setError(null)
     setMessage(null)
+    setTestResult(null)
 
     try {
       const response = await fetch("/api/admin/smtp-settings", {
@@ -145,9 +147,11 @@ export function SmtpSettingsPanel() {
         throw new Error(data.error || "Failed to send test email")
       }
 
-      setMessage(data.message || "Test email sent")
+      const successMsg = data.message || `Test email sent successfully to ${testEmails.trim()}`
+      setTestResult({ ok: true, message: successMsg })
     } catch (testError) {
-      setError(testError instanceof Error ? testError.message : "Failed to send test email")
+      const errMsg = testError instanceof Error ? testError.message : "Failed to send test email"
+      setTestResult({ ok: false, message: errMsg })
     } finally {
       setTesting(false)
     }
@@ -321,6 +325,15 @@ export function SmtpSettingsPanel() {
             {testing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Send Test Email
           </Button>
+
+          {testResult && (
+            <Alert className={testResult.ok ? "border-green-300 bg-green-50 text-green-700" : "border-red-300 bg-red-50 text-red-700"}>
+              {testResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+              <AlertDescription className="font-medium">
+                {testResult.ok ? "✅ Success: " : "❌ Failed: "}{testResult.message}
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
     </div>
