@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { canDoDirectorHr, canDoHrOffice, normalizeRole } from "@/lib/loan-workflow"
+import { canDoDirectorHr, canDoHrOffice, canDoLoanOffice, normalizeRole } from "@/lib/loan-workflow"
 
 function canManageTemplates(role: string, deptName?: string | null, deptCode?: string | null) {
-  return role === "admin" || canDoHrOffice(role, deptName, deptCode) || canDoDirectorHr(role, deptName, deptCode)
+  return (
+    role === "admin" ||
+    role === "hr_leave_office" ||
+    canDoHrOffice(role, deptName, deptCode) ||
+    canDoDirectorHr(role, deptName, deptCode) ||
+    canDoLoanOffice(role, deptName, deptCode)
+  )
 }
 
 export async function GET(request: NextRequest) {

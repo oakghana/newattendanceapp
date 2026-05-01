@@ -734,6 +734,7 @@ export default function LoanAppPage() {
   const [linkageSearch, setLinkageSearch] = useState("")
   const [linkageLocationFilter, setLinkageLocationFilter] = useState("all")
   const [linkageDepartmentFilter, setLinkageDepartmentFilter] = useState("all")
+  const [linkageRankFilter, setLinkageRankFilter] = useState("all")
   const [linkagePage, setLinkagePage] = useState(1)
   const [linkageRequestStatusFilter, setLinkageRequestStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending")
   const [linkageResolutionNotes, setLinkageResolutionNotes] = useState<Record<string, string>>({})
@@ -1630,31 +1631,79 @@ export default function LoanAppPage() {
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [lookupData?.locations, lookupData?.staff])
 
+  const LINKAGE_PAGE_SIZE = 12
+
   const filteredLinkageRows = useMemo(() => {
     const q = linkageSearch.trim().toLowerCase()
-    if (!q) return lookupData?.linkages || []
-
     return (lookupData?.linkages || []).filter((link) => {
       const staff = (lookupData?.staff || []).find((row) => row.id === link.staff_user_id)
       const hod = (lookupData?.hods || []).find((row) => row.id === link.hod_user_id)
-      const searchText = [
-        staff?.first_name,
-        staff?.last_name,
-        staff?.employee_id,
-        staff?.position,
-        staff?.geofence_locations?.name,
-        staff?.geofence_locations?.districts?.name,
-        hod?.first_name,
-        hod?.last_name,
-        hod?.position,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
 
-      return searchText.includes(q)
+      // Text search
+      if (q) {
+        const searchText = [
+          staff?.first_name,
+          staff?.last_name,
+          staff?.employee_id,
+          staff?.position,
+          staff?.geofence_locations?.name,
+          staff?.geofence_locations?.districts?.name,
+          hod?.first_name,
+          hod?.last_name,
+          hod?.position,
+        ].filter(Boolean).join(" ").toLowerCase()
+        if (!searchText.includes(q)) return false
+      }
+
+      // Location filter
+      if (linkageLocationFilter !== "all") {
+        if ((staff?.geofence_locations?.name || "") !== linkageLocationFilter) return false
+      }
+
+      // Department filter
+      if (linkageDepartmentFilter !== "all") {
+        if ((staff?.departments?.name || "") !== linkageDepartmentFilter) return false
+      }
+
+      // Rank filter
+      if (linkageRankFilter !== "all") {
+        if ((staff?.position || "").toLowerCase() !== linkageRankFilter.toLowerCase()) return false
+      }
+
+      return true
     })
-  }, [lookupData?.linkages, lookupData?.staff, lookupData?.hods, linkageSearch])
+  }, [lookupData?.linkages, lookupData?.staff, lookupData?.hods, linkageSearch, linkageLocationFilter, linkageDepartmentFilter, linkageRankFilter])
+
+  const linkageTotalPages = Math.max(1, Math.ceil(filteredLinkageRows.length / LINKAGE_PAGE_SIZE))
+  const paginatedLinkageRows = filteredLinkageRows.slice((linkagePage - 1) * LINKAGE_PAGE_SIZE, linkagePage * LINKAGE_PAGE_SIZE)
+
+  // Unique filter options derived from data
+  const linkageLocationOptions = useMemo(() => {
+    const names = new Set<string>()
+    ;(lookupData?.staff || []).forEach((s) => {
+      const n = s?.geofence_locations?.name
+      if (n) names.add(n)
+    })
+    return Array.from(names).sort()
+  }, [lookupData?.staff])
+
+  const linkageDeptOptions = useMemo(() => {
+    const names = new Set<string>()
+    ;(lookupData?.staff || []).forEach((s: any) => {
+      const n = s?.departments?.name
+      if (n) names.add(n)
+    })
+    return Array.from(names).sort()
+  }, [lookupData?.staff])
+
+  const linkageRankOptions = useMemo(() => {
+    const positions = new Set<string>()
+    ;(lookupData?.staff || []).forEach((s) => {
+      const p = s?.position
+      if (p) positions.add(p)
+    })
+    return Array.from(positions).sort()
+  }, [lookupData?.staff])
 
   const filteredLinkageRequests = useMemo(() => {
     let rows = [...(lookupData?.linkageRequests || [])]
@@ -3618,27 +3667,84 @@ export default function LoanAppPage() {
           <Card className="border-slate-200 shadow-sm">
             <CardHeader>
               <CardTitle>Current Linkage Data</CardTitle>
-              <CardDescription>Review the active staff-to-HOD mapping records currently available in the system.</CardDescription>
+              <CardDescription>Review the active staff-to-HOD mapping records currently available in the system. {filteredLinkageRows.length > 0 && <span className="ml-1 font-medium text-slate-600">({filteredLinkageRows.length} record{filteredLinkageRows.length !== 1 ? "s" : ""})</span>}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="mb-3">
+              {/* Search + Filters */}
+              <div className="mb-4 space-y-3">
                 <Input
                   value={linkageSearch}
-                  onChange={(e) => setLinkageSearch(e.target.value)}
+                  onChange={(e) => { setLinkageSearch(e.target.value); setLinkagePage(1) }}
                   placeholder="Search by staff name, employee ID, HOD, rank, location, or district"
                 />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Select value={linkageLocationFilter} onValueChange={(v) => { setLinkageLocationFilter(v); setLinkagePage(1) }}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="All Locations" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Locations</SelectItem>
+                      {linkageLocationOptions.map((loc) => (
+                        <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={linkageDepartmentFilter} onValueChange={(v) => { setLinkageDepartmentFilter(v); setLinkagePage(1) }}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {linkageDeptOptions.map((dept) => (
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={linkageRankFilter} onValueChange={(v) => { setLinkageRankFilter(v); setLinkagePage(1) }}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="All Ranks" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Ranks</SelectItem>
+                      {linkageRankOptions.map((rank) => (
+                        <SelectItem key={rank} value={rank}>{rank}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(linkageSearch || linkageLocationFilter !== "all" || linkageDepartmentFilter !== "all" || linkageRankFilter !== "all") && (
+                  <button
+                    className="text-xs text-blue-600 hover:underline"
+                    onClick={() => { setLinkageSearch(""); setLinkageLocationFilter("all"); setLinkageDepartmentFilter("all"); setLinkageRankFilter("all"); setLinkagePage(1) }}
+                  >
+                    Clear all filters
+                  </button>
+                )}
               </div>
+
+              {/* Cards Grid */}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {filteredLinkageRows.map((link) => {
+                {paginatedLinkageRows.map((link) => {
                   const staff = (lookupData?.staff || []).find((s) => s.id === link.staff_user_id)
                   const hod = (lookupData?.hods || []).find((h) => h.id === link.hod_user_id)
                   return (
-                    <div key={link.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-900 shadow-sm">
-                      <div><strong>Staff:</strong> {staff ? `${staff.first_name} ${staff.last_name}` : link.staff_user_id} ({staff?.position || "N/A"})</div>
-                      <div className="mt-1"><strong>HOD:</strong> {hod ? `${hod.first_name} ${hod.last_name}` : link.hod_user_id} ({hod?.position || "N/A"})</div>
-                      <div className="mt-1 text-slate-700"><strong>Location:</strong> {staff?.geofence_locations?.name || "N/A"}</div>
-                      <div className="mt-1 text-slate-700"><strong>District:</strong> {staff?.geofence_locations?.districts?.name || "N/A"}</div>
-                      <div className="mt-1 text-slate-700"><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
+                    <div key={link.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-900 shadow-sm hover:border-slate-300 transition-colors">
+                      <div className="flex items-start justify-between gap-1 mb-2">
+                        <div>
+                          <p className="font-semibold text-sm text-slate-900">{staff ? `${staff.first_name} ${staff.last_name}` : link.staff_user_id}</p>
+                          <p className="text-slate-500">{staff?.employee_id || "No ID"} · <span className="capitalize">{staff?.position || "N/A"}</span></p>
+                        </div>
+                        {staff?.position && (
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 capitalize">{staff.position}</span>
+                        )}
+                      </div>
+                      <div className="mt-1 space-y-0.5 border-t border-slate-100 pt-2">
+                        <div><strong>HOD:</strong> {hod ? `${hod.first_name} ${hod.last_name}` : link.hod_user_id} <span className="text-slate-400">({hod?.position || "N/A"})</span></div>
+                        <div><strong>Location:</strong> {staff?.geofence_locations?.name || "N/A"}</div>
+                        <div><strong>District:</strong> {staff?.geofence_locations?.districts?.name || "N/A"}</div>
+                        <div><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
+                        {(staff as any)?.departments?.name && <div><strong>Dept:</strong> {(staff as any).departments.name}</div>}
+                      </div>
                       {canDirectLinkageUpdate && (
                         <div className="mt-3">
                           <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>
@@ -3650,9 +3756,23 @@ export default function LoanAppPage() {
                   )
                 })}
                 {filteredLinkageRows.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No staff-to-HOD linkages match your search.</p>
+                  <p className="col-span-3 text-sm text-muted-foreground py-8 text-center">No staff-to-HOD linkages match your filters.</p>
                 )}
               </div>
+
+              {/* Pagination */}
+              {linkageTotalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <p className="text-xs text-slate-500">
+                    Showing {((linkagePage - 1) * LINKAGE_PAGE_SIZE) + 1}–{Math.min(linkagePage * LINKAGE_PAGE_SIZE, filteredLinkageRows.length)} of {filteredLinkageRows.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={linkagePage <= 1} onClick={() => setLinkagePage((p) => p - 1)} className="h-7 text-xs px-3">Prev</Button>
+                    <span className="text-xs text-slate-600">Page {linkagePage} of {linkageTotalPages}</span>
+                    <Button size="sm" variant="outline" disabled={linkagePage >= linkageTotalPages} onClick={() => setLinkagePage((p) => p + 1)} className="h-7 text-xs px-3">Next</Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

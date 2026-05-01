@@ -580,15 +580,33 @@ export async function POST(request: NextRequest) {
     // Determine whether this attendance record was created from an approved off-premises request
     const isAttendanceOffPremises = !!attendanceRecord.on_official_duty_outside_premises || !!attendanceRecord.is_remote_location
 
-    if (isAttendanceOffPremises && workHours < 7) {
-      return NextResponse.json(
-        {
-          error: `Approved off-premises sessions can check out remotely only after 7 hours of work. You have worked ${workHours.toFixed(2)} hours so far.`,
-          minimumHoursRequired: 7,
-          workedHours: Number(workHours.toFixed(2)),
-        },
-        { status: 400 },
-      )
+    if (isAttendanceOffPremises) {
+      // If the user is currently within range, only 2 hours minimum is required.
+      // Remote / out-of-range checkout for off-premises sessions still requires 7 hours.
+      let withinRangeNow = false
+      if (!qr_code_used && typeof latitude === "number" && typeof longitude === "number") {
+        const tempLoc: LocationData = {
+          latitude,
+          longitude,
+          accuracy: typeof accuracy === "number" ? accuracy : 50,
+        }
+        const tempValidation = validateCheckoutLocation(tempLoc, qccLocations, deviceCheckOutRadius)
+        withinRangeNow = tempValidation.canCheckOut
+      }
+
+      const minHours = withinRangeNow ? 2 : 7
+      if (workHours < minHours) {
+        return NextResponse.json(
+          {
+            error: withinRangeNow
+              ? `You need at least 2 hours of work before checking out. You have worked ${workHours.toFixed(2)} hours so far.`
+              : `Approved off-premises sessions can check out remotely only after 7 hours of work. You have worked ${workHours.toFixed(2)} hours so far.`,
+            minimumHoursRequired: minHours,
+            workedHours: Number(workHours.toFixed(2)),
+          },
+          { status: 400 },
+        )
+      }
     }
 
     if (!qr_code_used && latitude && longitude) {

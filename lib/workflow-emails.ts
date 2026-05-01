@@ -15,28 +15,35 @@ import { emailService } from "@/lib/email-service"
 
 const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
 
-// ─── small colour palette shared by all templates ──────────────────────────
+// ─── colour palette shared by all templates ─────────────────────────────────
 const GREEN = "#2c6216"
 const LIGHT_GREEN = "#f0f7ec"
+
+// QCC logo hosted on the live site – email clients that block remote images
+// will just show the text fallback in the alt attribute.
+const LOGO_URL = `${APP_URL}/images/qcc-logo.png`
 
 function baseLayout(title: string, body: string): string {
   return `
 <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-  <div style="background:${GREEN};padding:20px 28px;">
-    <h2 style="margin:0;color:#fff;font-size:17px;">${title}</h2>
-    <p style="margin:4px 0 0;color:#cde8ba;font-size:12px;">Quality Control Company Ltd. (COCOBOD)</p>
+  <div style="background:${GREEN};padding:16px 28px;display:flex;align-items:center;gap:14px;">
+    <img src="${LOGO_URL}" alt="QCC Logo" width="48" height="48" style="border-radius:6px;background:#fff;padding:3px;flex-shrink:0;" />
+    <div>
+      <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">${title}</h2>
+      <p style="margin:3px 0 0;color:#cde8ba;font-size:12px;">Quality Control Company Ltd. (COCOBOD) — HR System</p>
+    </div>
   </div>
   <div style="padding:24px 28px;background:${LIGHT_GREEN};">
     ${body}
   </div>
   <div style="padding:12px 28px;background:#f8f8f8;border-top:1px solid #e2e8f0;">
-    <p style="margin:0;color:#888;font-size:11px;">This is an automated notification from the QCC HR System. Do not reply to this email.</p>
+    <p style="margin:0;color:#888;font-size:11px;">This is an automated notification from the QCC HR &amp; Loans System. Do not reply to this email.<br/>If you believe this email was sent in error, please contact your HR department.</p>
   </div>
 </div>`
 }
 
 function btn(url: string, label: string): string {
-  return `<a href="${url}" style="display:inline-block;margin-top:14px;padding:10px 22px;background:${GREEN};color:#fff;border-radius:5px;text-decoration:none;font-size:13px;">${label}</a>`
+  return `<a href="${url}" style="display:inline-block;margin-top:14px;padding:10px 22px;background:${GREEN};color:#fff;border-radius:5px;text-decoration:none;font-size:13px;font-weight:600;">${label}</a>`
 }
 
 function row(label: string, value: string): string {
@@ -100,15 +107,90 @@ async function hodEmailsFromReviews(admin: AdminClient, leavePlanRequestId: stri
   return (data || []).map((u: any) => String(u.email || "")).filter(Boolean)
 }
 
-async function send(to: string | string[], subject: string, html: string): Promise<void> {
+// ─── DB template lookup ──────────────────────────────────────────────────────
+// Looks up a custom template from workflow_message_templates. Returns the
+// custom subject+body if found and active, otherwise returns null so the
+// caller falls back to the hardcoded template.
+async function lookupTemplate(
+  admin: AdminClient,
+  domain: "loan" | "leave",
+  key: string,
+): Promise<{ subject: string; body: string } | null> {
+  try {
+    const { data } = await admin
+      .from("workflow_message_templates")
+      .select("subject, body, is_active")
+      .eq("workflow_domain", domain)
+      .eq("template_key", key)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (data?.body) {
+      return { subject: String(data.subject || ""), body: String(data.body) }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ─── Bounce / send-failure admin notification ────────────────────────────────
+async function notifyAdminOfBadEmail(
+  admin: AdminClient,
+  failedEmail: string,
+  context: string,
+): Promise<void> {
+  try {
+    const { data: admins } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("role", "admin")
+      .eq("is_active", true)
+    const adminIds = (admins || []).map((a: any) => String(a.id)).filter(Boolean)
+    if (!adminIds.length) return
+    await admin.from("staff_notifications").insert(
+      adminIds.map((id: string) => ({
+        recipient_id: id,
+        title: "Email Delivery Failure",
+        message: `An email notification could not be delivered to "${failedEmail}" during: ${context}. Please verify the staff member's email in Staff Management or disable their account if inactive.`,
+        type: "email_delivery_failure",
+        data: { failed_email: failedEmail, context },
+        is_read: false,
+      })),
+    )
+  } catch {
+    // best-effort
+  }
+}
+
+async function send(
+  admin: AdminClient | null,
+  to: string | string[],
+  subject: string,
+  html: string,
+  context = "workflow notification",
+): Promise<void> {
   const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean)
   if (!recipients.length) return
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     recipients.map((email) =>
       emailService.sendEmail(email, { subject, html, text }, {}),
     ),
   )
+  // Notify admin for any hard failures
+  if (admin) {
+    results.forEach((result, idx) => {
+      if (result.status === "rejected") {
+        notifyAdminOfBadEmail(admin, recipients[idx], context).catch(() => {})
+      } else if (result.status === "fulfilled" && result.value && !(result.value as any).success) {
+        const errMsg = String((result.value as any).error || "")
+        // Only notify for hard bounce / invalid address errors, not temporary SMTP issues
+        if (/invalid|not found|does not exist|no such user|address rejected|bounced/i.test(errMsg)) {
+          notifyAdminOfBadEmail(admin, recipients[idx], context).catch(() => {})
+        }
+      }
+    })
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -146,7 +228,7 @@ export async function notifyLeaveSubmitted(
       )}
       ${btn(link, "Review Leave Request")}`,
     )
-    await send(hodEmails, subject, html)
+    await send(admin, hodEmails, subject, html, "leave submitted notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLeaveSubmitted failed:", e)
   }
@@ -186,7 +268,7 @@ export async function notifyLeaveHodApproved(
       )}
       ${btn(link, "Process in HR Leave Office")}`,
     )
-    await send(hrEmails, subject, html)
+    await send(admin, hrEmails, subject, html, "leave HOD approved notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLeaveHodApproved failed:", e)
   }
@@ -230,7 +312,7 @@ export async function notifyLeaveHodDecision(
       <p style="font-size:13px;color:#444;">Please log in to review the details and resubmit if applicable.</p>
       ${btn(link, "View My Leave Requests")}`,
     )
-    await send(email, subject, html)
+    await send(admin, email, subject, html, "leave HOD decision notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLeaveHodDecision failed:", e)
   }
@@ -273,7 +355,7 @@ export async function notifyLeaveHrOfficeForwarded(
       )}
       ${btn(link, "Review & Approve")}`,
     )
-    await send(hrEmails, subject, html)
+    await send(admin, hrEmails, subject, html, "leave HR office forwarded notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLeaveHrOfficeForwarded failed:", e)
   }
@@ -319,7 +401,7 @@ export async function notifyLeaveHrApproved(
         )}
         ${memoLink ? btn(memoLink, "Download Approval Memo (PDF)") : ""}`,
       )
-      await send(staffEmail, subject, html)
+      await send(admin, staffEmail, subject, html, "leave HR approved staff notification")
     }
 
     if (hodEmails.length) {
@@ -334,7 +416,7 @@ export async function notifyLeaveHrApproved(
           row("Approved Days", String(opts.effectiveDays))
         )}`,
       )
-      await send(hodEmails, subject, html)
+      await send(admin, hodEmails, subject, html, "leave HR approved HOD notification")
     }
   } catch (e) {
     console.warn("[workflow-emails] notifyLeaveHrApproved failed:", e)
@@ -369,7 +451,7 @@ export async function notifyLeaveHrRejected(
       <p style="font-size:13px;color:#444;">If you have questions, please contact HR directly.</p>
       ${btn(link, "View My Leave Requests")}`,
     )
-    await send(email, subject, html)
+    await send(admin, email, subject, html, "leave HR rejected notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLeaveHrRejected failed:", e)
   }
@@ -410,7 +492,7 @@ export async function notifyLoanSubmitted(
       )}
       ${btn(link, "Review Loan Request")}`,
     )
-    await send(hodEmails, subject, html)
+    await send(admin, hodEmails, subject, html, "loan submitted notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanSubmitted failed:", e)
   }
@@ -449,7 +531,7 @@ export async function notifyLoanHodApproved(
       )}
       ${btn(link, "Process in Loan Office")}`,
     )
-    await send(emails, subject, html)
+    await send(admin, emails, subject, html, "loan HOD approved notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanHodApproved failed:", e)
   }
@@ -486,7 +568,7 @@ export async function notifyLoanHodRejected(
       )}
       ${btn(link, "View My Loan Requests")}`,
     )
-    await send(email, subject, html)
+    await send(admin, email, subject, html, "loan HOD rejected notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanHodRejected failed:", e)
   }
@@ -525,7 +607,7 @@ export async function notifyLoanStageAdvanced(
       )}
       ${btn(link, `Review in ${opts.toStage}`)}`,
     )
-    await send(emails, subject, html)
+    await send(admin, emails, subject, html, "loan stage advanced notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanStageAdvanced failed:", e)
   }
@@ -562,7 +644,7 @@ export async function notifyLoanApproved(
       )}
       ${opts.memoUrl ? btn(opts.memoUrl, "Download Approval Memo (PDF)") : ""}`,
     )
-    await send(email, subject, html)
+    await send(admin, email, subject, html, "loan approved notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanApproved failed:", e)
   }
@@ -601,7 +683,7 @@ export async function notifyLoanRejected(
       )}
       ${btn(link, "View My Loan Requests")}`,
     )
-    await send(email, subject, html)
+    await send(admin, email, subject, html, "loan rejected notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanRejected failed:", e)
   }
