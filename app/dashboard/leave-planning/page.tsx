@@ -13,7 +13,7 @@ export default async function LeavePlanningPage() {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("id, role, department_id, departments(name, code)")
+    .select("id, role, first_name, last_name, department_id, departments(name, code)")
     .eq("id", user.id)
     .single()
 
@@ -26,6 +26,8 @@ export default async function LeavePlanningPage() {
       <LeavePlanningClient
         profile={{
           role: profile.role,
+          firstName: (profile as any)?.first_name || "",
+          lastName: (profile as any)?.last_name || "",
           departmentName: (profile as any)?.departments?.name || null,
           departmentCode: (profile as any)?.departments?.code || null,
         }}

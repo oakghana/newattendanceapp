@@ -207,8 +207,13 @@ export async function POST(request: NextRequest) {
 
     const available = await emailService.isAvailable()
     if (!available) {
+      const diagnostics = emailService.getLastError()
       return NextResponse.json(
-        { error: "SMTP is not configured yet. Save valid SMTP settings first." },
+        {
+          error: diagnostics
+            ? `SMTP connection failed: ${diagnostics}`
+            : "SMTP is not configured yet. Save valid SMTP settings first.",
+        },
         { status: 400 },
       )
     }
@@ -232,6 +237,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: `Failed to send to: ${failed.map((item) => item.recipient).join(", ")}`,
+          diagnostics: failed.map((item) => ({
+            recipient: item.recipient,
+            reason: item.result.error || "Unknown SMTP error",
+          })),
         },
         { status: 500 },
       )

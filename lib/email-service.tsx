@@ -24,6 +24,7 @@ class EmailService {
   private initializationPromise: Promise<void> | null = null
   private senderEmail = ""
   private senderName = "QCC Attendance System"
+  private lastError: string | null = null
 
   private fromEnvironment(): EmailConfig | null {
     const user = String(process.env.SMTP_USER || "").trim()
@@ -92,29 +93,57 @@ class EmailService {
       const emailConfig = await this.resolveEmailConfig()
       this.transporter = null
       this.isConfigured = false
+      this.lastError = null
 
       if (!emailConfig || !emailConfig.auth.user || !emailConfig.auth.pass) {
         console.warn("[EmailService] SMTP credentials not configured")
+        this.lastError = "SMTP credentials are missing. Set SMTP_USER and SMTP_PASS or save SMTP settings in the admin panel."
         return
       }
 
       if (!Number.isFinite(emailConfig.port)) {
         console.warn("[EmailService] Invalid SMTP port configured")
+        this.lastError = "SMTP port is invalid. Use port 587 (STARTTLS) or 465 (SSL/TLS)."
         return
       }
 
       this.transporter = nodemailer.createTransporter(emailConfig)
 
-      // Verify connection
-      await this.transporter.verify()
+      // Verify connection. If Gmail STARTTLS fails due network/greeting issues, try SSL fallback (465).
+      try {
+        await this.transporter.verify()
+      } catch (primaryError: any) {
+        const host = String(emailConfig.host || "").toLowerCase()
+        const canTryGmailFallback = host.includes("smtp.gmail.com") && !emailConfig.secure
+
+        if (!canTryGmailFallback) {
+          throw primaryError
+        }
+
+        const fallbackConfig: EmailConfig = {
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true,
+          auth: {
+            user: emailConfig.auth.user,
+            pass: emailConfig.auth.pass,
+          },
+        }
+
+        this.transporter = nodemailer.createTransporter(fallbackConfig)
+        await this.transporter.verify()
+        console.warn("[EmailService] Primary SMTP profile failed; Gmail SSL fallback (465) is now active")
+      }
       this.isConfigured = true
       this.senderEmail = emailConfig.auth.user
       this.senderName = emailConfig.fromName || "QCC Attendance System"
+      this.lastError = null
       console.log("[EmailService] Email service initialized successfully")
-    } catch (error) {
+    } catch (error: any) {
       console.error("[EmailService] Failed to initialize email service:", error)
       this.isConfigured = false
       this.transporter = null
+      this.lastError = error?.message || "SMTP initialization failed"
     }
   }
 
@@ -141,7 +170,7 @@ class EmailService {
 
     if (!this.isConfigured || !this.transporter) {
       console.warn("[EmailService] Email service not configured, skipping email send")
-      return { success: false, error: "Email service not configured" }
+      return { success: false, error: this.lastError || "Email service not configured" }
     }
 
     try {
@@ -160,11 +189,17 @@ class EmailService {
 
       const result = await this.transporter.sendMail(mailOptions)
       console.log("[EmailService] Email sent successfully:", result.messageId)
+      this.lastError = null
       return { success: true, messageId: result.messageId }
-    } catch (error) {
+    } catch (error: any) {
       console.error("[EmailService] Failed to send email:", error)
-      return { success: false, error: error.message }
+      this.lastError = error?.message || "SMTP send failed"
+      return { success: false, error: this.lastError }
     }
+  }
+
+  getLastError() {
+    return this.lastError
   }
 
   private replaceTemplateVariables(template: string, data: Record<string, any>): string {

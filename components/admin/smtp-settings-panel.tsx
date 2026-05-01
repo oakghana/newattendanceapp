@@ -111,7 +111,11 @@ export function SmtpSettingsPanel() {
         body: JSON.stringify(payload),
       })
 
-      const data = (await response.json()) as { error?: string; message?: string }
+      const data = (await response.json()) as {
+        error?: string
+        message?: string
+        diagnostics?: Array<{ recipient?: string; reason?: string }>
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to save SMTP settings")
@@ -144,7 +148,16 @@ export function SmtpSettingsPanel() {
       const data = (await response.json()) as { error?: string; message?: string }
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to send test email")
+        const diagnostics = Array.isArray(data.diagnostics) && data.diagnostics.length > 0
+          ? data.diagnostics
+              .map((item) => `${item.recipient || "recipient"}: ${item.reason || "Unknown error"}`)
+              .join("; ")
+          : ""
+        throw new Error(
+          diagnostics
+            ? `${data.error || "Failed to send test email"} (${diagnostics})`
+            : data.error || "Failed to send test email",
+        )
       }
 
       const successMsg = data.message || `Test email sent successfully to ${testEmails.trim()}`

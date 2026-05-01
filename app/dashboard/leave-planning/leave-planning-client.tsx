@@ -103,6 +103,8 @@ interface LeaveTypeOption {
 interface LeavePlanningClientProps {
   profile: {
     role: string
+    firstName?: string
+    lastName?: string
     departmentName: string | null
     departmentCode: string | null
   }
@@ -574,6 +576,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [uploadedSigUrl, setUploadedSigUrl] = useState<string | null>(null)
   const [drawnSigUrl, setDrawnSigUrl] = useState<string | null>(null)
 
+  const defaultStaffSignature = useMemo(() => {
+    const fullName = [String(profile.firstName || "").trim(), String(profile.lastName || "").trim()]
+      .filter(Boolean)
+      .join(" ")
+      .trim()
+    return fullName || "Staff Signature"
+  }, [profile.firstName, profile.lastName])
+
   // ── HOD review ──────────────────────────────────────────────────────
   const [hodAction, setHodAction] = useState<Record<string, "approve" | "reject" | "recommend_change">>({})
   const [hodNote, setHodNote] = useState<Record<string, string>>({})
@@ -609,10 +619,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
   // ── Computed ────────────────────────────────────────────────────────
   const activeSig = useMemo(() => {
-    if (signatureMode === "typed") return { text: typedSignature || null, dataUrl: null }
+    if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
     return { text: null, dataUrl: drawnSigUrl }
-  }, [signatureMode, typedSignature, uploadedSigUrl, drawnSigUrl])
+  }, [signatureMode, typedSignature, uploadedSigUrl, drawnSigUrl, defaultStaffSignature])
 
   const computedDays = useMemo(() => {
     if (!startDate || !endDate) return 0
@@ -708,6 +718,16 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       // silent
     }
   }, [])
+
+  useEffect(() => {
+    // Staff requests should default to typed signature using their profile name.
+    if (canSelfApply) {
+      setSignatureMode("typed")
+      if (!typedSignature.trim()) {
+        setTypedSignature(defaultStaffSignature)
+      }
+    }
+  }, [canSelfApply, defaultStaffSignature, typedSignature])
 
   useEffect(() => {
     void loadData()
@@ -984,6 +1004,27 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       toast({ title: "Reason required", description: "Provide a detailed reason — it will appear in the memo.", variant: "destructive" })
       return
     }
+
+    const holidayDeducted = Number(officeHolidayDays[requestId] || 0)
+    const priorDeducted = Number(officePriorDays[requestId] || 0)
+    const travelAdded = Number(officeTravelDays[requestId] || 0)
+    const baseDays = adjStart && adjEnd ? computeLeaveDays(adjStart, adjEnd) : 0
+    const finalDays = Math.max(0, baseDays - holidayDeducted - priorDeducted + travelAdded)
+
+    const confirmForward = window.confirm(
+      `Please confirm the adjusted leave values before forwarding:\n\n` +
+      `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
+      `Base Days: ${baseDays}\n` +
+      `- Public Holidays: ${holidayDeducted}\n` +
+      `- Prior Leave Enjoyed: ${priorDeducted}\n` +
+      `+ Travelling Days: ${travelAdded}\n` +
+      `Final Days to Approvers: ${finalDays}\n\n` +
+      `Reason: ${rsn.trim()}\n\n` +
+      `Click OK to confirm accuracy and forward to HR Approvers.`,
+    )
+
+    if (!confirmForward) return
+
     setOfficeSubmitting(requestId)
     try {
       const res = await fetch("/api/leave/planning/hr-office", {
@@ -997,6 +1038,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           holiday_days_deducted: Number(officeHolidayDays[requestId] || 0),
           travelling_days_added: Number(officeTravelDays[requestId] || 0),
           prior_leave_days_deducted: Number(officePriorDays[requestId] || 0),
+          adjusted_days: finalDays,
           memo_draft_subject: officeMemoSubject[requestId] || null,
           memo_draft_body: officeMemoBody[requestId] || null,
           memo_draft_cc: officeMemoCc[requestId] || null,
@@ -1227,18 +1269,17 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
                     <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
-
-                                  {sameMonthConflict && (
-                                    <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-700">
-                                      <span className="mt-0.5 text-lg leading-none">🚫</span>
-                                      <div className="text-sm">
-                                        <p className="font-semibold">Duplicate leave request detected</p>
-                                        <p className="mt-0.5">You already have an active <strong>{leaveTypeLabelShort(sameMonthConflict.leave_type_key)}</strong> request for this month ({sameMonthConflict.preferred_start_date} to {sameMonthConflict.preferred_end_date}, status: <strong>{sameMonthConflict.status}</strong>). Only one request per leave type per month is allowed. Please choose a different month or leave type.</p>
-                                      </div>
-                                    </div>
-                                  )}
                   </div>
                 </div>
+
+                {sameMonthConflict && (
+                  <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-700">
+                    <div className="text-sm">
+                      <p className="font-semibold">Duplicate leave request detected</p>
+                      <p className="mt-0.5">You already have an active <strong>{leaveTypeLabelShort(sameMonthConflict.leave_type_key)}</strong> request for this month ({sameMonthConflict.preferred_start_date} to {sameMonthConflict.preferred_end_date}, status: <strong>{sameMonthConflict.status}</strong>). Only one request per leave type per month is allowed. Please choose a different month or leave type.</p>
+                    </div>
+                  </div>
+                )}
 
                 {startDate && endDate && (
                   <div className="flex flex-wrap gap-3">
@@ -1267,35 +1308,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
                     Staff Signature <span className="text-red-500">*</span>
                   </Label>
-                  <div className="flex gap-2 flex-wrap mb-2">
-                    {(["typed", "draw", "upload"] as SignatureMode[]).map((m) => (
-                      <Button key={m} size="sm"
-                        variant={signatureMode === m ? "default" : "outline"}
-                        onClick={() => setSignatureMode(m)}
-                        className={`h-7 text-xs capitalize ${signatureMode === m ? "bg-green-700 hover:bg-green-800" : ""}`}>
-                        {m === "typed" ? "Type" : m === "draw" ? "Draw" : "Upload"}
-                      </Button>
-                    ))}
-                  </div>
-                  {signatureMode === "typed" && (
-                    <Input
-                      placeholder="Type your full name as signature"
-                      value={typedSignature}
-                      onChange={(e) => setTypedSignature(e.target.value)}
-                      className="italic font-serif text-base h-12"
-                    />
-                  )}
-                  {signatureMode === "draw" && (
-                    <SignaturePad onSave={(d) => setDrawnSigUrl(d)} savedDataUrl={drawnSigUrl} />
-                  )}
-                  {signatureMode === "upload" && (
-                    <Input type="file" accept="image/*"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0]
-                        if (file) setUploadedSigUrl(await readAsDataUrl(file))
-                      }}
-                    />
-                  )}
+                  <Input
+                    value={typedSignature || defaultStaffSignature}
+                    onChange={(e) => setTypedSignature(e.target.value)}
+                    className="italic font-serif text-base h-12"
+                    readOnly
+                  />
+                  <p className="text-xs text-slate-500">Signature is auto-populated from your staff profile name.</p>
                 </div>
 
                 <div className="flex gap-3 pt-2">

@@ -45,6 +45,34 @@ function leaveTypeLabel(key: string): string {
   return map[key] || String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+function renderMemoTemplate(template: string, data: Record<string, any>) {
+  const rendered = String(template || "")
+    .replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
+      const value = data[key]
+      return value === null || value === undefined ? "" : String(value)
+    })
+    // Remove any unresolved placeholders to avoid exposing raw template tags in official memos.
+    .replace(/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/g, "")
+
+  return rendered.replace(/[ \t]+\n/g, "\n").trim()
+}
+
+function leaveReferenceCode(leaveTypeKey: string) {
+  const map: Record<string, string> = {
+    annual: "AL",
+    sick: "SL",
+    maternity: "MAT",
+    paternity: "PAT",
+    study: "STL",
+    compassionate: "CL",
+    part_leave: "PL",
+    no_pay: "LWP",
+    casual: "CSL",
+    leave_of_absence: "LOA",
+  }
+  return map[String(leaveTypeKey || "").toLowerCase()] || "LV"
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -201,7 +229,6 @@ export async function GET(
     const wasAdjusted = !!lr.adjusted_days && lr.adjusted_days !== lr.original_requested_days
 
     const leaveLabel = leaveTypeLabel(String(lr.leave_type_key || "annual"))
-    const subject = String(lr.memo_draft_subject || "").trim() || `APPLICATION FOR ${leaveLabel.toUpperCase()} — ${lr.leave_year_period || "2026/2027"}`
 
     // Return-to-work date (next business day after leave end)
     const returnDate = new Date(effectiveEnd)
@@ -210,8 +237,32 @@ export async function GET(
     if (returnDate.getDay() === 6) returnDate.setDate(returnDate.getDate() + 2)
     if (returnDate.getDay() === 0) returnDate.setDate(returnDate.getDate() + 1)
 
+    const templateData = {
+      staff_name: fmtName(ap),
+      staff_number: String(ap?.employee_id || ap?.staff_number || ""),
+      leave_type: leaveLabel,
+      leave_year_period: String(lr.leave_year_period || "2026/2027"),
+      leave_start_date: fmtDate(effectiveStart),
+      leave_end_date: fmtDate(effectiveEnd),
+      approved_days: String(effectiveDays),
+      submitted_date: fmtDate(lr.submitted_at || lr.created_at),
+      return_to_work_date: fmtDate(returnDate.toISOString()),
+      travelling_days: String(Number(lr.travelling_days_added || 0)),
+      travelling_days_info:
+        Number(lr.travelling_days_added || 0) > 0
+          ? `Travelling Days: ${Number(lr.travelling_days_added || 0)} day(s)\n`
+          : "",
+      adjustment_details: lr.adjustment_reason ? `Adjustment Details: ${String(lr.adjustment_reason)}\n\n` : "",
+    }
+
+    const renderedSubject = renderMemoTemplate(
+      String(lr.memo_draft_subject || "").trim() || `APPLICATION FOR ${leaveLabel.toUpperCase()} - ${lr.leave_year_period || "2026/2027"}`,
+      templateData,
+    )
+    const subject = renderedSubject || `APPLICATION FOR ${leaveLabel.toUpperCase()} - ${lr.leave_year_period || "2026/2027"}`
+
     const paragraphs: string[] = []
-    const draftBody = String(lr.memo_draft_body || "").trim()
+    const draftBody = renderMemoTemplate(String(lr.memo_draft_body || "").trim(), templateData)
     if (draftBody) {
       for (const block of draftBody.split(/\n\s*\n/)) {
         const trimmed = block.trim()
@@ -287,7 +338,9 @@ export async function GET(
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
-    const refNum = `QCC/HRD/LV/${new Date(lr.hr_approved_at || lr.created_at).getFullYear()}/${String(lr.id || "").slice(-6).toUpperCase()}`
+    const refYear = new Date(lr.hr_approved_at || lr.created_at).getFullYear()
+    const refCode = leaveReferenceCode(String(lr.leave_type_key || "annual"))
+    const refNum = `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
     doc.text(`Date:  ${fmtDate(lr.hr_approved_at || lr.created_at)}`, pageWidth - marginRight - 42, y)
     y += 5.5
