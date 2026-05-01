@@ -622,6 +622,9 @@ async function fetchHrOfficeAnalytics(admin: any) {
     leave_type_breakdown: Array.from(typeCountMap.values()).sort((a, b) => b.total - a.total),
     location_ranking: Array.from(locationCountMap.values()).sort((a, b) => b.total - a.total).slice(0, 8),
     current_leave_roster: currentLeaveRoster,
+    records: [],
+    daily_leave_counts: [],
+    monthly_leave_counts: [],
   }
 }
 

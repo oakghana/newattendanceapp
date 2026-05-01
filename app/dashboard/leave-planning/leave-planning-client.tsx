@@ -1906,15 +1906,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       <Button
                         variant="outline"
                         className="xl:self-end"
-                        onClick={() => downloadLeaveAnalyticsCsv(hrOfficeAnalytics.records as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.csv`)}
-                        disabled={analyticsLoading || hrOfficeAnalytics.records.length === 0}
+                        onClick={() => downloadLeaveAnalyticsCsv((hrOfficeAnalytics.records ?? []) as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.csv`)}
+                        disabled={analyticsLoading || (hrOfficeAnalytics.records?.length ?? 0) === 0}
                       >
                         <Download className="mr-2 h-4 w-4" /> Export CSV
                       </Button>
                       <Button
                         className="bg-emerald-700 hover:bg-emerald-800 xl:self-end"
-                        onClick={() => void downloadLeaveAnalyticsPdf(hrOfficeAnalytics.records as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.pdf`, `HR Leave Office Analytics ${analyticsRange.start} to ${analyticsRange.end}`)}
-                        disabled={analyticsLoading || hrOfficeAnalytics.records.length === 0}
+                        onClick={() => void downloadLeaveAnalyticsPdf((hrOfficeAnalytics.records ?? []) as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.pdf`, `HR Leave Office Analytics ${analyticsRange.start} to ${analyticsRange.end}`)}
+                        disabled={analyticsLoading || (hrOfficeAnalytics.records?.length ?? 0) === 0}
                       >
                         <Download className="mr-2 h-4 w-4" /> Export PDF
                       </Button>
