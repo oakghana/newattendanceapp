@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
-import { Activity, BarChart3, CalendarDays, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
+import { Activity, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -127,37 +127,6 @@ type WorkflowResponse = {
     directorHr: LoanRequest[]
     directorGoodFd: LoanRequest[]
     allLoans: LoanRequest[]
-  }
-}
-
-type LeaveAnalyticsRecord = {
-  id: string
-  user_id: string
-  staff_name: string
-  employee_id?: string | null
-  rank?: string | null
-  leave_type_key: string
-  start_date: string
-  end_date: string
-  days: number
-  submitted_at?: string | null
-  location_name?: string | null
-  location_address?: string | null
-  department_name?: string | null
-}
-
-type LeaveAnalyticsPayload = {
-  rangeStart: string
-  rangeEnd: string
-  analytics: {
-    totals: Record<string, number>
-    outstanding_by_status: Array<{ status: string; total: number }>
-    leave_type_breakdown: Array<{ leave_type_key: string; total: number; on_leave_now: number; upcoming: number; completed: number }>
-    location_ranking: Array<{ name: string; total: number; on_leave_now: number; upcoming: number }>
-    current_leave_roster: LeaveAnalyticsRecord[]
-    daily_leave_counts: Array<{ date: string; total: number }>
-    monthly_leave_counts: Array<{ month: string; total: number }>
-    records: LeaveAnalyticsRecord[]
   }
 }
 
@@ -291,19 +260,6 @@ function toIsoDate(value: Date) {
 
 function currentMonthValue() {
   return toIsoDate(new Date()).slice(0, 7)
-}
-
-function monthValueToRange(monthValue: string) {
-  const [year, month] = monthValue.split("-").map(Number)
-  const start = new Date(Date.UTC(year, month - 1, 1))
-  const end = new Date(Date.UTC(year, month, 0))
-  return { start: toIsoDate(start), end: toIsoDate(end) }
-}
-
-function shiftMonthValue(monthValue: string, delta: number) {
-  const [year, month] = monthValue.split("-").map(Number)
-  const shifted = new Date(Date.UTC(year, month - 1 + delta, 1))
-  return toIsoDate(shifted).slice(0, 7)
 }
 
 function monthLabel(monthValue: string) {
@@ -705,78 +661,6 @@ function LoanAnalyticsBarChart({
   )
 }
 
-function SmartLeaveCalendar({
-  monthValue,
-  selectedDate,
-  countsByDate,
-  onChangeMonth,
-  onSelectDate,
-}: {
-  monthValue: string
-  selectedDate: string | null
-  countsByDate: Record<string, number>
-  onChangeMonth: (monthValue: string) => void
-  onSelectDate: (date: string) => void
-}) {
-  const [year, month] = monthValue.split("-").map(Number)
-  const first = new Date(Date.UTC(year, month - 1, 1))
-  const last = new Date(Date.UTC(year, month, 0))
-  const leading = (first.getUTCDay() + 6) % 7
-  const totalDays = last.getUTCDate()
-  const cells: Array<string | null> = []
-  for (let index = 0; index < leading; index += 1) cells.push(null)
-  for (let day = 1; day <= totalDays; day += 1) {
-    cells.push(`${monthValue}-${String(day).padStart(2, "0")}`)
-  }
-  while (cells.length % 7 !== 0) cells.push(null)
-
-  return (
-    <Card className="border border-slate-200 bg-white shadow-sm">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm text-slate-900">Leave Intelligence Calendar</CardTitle>
-            <CardDescription>Click any day to inspect approved leave activity affecting that date.</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => onChangeMonth(shiftMonthValue(monthValue, -1))}>Prev</Button>
-            <div className="min-w-[150px] text-center text-sm font-semibold text-slate-900">{monthLabel(monthValue)}</div>
-            <Button variant="outline" size="sm" onClick={() => onChangeMonth(shiftMonthValue(monthValue, 1))}>Next</Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-7 gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
-            <div key={label} className="rounded-lg bg-slate-50 px-2 py-1 text-center">{label}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {cells.map((cell, index) => {
-            if (!cell) return <div key={`empty-${index}`} className="h-20 rounded-xl border border-dashed border-slate-100 bg-slate-50/60" />
-            const count = Number(countsByDate[cell] || 0)
-            const isSelected = selectedDate === cell
-            return (
-              <button
-                key={cell}
-                type="button"
-                onClick={() => onSelectDate(cell)}
-                className={`h-20 rounded-xl border p-2 text-left transition-all ${isSelected ? "border-emerald-500 bg-emerald-50 shadow-sm" : count > 0 ? "border-cyan-200 bg-cyan-50/60 hover:border-cyan-300" : "border-slate-200 bg-white hover:border-slate-300"}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className={`text-sm font-semibold ${isSelected ? "text-emerald-800" : "text-slate-800"}`}>{cell.slice(-2)}</span>
-                  {count > 0 && <Badge className="bg-cyan-700 text-white">{count}</Badge>}
-                </div>
-                <p className="mt-3 text-[11px] text-slate-500">{count > 0 ? `${count} leave record(s)` : "No approved leave"}</p>
-              </button>
-            )
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function LoanAppPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -874,10 +758,6 @@ export default function LoanAppPage() {
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
   const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
-  const [loanOfficeCalendarMonth, setLoanOfficeCalendarMonth] = useState(() => currentMonthValue())
-  const [loanOfficeCalendarDate, setLoanOfficeCalendarDate] = useState<string | null>(() => toIsoDate(new Date()))
-  const [loanOfficeLeaveAnalytics, setLoanOfficeLeaveAnalytics] = useState<LeaveAnalyticsPayload | null>(null)
-  const [loanOfficeLeaveAnalyticsLoading, setLoanOfficeLeaveAnalyticsLoading] = useState(false)
 
   const [accountsSearch, setAccountsSearch] = useState("")
   const [accountsStatus, setAccountsStatus] = useState("all")
@@ -929,7 +809,8 @@ export default function LoanAppPage() {
   )
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
-  const isAdmin = normalizedRole === "admin" || normalizedRole === "it_admin"
+  const isAdmin = normalizedRole === "admin"
+  const canAccessLoanOfficeWorkspace = ["admin", "loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
@@ -955,11 +836,11 @@ export default function LoanAppPage() {
     }
     const tabs = [{ key: "staff", label: "My Loans" }, { key: "tracking", label: "Tracking" }]
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
-    if (p?.loanOffice || p?.hrOffice || p?.viewAllTabs) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
+    if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Director HR (${c.director})` })
-    if (p?.hrOffice || p?.loanOffice || p?.viewAllTabs) tabs.push({ key: "setup", label: "Setup & Linkage" })
+    if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
     if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
@@ -967,7 +848,7 @@ export default function LoanAppPage() {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs
-  }, [data, normalizedRole])
+  }, [data, canAccessLoanOfficeWorkspace])
 
   const defaultTab = visibleTabs[0]?.key || "staff"
 
@@ -1135,20 +1016,6 @@ export default function LoanAppPage() {
     }
   }, [loanOfficeWorkspaceRows])
 
-  const loanOfficeCalendarCountMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const row of loanOfficeLeaveAnalytics?.analytics?.daily_leave_counts || []) {
-      map[String(row.date)] = Number(row.total || 0)
-    }
-    return map
-  }, [loanOfficeLeaveAnalytics])
-
-  const selectedDateLeaveRecords = useMemo(() => {
-    if (!loanOfficeCalendarDate) return []
-    return (loanOfficeLeaveAnalytics?.analytics?.records || []).filter((row) => {
-      return row.start_date <= loanOfficeCalendarDate && row.end_date >= loanOfficeCalendarDate
-    })
-  }, [loanOfficeCalendarDate, loanOfficeLeaveAnalytics])
   const filteredAccounts = useMemo(
     () => filterAndSortRows(data?.inbox?.accounts || [], accountsSearch, accountsStatus, accountsSort),
     [data?.inbox?.accounts, accountsSearch, accountsStatus, accountsSort],
@@ -1438,42 +1305,6 @@ export default function LoanAppPage() {
     setTemplateBody(activeTemplate.body || "")
   }, [activeTemplate])
 
-  useEffect(() => {
-    if (!(p?.loanOffice || p?.hrOffice || p?.viewAllTabs)) return
-
-    let cancelled = false
-    const loadLeaveAnalytics = async () => {
-      setLoanOfficeLeaveAnalyticsLoading(true)
-      try {
-        const range = monthValueToRange(loanOfficeCalendarMonth)
-        const params = new URLSearchParams({ start: range.start, end: range.end })
-        const res = await fetch(`/api/leave/analytics?${params.toString()}`, { cache: "no-store" })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error || "Failed to load leave calendar analytics")
-        if (!cancelled) {
-          setLoanOfficeLeaveAnalytics(json)
-          if (!loanOfficeCalendarDate || !loanOfficeCalendarDate.startsWith(loanOfficeCalendarMonth)) {
-            setLoanOfficeCalendarDate(range.start)
-          }
-        }
-      } catch (e) {
-        if (!cancelled) {
-          toast({
-            title: "Calendar analytics failed",
-            description: e instanceof Error ? e.message : "Failed to load leave analytics for the calendar",
-            variant: "destructive",
-          })
-        }
-      } finally {
-        if (!cancelled) setLoanOfficeLeaveAnalyticsLoading(false)
-      }
-    }
-
-    void loadLeaveAnalytics()
-    return () => {
-      cancelled = true
-    }
-  }, [loanOfficeCalendarDate, loanOfficeCalendarMonth, p?.hrOffice, p?.loanOffice, p?.viewAllTabs, toast])
 
   const submitRequest = async () => {
     if (!loanTypeKey) {
@@ -2506,66 +2337,6 @@ export default function LoanAppPage() {
               emptyMessage="No location analytics available for the current loan workspace."
               formatter={(row) => String(row?.name || "Unassigned")}
             />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-            <SmartLeaveCalendar
-              monthValue={loanOfficeCalendarMonth}
-              selectedDate={loanOfficeCalendarDate}
-              countsByDate={loanOfficeCalendarCountMap}
-              onChangeMonth={setLoanOfficeCalendarMonth}
-              onSelectDate={setLoanOfficeCalendarDate}
-            />
-
-            <Card className="border border-slate-200 bg-white shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm text-slate-900">Selected Day Leave Impact</CardTitle>
-                <CardDescription>
-                  {loanOfficeCalendarDate ? `Approved leave records affecting ${fmtDate(loanOfficeCalendarDate)}` : "Select a day to inspect leave impact."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                  <span>Month: {monthLabel(loanOfficeCalendarMonth)}</span>
-                  <span>Approved leave records this month: {loanOfficeLeaveAnalytics?.analytics?.records.length || 0}</span>
-                  {loanOfficeLeaveAnalyticsLoading && <span className="font-medium text-fuchsia-700">Refreshing calendar intelligence…</span>}
-                </div>
-                {selectedDateLeaveRecords.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-500">
-                    No approved leave records overlap this day.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedDateLeaveRecords.map((row) => (
-                      <div key={`leave-impact-${row.id}`} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{row.staff_name}</p>
-                            <p className="text-xs text-slate-500">{row.employee_id || "No ID"} · {row.rank || "No rank"}</p>
-                          </div>
-                          <Badge className="bg-fuchsia-700 text-white">{row.days}d</Badge>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-                          <span>{row.start_date} to {row.end_date}</span>
-                          <span>•</span>
-                          <span>{row.location_name || row.department_name || "Unassigned"}</span>
-                          <span>•</span>
-                          <span>{row.leave_type_key.replaceAll("_", " ")}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 text-xs text-cyan-900">
-                  <div className="flex items-center gap-2 font-semibold"><CalendarDays className="h-4 w-4" /> Monthly Leave Snapshot</div>
-                  <div className="mt-2 space-y-1">
-                    <p>Current leave roster in range: {loanOfficeLeaveAnalytics?.analytics?.current_leave_roster.length || 0}</p>
-                    <p>Locations affected this month: {loanOfficeLeaveAnalytics?.analytics?.location_ranking.length || 0}</p>
-                    <p>Peak daily leave load: {Math.max(0, ...(loanOfficeLeaveAnalytics?.analytics?.daily_leave_counts || []).map((row) => Number(row.total || 0)))}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           <Card>

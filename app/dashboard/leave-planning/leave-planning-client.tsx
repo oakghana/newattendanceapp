@@ -540,6 +540,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
+  const canViewLeaveAnalytics = normalizedRole === "loan_office"
   const canSelfApply = isStaff || isHod || isAdmin ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "loan_office"].includes(normalizedRole)
 
@@ -685,7 +686,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [activeTab, hrOfficeAutoRefresh, loadData])
 
   useEffect(() => {
-    if (!isHrOffice) return
+    if (!canViewLeaveAnalytics) return
 
     let cancelled = false
     const loadAnalytics = async () => {
@@ -716,7 +717,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return () => {
       cancelled = true
     }
-  }, [analyticsRange.end, analyticsRange.start, isHrOffice, toast])
+  }, [analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, toast])
 
   // ── Derived lists ────────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
@@ -1502,11 +1503,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               </div>
             </div>
             <Tabs defaultValue="operations" className="space-y-4">
-              <TabsList className="grid h-auto w-full grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+              <TabsList className={`grid h-auto w-full ${canViewLeaveAnalytics ? "grid-cols-2" : "grid-cols-1"} rounded-xl border border-slate-200 bg-slate-50 p-1.5`}>
                 <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Operations</TabsTrigger>
-                <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
+                {canViewLeaveAnalytics && (
+                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
+                )}
               </TabsList>
 
+              {canViewLeaveAnalytics && (
               <TabsContent value="analytics" className="space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
@@ -1645,6 +1649,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
                 <CurrentLeaveRoster rows={hrOfficeAnalytics.current_leave_roster || []} />
               </TabsContent>
+              )}
 
               <TabsContent value="operations">
                 {hrOfficeFilteredQueue.length === 0 ? (
