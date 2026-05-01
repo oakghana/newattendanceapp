@@ -2,9 +2,49 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrApproved, notifyLeaveHrRejected } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
+import { renderTemplate } from "@/lib/leave-templates"
 import crypto from "crypto"
 
 const HR_APPROVE_ELIGIBLE = ["hr_office_forwarded", "manager_confirmed", "hod_approved"] as const
+
+function leaveTypeLabel(key: string): string {
+  const map: Record<string, string> = {
+    annual: "Annual Leave",
+    sick: "Sick Leave",
+    maternity: "Maternity Leave",
+    paternity: "Paternity Leave",
+    study: "Study Leave",
+    compassionate: "Compassionate Leave",
+    part_leave: "Part Leave",
+    no_pay: "Leave Without Pay",
+    casual: "Casual Leave",
+  }
+  return map[key] || String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function fmtDate(value?: string | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
+}
+
+function getApprovalTemplateKey(leaveTypeKey: string) {
+  const normalized = String(leaveTypeKey || "annual").toLowerCase()
+  if (normalized === "sick") return "sick_leave_approval"
+  if (normalized === "no_pay") return "leave_of_absence"
+  return "annual_leave_approval"
+}
+
+async function fetchTemplate(admin: any, templateKey: string) {
+  const { data } = await admin
+    .from("leave_memo_templates")
+    .select("template_key, subject_template, body_template, cc_recipients")
+    .eq("template_key", templateKey)
+    .eq("is_active", true)
+    .maybeSingle()
+  return data
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -104,6 +144,90 @@ export async function POST(request: NextRequest) {
       .trim() || "HR Approver"
 
     const now = new Date().toISOString()
+    const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
+    const effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
+    const effectiveDays = Number((leaveRequest as any).adjusted_days || (leaveRequest as any).requested_days || 0)
+    const returnDate = new Date(effectiveEnd)
+    if (!Number.isNaN(returnDate.getTime())) {
+      returnDate.setDate(returnDate.getDate() + 1)
+      if (returnDate.getDay() === 6) returnDate.setDate(returnDate.getDate() + 2)
+      if (returnDate.getDay() === 0) returnDate.setDate(returnDate.getDate() + 1)
+    }
+
+    const { data: applicantProfile } = await admin
+      .from("user_profiles")
+      .select("first_name, last_name, employee_id, staff_number")
+      .eq("id", (leaveRequest as any).user_id)
+      .maybeSingle()
+
+    const staffName = [
+      String((applicantProfile as any)?.first_name || ""),
+      String((applicantProfile as any)?.last_name || ""),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "Staff Member"
+
+    const templateData = {
+      staff_name: staffName,
+      staff_number: String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || ""),
+      leave_type: leaveTypeLabel(String((leaveRequest as any).leave_type_key || "annual")),
+      leave_year_period: String((leaveRequest as any).leave_year_period || "2026/2027"),
+      leave_start_date: fmtDate(effectiveStart),
+      leave_end_date: fmtDate(effectiveEnd),
+      approved_days: effectiveDays,
+      submitted_date: fmtDate((leaveRequest as any).submitted_at || (leaveRequest as any).created_at || now),
+      return_to_work_date: fmtDate(returnDate.toISOString()),
+      travelling_days: Number((leaveRequest as any).travelling_days_added || 0),
+      travelling_days_info: Number((leaveRequest as any).travelling_days_added || 0) > 0 ? `Travelling Days: ${Number((leaveRequest as any).travelling_days_added || 0)} day(s)\n` : "",
+      adjustment_details: (leaveRequest as any).adjustment_reason
+        ? `Adjustment Details: ${(leaveRequest as any).adjustment_reason}\n\n`
+        : "",
+      rejection_reason: note || "Management could not approve the request at this time.",
+    }
+
+    const approvalTemplate = await fetchTemplate(admin, getApprovalTemplateKey(String((leaveRequest as any).leave_type_key || "annual")))
+    const rejectionTemplate = await fetchTemplate(admin, "leave_rejection")
+
+    const fallbackApprovalSubject = approvalTemplate?.subject_template
+      ? renderTemplate(String(approvalTemplate.subject_template), templateData)
+      : null
+    const fallbackApprovalBody = approvalTemplate?.body_template
+      ? renderTemplate(String(approvalTemplate.body_template), templateData)
+      : null
+    const fallbackApprovalCc = approvalTemplate?.cc_recipients ? String(approvalTemplate.cc_recipients) : null
+
+    const fallbackRejectionSubject = rejectionTemplate?.subject_template
+      ? renderTemplate(String(rejectionTemplate.subject_template), templateData)
+      : null
+    const fallbackRejectionBody = rejectionTemplate?.body_template
+      ? renderTemplate(String(rejectionTemplate.body_template), templateData)
+      : null
+    const fallbackRejectionCc = rejectionTemplate?.cc_recipients ? String(rejectionTemplate.cc_recipients) : null
+
+    const resolvedSubject = memo_draft_subject
+      ? String(memo_draft_subject).trim()
+      : String((leaveRequest as any).memo_draft_subject || "").trim() || fallbackApprovalSubject
+
+    const resolvedBody = memo_draft_body
+      ? String(memo_draft_body).trim()
+      : String((leaveRequest as any).memo_draft_body || "").trim() || fallbackApprovalBody
+
+    const resolvedCc = memo_draft_cc
+      ? String(memo_draft_cc).trim()
+      : String((leaveRequest as any).memo_draft_cc || "").trim() || fallbackApprovalCc
+
+    const resolvedRejectSubject = memo_draft_subject
+      ? String(memo_draft_subject).trim()
+      : String((leaveRequest as any).memo_draft_subject || "").trim() || fallbackRejectionSubject
+
+    const resolvedRejectBody = memo_draft_body
+      ? String(memo_draft_body).trim()
+      : String((leaveRequest as any).memo_draft_body || "").trim() || fallbackRejectionBody
+
+    const resolvedRejectCc = memo_draft_cc
+      ? String(memo_draft_cc).trim()
+      : String((leaveRequest as any).memo_draft_cc || "").trim() || fallbackRejectionCc
 
     if (action === "reject") {
       await admin
@@ -115,6 +239,9 @@ export async function POST(request: NextRequest) {
           hr_approved_at: now,
           hr_approval_note: note || null,
           ...memoDraftPatch,
+          memo_draft_subject: resolvedRejectSubject,
+          memo_draft_body: resolvedRejectBody,
+          memo_draft_cc: resolvedRejectCc,
           updated_at: now,
         })
         .eq("id", leave_plan_request_id)
@@ -143,10 +270,6 @@ export async function POST(request: NextRequest) {
     // Generate a secure memo token for PDF download
     const memoToken = crypto.randomBytes(32).toString("hex")
 
-    const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
-    const effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
-    const effectiveDays = Number((leaveRequest as any).adjusted_days || (leaveRequest as any).requested_days || 0)
-
     const { error: approveError } = await admin
       .from("leave_plan_requests")
       .update({
@@ -156,6 +279,9 @@ export async function POST(request: NextRequest) {
         hr_approved_at: now,
         hr_approval_note: note || null,
         ...memoDraftPatch,
+        memo_draft_subject: resolvedSubject,
+        memo_draft_body: resolvedBody,
+        memo_draft_cc: resolvedCc,
         memo_token: memoToken,
         memo_generated_at: now,
         hr_signature_mode: hr_signature_mode || "typed",

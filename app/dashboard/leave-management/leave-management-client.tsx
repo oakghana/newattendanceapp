@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
+import { placeholderDescriptions } from "@/lib/leave-templates"
 
 interface LeaveRequest {
   id: string
@@ -115,6 +116,15 @@ export function LeaveManagementClient({
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [savingTemplateKey, setSavingTemplateKey] = useState<string | null>(null)
+  const [creatingTemplate, setCreatingTemplate] = useState(false)
+  const [newTemplate, setNewTemplate] = useState({
+    template_key: "",
+    template_name: "",
+    description: "",
+    subject_template: "",
+    body_template: "",
+    cc_recipients: "",
+  })
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -146,6 +156,65 @@ export function LeaveManagementClient({
       ...prev,
       [templateKey]: { ...original },
     }))
+  }
+
+  const slugifyTemplateKey = (value: string) =>
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+
+  const handleCreateTemplate = async () => {
+    if (!canEditHrTemplates) return
+
+    const payload = {
+      ...newTemplate,
+      template_key: slugifyTemplateKey(newTemplate.template_key || newTemplate.template_name),
+    }
+
+    if (!payload.template_key || !payload.template_name || !payload.subject_template || !payload.body_template) {
+      toast({
+        title: "Missing template details",
+        description: "Template key, name, subject, and body are required.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setCreatingTemplate(true)
+    try {
+      const response = await fetch("/api/leave/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error || "Failed to create template")
+      }
+
+      const created = result.template as HrMemoTemplate
+      setHrTemplates((prev) => [...prev, created].sort((a, b) => a.template_name.localeCompare(b.template_name)))
+      setTemplateDrafts((prev) => ({ ...prev, [created.template_key]: created }))
+      setNewTemplate({
+        template_key: "",
+        template_name: "",
+        description: "",
+        subject_template: "",
+        body_template: "",
+        cc_recipients: "",
+      })
+      toast({ title: "Template created", description: `${created.template_name} is ready for use.` })
+    } catch (error) {
+      toast({
+        title: "Create failed",
+        description: error instanceof Error ? error.message : "Could not create template",
+        variant: "destructive",
+      })
+    } finally {
+      setCreatingTemplate(false)
+    }
   }
 
   const showUnderReviewToast = () => {
@@ -601,6 +670,88 @@ export function LeaveManagementClient({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {canEditHrTemplates && (
+              <div className="rounded-xl border border-emerald-200 bg-white p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Create New Template</p>
+                  <p className="text-xs text-slate-500 mt-1">Add a new reusable memo template for special leave cases or revised wording.</p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Template Name</Label>
+                    <Input
+                      value={newTemplate.template_name}
+                      onChange={(e) => setNewTemplate((prev) => ({
+                        ...prev,
+                        template_name: e.target.value,
+                        template_key: prev.template_key || slugifyTemplateKey(e.target.value),
+                      }))}
+                      placeholder="Annual Leave Approval Revised"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Template Key</Label>
+                    <Input
+                      value={newTemplate.template_key}
+                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, template_key: slugifyTemplateKey(e.target.value) }))}
+                      placeholder="annual_leave_approval_revised"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Description</Label>
+                  <Input
+                    value={newTemplate.description}
+                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="For use when annual leave requires special management wording"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Subject Template</Label>
+                  <Input
+                    value={newTemplate.subject_template}
+                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, subject_template: e.target.value }))}
+                    placeholder="APPLICATION FOR {{leave_type}} - {{leave_year_period}}"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Body Template</Label>
+                  <Textarea
+                    rows={6}
+                    value={newTemplate.body_template}
+                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, body_template: e.target.value }))}
+                    placeholder="We refer to your application dated {{submitted_date}}..."
+                    className="text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">CC Recipients</Label>
+                  <Input
+                    value={newTemplate.cc_recipients}
+                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, cc_recipients: e.target.value }))}
+                    placeholder="Managing Director, HR Head, Accounts Manager"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={handleCreateTemplate} disabled={creatingTemplate} className="bg-emerald-700 hover:bg-emerald-800">
+                    {creatingTemplate ? "Creating..." : "Create Template"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Available Placeholders</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {Object.entries(placeholderDescriptions).map(([key, description]) => (
+                  <div key={key} className="rounded-lg border border-amber-200 bg-white px-3 py-2">
+                    <p className="text-[11px] font-semibold text-amber-900">{key}</p>
+                    <p className="text-[11px] text-slate-600 mt-1">{description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {templatesLoading ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
                 Loading templates...
