@@ -70,10 +70,10 @@ export default async function SettingsPage() {
     },
     {
       title: "Notification Settings",
-      description: "Configure system notifications and alerts",
+      description: "Configure workflow email notifications and SMTP delivery",
       icon: Bell,
       href: "/dashboard/settings/notifications",
-      roles: ["admin", "department_head", "staff"],
+      roles: ["admin"],
     },
     {
       title: "Security Settings",

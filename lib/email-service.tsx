@@ -1,5 +1,6 @@
 import "server-only"
 import nodemailer from "nodemailer"
+import { createAdminClient } from "@/lib/supabase/server"
 
 interface EmailConfig {
   host: string
@@ -21,26 +22,84 @@ class EmailService {
   private transporter: nodemailer.Transporter | null = null
   private isConfigured = false
   private initializationPromise: Promise<void> | null = null
+  private senderEmail = ""
+  private senderName = "QCC Attendance System"
 
-  constructor() {
-    this.initializationPromise = this.initializeTransporter()
+  private fromEnvironment(): EmailConfig | null {
+    const user = String(process.env.SMTP_USER || "").trim()
+    const pass = String(process.env.SMTP_PASS || "").trim()
+    if (!user || !pass) return null
+
+    return {
+      host: String(process.env.SMTP_HOST || "smtp.gmail.com").trim() || "smtp.gmail.com",
+      port: Number.parseInt(process.env.SMTP_PORT || "587"),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: {
+        user,
+        pass,
+      },
+    }
+  }
+
+  private async fromDatabase(): Promise<(EmailConfig & { fromName?: string }) | null> {
+    try {
+      const adminClient = await createAdminClient()
+      const { data } = await adminClient.from("system_settings").select("settings").eq("id", 1).maybeSingle()
+      const settings = (data?.settings || {}) as Record<string, any>
+      const smtp = (settings.smtp || {}) as Record<string, any>
+
+      if (smtp.enabled === false) {
+        return null
+      }
+
+      const user = String(smtp.user || "").trim()
+      const pass = String(smtp.pass || "").trim()
+
+      if (!user || !pass) {
+        return null
+      }
+
+      return {
+        host: String(smtp.host || "smtp.gmail.com").trim() || "smtp.gmail.com",
+        port: Number.parseInt(String(smtp.port || "587"), 10),
+        secure: String(smtp.secure) === "true" || smtp.secure === true,
+        auth: {
+          user,
+          pass,
+        },
+        fromName: String(smtp.fromName || "QCC Attendance System").trim() || "QCC Attendance System",
+      }
+    } catch (error) {
+      console.warn("[EmailService] Failed to load SMTP config from database:", error)
+      return null
+    }
+  }
+
+  private async resolveEmailConfig(): Promise<(EmailConfig & { fromName?: string }) | null> {
+    const fromEnv = this.fromEnvironment()
+    if (fromEnv) {
+      return {
+        ...fromEnv,
+        fromName: "QCC Attendance System",
+      }
+    }
+
+    return this.fromDatabase()
   }
 
   private async initializeTransporter() {
     try {
-      // Check for email configuration in environment variables
-      const emailConfig: EmailConfig = {
-        host: process.env.SMTP_HOST || "smtp.gmail.com",
-        port: Number.parseInt(process.env.SMTP_PORT || "587"),
-        secure: process.env.SMTP_SECURE === "true",
-        auth: {
-          user: process.env.SMTP_USER || "",
-          pass: process.env.SMTP_PASS || "",
-        },
+      const emailConfig = await this.resolveEmailConfig()
+      this.transporter = null
+      this.isConfigured = false
+
+      if (!emailConfig || !emailConfig.auth.user || !emailConfig.auth.pass) {
+        console.warn("[EmailService] SMTP credentials not configured")
+        return
       }
 
-      if (!emailConfig.auth.user || !emailConfig.auth.pass) {
-        console.warn("[EmailService] SMTP credentials not configured")
+      if (!Number.isFinite(emailConfig.port)) {
+        console.warn("[EmailService] Invalid SMTP port configured")
         return
       }
 
@@ -49,18 +108,26 @@ class EmailService {
       // Verify connection
       await this.transporter.verify()
       this.isConfigured = true
+      this.senderEmail = emailConfig.auth.user
+      this.senderName = emailConfig.fromName || "QCC Attendance System"
       console.log("[EmailService] Email service initialized successfully")
     } catch (error) {
       console.error("[EmailService] Failed to initialize email service:", error)
       this.isConfigured = false
+      this.transporter = null
     }
   }
 
   private async ensureInitialized() {
-    if (!this.initializationPromise) {
+    if (!this.initializationPromise || !this.isConfigured || !this.transporter) {
       this.initializationPromise = this.initializeTransporter()
     }
 
+    await this.initializationPromise
+  }
+
+  async refreshConfiguration() {
+    this.initializationPromise = this.initializeTransporter()
     await this.initializationPromise
   }
 
@@ -84,7 +151,7 @@ class EmailService {
       const text = this.replaceTemplateVariables(template.text, data)
 
       const mailOptions = {
-        from: `"QCC Attendance System" <${process.env.SMTP_USER}>`,
+        from: `"${this.senderName}" <${this.senderEmail}>`,
         to,
         subject,
         html,
