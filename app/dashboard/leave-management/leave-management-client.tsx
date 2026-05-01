@@ -451,7 +451,7 @@ export function LeaveManagementClient({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <LeaveMetricCard label="Pending" value={String(canUseStaffLeaveHub ? pendingRequests.length : pendingNotifications.length)} hint={canUseStaffLeaveHub ? "Awaiting decision" : "Need review"} tone="amber" icon={<FileClock className="h-4 w-4" />} />
+              <LeaveMetricCard label="Pending" value={String(canUseStaffLeaveHub ? pendingRequests.length : pendingNotifications.length)} hint={canUseStaffLeaveHub ? "Awaiting decision" : "Need review"} tone="blue" icon={<FileClock className="h-4 w-4" />} />
               <LeaveMetricCard label="Approved" value={String(approvedRequests.length)} hint="Confirmed leave" tone="emerald" icon={<CheckCircle2 className="h-4 w-4" />} />
               <LeaveMetricCard label="Submitted" value={String(staffRequests.length)} hint="My requests" tone="cyan" icon={<Calendar className="h-4 w-4" />} />
               <LeaveMetricCard label="Approvals" value={String(pendingNotifications.length)} hint="Manager queue" tone="violet" icon={<ArrowUpRight className="h-4 w-4" />} />
@@ -461,8 +461,8 @@ export function LeaveManagementClient({
       </Card>
 
       {canUseStaffLeaveHub && !hasHodLinkage && (
-        <Alert className="border-amber-200 bg-amber-50">
-          <AlertDescription className="text-amber-800">
+        <Alert className="border-blue-200 bg-blue-50">
+          <AlertDescription className="text-blue-800">
             Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.
           </AlertDescription>
         </Alert>
@@ -524,7 +524,7 @@ export function LeaveManagementClient({
             </TabsTrigger>
             {isManagerView && (
               <>
-              <TabsTrigger value="pending-approvals" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=inactive]:text-amber-700">
+              <TabsTrigger value="pending-approvals" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-blue-700">
                 Pending ({pendingNotifications.length})
               </TabsTrigger>
               {isAdminView && (
@@ -591,7 +591,7 @@ export function LeaveManagementClient({
         {isManagerView && (
           <>
             <TabsContent value="pending-approvals" className="space-y-4">
-              <Alert className="border-amber-200 bg-amber-50">
+              <Alert className="border-blue-200 bg-blue-50">
                 <AlertDescription>
                   Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
                 </AlertDescription>
@@ -675,11 +675,11 @@ function LeaveMetricCard({
   label: string
   value: string
   hint: string
-  tone: "amber" | "emerald" | "cyan" | "violet"
+  tone: "blue" | "emerald" | "cyan" | "violet"
   icon: React.ReactNode
 }) {
   const tones = {
-    amber: "border-amber-300/20 bg-amber-300/10 text-amber-50",
+    blue: "border-blue-300/20 bg-blue-300/10 text-blue-50",
     emerald: "border-emerald-300/20 bg-emerald-300/10 text-emerald-50",
     cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-50",
     violet: "border-violet-300/20 bg-violet-300/10 text-violet-50",
@@ -727,7 +727,7 @@ function LeaveRequestCard({
     isApproved
       ? "border-emerald-200 bg-emerald-50/60"
       : isPending
-        ? "border-amber-200 bg-amber-50/60"
+        ? "border-blue-200 bg-blue-50/60"
         : "border-rose-200 bg-rose-50/60"
 
   return (
@@ -738,7 +738,7 @@ function LeaveRequestCard({
             <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
             <CardDescription className="mt-1 line-clamp-2">{request.reason}</CardDescription>
           </div>
-          <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
+          <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
             {formatLeaveType(request.status)}
           </Badge>
         </div>

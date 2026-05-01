@@ -186,9 +186,9 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
         </div>
         <WorkflowStages status={req.status} />
         {req.adjustment_reason && (
-          <Alert className="mt-3 py-2 border-amber-200 bg-amber-50">
-            <AlertCircle className="h-3 w-3 text-amber-600" />
-            <AlertDescription className="text-xs text-amber-800 ml-1">
+          <Alert className="mt-3 py-2 border-blue-200 bg-blue-50">
+            <AlertCircle className="h-3 w-3 text-blue-600" />
+            <AlertDescription className="text-xs text-blue-800 ml-1">
               <strong>HR Office adjustment:</strong> {req.adjustment_reason}
               {req.adjusted_days && req.original_requested_days && req.adjusted_days !== req.original_requested_days && (
                 <span className="ml-1">({req.original_requested_days}d → {req.adjusted_days}d)</span>
@@ -817,7 +817,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                 className={action === act
                                   ? act === "approve" ? "bg-emerald-600 hover:bg-emerald-700"
                                   : act === "reject" ? "bg-red-600 hover:bg-red-700"
-                                  : "bg-amber-600 hover:bg-amber-700"
+                                  : "bg-blue-600 hover:bg-blue-700"
                                   : ""
                                 }>
                                 {act === "approve" ? "✓ Approve" : act === "reject" ? "✗ Reject" : "⟳ Changes"}
