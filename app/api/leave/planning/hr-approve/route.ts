@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { isHrApproverRole, isHrDepartment, buildHologramCode } from "@/lib/leave-planning"
+import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
 import crypto from "crypto"
 
 const HR_APPROVE_ELIGIBLE = ["hr_office_forwarded", "manager_confirmed", "hod_approved"] as const
@@ -52,7 +52,19 @@ export async function POST(request: NextRequest) {
       hr_signature_text,
       hr_signature_image_url,
       hr_signature_data_url,
+      memo_draft_subject,
+      memo_draft_body,
+      memo_draft_cc,
     } = body
+
+    const memoDraftPatch = {
+      memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
+      memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
+      memo_draft_cc: memo_draft_cc ? String(memo_draft_cc).trim() : null,
+      memo_draft_last_edited_by: user.id,
+      memo_draft_last_edited_role: "hr_approver",
+      memo_draft_last_edited_at: new Date().toISOString(),
+    }
 
     if (!leave_plan_request_id || !action) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
@@ -101,6 +113,7 @@ export async function POST(request: NextRequest) {
           hr_approver_name: approverName,
           hr_approved_at: now,
           hr_approval_note: note || null,
+          ...memoDraftPatch,
           updated_at: now,
         })
         .eq("id", leave_plan_request_id)
@@ -133,6 +146,7 @@ export async function POST(request: NextRequest) {
         hr_approver_name: approverName,
         hr_approved_at: now,
         hr_approval_note: note || null,
+        ...memoDraftPatch,
         memo_token: memoToken,
         memo_generated_at: now,
         hr_signature_mode: hr_signature_mode || "typed",

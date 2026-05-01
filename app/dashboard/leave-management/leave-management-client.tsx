@@ -412,7 +412,7 @@ export function LeaveManagementClient({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <Card className="overflow-hidden border-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_28%),linear-gradient(135deg,_#08111f_0%,_#0f2741_48%,_#12355a_100%)] text-white shadow-[0_24px_90px_rgba(8,15,32,0.24)]">
         <CardContent className="p-6 md:p-8">
           <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
@@ -514,36 +514,36 @@ export function LeaveManagementClient({
       )}
 
       <Tabs defaultValue="my-requests" className="space-y-6">
-        <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
+        <TabsList className="flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
           <>
-            <TabsTrigger value="my-requests" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
+            <TabsTrigger value="my-requests" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
               My Requests ({staffRequests.length})
             </TabsTrigger>
-            <TabsTrigger value="approved" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
+            <TabsTrigger value="approved" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
               Approved ({approvedRequests.length})
             </TabsTrigger>
             {isManagerView && (
               <>
-              <TabsTrigger value="pending-approvals" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-blue-700">
+              <TabsTrigger value="pending-approvals" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-blue-700">
                 Pending ({pendingNotifications.length})
               </TabsTrigger>
               {isAdminView && (
                 <>
-                  <TabsTrigger value="role-staff" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-sky-600 data-[state=active]:text-white data-[state=inactive]:text-sky-700">
+                  <TabsTrigger value="role-staff" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-sky-600 data-[state=active]:text-white data-[state=inactive]:text-sky-700">
                     Staff ({adminStaffQueue.length})
                   </TabsTrigger>
-                  <TabsTrigger value="role-hod" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=inactive]:text-violet-700">
+                  <TabsTrigger value="role-hod" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=inactive]:text-violet-700">
                     HOD ({adminHodQueue.length})
                   </TabsTrigger>
-                  <TabsTrigger value="role-regional" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-indigo-700">
+                  <TabsTrigger value="role-regional" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-indigo-700">
                     Regional ({adminRegionalQueue.length})
                   </TabsTrigger>
-                  <TabsTrigger value="delayed" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-rose-600 data-[state=active]:text-white data-[state=inactive]:text-rose-700">
+                  <TabsTrigger value="delayed" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-rose-600 data-[state=active]:text-white data-[state=inactive]:text-rose-700">
                     Delayed {`>=${inactivityDays}d`} ({adminDelayedQueue.length})
                   </TabsTrigger>
                 </>
               )}
-              <TabsTrigger value="history" className="flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
+              <TabsTrigger value="history" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
                 History
               </TabsTrigger>
               </>

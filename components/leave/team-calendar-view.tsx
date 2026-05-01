@@ -76,7 +76,7 @@ export function TeamCalendarView() {
     setLoading(true)
     setError(null)
     const m = `${year}-${String(month + 1).padStart(2, "0")}`
-    fetch(`/api/leave/team-calendar?month=${m}`)
+    fetch(`/api/leave/team-calendar?month=${m}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error)
@@ -119,8 +119,8 @@ export function TeamCalendarView() {
   return (
     <Card className="overflow-hidden border-0 shadow-md">
       {/* Header */}
-      <div className="bg-[linear-gradient(135deg,_#0f2741_0%,_#1e3a5f_100%)] px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-[linear-gradient(135deg,_#0f2741_0%,_#1e3a5f_100%)] px-4 py-4 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white/10 p-2.5">
               <Users className="h-5 w-5 text-cyan-200" />
@@ -130,11 +130,11 @@ export function TeamCalendarView() {
               <p className="text-xs text-slate-300">Who is off this month</p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-1 py-1">
             <Button size="icon" variant="ghost" className="h-8 w-8 rounded-xl text-white hover:bg-white/10" onClick={prevMonth}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[130px] text-center text-sm font-semibold text-white">
+            <span className="min-w-[120px] text-center text-sm font-semibold text-white">
               {MONTH_NAMES[month]} {year}
             </span>
             <Button size="icon" variant="ghost" className="h-8 w-8 rounded-xl text-white hover:bg-white/10" onClick={nextMonth}>
@@ -144,7 +144,7 @@ export function TeamCalendarView() {
         </div>
       </div>
 
-      <CardContent className="p-4">
+      <CardContent className="p-3 sm:p-4">
         {loading ? (
           <div className="flex items-center justify-center py-14">
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />

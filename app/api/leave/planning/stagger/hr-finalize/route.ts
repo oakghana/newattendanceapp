@@ -101,9 +101,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Stagger request not found." }, { status: 404 })
     }
 
-    if (stagger.status !== "manager_confirmed") {
+    if (!["manager_confirmed", "hod_approved", "hr_office_forwarded"].includes(String(stagger.status || ""))) {
       return NextResponse.json(
-        { error: "Only manager-confirmed stagger requests can be finalized by HR." },
+        { error: "Only HOD/HR-office cleared stagger requests can be finalized by HR." },
         { status: 400 },
       )
     }

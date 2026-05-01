@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
 
 export async function GET() {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -45,16 +46,39 @@ export async function GET() {
       })
     }
 
-    // Fetch user's leave_requests for this period (approved + pending count toward usage)
-    const { data: requests } = await supabase
+    // V2 source of truth: leave planning requests finalized by HR approver.
+    const { data: v2ApprovedRequests } = await admin
+      .from("leave_plan_requests")
+      .select(
+        "leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days, status",
+      )
+      .eq("user_id", user.id)
+      .eq("status", "hr_approved")
+
+    // Legacy fallback source for older leave module records.
+    const { data: legacyApprovedRequests } = await admin
       .from("leave_requests")
       .select("leave_type, start_date, end_date, status")
       .eq("user_id", user.id)
-      .in("status", ["approved", "pending", "active"])
+      .in("status", ["approved", "active"])
 
-    // Compute days used per type (business days approximation: count calendar days excl. weekends)
+    // Compute days used per type.
     const usageMap: Record<string, number> = {}
-    for (const req of requests || []) {
+
+    for (const req of v2ApprovedRequests || []) {
+      const key = String((req as any).leave_type_key || "annual").toLowerCase().trim()
+      const adjustedDays = Number((req as any).adjusted_days || 0)
+      const start = String((req as any).adjusted_start_date || (req as any).preferred_start_date || "")
+      const end = String((req as any).adjusted_end_date || (req as any).preferred_end_date || "")
+      const requestedDays = Number((req as any).requested_days || 0)
+
+      const days =
+        adjustedDays > 0 ? adjustedDays : requestedDays > 0 ? requestedDays : countCalendarDays(start, end)
+
+      usageMap[key] = (usageMap[key] || 0) + days
+    }
+
+    for (const req of legacyApprovedRequests || []) {
       const key = String(req.leave_type || "annual").toLowerCase().trim()
       const days = countCalendarDays(req.start_date, req.end_date)
       usageMap[key] = (usageMap[key] || 0) + days

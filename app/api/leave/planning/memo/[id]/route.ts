@@ -201,7 +201,7 @@ export async function GET(
     const wasAdjusted = !!lr.adjusted_days && lr.adjusted_days !== lr.original_requested_days
 
     const leaveLabel = leaveTypeLabel(String(lr.leave_type_key || "annual"))
-    const subject = `APPLICATION FOR ${leaveLabel.toUpperCase()} — ${lr.leave_year_period || "2026/2027"}`
+    const subject = String(lr.memo_draft_subject || "").trim() || `APPLICATION FOR ${leaveLabel.toUpperCase()} — ${lr.leave_year_period || "2026/2027"}`
 
     // Return-to-work date (next business day after leave end)
     const returnDate = new Date(effectiveEnd)
@@ -211,12 +211,20 @@ export async function GET(
     if (returnDate.getDay() === 0) returnDate.setDate(returnDate.getDate() + 1)
 
     const paragraphs: string[] = []
-    paragraphs.push(
-      `We refer to your application for ${leaveLabel} dated ${fmtDate(lr.submitted_at)} on the above subject and wish to inform you that Management has approved your leave request as follows:`,
-    )
-    paragraphs.push(
-      `Leave Type: ${leaveLabel}\nLeave Period: ${fmtDate(effectiveStart)} to ${fmtDate(effectiveEnd)}\nApproved Days: ${effectiveDays} day(s)\nReturn to Work Date: ${fmtDate(returnDate.toISOString())}`,
-    )
+    const draftBody = String(lr.memo_draft_body || "").trim()
+    if (draftBody) {
+      for (const block of draftBody.split(/\n\s*\n/)) {
+        const trimmed = block.trim()
+        if (trimmed) paragraphs.push(trimmed)
+      }
+    } else {
+      paragraphs.push(
+        `We refer to your application for ${leaveLabel} dated ${fmtDate(lr.submitted_at)} on the above subject and wish to inform you that Management has approved your leave request as follows:`,
+      )
+      paragraphs.push(
+        `Leave Type: ${leaveLabel}\nLeave Period: ${fmtDate(effectiveStart)} to ${fmtDate(effectiveEnd)}\nApproved Days: ${effectiveDays} day(s)\nReturn to Work Date: ${fmtDate(returnDate.toISOString())}`,
+      )
+    }
 
     if (wasAdjusted && lr.adjustment_reason) {
       const breakdown: string[] = [`Original Requested Days: ${lr.original_requested_days || lr.requested_days}`]
@@ -402,12 +410,20 @@ export async function GET(
     doc.text("CC:", marginLeft, y)
     doc.setFont("times", "normal")
     const ccEntries: string[] = []
-    if (hodProfile) {
-      ccEntries.push(`${fmtName(hodProfile).toUpperCase()} — ${String(hodProfile?.position || hodProfile?.role || "HOD").toUpperCase()}`)
+    const draftCc = String(lr.memo_draft_cc || "").trim()
+    if (draftCc) {
+      for (const line of draftCc.split(/\r?\n/)) {
+        const trimmed = line.trim()
+        if (trimmed) ccEntries.push(trimmed)
+      }
+    } else {
+      if (hodProfile) {
+        ccEntries.push(`${fmtName(hodProfile).toUpperCase()} — ${String(hodProfile?.position || hodProfile?.role || "HOD").toUpperCase()}`)
+      }
+      ccEntries.push("ACCOUNTS MANAGER — QUALITY CONTROL COMPANY LIMITED")
+      ccEntries.push("HR LEAVE OFFICE — HUMAN RESOURCES DEPARTMENT")
+      ccEntries.push("FILE")
     }
-    ccEntries.push("ACCOUNTS MANAGER — QUALITY CONTROL COMPANY LIMITED")
-    ccEntries.push("HR LEAVE OFFICE — HUMAN RESOURCES DEPARTMENT")
-    ccEntries.push("FILE")
 
     let ccX = marginLeft + 10
     for (const cc of ccEntries) {

@@ -65,7 +65,7 @@ export function LeaveBalanceWidget() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/leave/balance")
+    fetch("/api/leave/balance", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error)
@@ -102,8 +102,8 @@ export function LeaveBalanceWidget() {
   return (
     <Card className="overflow-hidden border-0 shadow-md">
       {/* Header */}
-      <div className="bg-[linear-gradient(135deg,_#0f2741_0%,_#1e3a5f_100%)] px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-[linear-gradient(135deg,_#0f2741_0%,_#1e3a5f_100%)] px-4 py-4 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white/10 p-2.5">
               <TrendingUp className="h-5 w-5 text-cyan-200" />
@@ -127,8 +127,8 @@ export function LeaveBalanceWidget() {
         </div>
       </div>
 
-      <CardContent className="p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <CardContent className="p-3 sm:p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {data.balances.map((balance) => {
             const pct = balance.entitlement > 0 ? Math.min(100, (balance.used / balance.entitlement) * 100) : 0
             const col = getColour(balance.key)

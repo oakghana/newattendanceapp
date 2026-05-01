@@ -281,6 +281,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [officeTravelDays, setOfficeTravelDays] = useState<Record<string, string>>({})
   const [officePriorDays, setOfficePriorDays] = useState<Record<string, string>>({})
   const [officeReason, setOfficeReason] = useState<Record<string, string>>({})
+  const [officeMemoSubject, setOfficeMemoSubject] = useState<Record<string, string>>({})
+  const [officeMemoBody, setOfficeMemoBody] = useState<Record<string, string>>({})
+  const [officeMemoCc, setOfficeMemoCc] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
   // ── HR Approver ─────────────────────────────────────────────────────
@@ -288,6 +291,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
   const [hrSigDataUrl, setHrSigDataUrl] = useState<string | null>(null)
+  const [hrMemoSubject, setHrMemoSubject] = useState<Record<string, string>>({})
+  const [hrMemoBody, setHrMemoBody] = useState<Record<string, string>>({})
+  const [hrMemoCc, setHrMemoCc] = useState<Record<string, string>>({})
   const [hrSubmitting, setHrSubmitting] = useState<string | null>(null)
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
 
@@ -498,6 +504,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           holiday_days_deducted: Number(officeHolidayDays[requestId] || 0),
           travelling_days_added: Number(officeTravelDays[requestId] || 0),
           prior_leave_days_deducted: Number(officePriorDays[requestId] || 0),
+          memo_draft_subject: officeMemoSubject[requestId] || null,
+          memo_draft_body: officeMemoBody[requestId] || null,
+          memo_draft_cc: officeMemoCc[requestId] || null,
         }),
       })
       const json = await res.json()
@@ -522,6 +531,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           leave_plan_request_id: requestId,
           action,
           note: hrNote[requestId] || null,
+          memo_draft_subject: hrMemoSubject[requestId] || null,
+          memo_draft_body: hrMemoBody[requestId] || null,
+          memo_draft_cc: hrMemoCc[requestId] || null,
           hr_signature_mode: hrSigMode,
           hr_signature_text: hrSigMode === "typed" ? hrSigTyped : null,
           hr_signature_data_url: hrSigMode !== "typed" ? hrSigDataUrl : null,
@@ -558,7 +570,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ── Header Banner ──────────────────────────────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
@@ -607,10 +619,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
       {data && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="flex flex-wrap h-auto gap-1.5 rounded-xl mb-2 border border-blue-100 bg-blue-50/60 p-1.5">
+          <TabsList className="mb-2 flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-xl border border-blue-100 bg-blue-50/60 p-1.5">
             {tabs.map(({ value, label, Icon, count }) => (
               <TabsTrigger key={value} value={value}
-                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-800 transition-colors hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:font-semibold">
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-800 transition-colors hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:font-semibold">
                 <Icon className="w-4 h-4" />
                 {label}
                 {count != null && count > 0 && (
@@ -952,6 +964,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                             if (!isExpanded) {
                               setOfficeAdjStart((p) => ({ ...p, [req.id]: req.preferred_start_date || "" }))
                               setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.preferred_end_date || "" }))
+                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || "" }))
+                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || "" }))
+                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || "" }))
                             }
                           }}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50">
@@ -1028,6 +1043,40 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                 rows={3} className="resize-none text-sm"
                               />
                             </div>
+
+                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2">
+                              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Editable)</p>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Memo Subject</Label>
+                                <Input
+                                  value={officeMemoSubject[req.id] || ""}
+                                  onChange={(e) => setOfficeMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="RE: APPLICATION FOR ANNUAL LEAVE — 2026/2027"
+                                  className="h-9 bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Memo Body</Label>
+                                <Textarea
+                                  value={officeMemoBody[req.id] || ""}
+                                  onChange={(e) => setOfficeMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="Draft the memo body that HR approver can finalize before approval."
+                                  rows={4}
+                                  className="resize-none text-sm bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">CC List (one per line)</Label>
+                                <Textarea
+                                  value={officeMemoCc[req.id] || ""}
+                                  onChange={(e) => setOfficeMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="HOD\nACCOUNTS MANAGER\nHR LEAVE OFFICE\nFILE"
+                                  rows={3}
+                                  className="resize-none text-sm bg-white"
+                                />
+                              </div>
+                            </div>
+
                             <Button onClick={() => submitHrOfficeReview(req.id)}
                               disabled={officeSubmitting === req.id}
                               className="bg-blue-700 hover:bg-blue-800 text-white">
@@ -1128,12 +1177,54 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                           </Alert>
                         )}
                         <Button size="sm" variant="outline"
-                          onClick={() => setHrExpandedId(isExpanded ? null : req.id)}
+                          onClick={() => {
+                            if (isExpanded) {
+                              setHrExpandedId(null)
+                              return
+                            }
+                            setHrExpandedId(req.id)
+                            setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || "" }))
+                            setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || "" }))
+                            setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || "" }))
+                          }}
                           className="text-xs h-8">
                           {isExpanded ? "▲ Collapse" : "▼ Review & Decide"}
                         </Button>
                         {isExpanded && (
                           <div className="mt-4 space-y-3 border-t pt-4">
+                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2">
+                              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Final Edit Before Issue)</p>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Memo Subject</Label>
+                                <Input
+                                  value={hrMemoSubject[req.id] || ""}
+                                  onChange={(e) => setHrMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="Memo subject"
+                                  className="h-9 bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Memo Body</Label>
+                                <Textarea
+                                  value={hrMemoBody[req.id] || ""}
+                                  onChange={(e) => setHrMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="Finalize memo body before issuing approval."
+                                  rows={4}
+                                  className="resize-none text-sm bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">CC List (one per line)</Label>
+                                <Textarea
+                                  value={hrMemoCc[req.id] || ""}
+                                  onChange={(e) => setHrMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="CC recipients"
+                                  rows={3}
+                                  className="resize-none text-sm bg-white"
+                                />
+                              </div>
+                            </div>
+
                             <div className="space-y-1">
                               <Label className="text-xs font-semibold">HR Note (optional)</Label>
                               <Textarea

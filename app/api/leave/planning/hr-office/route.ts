@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { isHrLeaveOfficeRole, isHrApproverRole, isHrDepartment, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
+import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +56,9 @@ export async function POST(request: NextRequest) {
       holiday_days_deducted,
       travelling_days_added,
       prior_leave_days_deducted,
+      memo_draft_subject,
+      memo_draft_body,
+      memo_draft_cc,
     } = body
 
     if (!leave_plan_request_id) {
@@ -135,6 +138,12 @@ export async function POST(request: NextRequest) {
         hr_office_reviewer_id: user.id,
         hr_office_reviewer_name: reviewerName,
         hr_office_reviewed_at: new Date().toISOString(),
+        memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
+        memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
+        memo_draft_cc: memo_draft_cc ? String(memo_draft_cc).trim() : null,
+        memo_draft_last_edited_by: user.id,
+        memo_draft_last_edited_role: "hr_leave_office",
+        memo_draft_last_edited_at: new Date().toISOString(),
         // Apply the adjusted dates as the effective dates for HR to finalize
         preferred_start_date: adjusted_start_date,
         preferred_end_date: adjusted_end_date,
