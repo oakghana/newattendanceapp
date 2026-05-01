@@ -144,6 +144,106 @@ function toIsoDate(value: Date) {
   return value.toISOString().slice(0, 10)
 }
 
+// ─── Corporate Memo Template Builder ────────────────────────────────────────
+function buildMemoTemplate(req: any): { subject: string; body: string } {
+  const leaveType = String(req.leave_type_key || "annual")
+  const labelMap: Record<string, string> = {
+    annual: "Annual Leave",
+    sick: "Sick Leave",
+    maternity: "Maternity Leave",
+    paternity: "Paternity Leave",
+    study: "Study Leave",
+    compassionate: "Compassionate Leave",
+    part_leave: "Part Leave",
+    no_pay: "Leave Without Pay",
+    casual: "Casual Leave",
+  }
+  const leaveLabel = labelMap[leaveType] || leaveTypeLabelShort(leaveType)
+  const yearPeriod = String(req.leave_year_period || "2026/2027")
+  const staffName = String(req.staff_name || "")
+  const employeeId = String(req.employee_id || "")
+  const rank = String(req.rank || "")
+  const deptName = String(req.department_name || "")
+  const effectiveStart = req.adjusted_start_date || req.preferred_start_date
+  const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
+  const effectiveDays = Number(req.adjusted_days || req.requested_days || 0)
+
+  const fmtLong = (val?: string | null) => {
+    if (!val) return "—"
+    try {
+      return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
+    } catch { return val }
+  }
+
+  const startStr = fmtLong(effectiveStart)
+  const endStr = fmtLong(effectiveEnd)
+
+  // Return-to-work: next business day after leave end
+  let returnStr = "—"
+  if (effectiveEnd) {
+    const ret = new Date(effectiveEnd)
+    ret.setDate(ret.getDate() + 1)
+    if (ret.getDay() === 6) ret.setDate(ret.getDate() + 2)
+    if (ret.getDay() === 0) ret.setDate(ret.getDate() + 1)
+    returnStr = fmtLong(ret.toISOString().slice(0, 10))
+  }
+
+  const submittedStr = fmtLong(req.submitted_at || req.created_at)
+
+  const refCodeMap: Record<string, string> = {
+    annual: "AL",
+    sick: "SL",
+    maternity: "MAT",
+    paternity: "PAT",
+    study: "STL",
+    compassionate: "CL",
+    part_leave: "PL",
+    no_pay: "LWP",
+    casual: "CSL",
+  }
+  const refCode = refCodeMap[leaveType] || "LV"
+  const yearShort = yearPeriod.slice(-4)
+
+  const subject = `APPLICATION FOR ${leaveLabel.toUpperCase()} — ${yearPeriod}`
+
+  const header = [
+    `TO: ${staffName}${employeeId ? ` (${employeeId})` : ""}`,
+    rank ? `POSITION: ${rank}` : "",
+    deptName ? `DEPARTMENT: ${deptName}` : "",
+    `REF: QCC/HRD/LV/${refCode}/${yearShort}`,
+    `DATE: ${new Date().toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })}`,
+  ].filter(Boolean).join("\n")
+
+  const opening = `We refer to your application for ${leaveLabel} dated ${submittedStr} on the above subject and wish to inform you that Management has approved your leave request as follows:`
+
+  const details = [
+    `Leave Type:          ${leaveLabel}`,
+    `Leave Period:        ${startStr} to ${endStr}`,
+    `Approved Days:       ${effectiveDays} day(s)`,
+    `Return to Work Date: ${returnStr}`,
+  ].join("\n")
+
+  const specificParagraphMap: Record<string, string> = {
+    annual: `You are requested to ensure that all official duties are properly handed over before proceeding on leave. You are expected to resume duty on ${returnStr}.`,
+    sick: `Management wishes you a speedy recovery. Please ensure that you submit your medical certificate / sick sheet to the Human Resource Department upon your return to duty on ${returnStr}.`,
+    maternity: `Management extends its congratulations to you on this occasion. You are expected to resume duty on ${returnStr}. Please ensure that all relevant documentation is submitted to the Human Resource Department upon your return.`,
+    paternity: `Management extends its congratulations to you on the occasion of the birth of your child. You are expected to resume duty on ${returnStr}.`,
+    study: `You are to ensure that all your official duties are properly handed over before proceeding on leave. You are required to submit your academic results or progress report to the Human Resource Department upon your return on ${returnStr}.`,
+    compassionate: `Management extends its sympathies during this difficult period. You are expected to resume duty on ${returnStr}.`,
+    part_leave: `You are requested to ensure that all official duties are properly handed over before proceeding on leave. You are expected to resume duty on ${returnStr}.`,
+    no_pay: `Please note that this leave is approved without pay for the entire approved period. You are expected to resume duty on ${returnStr}.`,
+    casual: `Please note that casual leave is granted at the discretion of Management. You are expected to resume duty on ${returnStr}.`,
+  }
+  const specificPara = specificParagraphMap[leaveType] || `You are expected to resume duty on ${returnStr}.`
+
+  const closing = `By a copy of this letter, the relevant departments are notified of your approved leave period.\n\nYou can count on our co-operation.`
+
+  const body = [header, "", subject, "", opening, "", details, "", specificPara, "", closing].join("\n")
+
+  return { subject, body }
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 function getCurrentMonthRange() {
   const now = new Date()
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
@@ -1791,8 +1891,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                               setOfficeAdjStart((p) => ({ ...p, [req.id]: req.preferred_start_date || "" }))
                               setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.preferred_end_date || "" }))
                               setOfficeTemplateKey((p) => ({ ...p, [req.id]: matchingTemplate?.template_key || "" }))
-                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || matchingTemplate?.subject_template || "" }))
-                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || matchingTemplate?.body_template || "" }))
+                              const memoTpl = buildMemoTemplate(req)
+                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || matchingTemplate?.subject_template || memoTpl.subject }))
+                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || matchingTemplate?.body_template || memoTpl.body }))
                               setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || matchingTemplate?.cc_recipients || "" }))
                             }
                           }}
@@ -2090,8 +2191,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                               return
                             }
                             setHrExpandedId(req.id)
-                            setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || "" }))
-                            setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || "" }))
+                            const hrMemoTpl = buildMemoTemplate(req)
+                            setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || hrMemoTpl.subject }))
+                            setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || hrMemoTpl.body }))
                             setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || "" }))
                           }}
                           className="text-xs h-8">

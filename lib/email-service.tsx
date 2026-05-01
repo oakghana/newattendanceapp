@@ -107,7 +107,7 @@ class EmailService {
         return
       }
 
-      this.transporter = nodemailer.createTransporter(emailConfig)
+      this.transporter = nodemailer.createTransport(emailConfig)
 
       // Verify connection. If Gmail STARTTLS fails due network/greeting issues, try SSL fallback (465).
       try {
@@ -130,7 +130,7 @@ class EmailService {
           },
         }
 
-        this.transporter = nodemailer.createTransporter(fallbackConfig)
+        this.transporter = nodemailer.createTransport(fallbackConfig)
         await this.transporter.verify()
         console.warn("[EmailService] Primary SMTP profile failed; Gmail SSL fallback (465) is now active")
       }
