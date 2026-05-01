@@ -1,8 +1,116 @@
 import { updateSession } from "@/lib/supabase/middleware";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+// Define route protection rules: [pathPattern] => [allowedRoles]
+const PROTECTED_ROUTES: Record<string, string[]> = {
+  // Admin pages
+  "/admin": ["admin"],
+  "/dashboard/admin": ["admin"],
+  "/dashboard/settings": ["admin"],
+  "/dashboard/loan-app": ["admin", "director_hr", "manager_hr", "hr_officer", "loan_office", "accounts"],
+  
+  // HR/Leave Management
+  "/dashboard/leave-management": ["admin", "hr_leave_office", "hr_officer", "manager_hr", "director_hr", "department_head", "regional_manager"],
+  "/dashboard/leave-planning": ["admin", "hr_leave_office", "hr_officer", "manager_hr", "director_hr"],
+  
+  // Staff Dashboard
+  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee"],
+  
+  // Regional Manager pages
+  "/dashboard/regional": ["admin", "regional_manager"],
+  "/dashboard/department": ["admin", "department_head", "regional_manager"],
+  
+  // Accounts pages
+  "/dashboard/accounts": ["admin", "accounts"],
+  
+  // Audit pages
+  "/dashboard/audit": ["admin", "audit_staff"],
+};
+
+function normalizeRole(role: string | null | undefined): string {
+  return (role || "").toLowerCase().trim().replace(/[-\s]+/g, "_");
+}
+
+function isAuthorizedForRoute(userRole: string | null | undefined, pathname: string): boolean {
+  const normalized = normalizeRole(userRole);
+  
+  // Check exact and pattern matches
+  for (const [pattern, allowedRoles] of Object.entries(PROTECTED_ROUTES)) {
+    // Exact match
+    if (pathname === pattern) {
+      return allowedRoles.some(r => normalizeRole(r) === normalized);
+    }
+    
+    // Pattern match (pathname starts with pattern)
+    if (pathname.startsWith(pattern + "/")) {
+      return allowedRoles.some(r => normalizeRole(r) === normalized);
+    }
+  }
+  
+  // If not in protected routes, allow access (public pages)
+  return true;
+}
 
 export default async function proxy(request: NextRequest) {
-  return await updateSession(request);
+  const pathname = request.nextUrl.pathname;
+  
+  // Skip auth check for public paths, API routes, and static files
+  if (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/public/") ||
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname === "/auth" ||
+    pathname.startsWith("/images/") ||
+    pathname.startsWith("/fonts/") ||
+    pathname.match(/\.\w+$/) // Files with extensions
+  ) {
+    return await updateSession(request);
+  }
+
+  try {
+    // Update session first
+    let response = await updateSession(request);
+    
+    // Get user session for authorization check
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    // Fetch user profile to get role
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", session.user.id)
+      .maybeSingle();
+
+    const userRole = profile?.role;
+
+    // Check authorization for the requested route
+    if (!isAuthorizedForRoute(userRole, pathname)) {
+      console.warn(
+        `[Authorization] User ${session.user.id} (role: ${userRole}) attempted unauthorized access to ${pathname}`
+      );
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+
+    return response;
+  } catch (error) {
+    console.error("[Proxy] Error:", error);
+    return await updateSession(request);
+  }
 }
 
 export const config = {
