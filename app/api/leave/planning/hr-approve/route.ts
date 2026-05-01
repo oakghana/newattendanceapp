@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { notifyLeaveHrApproved, notifyLeaveHrRejected } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
 import crypto from "crypto"
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", leave_plan_request_id)
 
-      // Notify staff of rejection
+      // In-app notification
       await admin.from("staff_notifications").insert({
         recipient_id: (leaveRequest as any).user_id,
         type: "leave_plan_hr_rejected",
@@ -126,6 +127,14 @@ export async function POST(request: NextRequest) {
         message: `Your leave request has been rejected by HR. ${note ? `Reason: ${note}` : ""}`,
         data: { leave_plan_request_id, action: "reject", note: note || null },
       }).then(() => {}).catch(() => {})
+
+      // Email notification
+      notifyLeaveHrRejected(admin, {
+        staffUserId: (leaveRequest as any).user_id,
+        staffName: "Staff Member",
+        approverName,
+        note: note || "",
+      }).catch(() => {})
 
       return NextResponse.json({ success: true, message: "Leave request rejected." })
     }
@@ -201,7 +210,7 @@ export async function POST(request: NextRequest) {
       // Non-fatal
     }
 
-    // Notify staff of approval with memo link
+    // In-app notification
     await admin.from("staff_notifications").insert({
       recipient_id: (leaveRequest as any).user_id,
       type: "leave_plan_hr_approved",
@@ -216,6 +225,19 @@ export async function POST(request: NextRequest) {
         effective_days: effectiveDays,
       },
     }).then(() => {}).catch(() => {})
+
+    // Email notification (staff + HOD)
+    notifyLeaveHrApproved(admin, {
+      leavePlanRequestId: leave_plan_request_id,
+      staffUserId: (leaveRequest as any).user_id,
+      staffName: "Staff Member",
+      leaveType: String((leaveRequest as any).leave_type_key || "annual"),
+      effectiveStart,
+      effectiveEnd,
+      effectiveDays,
+      approverName,
+      memoToken,
+    }).catch(() => {})
 
     return NextResponse.json({
       success: true,

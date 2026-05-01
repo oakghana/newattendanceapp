@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import {
+  notifyLoanHodApproved,
+  notifyLoanHodRejected,
+  notifyLoanStageAdvanced,
+  notifyLoanApproved,
+  notifyLoanRejected,
+} from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   GOOD_FD_THRESHOLD,
@@ -239,6 +246,8 @@ export async function POST(request: NextRequest) {
       update.hod_review_note = note
       update.hod_decision_at = new Date().toISOString()
 
+      const hodActorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
+      const staffNameForHod = String(req.staff_full_name || "").trim() || "Staff Member"
       if (decision === "approve") {
         await notifyUsers(
           admin,
@@ -248,6 +257,14 @@ export async function POST(request: NextRequest) {
           "loan_hod_approved",
           { request_id: req.id },
         )
+        notifyLoanHodApproved(admin, {
+          loanRequestId: req.id,
+          staffName: staffNameForHod,
+          loanType: String(req.loan_type_label || req.loan_type_key || ""),
+          requestNumber: String(req.request_number || req.id),
+          hodName: hodActorName,
+          amount: req.amount ?? null,
+        }).catch(() => {})
       } else {
         await notifyUsers(
           admin,
@@ -257,6 +274,14 @@ export async function POST(request: NextRequest) {
           "loan_hod_rejected",
           { request_id: req.id },
         )
+        notifyLoanHodRejected(admin, {
+          staffUserId: req.user_id,
+          staffName: staffNameForHod,
+          loanType: String(req.loan_type_label || req.loan_type_key || ""),
+          requestNumber: String(req.request_number || req.id),
+          hodName: hodActorName,
+          note: note || "",
+        }).catch(() => {})
       }
     }
 
@@ -317,6 +342,7 @@ export async function POST(request: NextRequest) {
         update.status = toStatus
         update.loan_office_forwarded_at = new Date().toISOString()
 
+        const loanStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
         if (requiresFdCheck) {
           const { data: accountsUsers } = await admin
             .from("user_profiles")
@@ -331,6 +357,15 @@ export async function POST(request: NextRequest) {
             "loan_accounts_pending",
             { request_id: req.id },
           )
+          notifyLoanStageAdvanced(admin, {
+            toRoles: ["accounts", "admin"],
+            staffName: loanStaffName,
+            loanType: String(req.loan_type_label || req.loan_type_key || ""),
+            requestNumber: String(req.request_number || req.id),
+            fromStage: "Loan Office",
+            toStage: "Accounts / FD",
+            amount: req.amount ?? null,
+          }).catch(() => {})
         } else {
           const { data: hrUsers } = await admin
             .from("user_profiles")
@@ -345,6 +380,15 @@ export async function POST(request: NextRequest) {
             "loan_hr_terms_pending",
             { request_id: req.id },
           )
+          notifyLoanStageAdvanced(admin, {
+            toRoles: ["hr_officer", "director_hr", "manager_hr", "hr_director", "admin"],
+            staffName: loanStaffName,
+            loanType: String(req.loan_type_label || req.loan_type_key || ""),
+            requestNumber: String(req.request_number || req.id),
+            fromStage: "Loan Office",
+            toStage: "HR Terms",
+            amount: req.amount ?? null,
+          }).catch(() => {})
         }
       }
     }
@@ -615,6 +659,8 @@ export async function POST(request: NextRequest) {
       update.director_note = note
       update.director_decision_at = new Date().toISOString()
 
+      const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
+      const dirStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
       await notifyUsers(
         admin,
         [req.user_id],
@@ -629,6 +675,29 @@ export async function POST(request: NextRequest) {
           memo_path: buildMemoPath(req.id, req.user_id),
         },
       )
+
+      if (decision === "approve") {
+        const memoUrl = `${process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || ""}${buildMemoPath(req.id, req.user_id)}`
+        notifyLoanApproved(admin, {
+          staffUserId: req.user_id,
+          staffName: dirStaffName,
+          loanType: String(req.loan_type_label || req.loan_type_key || ""),
+          requestNumber: String(req.request_number || req.id),
+          approverName: directorName,
+          amount: req.amount ?? null,
+          memoUrl,
+        }).catch(() => {})
+      } else {
+        notifyLoanRejected(admin, {
+          staffUserId: req.user_id,
+          staffName: dirStaffName,
+          loanType: String(req.loan_type_label || req.loan_type_key || ""),
+          requestNumber: String(req.request_number || req.id),
+          rejectedBy: directorName,
+          stage: "Director HR",
+          note: note || "",
+        }).catch(() => {})
+      }
 
       if (decision === "approve") {
         const { data: accountsUsers } = await admin

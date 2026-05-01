@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
 
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
       throw updateError
     }
 
-    // Notify the staff member
+    // In-app notification to staff
     await admin.from("staff_notifications").insert({
       recipient_id: (leaveRequest as any).user_id,
       type: "leave_plan_hr_office_review",
@@ -171,6 +172,18 @@ export async function POST(request: NextRequest) {
         adjustment_reason: adjustment_reason.trim(),
       },
     }).then(() => {}).catch(() => {}) // Non-fatal
+
+
+    // Email HR Approvers that a request is ready for final approval
+    notifyLeaveHrOfficeForwarded(admin, {
+      leavePlanRequestId: leave_plan_request_id,
+      staffName: "Staff Member",
+      leaveType: String((leaveRequest as any).leave_type_key || "annual"),
+      adjustedStartDate: adjusted_start_date,
+      adjustedEndDate: adjusted_end_date,
+      adjustedDays: computedAdjustedDays,
+      reviewerName,
+    }).catch(() => {})
 
     return NextResponse.json({
       success: true,

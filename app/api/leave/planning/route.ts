@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { notifyLeaveSubmitted } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   buildHologramCode,
@@ -649,6 +650,24 @@ export async function POST(request: NextRequest) {
     }
 
     await syncManagerReviews(admin, requestRow.id, nonHrReviewers as any)
+
+    // Fire-and-forget email to HOD reviewers
+    const staffProfile = await admin
+      .from("user_profiles")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .maybeSingle()
+    const staffName = staffProfile.data
+      ? `${staffProfile.data.first_name || ""} ${staffProfile.data.last_name || ""}`.trim()
+      : "Staff Member"
+    notifyLeaveSubmitted(admin, {
+      leavePlanRequestId: requestRow.id,
+      staffName,
+      leaveType: leaveTypeKey,
+      startDate: preferred_start_date,
+      endDate: preferred_end_date,
+      requestedDays,
+    }).catch(() => {})
 
     return NextResponse.json({ success: true, request: requestRow }, { status: 201 })
   } catch (error) {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
 
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
           ? `${profile.role === "regional_manager" ? "Regional Manager" : "Department Head"} requested updates to your leave plan (${nextStartDate} to ${nextEndDate}). Reason: ${recommendation}`
           : `${profile.role === "regional_manager" ? "Regional Manager" : "Department Head"} rejected your leave plan request. Reason: ${recommendation}`
 
+      // In-app notification
       await admin.from("staff_notifications").insert({
         recipient_id: leavePlan.user_id,
         type: "leave_plan_manager_review",
@@ -230,6 +232,31 @@ export async function POST(request: NextRequest) {
         },
         is_read: false,
       })
+
+      // Email notification to staff
+      const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || (profile as any).role || "HOD"
+      notifyLeaveHodDecision(admin, {
+        staffUserId: leavePlan.user_id,
+        staffName: "Staff Member",
+        decision: decision as "rejected" | "recommend_change",
+        hodName,
+        reason: recommendation || "",
+        leavePlanRequestId: leave_plan_request_id,
+      }).catch(() => {})
+    }
+
+    // If fully approved by all HODs → notify HR Leave Office
+    if (nextStatus === "hod_approved" || nextStatus === "manager_confirmed") {
+      const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
+      notifyLeaveHodApproved(admin, {
+        leavePlanRequestId: leave_plan_request_id,
+        staffName: "Staff Member",
+        leaveType: String((leavePlan as any).leave_type_key || "annual"),
+        startDate: String((leavePlan as any).preferred_start_date || ""),
+        endDate: String((leavePlan as any).preferred_end_date || ""),
+        requestedDays: Number((leavePlan as any).requested_days || 0),
+        hodName,
+      }).catch(() => {})
     }
 
     return NextResponse.json({ success: true, status: nextStatus })

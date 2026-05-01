@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { notifyLoanSubmitted } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { isSchemaIssue, normalizeRole, requestIsEditable } from "@/lib/loan-workflow"
@@ -488,6 +489,17 @@ export async function POST(request: NextRequest) {
       "loan_staff_submitted",
       { request_id: inserted.id, request_number: inserted.request_number },
     )
+
+    // Email HODs about new request (fire-and-forget)
+    const staffFullName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Staff Member"
+    notifyLoanSubmitted(admin, {
+      loanRequestId: inserted.id,
+      staffUserId: user.id,
+      staffName: staffFullName,
+      loanType: loanType.loan_label || inserted.loan_type_key,
+      requestNumber: inserted.request_number || inserted.id,
+      amount: inserted.amount ?? null,
+    }).catch(() => {})
 
     return NextResponse.json({ success: true, data: inserted })
   } catch (error: any) {
