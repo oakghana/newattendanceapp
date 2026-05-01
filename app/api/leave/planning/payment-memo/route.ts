@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+function getSupabaseClients() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    return {
+      error: "Supabase environment variables are missing",
+      supabase: null,
+      admin: null,
+    }
+  }
+
+  return {
+    error: null,
+    supabase: createClient(supabaseUrl, anonKey),
+    admin: createClient(supabaseUrl, serviceRoleKey),
+  }
+}
 
 /**
  * POST /api/leave/planning/payment-memo
@@ -10,6 +27,11 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SU
  */
 export async function POST(request: NextRequest) {
   try {
+    const { supabase, admin, error: clientError } = getSupabaseClients()
+    if (clientError || !supabase || !admin) {
+      return NextResponse.json({ error: clientError }, { status: 500 })
+    }
+
     const user = await supabase.auth.getUser()
     if (!user.data.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -155,6 +177,11 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
+    const { supabase, admin, error: clientError } = getSupabaseClients()
+    if (clientError || !supabase || !admin) {
+      return NextResponse.json({ error: clientError }, { status: 500 })
+    }
+
     const user = await supabase.auth.getUser()
     if (!user.data.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -247,6 +274,11 @@ export async function PUT(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+    const { supabase, admin, error: clientError } = getSupabaseClients()
+    if (clientError || !supabase || !admin) {
+      return NextResponse.json({ error: clientError }, { status: 500 })
+    }
+
     const user = await supabase.auth.getUser()
     if (!user.data.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
