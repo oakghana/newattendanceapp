@@ -80,6 +80,11 @@ interface Location {
 }
 
 export function StaffManagement() {
+  const canonicalRole = (role: string | null | undefined) => {
+    const normalized = String(role || "").toLowerCase().trim()
+    return normalized === "hr_office" ? "hr_leave_office" : normalized
+  }
+
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -142,7 +147,10 @@ export function StaffManagement() {
       }
 
       if (result.success) {
-        setStaff(result.data)
+        const rows = Array.isArray(result.data)
+          ? result.data.map((row: StaffMember) => ({ ...row, role: canonicalRole(row.role) }))
+          : []
+        setStaff(rows)
         setTotalPages(result.pagination?.totalPages || 1)
         setError(null)
       } else {
@@ -633,6 +641,7 @@ export function StaffManagement() {
                   <SelectItem value="audit_staff">Audit Staff</SelectItem>
                   <SelectItem value="accounts">Accounts</SelectItem>
                   <SelectItem value="loan_office">Loan Office</SelectItem>
+                  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
                   <SelectItem value="manager_hr">Manager HR</SelectItem>
                   <SelectItem value="director_hr">Director HR</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
@@ -792,6 +801,7 @@ export function StaffManagement() {
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                                 {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
@@ -968,6 +978,7 @@ export function StaffManagement() {
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
@@ -1140,7 +1151,7 @@ export function StaffManagement() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setEditingStaff(member)}
+                            onClick={() => setEditingStaff({ ...member, role: canonicalRole(member.role) })}
                             className="h-8 w-8 p-0 hover:bg-primary/10 hover:border-primary/20"
                             disabled={
                               currentUserRole === "it-admin" && (member.role === "admin" || member.role === "it-admin")

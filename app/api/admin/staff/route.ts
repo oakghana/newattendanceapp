@@ -116,7 +116,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (roleFilter && roleFilter !== "all") {
-      query = query.eq("role", roleFilter)
+      if (roleFilter === "hr_leave_office") {
+        query = query.in("role", ["hr_leave_office", "hr_office"])
+      } else {
+        query = query.eq("role", roleFilter)
+      }
     }
 
     // Server-side search (use ILIKE for case-insensitive partial match)
@@ -440,7 +444,7 @@ export async function POST(request: NextRequest) {
             error:
               "Database constraint prevents the new role from being saved. Please run the migration to update the user_profiles role constraint.",
             details:
-              "Suggested SQL (Postgres):\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;\nALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','director_hr','manager_hr'));",
+              "Suggested SQL (Postgres):\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;\nALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','hr_leave_office','director_hr','manager_hr'));",
           },
           400,
         )

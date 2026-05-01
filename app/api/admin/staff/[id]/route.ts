@@ -231,7 +231,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         updateMessage.includes("valid_role") ||
         updateCode === "23514"
       ) {
-        const safeSuggestedSQL = `-- Replace <constraint_name> if different. Example uses ${constraintName || 'user_profiles_role_check'}\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS ${constraintName || 'user_profiles_role_check'};\nALTER TABLE user_profiles ADD CONSTRAINT ${constraintName || 'user_profiles_role_check'} CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff'));
+        const safeSuggestedSQL = `-- Replace <constraint_name> if different. Example uses ${constraintName || 'user_profiles_role_check'}\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS ${constraintName || 'user_profiles_role_check'};\nALTER TABLE user_profiles ADD CONSTRAINT ${constraintName || 'user_profiles_role_check'} CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','hr_office','hr_leave_office','director_hr','manager_hr','loan_committee','committee'));
 \n-- Alternatively, run the query to inspect current check constraints:\nSELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'user_profiles'::regclass AND contype = 'c';`
 
         return NextResponse.json(

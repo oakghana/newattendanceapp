@@ -70,6 +70,7 @@ interface HrMemoTemplate {
   cc_recipients: string | null
   is_active: boolean
   updated_at: string | null
+  category?: string | null
 }
 
 export function LeaveManagementClient({
@@ -117,6 +118,8 @@ export function LeaveManagementClient({
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [savingTemplateKey, setSavingTemplateKey] = useState<string | null>(null)
   const [creatingTemplate, setCreatingTemplate] = useState(false)
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState("all")
+  const [templateActionKey, setTemplateActionKey] = useState<string | null>(null)
   const [newTemplate, setNewTemplate] = useState({
     template_key: "",
     template_name: "",
@@ -124,6 +127,7 @@ export function LeaveManagementClient({
     subject_template: "",
     body_template: "",
     cc_recipients: "",
+    category: "approval",
   })
 
   const copyTemplate = async (value: string, label: string) => {
@@ -204,6 +208,7 @@ export function LeaveManagementClient({
         subject_template: "",
         body_template: "",
         cc_recipients: "",
+        category: "approval",
       })
       toast({ title: "Template created", description: `${created.template_name} is ready for use.` })
     } catch (error) {
@@ -291,6 +296,15 @@ export function LeaveManagementClient({
 
     const result = await response.json().catch(() => ({}))
     if (!response.ok) {
+      if (result?.code === "LEAVE_DATE_OVERLAP" && result?.suggested_start_date && result?.suggested_end_date) {
+        const useSuggestion = window.confirm(
+          `${result.error}\n\nSuggested next available dates: ${result.suggested_start_date} to ${result.suggested_end_date}.\n\nClick OK to use the suggested dates.`,
+        )
+        if (useSuggestion) {
+          setEditStartDate(result.suggested_start_date)
+          setEditEndDate(result.suggested_end_date)
+        }
+      }
       toast({ title: "Update failed", description: result?.error || "Could not edit leave request.", variant: "destructive" })
       return
     }
@@ -465,6 +479,46 @@ export function LeaveManagementClient({
 
     void loadTemplates()
   }, [canViewHrTemplates, toast])
+
+  const runTemplateAction = async (templateKey: string, action: "duplicate" | "deactivate" | "activate") => {
+    setTemplateActionKey(`${action}:${templateKey}`)
+    try {
+      const response = await fetch("/api/leave/templates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_key: templateKey, action }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error || `Failed to ${action} template`)
+      }
+
+      const updated = result.template as HrMemoTemplate
+      if (action === "duplicate") {
+        setHrTemplates((prev) => [...prev, updated].sort((a, b) => a.template_name.localeCompare(b.template_name)))
+      } else {
+        setHrTemplates((prev) => prev.map((row) => (row.template_key === templateKey ? updated : row)))
+      }
+      setTemplateDrafts((prev) => ({ ...prev, [updated.template_key]: updated }))
+      toast({
+        title: action === "duplicate" ? "Template duplicated" : action === "deactivate" ? "Template deactivated" : "Template activated",
+        description: updated.template_name,
+      })
+    } catch (error) {
+      toast({
+        title: "Template action failed",
+        description: error instanceof Error ? error.message : "Could not update template",
+        variant: "destructive",
+      })
+    } finally {
+      setTemplateActionKey(null)
+    }
+  }
+
+  const filteredTemplates = hrTemplates.filter((template) => {
+    if (templateCategoryFilter === "all") return true
+    return String(template.category || "general") === templateCategoryFilter
+  })
 
   const saveTemplate = async (templateKey: string) => {
     if (!canEditHrTemplates) {
@@ -732,6 +786,14 @@ export function LeaveManagementClient({
                     placeholder="Managing Director, HR Head, Accounts Manager"
                   />
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Category</Label>
+                  <Input
+                    value={newTemplate.category}
+                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, category: e.target.value.toLowerCase().trim() || "general" }))}
+                    placeholder="approval, rejection, deferment, special-case"
+                  />
+                </div>
                 <div className="flex justify-end">
                   <Button onClick={handleCreateTemplate} disabled={creatingTemplate} className="bg-emerald-700 hover:bg-emerald-800">
                     {creatingTemplate ? "Creating..." : "Create Template"}
@@ -739,6 +801,21 @@ export function LeaveManagementClient({
                 </div>
               </div>
             )}
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Template Filter</p>
+                  <p className="text-xs text-slate-500">Quickly switch between approval, rejection, deferment, and special-case templates.</p>
+                </div>
+                <Input
+                  value={templateCategoryFilter}
+                  onChange={(e) => setTemplateCategoryFilter(e.target.value.toLowerCase().trim() || "all")}
+                  className="w-full md:w-[220px]"
+                  placeholder="all / approval / rejection"
+                />
+              </div>
+            </div>
 
             <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Available Placeholders</p>
@@ -756,12 +833,12 @@ export function LeaveManagementClient({
               <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
                 Loading templates...
               </div>
-            ) : hrTemplates.length === 0 ? (
+            ) : filteredTemplates.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
-                No templates found. Run template migration to seed defaults.
+                No templates found for this filter.
               </div>
             ) : (
-              hrTemplates.map((template) => {
+              filteredTemplates.map((template) => {
                 const draft = templateDrafts[template.template_key] || template
                 return (
                   <div key={template.template_key} className="rounded-xl border border-blue-200 bg-white p-3 space-y-3">
@@ -769,6 +846,7 @@ export function LeaveManagementClient({
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{draft.template_name}</p>
                         <p className="text-[11px] text-slate-500">Key: {draft.template_key}</p>
+                        <p className="text-[11px] text-slate-500">Category: {String(draft.category || "general")}</p>
                       </div>
                       <Badge variant={draft.is_active ? "default" : "outline"} className={draft.is_active ? "bg-emerald-600" : ""}>
                         {draft.is_active ? "Active" : "Inactive"}
@@ -822,6 +900,15 @@ export function LeaveManagementClient({
                       />
                     </div>
 
+                    <div className="space-y-1">
+                      <Label className="text-xs">Category</Label>
+                      <Input
+                        value={draft.category || "general"}
+                        onChange={(e) => updateTemplateDraft(draft.template_key, { category: e.target.value.toLowerCase().trim() || "general" })}
+                        disabled={!canEditHrTemplates}
+                      />
+                    </div>
+
                     <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
@@ -840,6 +927,22 @@ export function LeaveManagementClient({
                             onClick={() => resetTemplateDraft(draft.template_key)}
                           >
                             Reset
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => runTemplateAction(draft.template_key, "duplicate")}
+                            disabled={templateActionKey === `duplicate:${draft.template_key}`}
+                          >
+                            Duplicate
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => runTemplateAction(draft.template_key, draft.is_active ? "deactivate" : "activate")}
+                            disabled={templateActionKey === `${draft.is_active ? "deactivate" : "activate"}:${draft.template_key}`}
+                          >
+                            {draft.is_active ? "Deactivate" : "Activate"}
                           </Button>
                           <Button
                             size="sm"

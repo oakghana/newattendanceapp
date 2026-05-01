@@ -26,6 +26,23 @@ const EDITABLE_STATUSES = [
   "hr_rejected",
 ] as const
 
+const OVERLAP_BLOCKING_STATUSES = [
+  "pending",
+  "pending_hod",
+  "pending_hr",
+  "pending_manager_review",
+  "pending_hod_review",
+  "manager_changes_requested",
+  "hod_changes_requested",
+  "manager_confirmed",
+  "hod_approved",
+  "hr_office_forwarded",
+  "approved",
+  "hr_approved",
+] as const
+
+const DUPLICATE_BLOCKING_STATUSES = OVERLAP_BLOCKING_STATUSES
+
 function normalizeRoleValue(role: string | null | undefined) {
   return String(role || "")
     .toLowerCase()
@@ -252,6 +269,293 @@ function buildInitialLeaveMemoDraft(payload: {
   return { subject, body }
 }
 
+function formatDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date)
+  copy.setDate(copy.getDate() + days)
+  return copy
+}
+
+function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
+  return startA <= endB && startB <= endA
+}
+
+async function findOverlapSuggestion(
+  admin: any,
+  userId: string,
+  requestedStartDate: string,
+  requestedEndDate: string,
+  durationDays: number,
+  excludeRequestId?: string,
+) {
+  let query = admin
+    .from("leave_plan_requests")
+    .select("id, preferred_start_date, preferred_end_date, status")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .in("status", [...OVERLAP_BLOCKING_STATUSES])
+    .order("preferred_start_date", { ascending: true })
+
+  if (excludeRequestId) {
+    query = query.neq("id", excludeRequestId)
+  }
+
+  const { data: existingRows, error } = await query
+  if (error) {
+    throw error
+  }
+
+  const requestedStart = new Date(requestedStartDate)
+  const requestedEnd = new Date(requestedEndDate)
+  if (Number.isNaN(requestedStart.getTime()) || Number.isNaN(requestedEnd.getTime())) {
+    return null
+  }
+
+  const ranges = (existingRows || [])
+    .map((row: any) => ({
+      id: String(row.id),
+      status: String(row.status || ""),
+      start: new Date(row.preferred_start_date),
+      end: new Date(row.preferred_end_date),
+    }))
+    .filter((row: any) => !Number.isNaN(row.start.getTime()) && !Number.isNaN(row.end.getTime()))
+
+  const firstConflict = ranges.find((row: any) => rangesOverlap(requestedStart, requestedEnd, row.start, row.end))
+  if (!firstConflict) {
+    return null
+  }
+
+  let candidateStart = addDays(firstConflict.end, 1)
+
+  while (true) {
+    const candidateEnd = addDays(candidateStart, Math.max(durationDays, 1) - 1)
+    const blockingRange = ranges.find((row: any) => rangesOverlap(candidateStart, candidateEnd, row.start, row.end))
+    if (!blockingRange) {
+      return {
+        conflict: {
+          id: firstConflict.id,
+          status: firstConflict.status,
+          start_date: formatDateOnly(firstConflict.start),
+          end_date: formatDateOnly(firstConflict.end),
+        },
+        suggested_start_date: formatDateOnly(candidateStart),
+        suggested_end_date: formatDateOnly(candidateEnd),
+      }
+    }
+    candidateStart = addDays(blockingRange.end, 1)
+  }
+}
+
+async function findDuplicateLeaveRequest(
+  admin: any,
+  userId: string,
+  leaveTypeKey: string,
+  preferredStartDate: string,
+  preferredEndDate: string,
+  excludeRequestId?: string,
+) {
+  let query = admin
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, preferred_start_date, preferred_end_date, status, submitted_at")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .eq("leave_type_key", leaveTypeKey)
+    .eq("preferred_start_date", preferredStartDate)
+    .eq("preferred_end_date", preferredEndDate)
+    .in("status", [...DUPLICATE_BLOCKING_STATUSES])
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+
+  if (excludeRequestId) {
+    query = query.neq("id", excludeRequestId)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const existing = Array.isArray(data) ? data[0] : null
+  if (!existing) return null
+
+  return {
+    id: String(existing.id),
+    status: String(existing.status || ""),
+    leave_type_key: String(existing.leave_type_key || leaveTypeKey),
+    start_date: String(existing.preferred_start_date || preferredStartDate),
+    end_date: String(existing.preferred_end_date || preferredEndDate),
+    submitted_at: existing.submitted_at || null,
+  }
+}
+
+async function fetchStaffLeaveHistory(admin: any, userIds: string[]) {
+  const uniqueUserIds = [...new Set(userIds.filter(Boolean))]
+  if (uniqueUserIds.length === 0) return {}
+
+  const { data, error } = await admin
+    .from("leave_plan_requests")
+    .select(`
+      id,
+      user_id,
+      leave_type_key,
+      preferred_start_date,
+      preferred_end_date,
+      adjusted_start_date,
+      adjusted_end_date,
+      requested_days,
+      adjusted_days,
+      entitlement_days,
+      status,
+      submitted_at,
+      created_at,
+      manager_recommendation,
+      adjustment_reason,
+      hr_approval_note,
+      is_archived
+    `)
+    .in("user_id", uniqueUserIds)
+    .order("submitted_at", { ascending: false })
+
+  if (error) throw error
+
+  const historyByUser: Record<string, any[]> = {}
+  for (const row of data || []) {
+    const userId = String((row as any).user_id || "")
+    if (!userId) continue
+    if (!historyByUser[userId]) {
+      historyByUser[userId] = []
+    }
+    if (historyByUser[userId].length < 8) {
+      historyByUser[userId].push(row)
+    }
+  }
+
+  return historyByUser
+}
+
+async function fetchHrOfficeAnalytics(admin: any) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const { data, error } = await admin
+    .from("leave_plan_requests")
+    .select(`
+      id,
+      status,
+      leave_type_key,
+      preferred_start_date,
+      preferred_end_date,
+      adjusted_start_date,
+      adjusted_end_date,
+      requested_days,
+      adjusted_days,
+      submitted_at,
+      created_at,
+      is_archived,
+      user:user_profiles!leave_plan_requests_user_id_fkey (
+        id,
+        first_name,
+        last_name,
+        employee_id,
+        departments(name, code),
+        geofence_locations(name, address)
+      )
+    `)
+    .eq("is_archived", false)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+
+  const rows = Array.isArray(data) ? data : []
+  const outstanding = rows.filter((row: any) => (HR_OFFICE_PENDING_STATUSES as string[]).includes(String(row?.status || "")))
+  const approved = rows.filter((row: any) => String(row?.status || "") === "hr_approved")
+
+  const onLeaveNow = approved.filter((row: any) => {
+    const start = new Date(String(row?.adjusted_start_date || row?.preferred_start_date || ""))
+    const end = new Date(String(row?.adjusted_end_date || row?.preferred_end_date || ""))
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false
+    start.setHours(0, 0, 0, 0)
+    end.setHours(23, 59, 59, 999)
+    return start <= today && end >= today
+  })
+
+  const upcoming = approved.filter((row: any) => {
+    const start = new Date(String(row?.adjusted_start_date || row?.preferred_start_date || ""))
+    if (Number.isNaN(start.getTime())) return false
+    start.setHours(0, 0, 0, 0)
+    return start > today
+  })
+
+  const completed = approved.filter((row: any) => {
+    const end = new Date(String(row?.adjusted_end_date || row?.preferred_end_date || ""))
+    if (Number.isNaN(end.getTime())) return false
+    end.setHours(23, 59, 59, 999)
+    return end < today
+  })
+
+  const uniqueOnLeaveStaff = new Set(onLeaveNow.map((row: any) => String(row?.user?.id || "")).filter(Boolean)).size
+  const uniqueUpcomingStaff = new Set(upcoming.map((row: any) => String(row?.user?.id || "")).filter(Boolean)).size
+  const uniqueCompletedStaff = new Set(completed.map((row: any) => String(row?.user?.id || "")).filter(Boolean)).size
+
+  const typeCountMap = new Map<string, { leave_type_key: string; total: number; on_leave_now: number; upcoming: number; completed: number }>()
+  const locationCountMap = new Map<string, { name: string; total: number; on_leave_now: number; upcoming: number }>()
+
+  for (const row of approved) {
+    const typeKey = String(row?.leave_type_key || "annual")
+    const typeEntry = typeCountMap.get(typeKey) || { leave_type_key: typeKey, total: 0, on_leave_now: 0, upcoming: 0, completed: 0 }
+    typeEntry.total += 1
+    if (onLeaveNow.some((item: any) => item.id === row.id)) typeEntry.on_leave_now += 1
+    if (upcoming.some((item: any) => item.id === row.id)) typeEntry.upcoming += 1
+    if (completed.some((item: any) => item.id === row.id)) typeEntry.completed += 1
+    typeCountMap.set(typeKey, typeEntry)
+
+    const locationName = String(
+      row?.user?.geofence_locations?.name || row?.user?.departments?.name || "Unassigned Location",
+    )
+    const locationEntry = locationCountMap.get(locationName) || { name: locationName, total: 0, on_leave_now: 0, upcoming: 0 }
+    locationEntry.total += 1
+    if (onLeaveNow.some((item: any) => item.id === row.id)) locationEntry.on_leave_now += 1
+    if (upcoming.some((item: any) => item.id === row.id)) locationEntry.upcoming += 1
+    locationCountMap.set(locationName, locationEntry)
+  }
+
+  const currentLeaveRoster = onLeaveNow.slice(0, 8).map((row: any) => ({
+    id: row.id,
+    staff_name: [row?.user?.first_name, row?.user?.last_name].filter(Boolean).join(" ") || row?.user?.employee_id || "Staff",
+    employee_id: row?.user?.employee_id || null,
+    leave_type_key: row?.leave_type_key || "annual",
+    start_date: row?.adjusted_start_date || row?.preferred_start_date || null,
+    end_date: row?.adjusted_end_date || row?.preferred_end_date || null,
+    days: Number(row?.adjusted_days || row?.requested_days || 0),
+    location_name: row?.user?.geofence_locations?.name || row?.user?.departments?.name || "Unassigned Location",
+  }))
+
+  return {
+    totals: {
+      outstanding_requests: outstanding.length,
+      approved_total: approved.length,
+      staff_on_leave_now: uniqueOnLeaveStaff,
+      staff_yet_to_enjoy: uniqueUpcomingStaff,
+      staff_completed_leave: uniqueCompletedStaff,
+      completed_leave_requests: completed.length,
+    },
+    outstanding_by_status: [
+      {
+        status: "hod_approved",
+        total: outstanding.filter((row: any) => String(row?.status || "") === "hod_approved").length,
+      },
+      {
+        status: "manager_confirmed",
+        total: outstanding.filter((row: any) => String(row?.status || "") === "manager_confirmed").length,
+      },
+    ],
+    leave_type_breakdown: Array.from(typeCountMap.values()).sort((a, b) => b.total - a.total),
+    location_ranking: Array.from(locationCountMap.values()).sort((a, b) => b.total - a.total).slice(0, 8),
+    current_leave_roster: currentLeaveRoster,
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
@@ -292,7 +596,8 @@ export async function GET(request: NextRequest) {
           *,
           user:user_profiles!leave_plan_requests_user_id_fkey (
             id, first_name, last_name, employee_id,
-            departments(name, code)
+            departments(name, code),
+            geofence_locations(name, address)
           )
         `)
         .in("status", [...HR_OFFICE_PENDING_STATUSES])
@@ -315,10 +620,13 @@ export async function GET(request: NextRequest) {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
+      const analytics = await fetchHrOfficeAnalytics(admin)
+
       return NextResponse.json({
         mode: "hr_office",
         requests: requests || [],
         myRequests: myRequests || [],
+        analytics,
       })
     }
 
@@ -446,12 +754,18 @@ export async function GET(request: NextRequest) {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
+      const reviewUserIds = (nonArchivedReviews || [])
+        .map((row: any) => String(row?.leave_plan_request?.user?.id || ""))
+        .filter(Boolean)
+      const staffHistoryByUser = await fetchStaffLeaveHistory(admin, reviewUserIds)
+
       return NextResponse.json({
         mode: "manager",
         reviews: nonArchivedReviews,
         staggerReviews: staggerReviews || [],
         myRequests: myRequests || [],
         myStaggerRequests: myStaggerRequests || [],
+        staffHistoryByUser,
       })
     }
 
@@ -537,12 +851,16 @@ export async function GET(request: NextRequest) {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
+      const requestUserIds = (data || []).map((row: any) => String(row?.user?.id || row?.user_id || "")).filter(Boolean)
+      const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
+
       return NextResponse.json({
         mode: "hr",
         requests: data || [],
         staggerRequests: stagger || [],
         myRequests: myRequests || [],
         myStaggerRequests: myStaggerRequests || [],
+        staffHistoryByUser,
       })
     }
 
@@ -588,7 +906,18 @@ export async function POST(request: NextRequest) {
     const role = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
     const canSelfApply =
       isStaffRole(role) ||
-      ["admin", "regional_manager", "department_head", "hr_officer", "hr_director", "director_hr", "manager_hr"].includes(role)
+      [
+        "admin",
+        "regional_manager",
+        "department_head",
+        "hr_officer",
+        "hr_director",
+        "director_hr",
+        "manager_hr",
+        "hr_leave_office",
+        "hr_office",
+        "loan_office",
+      ].includes(role)
     if (!canSelfApply) {
       return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
     }
@@ -601,6 +930,9 @@ export async function POST(request: NextRequest) {
       "hr_director",
       "director_hr",
       "manager_hr",
+      "hr_leave_office",
+      "hr_office",
+      "loan_office",
     ].includes(role)
     if (shouldEnforceAttendance) {
       const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
@@ -638,27 +970,56 @@ export async function POST(request: NextRequest) {
     }
     const entitlementDays = entitlementResult.entitlementDays
 
-        const canSubmitBeyondEntitlementForHrAdjustment =
-          role === "admin" ||
-          role === "regional_manager" ||
-          role === "department_head" ||
-          role === "hr_officer" ||
-          role === "hr_director" ||
-          role === "director_hr" ||
-          role === "manager_hr" ||
-          role.includes("manager")
-
-        if (entitlementDays !== null && requestedDays > entitlementDays && !canSubmitBeyondEntitlementForHrAdjustment) {
-          return NextResponse.json(
-            {
-              error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type.`,
-            },
-            { status: 400 },
-          )
-        }
+    if (entitlementDays !== null && requestedDays > entitlementDays) {
+      return NextResponse.json(
+        {
+          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
+          code: "LEAVE_ENTITLEMENT_EXCEEDED",
+          entitlement_days: entitlementDays,
+          requested_days: requestedDays,
+        },
+        { status: 400 },
+      )
+    }
 
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
+    }
+
+    const duplicateRequest = await findDuplicateLeaveRequest(
+      admin,
+      user.id,
+      leaveTypeKey,
+      preferred_start_date,
+      preferred_end_date,
+    )
+    if (duplicateRequest) {
+      return NextResponse.json(
+        {
+          error: "This leave request has already been submitted with the same leave type and date range.",
+          code: "DUPLICATE_LEAVE_REQUEST",
+          duplicate: duplicateRequest,
+        },
+        { status: 409 },
+      )
+    }
+
+    const overlapSuggestion = await findOverlapSuggestion(
+      admin,
+      user.id,
+      preferred_start_date,
+      preferred_end_date,
+      requestedDays,
+    )
+    if (overlapSuggestion) {
+      return NextResponse.json(
+        {
+          error: "The selected leave period overlaps with an existing leave request.",
+          code: "LEAVE_DATE_OVERLAP",
+          ...overlapSuggestion,
+        },
+        { status: 409 },
+      )
     }
 
     if (!user_signature_text && !user_signature_image_url && !user_signature_data_url) {
@@ -780,7 +1141,18 @@ export async function PUT(request: NextRequest) {
     const role = normalizeRoleValue(profile.role)
     const canSelfApply =
       isStaffRole(role) ||
-      ["admin", "regional_manager", "department_head", "hr_officer", "hr_director", "director_hr", "manager_hr"].includes(role)
+      [
+        "admin",
+        "regional_manager",
+        "department_head",
+        "hr_officer",
+        "hr_director",
+        "director_hr",
+        "manager_hr",
+        "hr_leave_office",
+        "hr_office",
+        "loan_office",
+      ].includes(role)
 
     if (!canSelfApply) {
       return NextResponse.json({ error: "Only staff, managers, and admins can update leave plans." }, { status: 403 })
@@ -831,6 +1203,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
     }
 
+    const overlapSuggestion = await findOverlapSuggestion(
+      admin,
+      user.id,
+      preferred_start_date,
+      preferred_end_date,
+      requestedDays,
+      id,
+    )
+    if (overlapSuggestion) {
+      return NextResponse.json(
+        {
+          error: "The selected leave period overlaps with an existing leave request.",
+          code: "LEAVE_DATE_OVERLAP",
+          ...overlapSuggestion,
+        },
+        { status: 409 },
+      )
+    }
+
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
     const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey)
     if (entitlementResult.error) {
@@ -838,22 +1229,34 @@ export async function PUT(request: NextRequest) {
     }
     const entitlementDays = entitlementResult.entitlementDays
 
-    const canSubmitBeyondEntitlementForHrAdjustment =
-      role === "admin" ||
-      role === "regional_manager" ||
-      role === "department_head" ||
-      role === "hr_officer" ||
-      role === "hr_director" ||
-      role === "director_hr" ||
-      role === "manager_hr" ||
-      role.includes("manager")
-
-    if (entitlementDays !== null && requestedDays > entitlementDays && !canSubmitBeyondEntitlementForHrAdjustment) {
+    if (entitlementDays !== null && requestedDays > entitlementDays) {
       return NextResponse.json(
         {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type.`,
+          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
+          code: "LEAVE_ENTITLEMENT_EXCEEDED",
+          entitlement_days: entitlementDays,
+          requested_days: requestedDays,
         },
         { status: 400 },
+      )
+    }
+
+    const duplicateRequest = await findDuplicateLeaveRequest(
+      admin,
+      user.id,
+      leaveTypeKey,
+      preferred_start_date,
+      preferred_end_date,
+      id,
+    )
+    if (duplicateRequest) {
+      return NextResponse.json(
+        {
+          error: "This leave request has already been submitted with the same leave type and date range.",
+          code: "DUPLICATE_LEAVE_REQUEST",
+          duplicate: duplicateRequest,
+        },
+        { status: 409 },
       )
     }
 

@@ -5,7 +5,7 @@
 // Staff → HOD Review → HR Leave Office → HR Approval + Memo
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -46,7 +46,26 @@ import {
   XCircle,
   Pencil,
   Trash2,
+  Search,
+  Clock3,
+  ArrowUpDown,
+  BarChart3,
+  Activity,
+  MapPin,
+  Users,
 } from "lucide-react"
+
+interface HrTemplateOption {
+  id: string
+  template_key: string
+  template_name: string
+  description?: string | null
+  subject_template: string
+  body_template: string
+  cc_recipients?: string | null
+  is_active: boolean
+  category?: string | null
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -160,6 +179,167 @@ function InfoPill({ label, value, highlight }: { label: string; value: string; h
   )
 }
 
+function StaffHistoryPanel({
+  history,
+  currentRequestId,
+}: {
+  history: any[]
+  currentRequestId?: string
+}) {
+  const rows = (history || []).filter((item: any) => String(item?.id || "") !== String(currentRequestId || "")).slice(0, 5)
+  if (rows.length === 0) return null
+
+  return (
+    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-900">Staff Leave History</p>
+      <div className="mt-2 space-y-2">
+        {rows.map((entry: any) => {
+          const status = String(entry?.status || "")
+          const start = String(entry?.adjusted_start_date || entry?.preferred_start_date || "")
+          const end = String(entry?.adjusted_end_date || entry?.preferred_end_date || "")
+          const days = Number(entry?.adjusted_days || entry?.requested_days || 0)
+          const leaveType = leaveTypeLabelShort(String(entry?.leave_type_key || "annual"))
+          return (
+            <div key={String(entry?.id || `${start}-${end}-${status}`)} className="rounded border border-violet-100 bg-white px-2 py-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs text-slate-700">
+                  {leaveType} · {fmtDate(start)} to {fmtDate(end)} · {days} day(s)
+                </p>
+                <Badge className={`text-[10px] border ${getStatusColor(status)}`}>{getStatusLabel(status)}</Badge>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ScientificMetricCard({
+  label,
+  value,
+  hint,
+  accent,
+  icon,
+}: {
+  label: string
+  value: string | number
+  hint: string
+  accent: string
+  icon: ReactNode
+}) {
+  return (
+    <div className={`rounded-2xl border bg-white/95 p-4 shadow-sm ${accent}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
+          <p className="mt-1 text-xs text-slate-500">{hint}</p>
+        </div>
+        <div className="rounded-2xl border border-white/70 bg-white p-3 text-slate-700 shadow-sm">
+          {icon}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ScientificBarChart({
+  title,
+  rows,
+  valueKey,
+  colorClass,
+  emptyMessage,
+  formatter,
+}: {
+  title: string
+  rows: any[]
+  valueKey: string
+  colorClass: string
+  emptyMessage: string
+  formatter?: (row: any) => string
+}) {
+  const maxValue = rows.reduce((max, row) => Math.max(max, Number(row?.[valueKey] || 0)), 0)
+  return (
+    <Card className="border border-slate-200 bg-white shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm text-slate-900">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="text-sm text-slate-500">{emptyMessage}</p>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row, index) => {
+              const value = Number(row?.[valueKey] || 0)
+              const width = maxValue > 0 ? Math.max(8, Math.round((value / maxValue) * 100)) : 0
+              return (
+                <div key={`${title}-${index}`} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-slate-700">{formatter ? formatter(row) : String(row?.name || row?.status || row?.leave_type_key || "Item")}</span>
+                    <span className="text-slate-500">{value}</span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                    <div className={`h-full rounded-full ${colorClass}`} style={{ width: `${width}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function CurrentLeaveRoster({ rows }: { rows: any[] }) {
+  return (
+    <Card className="border border-slate-200 bg-white shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm text-slate-900">Currently On Leave</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="text-sm text-slate-500">No staff are currently on approved leave.</p>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row: any) => (
+              <div key={String(row?.id || row?.employee_id || row?.staff_name)} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{row?.staff_name || "Staff"}</p>
+                    <p className="text-xs text-slate-500">{row?.employee_id || "No ID"} · {leaveTypeLabelShort(String(row?.leave_type_key || "annual"))}</p>
+                  </div>
+                  <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">{row?.days || 0}d</Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                  <span>{fmtDate(row?.start_date)} to {fmtDate(row?.end_date)}</span>
+                  <span>•</span>
+                  <span>{row?.location_name || "Unassigned Location"}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+const EMPTY_HR_ANALYTICS = {
+  totals: {
+    outstanding_requests: 0,
+    approved_total: 0,
+    staff_on_leave_now: 0,
+    staff_yet_to_enjoy: 0,
+    staff_completed_leave: 0,
+    completed_leave_requests: 0,
+  },
+  outstanding_by_status: [],
+  leave_type_breakdown: [],
+  location_ranking: [],
+  current_leave_roster: [],
+}
 // ─── Leave Request Card ───────────────────────────────────────────────────────
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
@@ -252,7 +432,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
   const canSelfApply = isStaff || isHod || isAdmin ||
-    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office"].includes(normalizedRole)
+    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "loan_office"].includes(normalizedRole)
 
   // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)
@@ -263,6 +443,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrOfficeShowArchived, setHrOfficeShowArchived] = useState(false)
   const [hrOfficePageSize, setHrOfficePageSize] = useState(100)
   const [hrOfficePage, setHrOfficePage] = useState(1)
+  const [hrOfficeSearch, setHrOfficeSearch] = useState("")
+  const [hrOfficeStatusFilter, setHrOfficeStatusFilter] = useState("all")
+  const [hrOfficeSortBy, setHrOfficeSortBy] = useState("priority")
+  const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
+  const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
 
   // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -294,6 +479,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [officeMemoSubject, setOfficeMemoSubject] = useState<Record<string, string>>({})
   const [officeMemoBody, setOfficeMemoBody] = useState<Record<string, string>>({})
   const [officeMemoCc, setOfficeMemoCc] = useState<Record<string, string>>({})
+  const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
   // ── HR Approver ─────────────────────────────────────────────────────
@@ -306,6 +492,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrMemoCc, setHrMemoCc] = useState<Record<string, string>>({})
   const [hrSubmitting, setHrSubmitting] = useState<string | null>(null)
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
+  const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
   // ── Computed ────────────────────────────────────────────────────────
   const activeSig = useMemo(() => {
@@ -334,6 +521,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Failed to load data")
       setData(json)
+      setHrOfficeLastRefresh(new Date().toISOString())
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data")
     } finally {
@@ -355,14 +543,34 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     } catch { /* silent */ }
   }, [])
 
+  const loadTemplateOptions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leave/templates", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) return
+      setTemplateOptions(Array.isArray(json.templates) ? json.templates.filter((row: HrTemplateOption) => row.is_active !== false) : [])
+    } catch {
+      // silent
+    }
+  }, [])
+
   useEffect(() => {
     void loadData()
     void loadPolicy()
-  }, [loadData, loadPolicy])
+    void loadTemplateOptions()
+  }, [loadData, loadPolicy, loadTemplateOptions])
 
   useEffect(() => {
     setHrOfficePage(1)
-  }, [hrOfficePageSize, hrOfficeShowArchived])
+  }, [hrOfficePageSize, hrOfficeShowArchived, hrOfficeSearch, hrOfficeStatusFilter, hrOfficeSortBy])
+
+  useEffect(() => {
+    if (activeTab !== "hr-office" || !hrOfficeAutoRefresh) return
+    const timer = setInterval(() => {
+      void loadData()
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [activeTab, hrOfficeAutoRefresh, loadData])
 
   // ── Derived lists ────────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
@@ -370,6 +578,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const hodAssignedReviews: any[] = useMemo(() => {
     if (!data) return []
     return data.reviews || []
+  }, [data])
+
+  const staffHistoryByUser: Record<string, any[]> = useMemo(() => {
+    if (!data) return {}
+    return data.staffHistoryByUser || {}
   }, [data])
 
   const hodPendingReviews: any[] = useMemo(() => {
@@ -394,20 +607,71 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     )
   }, [data])
 
+  const hrOfficeFilteredQueue: any[] = useMemo(() => {
+    let rows = [...hrOfficeQueue]
+
+    if (hrOfficeStatusFilter !== "all") {
+      rows = rows.filter((r: any) => String(r?.status || "") === hrOfficeStatusFilter)
+    }
+
+    const search = hrOfficeSearch.trim().toLowerCase()
+    if (search) {
+      rows = rows.filter((r: any) => {
+        const fullName = fmtName(r.user).toLowerCase()
+        const employeeId = String(r?.user?.employee_id || "").toLowerCase()
+        const leaveType = leaveTypeLabelShort(String(r?.leave_type_key || "")).toLowerCase()
+        const status = getStatusLabel(String(r?.status || "")).toLowerCase()
+        return (
+          fullName.includes(search) ||
+          employeeId.includes(search) ||
+          leaveType.includes(search) ||
+          status.includes(search)
+        )
+      })
+    }
+
+    const statusRank: Record<string, number> = {
+      hod_approved: 0,
+      manager_confirmed: 1,
+    }
+
+    rows.sort((a: any, b: any) => {
+      if (hrOfficeSortBy === "oldest") {
+        return new Date(String(a?.created_at || 0)).getTime() - new Date(String(b?.created_at || 0)).getTime()
+      }
+      if (hrOfficeSortBy === "longest") {
+        return Number(b?.requested_days || 0) - Number(a?.requested_days || 0)
+      }
+      if (hrOfficeSortBy === "priority") {
+        const left = statusRank[String(a?.status || "")] ?? 9
+        const right = statusRank[String(b?.status || "")] ?? 9
+        if (left !== right) return left - right
+      }
+      return new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime()
+    })
+
+    return rows
+  }, [hrOfficeQueue, hrOfficeSearch, hrOfficeSortBy, hrOfficeStatusFilter])
+
   const hrOfficeVisibleRows = useMemo(() => {
     const start = (hrOfficePage - 1) * hrOfficePageSize
-    return hrOfficeQueue.slice(start, start + hrOfficePageSize)
-  }, [hrOfficeQueue, hrOfficePage, hrOfficePageSize])
+    return hrOfficeFilteredQueue.slice(start, start + hrOfficePageSize)
+  }, [hrOfficeFilteredQueue, hrOfficePage, hrOfficePageSize])
 
   const hrOfficeTotalPages = useMemo(() => {
-    return Math.max(1, Math.ceil(hrOfficeQueue.length / hrOfficePageSize))
-  }, [hrOfficeQueue.length, hrOfficePageSize])
+    return Math.max(1, Math.ceil(hrOfficeFilteredQueue.length / hrOfficePageSize))
+  }, [hrOfficeFilteredQueue.length, hrOfficePageSize])
 
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
     return (data.requests || []).filter((r: any) =>
       ["hod_approved", "manager_confirmed", ...(HR_APPROVER_PENDING_STATUSES as string[])].includes(String(r?.status || "")),
     )
+  }, [data])
+
+  const hrOfficeAnalytics = useMemo(() => {
+    if (!data?.analytics) return EMPTY_HR_ANALYTICS
+    return data.analytics
   }, [data])
 
   // ── Actions ──────────────────────────────────────────────────────────
@@ -440,7 +704,19 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
         }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || "Submission failed")
+      if (!res.ok) {
+        if (json?.code === "LEAVE_DATE_OVERLAP" && json?.suggested_start_date && json?.suggested_end_date) {
+          const useSuggestion = window.confirm(
+            `${json.error}\n\nExisting request: ${json.conflict?.start_date || ""} to ${json.conflict?.end_date || ""}.\nSuggested next available dates: ${json.suggested_start_date} to ${json.suggested_end_date}.\n\nClick OK to use the suggested dates.`,
+          )
+          if (useSuggestion) {
+            setStartDate(json.suggested_start_date)
+            setEndDate(json.suggested_end_date)
+          }
+          throw new Error(json.error || "Selected dates overlap with an existing leave request")
+        }
+        throw new Error(json.error || "Submission failed")
+      }
       toast({
         title: editingId ? "Leave request updated" : "Leave request submitted",
         description: `Return-to-work: ${computeReturnToWorkDate(endDate)}`,
@@ -874,6 +1150,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                             <strong>Reason:</strong> {req.reason}
                           </p>
                         )}
+                        <StaffHistoryPanel
+                          history={staffHistoryByUser[String(req.user?.id || "")] || []}
+                          currentRequestId={req.id}
+                        />
                         <div className="space-y-3">
                           <div className="flex gap-2 flex-wrap">
                             {(["approve", "recommend_change", "reject"] as const).map((act) => (
@@ -968,6 +1248,29 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 </AlertDescription>
               </Alert>
 
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-emerald-700">Queue Size</p>
+                  <p className="text-xl font-bold text-emerald-900">{hrOfficeQueue.length}</p>
+                </div>
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-blue-700">HOD Approved</p>
+                  <p className="text-xl font-bold text-blue-900">
+                    {hrOfficeQueue.filter((row: any) => String(row?.status || "") === "hod_approved").length}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-amber-700">Manager Confirmed</p>
+                  <p className="text-xl font-bold text-amber-900">
+                    {hrOfficeQueue.filter((row: any) => String(row?.status || "") === "manager_confirmed").length}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-600">Showing</p>
+                  <p className="text-xl font-bold text-slate-900">{hrOfficeFilteredQueue.length}</p>
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-3">
                 <div className="flex items-center gap-2">
                   <Button
@@ -988,7 +1291,20 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </Button>
                 </div>
 
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  Last refresh: {hrOfficeLastRefresh ? fmtDate(hrOfficeLastRefresh) : "—"}
+                </div>
+
                 <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={hrOfficeAutoRefresh ? "default" : "outline"}
+                    className={hrOfficeAutoRefresh ? "bg-emerald-700 hover:bg-emerald-800" : ""}
+                    onClick={() => setHrOfficeAutoRefresh((prev) => !prev)}
+                  >
+                    {hrOfficeAutoRefresh ? "Auto Refresh ON" : "Auto Refresh OFF"}
+                  </Button>
                   <Label className="text-xs text-slate-600">Page Size</Label>
                   <Select value={String(hrOfficePageSize)} onValueChange={(v) => setHrOfficePageSize(Number(v))}>
                     <SelectTrigger className="h-8 w-[120px]">
@@ -1003,15 +1319,138 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </Select>
                 </div>
               </div>
-            </div>
-            {hrOfficeQueue.length === 0 ? (
-              <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
-                <ClipboardList className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                <p className="font-medium">No requests awaiting HR Leave Office review</p>
+
+              <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-[1fr_auto_auto]">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
+                  <Input
+                    value={hrOfficeSearch}
+                    onChange={(e) => setHrOfficeSearch(e.target.value)}
+                    className="pl-8"
+                    placeholder="Search staff, employee ID, leave type, or status"
+                  />
+                </div>
+                <Select value={hrOfficeStatusFilter} onValueChange={setHrOfficeStatusFilter}>
+                  <SelectTrigger className="h-9 w-full md:w-[190px]">
+                    <SelectValue placeholder="Filter status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="hod_approved">HOD Approved</SelectItem>
+                    <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={hrOfficeSortBy} onValueChange={setHrOfficeSortBy}>
+                  <SelectTrigger className="h-9 w-full md:w-[190px]">
+                    <ArrowUpDown className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="priority">Priority (recommended)</SelectItem>
+                    <SelectItem value="newest">Newest first</SelectItem>
+                    <SelectItem value="oldest">Oldest first</SelectItem>
+                    <SelectItem value="longest">Longest leave days</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {hrOfficeVisibleRows.map((req: any) => {
+            </div>
+            <Tabs defaultValue="operations" className="space-y-4">
+              <TabsList className="grid h-auto w-full grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+                <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Operations</TabsTrigger>
+                <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="analytics" className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <ScientificMetricCard
+                    label="Outstanding Requests"
+                    value={hrOfficeAnalytics.totals.outstanding_requests}
+                    hint="Waiting for HR Leave Office action"
+                    accent="border-cyan-200"
+                    icon={<ClipboardList className="h-5 w-5" />}
+                  />
+                  <ScientificMetricCard
+                    label="Staff On Leave"
+                    value={hrOfficeAnalytics.totals.staff_on_leave_now}
+                    hint="Approved leave active today"
+                    accent="border-emerald-200"
+                    icon={<Activity className="h-5 w-5" />}
+                  />
+                  <ScientificMetricCard
+                    label="Yet To Enjoy"
+                    value={hrOfficeAnalytics.totals.staff_yet_to_enjoy}
+                    hint="Approved leave scheduled ahead"
+                    accent="border-amber-200"
+                    icon={<Users className="h-5 w-5" />}
+                  />
+                  <ScientificMetricCard
+                    label="Completed Leave"
+                    value={hrOfficeAnalytics.totals.staff_completed_leave}
+                    hint="Staff who have completed leave"
+                    accent="border-violet-200"
+                    icon={<CheckCircle2 className="h-5 w-5" />}
+                  />
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                  <Card className="overflow-hidden border border-slate-200 bg-[linear-gradient(135deg,_#071a2f_0%,_#123d67_52%,_#0b7a75_100%)] text-white shadow-lg">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">HR Leave Office Intelligence</p>
+                          <h3 className="mt-2 text-2xl font-semibold tracking-tight">Operational Analytics Board</h3>
+                          <p className="mt-2 max-w-2xl text-sm text-slate-200">
+                            Monitor outstanding leave actions, approved leave utilization, geographic distribution, and staff leave consumption patterns in one scientific dashboard.
+                          </p>
+                        </div>
+                        <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                          <BarChart3 className="h-7 w-7 text-cyan-100" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <ScientificBarChart
+                    title="Outstanding Flow"
+                    rows={hrOfficeAnalytics.outstanding_by_status || []}
+                    valueKey="total"
+                    colorClass="bg-gradient-to-r from-cyan-500 to-blue-600"
+                    emptyMessage="No outstanding leave requests in the HR Office queue."
+                    formatter={(row) => getStatusLabel(String(row?.status || ""))}
+                  />
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <ScientificBarChart
+                    title="Leave Type Distribution"
+                    rows={hrOfficeAnalytics.leave_type_breakdown || []}
+                    valueKey="total"
+                    colorClass="bg-gradient-to-r from-emerald-500 to-teal-500"
+                    emptyMessage="No approved leave records available for type analysis."
+                    formatter={(row) => `${leaveTypeLabelShort(String(row?.leave_type_key || "annual"))} · now ${Number(row?.on_leave_now || 0)} / upcoming ${Number(row?.upcoming || 0)}`}
+                  />
+                  <ScientificBarChart
+                    title="Location / Rank Exposure"
+                    rows={hrOfficeAnalytics.location_ranking || []}
+                    valueKey="total"
+                    colorClass="bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                    emptyMessage="No approved leave records available for location ranking."
+                    formatter={(row) => `${String(row?.name || "Unassigned")} · active ${Number(row?.on_leave_now || 0)} / upcoming ${Number(row?.upcoming || 0)}`}
+                  />
+                </div>
+
+                <CurrentLeaveRoster rows={hrOfficeAnalytics.current_leave_roster || []} />
+              </TabsContent>
+
+              <TabsContent value="operations">
+                {hrOfficeFilteredQueue.length === 0 ? (
+                  <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                    <ClipboardList className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                    <p className="font-medium">No requests match your current HR Office filters</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {hrOfficeVisibleRows.map((req: any) => {
                   const isExpanded = officeExpanded === req.id
                   const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
                   const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
@@ -1022,8 +1461,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
                     : req.requested_days
                   const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
-                  return (
-                    <Card key={req.id} className="border shadow-sm">
+                  const generatedReason = [
+                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
+                    priorD > 0 ? `${priorD} prior leave day(s) deducted` : "",
+                    travelD > 0 ? `${travelD} travelling day(s) added` : "",
+                  ].filter(Boolean).join("; ")
+                      return (
+                    <Card key={req.id} className="group border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50/30 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
                       <CardContent className="p-5">
                         <div className="flex items-start justify-between mb-3">
                           <div>
@@ -1048,15 +1492,25 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                             <strong>HOD Recommendation:</strong> {req.manager_recommendation}
                           </p>
                         )}
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          <Badge className="border border-slate-200 bg-white text-slate-700">Requested: {req.requested_days} day(s)</Badge>
+                          <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "—"} day(s)</Badge>
+                        </div>
                         <Button size="sm" variant="outline"
                           onClick={() => {
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
+                              const matchingTemplate = templateOptions.find((template) => {
+                                const key = String(template.template_key || "")
+                                const leaveType = String(req.leave_type_key || "")
+                                return key.includes(leaveType) || key.includes("approval")
+                              }) || templateOptions[0]
                               setOfficeAdjStart((p) => ({ ...p, [req.id]: req.preferred_start_date || "" }))
                               setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.preferred_end_date || "" }))
-                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || "" }))
-                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || "" }))
-                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || "" }))
+                              setOfficeTemplateKey((p) => ({ ...p, [req.id]: matchingTemplate?.template_key || "" }))
+                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || matchingTemplate?.subject_template || "" }))
+                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || matchingTemplate?.body_template || "" }))
+                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || matchingTemplate?.cc_recipients || "" }))
                             }
                           }}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50">
@@ -1134,6 +1588,19 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                 Reason for Adjustment <span className="text-red-500">*</span>
                                 <span className="text-slate-400 font-normal ml-1">(will appear in leave memo)</span>
                               </Label>
+                              {generatedReason && (
+                                <div className="flex justify-end">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[11px]"
+                                    onClick={() => setOfficeReason((p) => ({ ...p, [req.id]: generatedReason }))}
+                                  >
+                                    Auto-fill from breakdown
+                                  </Button>
+                                </div>
+                              )}
                               <Textarea
                                 placeholder="e.g. Leave days reduced by 2 to account for 2 public holidays falling within leave period. 1 travelling day added."
                                 value={officeReason[req.id] || ""}
@@ -1144,6 +1611,32 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
                             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Editable)</p>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Template Source</Label>
+                                <Select
+                                  value={officeTemplateKey[req.id] || ""}
+                                  onValueChange={(value) => {
+                                    setOfficeTemplateKey((p) => ({ ...p, [req.id]: value }))
+                                    const selected = templateOptions.find((template) => template.template_key === value)
+                                    if (selected) {
+                                      setOfficeMemoSubject((p) => ({ ...p, [req.id]: selected.subject_template || "" }))
+                                      setOfficeMemoBody((p) => ({ ...p, [req.id]: selected.body_template || "" }))
+                                      setOfficeMemoCc((p) => ({ ...p, [req.id]: selected.cc_recipients || "" }))
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="h-9 bg-white">
+                                    <SelectValue placeholder="Select template" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {templateOptions.map((template) => (
+                                      <SelectItem key={template.id} value={template.template_key}>
+                                        {template.template_name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                               <div className="space-y-1">
                                 <Label className="text-xs">Memo Subject</Label>
                                 <Input
@@ -1184,37 +1677,39 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                         )}
                       </CardContent>
                     </Card>
-                  )
-                })}
+                      )
+                    })}
 
-                {hrOfficeQueue.length > hrOfficePageSize && (
-                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
-                    <p className="text-xs text-slate-600">
-                      Showing {(hrOfficePage - 1) * hrOfficePageSize + 1} to {Math.min(hrOfficePage * hrOfficePageSize, hrOfficeQueue.length)} of {hrOfficeQueue.length}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={hrOfficePage <= 1}
-                        onClick={() => setHrOfficePage((p) => Math.max(1, p - 1))}
-                      >
-                        Previous
-                      </Button>
-                      <span className="text-xs font-medium text-slate-700">Page {hrOfficePage} / {hrOfficeTotalPages}</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={hrOfficePage >= hrOfficeTotalPages}
-                        onClick={() => setHrOfficePage((p) => Math.min(hrOfficeTotalPages, p + 1))}
-                      >
-                        Next
-                      </Button>
-                    </div>
+                    {hrOfficeFilteredQueue.length > hrOfficePageSize && (
+                      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+                        <p className="text-xs text-slate-600">
+                          Showing {(hrOfficePage - 1) * hrOfficePageSize + 1} to {Math.min(hrOfficePage * hrOfficePageSize, hrOfficeFilteredQueue.length)} of {hrOfficeFilteredQueue.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={hrOfficePage <= 1}
+                            onClick={() => setHrOfficePage((p) => Math.max(1, p - 1))}
+                          >
+                            Previous
+                          </Button>
+                          <span className="text-xs font-medium text-slate-700">Page {hrOfficePage} / {hrOfficeTotalPages}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={hrOfficePage >= hrOfficeTotalPages}
+                            onClick={() => setHrOfficePage((p) => Math.min(hrOfficeTotalPages, p + 1))}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           {/* ── HR Final Approval ─────────────────────────────────────── */}
@@ -1301,6 +1796,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                             </AlertDescription>
                           </Alert>
                         )}
+                        <StaffHistoryPanel
+                          history={staffHistoryByUser[String(req.user?.id || "")] || []}
+                          currentRequestId={req.id}
+                        />
                         <Button size="sm" variant="outline"
                           onClick={() => {
                             if (isExpanded) {

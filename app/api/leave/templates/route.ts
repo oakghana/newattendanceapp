@@ -18,6 +18,8 @@ const TEMPLATE_EDIT_ROLES = [
   "hr_leave_office",
 ]
 
+const TEMPLATE_SELECT_COLUMNS = "id, template_key, template_name, description, subject_template, body_template, cc_recipients, is_active, updated_at"
+
 function normalizeRole(role: string | null | undefined) {
   return String(role || "")
     .toLowerCase()
@@ -51,7 +53,7 @@ async function resolveUserAndRole() {
   return { error: null, status: 200 as const, user, role: normalizeRole((profile as any).role), admin }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await resolveUserAndRole()
     if (auth.error || !auth.admin || !auth.role) {
@@ -62,10 +64,28 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { data, error } = await auth.admin
+    const url = new URL(request.url)
+    const category = String(url.searchParams.get("category") || "").trim().toLowerCase()
+
+    let query = auth.admin
       .from("leave_memo_templates")
-      .select("id, template_key, template_name, description, subject_template, body_template, cc_recipients, is_active, updated_at")
+      .select(`${TEMPLATE_SELECT_COLUMNS}, category`)
       .order("template_name", { ascending: true })
+
+    if (category) {
+      query = query.eq("category", category)
+    }
+
+    let { data, error } = await query
+
+    if (error && /category/i.test(String(error.message || ""))) {
+      const fallback = await auth.admin
+        .from("leave_memo_templates")
+        .select(TEMPLATE_SELECT_COLUMNS)
+        .order("template_name", { ascending: true })
+      data = (fallback.data || []).map((row: any) => ({ ...row, category: "general" }))
+      error = fallback.error
+    }
 
     if (error) {
       throw error
@@ -109,6 +129,7 @@ export async function PUT(request: NextRequest) {
       body_template: String(body?.body_template || "").trim(),
       cc_recipients: body?.cc_recipients ? String(body.cc_recipients).trim() : null,
       is_active: body?.is_active !== false,
+      category: body?.category ? String(body.category).trim().toLowerCase() : "general",
       updated_at: new Date().toISOString(),
     }
 
@@ -123,8 +144,32 @@ export async function PUT(request: NextRequest) {
       .from("leave_memo_templates")
       .update(payload)
       .eq("template_key", templateKey)
-      .select("id, template_key, template_name, description, subject_template, body_template, cc_recipients, is_active, updated_at")
+      .select(`${TEMPLATE_SELECT_COLUMNS}, category`)
       .maybeSingle()
+
+    if (error && /category/i.test(String(error.message || ""))) {
+      const retry = await auth.admin
+        .from("leave_memo_templates")
+        .update({
+          template_name: payload.template_name,
+          description: payload.description,
+          subject_template: payload.subject_template,
+          body_template: payload.body_template,
+          cc_recipients: payload.cc_recipients,
+          is_active: payload.is_active,
+          updated_at: payload.updated_at,
+        })
+        .eq("template_key", templateKey)
+        .select(TEMPLATE_SELECT_COLUMNS)
+        .maybeSingle()
+      if (retry.error) {
+        throw retry.error
+      }
+      if (!retry.data) {
+        return NextResponse.json({ error: "Template not found" }, { status: 404 })
+      }
+      return NextResponse.json({ success: true, template: { ...retry.data, category: "general" } })
+    }
 
     if (error) {
       throw error
@@ -181,6 +226,7 @@ export async function POST(request: NextRequest) {
       subject_template: String(body?.subject_template || "").trim(),
       body_template: String(body?.body_template || "").trim(),
       cc_recipients: body?.cc_recipients ? String(body.cc_recipients).trim() : null,
+      category: body?.category ? String(body.category).trim().toLowerCase() : "general",
       is_active: body?.is_active !== false,
     }
 
@@ -194,8 +240,28 @@ export async function POST(request: NextRequest) {
     const { data, error } = await auth.admin
       .from("leave_memo_templates")
       .insert(payload)
-      .select("id, template_key, template_name, description, subject_template, body_template, cc_recipients, is_active, updated_at")
+      .select(`${TEMPLATE_SELECT_COLUMNS}, category`)
       .single()
+
+    if (error && /category/i.test(String(error.message || ""))) {
+      const retry = await auth.admin
+        .from("leave_memo_templates")
+        .insert({
+          template_key: payload.template_key,
+          template_name: payload.template_name,
+          description: payload.description,
+          subject_template: payload.subject_template,
+          body_template: payload.body_template,
+          cc_recipients: payload.cc_recipients,
+          is_active: payload.is_active,
+        })
+        .select(TEMPLATE_SELECT_COLUMNS)
+        .single()
+      if (retry.error) {
+        throw retry.error
+      }
+      return NextResponse.json({ success: true, template: { ...retry.data, category: "general" } }, { status: 201 })
+    }
 
     if (error) {
       throw error
@@ -222,6 +288,100 @@ export async function POST(request: NextRequest) {
     console.error("[leave-templates] POST error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create template" },
+      { status: 500 },
+    )
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await resolveUserAndRole()
+    if (auth.error || !auth.admin || !auth.role || !auth.user) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status })
+    }
+
+    if (!TEMPLATE_EDIT_ROLES.includes(auth.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const action = String(body?.action || "").trim().toLowerCase()
+    const templateKey = String(body?.template_key || "").trim()
+
+    if (!action || !templateKey) {
+      return NextResponse.json({ error: "action and template_key are required" }, { status: 400 })
+    }
+
+    const { data: existing, error: existingError } = await auth.admin
+      .from("leave_memo_templates")
+      .select(`${TEMPLATE_SELECT_COLUMNS}, category`)
+      .eq("template_key", templateKey)
+      .maybeSingle()
+
+    if (existingError) {
+      throw existingError
+    }
+    if (!existing) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 })
+    }
+
+    if (action === "duplicate") {
+      const duplicateKey = `${templateKey}_copy_${Date.now()}`
+      const duplicatePayload: Record<string, any> = {
+        template_key: duplicateKey,
+        template_name: `${existing.template_name} Copy`,
+        description: existing.description,
+        subject_template: existing.subject_template,
+        body_template: existing.body_template,
+        cc_recipients: existing.cc_recipients,
+        is_active: false,
+      }
+
+      if ("category" in existing) {
+        duplicatePayload.category = (existing as any).category || "general"
+      }
+
+      let insertResult = await auth.admin
+        .from("leave_memo_templates")
+        .insert(duplicatePayload)
+        .select(`${TEMPLATE_SELECT_COLUMNS}, category`)
+        .single()
+
+      if (insertResult.error && /category/i.test(String(insertResult.error.message || ""))) {
+        delete duplicatePayload.category
+        insertResult = await auth.admin
+          .from("leave_memo_templates")
+          .insert(duplicatePayload)
+          .select(TEMPLATE_SELECT_COLUMNS)
+          .single()
+      }
+
+      if (insertResult.error) {
+        throw insertResult.error
+      }
+
+      return NextResponse.json({ success: true, template: { ...insertResult.data, category: (insertResult.data as any)?.category || "general" } })
+    }
+
+    if (action === "deactivate" || action === "activate") {
+      const { data, error } = await auth.admin
+        .from("leave_memo_templates")
+        .update({ is_active: action === "activate", updated_at: new Date().toISOString() })
+        .eq("template_key", templateKey)
+        .select(`${TEMPLATE_SELECT_COLUMNS}, category`)
+        .maybeSingle()
+
+      if (error) {
+        throw error
+      }
+      return NextResponse.json({ success: true, template: { ...data, category: (data as any)?.category || "general" } })
+    }
+
+    return NextResponse.json({ error: "Unsupported action" }, { status: 400 })
+  } catch (error) {
+    console.error("[leave-templates] PATCH error:", error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update template state" },
       { status: 500 },
     )
   }

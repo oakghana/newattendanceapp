@@ -116,6 +116,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Adjusted days must be greater than zero." }, { status: 400 })
     }
 
+    const entitlementDays = Number((leaveRequest as any).entitlement_days || 0)
+    const trimmedReason = String(adjustment_reason || "").trim()
+    if (entitlementDays > 0 && computedAdjustedDays > entitlementDays && trimmedReason.length < 10) {
+      return NextResponse.json(
+        {
+          error:
+            `Adjusted leave days (${computedAdjustedDays}) exceed recommended entitlement (${entitlementDays}). ` +
+            "Provide a clear reason (minimum 10 characters) for this HR Leave Office extension.",
+          code: "HR_EXTENSION_REASON_REQUIRED",
+          entitlement_days: entitlementDays,
+          adjusted_days: computedAdjustedDays,
+        },
+        { status: 400 },
+      )
+    }
+
     const reviewerName = [
       String((profile as any).first_name || ""),
       String((profile as any).last_name || ""),
@@ -132,7 +148,7 @@ export async function POST(request: NextRequest) {
         adjusted_days: computedAdjustedDays,
         adjusted_start_date,
         adjusted_end_date,
-        adjustment_reason: adjustment_reason.trim(),
+        adjustment_reason: trimmedReason,
         holiday_days_deducted: Number(holiday_days_deducted || 0),
         travelling_days_added: Number(travelling_days_added || 0),
         prior_leave_days_deducted: Number(prior_leave_days_deducted || 0),
@@ -163,13 +179,13 @@ export async function POST(request: NextRequest) {
       recipient_id: (leaveRequest as any).user_id,
       type: "leave_plan_hr_office_review",
       title: "Leave Request Reviewed by HR Leave Office",
-      message: `Your leave request has been reviewed by HR Leave Office. Adjusted days: ${computedAdjustedDays} (${adjusted_start_date} to ${adjusted_end_date}). Reason: ${adjustment_reason.trim()}. Your request is now awaiting final HR approval.`,
+      message: `Your leave request has been reviewed by HR Leave Office. Adjusted days: ${computedAdjustedDays} (${adjusted_start_date} to ${adjusted_end_date}). Reason: ${trimmedReason}. Your request is now awaiting final HR approval.`,
       data: {
         leave_plan_request_id,
         adjusted_days: computedAdjustedDays,
         adjusted_start_date,
         adjusted_end_date,
-        adjustment_reason: adjustment_reason.trim(),
+        adjustment_reason: trimmedReason,
       },
     }).then(() => {}).catch(() => {}) // Non-fatal
 
