@@ -334,24 +334,25 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFont("times", "italic")
     doc.setFontSize(8)
     doc.setTextColor(70, 70, 70)
-    doc.text("P.O Box M14", pageWidth - marginRight - 14, 19)
-    doc.text("Accra Ghana", pageWidth - marginRight - 14, 24)
+    const rightBlockX = pageWidth - marginRight - 14
+    doc.text("P.O Box M14", rightBlockX, 19)
+    doc.text("Accra Ghana", rightBlockX, 24)
+    doc.text(`Date:  ${memoDate}`, rightBlockX, 29)
 
     // Green separator under header
     doc.setDrawColor(44, 98, 22)
     doc.setLineWidth(0.5)
-    doc.line(marginLeft, 33, pageWidth - marginRight, 33)
+    doc.line(marginLeft, 38, pageWidth - marginRight, 38)
     doc.setLineWidth(0.2)
     doc.setDrawColor(210, 210, 210)
 
-    let y = 41
+    let y = 46
 
-    // ─── Our Ref No + Date ────────────────────────────────────────────
+    // ─── Our Ref No ───────────────────────────────────────────────────
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
     doc.text(`Our Ref No:  ${refNumber}`, marginLeft, y)
-    doc.text(`Date:  ${memoDate}`, pageWidth - marginRight - 42, y)
     y += 5.5
     doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10
