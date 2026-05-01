@@ -53,6 +53,7 @@ import {
   Activity,
   MapPin,
   Users,
+  LayoutList,
 } from "lucide-react"
 
 interface LeaveAnalyticsRecord {
@@ -800,7 +801,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
-  const canViewLeaveAnalytics = normalizedRole === "loan_office"
+  const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin || ["loan_office"].includes(normalizedRole)
+  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
   const canSelfApply = isStaff || isHod || isAdmin ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "loan_office"].includes(normalizedRole)
 
@@ -818,6 +820,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrOfficeSortBy, setHrOfficeSortBy] = useState("priority")
   const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
   const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
+  const [allRequestsSearch, setAllRequestsSearch] = useState("")
+  const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
   const [analyticsRange, setAnalyticsRange] = useState(() => getCurrentMonthRange())
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
@@ -1132,6 +1136,25 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return Math.max(1, Math.ceil(hrOfficeFilteredQueue.length / hrOfficePageSize))
   }, [hrOfficeFilteredQueue.length, hrOfficePageSize])
 
+  const allRequestsFiltered: any[] = useMemo(() => {
+    if (!data) return []
+    let rows = [...(data.requests || [])]
+    if (allRequestsStatusFilter !== "all") {
+      rows = rows.filter((r: any) => String(r?.status || "") === allRequestsStatusFilter)
+    }
+    const search = allRequestsSearch.trim().toLowerCase()
+    if (search) {
+      rows = rows.filter((r: any) => {
+        const name = [r?.user?.first_name, r?.user?.last_name].filter(Boolean).join(" ").toLowerCase()
+        const empId = String(r?.user?.employee_id || "").toLowerCase()
+        const lt = String(r?.leave_type_key || "").replace(/_/g, " ").toLowerCase()
+        const st = String(r?.status || "").replace(/_/g, " ").toLowerCase()
+        return name.includes(search) || empId.includes(search) || lt.includes(search) || st.includes(search)
+      })
+    }
+    return rows.sort((a: any, b: any) => new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime())
+  }, [data, allRequestsSearch, allRequestsStatusFilter])
+
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
     return (data.requests || []).filter((r: any) =>
@@ -1391,8 +1414,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
+    if (canSeeAllRequests) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -2437,6 +2461,95 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               </div>
             )}
           </TabsContent>
+
+          {canSeeAllRequests && (
+          <TabsContent value="all-requests">
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">All Leave Requests</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {(data?.requests || []).length} total</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
+                      <Input
+                        value={allRequestsSearch}
+                        onChange={(e) => setAllRequestsSearch(e.target.value)}
+                        className="pl-8 h-9 w-56"
+                        placeholder="Search staff, type, status"
+                      />
+                    </div>
+                    <Select value={allRequestsStatusFilter} onValueChange={setAllRequestsStatusFilter}>
+                      <SelectTrigger className="h-9 w-48">
+                        <SelectValue placeholder="Filter by status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="pending_manager_review">Pending HOD Review</SelectItem>
+                        <SelectItem value="hod_approved">HOD Approved</SelectItem>
+                        <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
+                        <SelectItem value="hod_changes_requested">HOD Changes Requested</SelectItem>
+                        <SelectItem value="hod_rejected">HOD Rejected</SelectItem>
+                        <SelectItem value="hr_office_forwarded">Forwarded to HR Approvers</SelectItem>
+                        <SelectItem value="hr_approved">HR Approved</SelectItem>
+                        <SelectItem value="hr_rejected">HR Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              {allRequestsFiltered.length === 0 ? (
+                <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                  <LayoutList className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                  <p className="font-medium">No leave requests found</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {allRequestsFiltered.map((req: any) => (
+                    <Card key={req.id} className="border-slate-200 hover:shadow-sm transition-shadow">
+                      <CardContent className="p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-semibold text-slate-800">
+                              {[req?.user?.first_name, req?.user?.last_name].filter(Boolean).join(" ") || "Staff"}
+                              {req?.user?.employee_id && (
+                                <span className="ml-2 text-xs text-slate-500 font-normal">#{req.user.employee_id}</span>
+                              )}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {String(req?.leave_type_key || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                              {" · "}{req?.preferred_start_date} — {req?.preferred_end_date}
+                              {" · "}{req?.adjusted_days || req?.requested_days || "—"} day(s)
+                            </p>
+                            {req?.user?.departments?.name && (
+                              <p className="text-xs text-slate-400">{req.user.departments.name}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge className={`text-xs ${getStatusColor(String(req?.status || ""))}`}>
+                              {getStatusLabel(String(req?.status || ""))}
+                            </Badge>
+                            {String(req?.status || "") === "hr_approved" && req?.memo_token && (
+                              <Button
+                                size="sm" variant="outline"
+                                onClick={() => openMemo(req.id, req.memo_token)}
+                                className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                                <Download className="w-3 h-3 mr-1" /> Memo
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2">Submitted {fmtDate(req?.submitted_at || req?.created_at)}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+          )}
         </Tabs>
       )}
     </div>

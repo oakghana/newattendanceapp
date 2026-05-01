@@ -669,7 +669,6 @@ export async function GET(request: NextRequest) {
             geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
           )
         `)
-        .in("status", [...HR_OFFICE_PENDING_STATUSES])
         .order("created_at", { ascending: false })
 
       if (!includeArchived) {
@@ -851,8 +850,6 @@ export async function GET(request: NextRequest) {
             departments(name, code)
           )
         `)
-        .in("status", ["hod_approved", "hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
-        .eq("is_archived", false)
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -897,7 +894,6 @@ export async function GET(request: NextRequest) {
             departments(name, code)
           )
         `)
-        .in("status", ["hod_approved", "hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
         .order("created_at", { ascending: false })
 
       if (staggerError) {
@@ -923,6 +919,8 @@ export async function GET(request: NextRequest) {
       const requestUserIds = (data || []).map((row: any) => String(row?.user?.id || row?.user_id || "")).filter(Boolean)
       const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
 
+      const analytics = await fetchHrOfficeAnalytics(admin)
+
       return NextResponse.json({
         mode: "hr",
         requests: data || [],
@@ -930,6 +928,7 @@ export async function GET(request: NextRequest) {
         myRequests: myRequests || [],
         myStaggerRequests: myStaggerRequests || [],
         staffHistoryByUser,
+        analytics,
       })
     }
 

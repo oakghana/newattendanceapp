@@ -19,19 +19,12 @@ const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").r
 const GREEN = "#2c6216"
 const LIGHT_GREEN = "#f0f7ec"
 
-// QCC logo hosted on the live site – email clients that block remote images
-// will just show the text fallback in the alt attribute.
-const LOGO_URL = `${APP_URL}/images/qcc-logo.png`
-
 function baseLayout(title: string, body: string): string {
   return `
 <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-  <div style="background:${GREEN};padding:16px 28px;display:flex;align-items:center;gap:14px;">
-    <img src="${LOGO_URL}" alt="QCC Logo" width="48" height="48" style="border-radius:6px;background:#fff;padding:3px;flex-shrink:0;" />
-    <div>
-      <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">${title}</h2>
-      <p style="margin:3px 0 0;color:#cde8ba;font-size:12px;">Quality Control Company Ltd. (COCOBOD) — HR System</p>
-    </div>
+  <div style="background:${GREEN};padding:16px 28px;">
+    <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">${title}</h2>
+    <p style="margin:3px 0 0;color:#cde8ba;font-size:12px;">Quality Control Company Ltd. (COCOBOD) — HR System</p>
   </div>
   <div style="padding:24px 28px;background:${LIGHT_GREEN};">
     ${body}
