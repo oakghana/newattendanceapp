@@ -201,6 +201,13 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             <strong>HOD note:</strong> {req.manager_recommendation}
           </p>
         )}
+        {req.memo_subject && req.memo_body && req.status !== "hr_approved" && (
+          <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 p-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Auto Memo Reference</p>
+            <p className="mt-1 text-xs font-medium text-emerald-900">{String(req.memo_subject)}</p>
+            <p className="mt-1 text-xs text-emerald-800 line-clamp-4">{String(req.memo_body)}</p>
+          </div>
+        )}
         {req.hr_approval_note && (
           <p className="text-xs text-slate-600 mt-2 bg-slate-50 p-2 rounded border border-slate-200">
             <strong>HR note:</strong> {req.hr_approval_note}
@@ -253,6 +260,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<any>(null)
   const [activeTab, setActiveTab] = useState("my-leaves")
+  const [hrOfficeShowArchived, setHrOfficeShowArchived] = useState(false)
+  const [hrOfficePageSize, setHrOfficePageSize] = useState(100)
+  const [hrOfficePage, setHrOfficePage] = useState(1)
 
   // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -319,7 +329,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/leave/planning", { cache: "no-store" })
+      const query = hrOfficeShowArchived ? "?includeArchived=true" : ""
+      const res = await fetch(`/api/leave/planning${query}`, { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Failed to load data")
       setData(json)
@@ -328,7 +339,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [hrOfficeShowArchived])
 
   const loadPolicy = useCallback(async () => {
     try {
@@ -348,6 +359,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     void loadData()
     void loadPolicy()
   }, [loadData, loadPolicy])
+
+  useEffect(() => {
+    setHrOfficePage(1)
+  }, [hrOfficePageSize, hrOfficeShowArchived])
 
   // ── Derived lists ────────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
@@ -378,6 +393,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       (HR_OFFICE_PENDING_STATUSES as string[]).includes(String(r?.status || "")),
     )
   }, [data])
+
+  const hrOfficeVisibleRows = useMemo(() => {
+    const start = (hrOfficePage - 1) * hrOfficePageSize
+    return hrOfficeQueue.slice(start, start + hrOfficePageSize)
+  }, [hrOfficeQueue, hrOfficePage, hrOfficePageSize])
+
+  const hrOfficeTotalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(hrOfficeQueue.length / hrOfficePageSize))
+  }, [hrOfficeQueue.length, hrOfficePageSize])
 
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
@@ -556,6 +580,36 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
   const openMemo = (requestId: string, token: string) =>
     window.open(`/api/leave/planning/memo/${requestId}?token=${encodeURIComponent(token)}`, "_blank")
+
+  const handleArchiveRequest = async (requestId: string, archive: boolean) => {
+    const reason = archive ? (window.prompt("Optional archive reason for records:") || "") : ""
+    try {
+      const res = await fetch("/api/leave/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leaveRequestId: requestId,
+          action: archive ? "archive" : "unarchive",
+          reason: reason || null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to update archive state")
+      toast({
+        title: archive ? "Request archived" : "Request restored",
+        description: archive
+          ? "Director HR and Manager HR views are now cleared for this request."
+          : "Request moved back to active HR Office queue.",
+      })
+      await loadData()
+    } catch (e) {
+      toast({
+        title: "Archive action failed",
+        description: e instanceof Error ? e.message : "Unable to archive request",
+        variant: "destructive",
+      })
+    }
+  }
 
   // ── Tab config ────────────────────────────────────────────────────────
   const tabs = useMemo(() => {
@@ -905,7 +959,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
           {/* ── HR Leave Office ───────────────────────────────────────── */}
           <TabsContent value="hr-office">
-            <div className="mb-4">
+            <div className="mb-4 space-y-3">
               <Alert className="border-blue-200 bg-blue-50">
                 <ClipboardList className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="text-xs text-blue-800 ml-1">
@@ -913,6 +967,42 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   prior partial leave enjoyed. All adjustments and reasons will appear in the staff&apos;s official leave memo.
                 </AlertDescription>
               </Alert>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={hrOfficeShowArchived ? "outline" : "default"}
+                    className={!hrOfficeShowArchived ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                    onClick={() => setHrOfficeShowArchived(false)}
+                  >
+                    Active Queue
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={hrOfficeShowArchived ? "default" : "outline"}
+                    className={hrOfficeShowArchived ? "bg-blue-700 hover:bg-blue-800" : ""}
+                    onClick={() => setHrOfficeShowArchived(true)}
+                  >
+                    Archived Queue
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-slate-600">Page Size</Label>
+                  <Select value={String(hrOfficePageSize)} onValueChange={(v) => setHrOfficePageSize(Number(v))}>
+                    <SelectTrigger className="h-8 w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="300">300</SelectItem>
+                      <SelectItem value="600">600</SelectItem>
+                      <SelectItem value="1000">1000</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
             {hrOfficeQueue.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -921,7 +1011,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               </div>
             ) : (
               <div className="space-y-4">
-                {hrOfficeQueue.map((req: any) => {
+                {hrOfficeVisibleRows.map((req: any) => {
                   const isExpanded = officeExpanded === req.id
                   const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
                   const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
@@ -971,6 +1061,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                           }}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50">
                           {isExpanded ? "▲ Collapse" : "▼ Adjust & Forward"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="ml-2 h-8 text-xs border-slate-300"
+                          onClick={() => handleArchiveRequest(req.id, !hrOfficeShowArchived)}
+                        >
+                          {hrOfficeShowArchived ? "Restore to Active" : "Archive Request"}
                         </Button>
 
                         {isExpanded && (
@@ -1088,6 +1186,33 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     </Card>
                   )
                 })}
+
+                {hrOfficeQueue.length > hrOfficePageSize && (
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+                    <p className="text-xs text-slate-600">
+                      Showing {(hrOfficePage - 1) * hrOfficePageSize + 1} to {Math.min(hrOfficePage * hrOfficePageSize, hrOfficeQueue.length)} of {hrOfficeQueue.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={hrOfficePage <= 1}
+                        onClick={() => setHrOfficePage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-xs font-medium text-slate-700">Page {hrOfficePage} / {hrOfficeTotalPages}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={hrOfficePage >= hrOfficeTotalPages}
+                        onClick={() => setHrOfficePage((p) => Math.min(hrOfficeTotalPages, p + 1))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>

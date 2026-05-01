@@ -1,7 +1,7 @@
 import { updateSession } from "@/lib/supabase/middleware";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 // Define route protection rules: [pathPattern] => [allowedRoles]
 const PROTECTED_ROUTES: Record<string, string[]> = {
@@ -62,8 +62,7 @@ export default async function proxy(request: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/public/") ||
     pathname === "/" ||
-    pathname === "/login" ||
-    pathname === "/auth" ||
+    pathname.startsWith("/auth") ||
     pathname.startsWith("/images/") ||
     pathname.startsWith("/fonts/") ||
     pathname.match(/\.\w+$/) // Files with extensions
@@ -72,28 +71,40 @@ export default async function proxy(request: NextRequest) {
   }
 
   try {
-    // Update session first
-    let response = await updateSession(request);
-    
-    // Get user session for authorization check
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    // Refresh/propagate auth cookies first
+    const response = await updateSession(request);
 
-    if (!session?.user) {
-      return NextResponse.redirect(new URL("/login", request.url));
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+      return response;
+    }
+
+    // Use cookie-aware server client in proxy context.
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll() {
+          // Session cookie writes are handled by updateSession.
+        },
+      },
+    });
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.redirect(new URL("/auth/login", request.url));
     }
 
     // Fetch user profile to get role
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .maybeSingle();
 
     const userRole = profile?.role;
@@ -101,7 +112,7 @@ export default async function proxy(request: NextRequest) {
     // Check authorization for the requested route
     if (!isAuthorizedForRoute(userRole, pathname)) {
       console.warn(
-        `[Authorization] User ${session.user.id} (role: ${userRole}) attempted unauthorized access to ${pathname}`
+        `[Authorization] User ${user.id} (role: ${userRole}) attempted unauthorized access to ${pathname}`
       );
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }

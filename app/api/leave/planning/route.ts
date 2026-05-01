@@ -211,8 +211,52 @@ async function resolveEntitlementDays(admin: any, leaveTypeKey: string) {
   return { entitlementDays: fallback ? fallback.entitlementDays : null, error: null }
 }
 
-export async function GET() {
+function formatMemoDate(value: string) {
   try {
+    return new Date(value).toLocaleDateString("en-GH", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    })
+  } catch {
+    return value
+  }
+}
+
+function buildInitialLeaveMemoDraft(payload: {
+  leaveTypeKey: string
+  leaveYearPeriod: string
+  preferredStartDate: string
+  preferredEndDate: string
+  requestedDays: number
+  submittedAt: string
+}) {
+  const leaveTypeLabel = String(payload.leaveTypeKey || "annual")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+
+  const subject = `LEAVE REQUEST RECEIVED - ${leaveTypeLabel} (${payload.leaveYearPeriod})`
+  const body = [
+    "Your leave request has been received and is now in workflow review.",
+    "",
+    `Leave Type: ${leaveTypeLabel}`,
+    `Requested Period: ${formatMemoDate(payload.preferredStartDate)} to ${formatMemoDate(payload.preferredEndDate)}`,
+    `Requested Days: ${payload.requestedDays}`,
+    `Submitted On: ${formatMemoDate(payload.submittedAt)}`,
+    "",
+    "Current Stage: Pending HOD/Manager Review",
+    "",
+    "This memo is generated automatically for your reference and for HR Leave Office records.",
+  ].join("\n")
+
+  return { subject, body }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const url = new URL(request.url)
+    const includeArchived = url.searchParams.get("includeArchived") === "true"
+
     const supabase = await createClient()
     const admin = await createAdminClient()
     const {
@@ -242,7 +286,7 @@ export async function GET() {
 
     // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ──
     if (isHrOffice && !isHrApprover) {
-      const { data: requests, error: reqError } = await admin
+      let officeQuery = admin
         .from("leave_plan_requests")
         .select(`
           *,
@@ -253,6 +297,12 @@ export async function GET() {
         `)
         .in("status", [...HR_OFFICE_PENDING_STATUSES])
         .order("created_at", { ascending: false })
+
+      if (!includeArchived) {
+        officeQuery = officeQuery.eq("is_archived", false)
+      }
+
+      const { data: requests, error: reqError } = await officeQuery
 
       if (reqError) {
         if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr_office", getSchemaIssueMessage(reqError))
@@ -324,6 +374,7 @@ export async function GET() {
             requested_days,
             reason,
             status,
+            is_archived,
             submitted_at,
             user:user_profiles!leave_plan_requests_user_id_fkey (
               id,
@@ -343,6 +394,8 @@ export async function GET() {
         }
         throw error
       }
+
+      const nonArchivedReviews = (data || []).filter((row: any) => !row?.leave_plan_request?.is_archived)
 
       const { data: staggerReviews, error: staggerError } = await admin
         .from("leave_plan_stagger_reviews")
@@ -395,7 +448,7 @@ export async function GET() {
 
       return NextResponse.json({
         mode: "manager",
-        reviews: data || [],
+        reviews: nonArchivedReviews,
         staggerReviews: staggerReviews || [],
         myRequests: myRequests || [],
         myStaggerRequests: myStaggerRequests || [],
@@ -416,6 +469,7 @@ export async function GET() {
           )
         `)
         .in("status", ["hod_approved", "hr_office_forwarded", "manager_confirmed", "hr_approved", "hr_rejected"])
+        .eq("is_archived", false)
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -611,9 +665,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A staff signature is required (typed, uploaded, or on-screen draw)." }, { status: 400 })
     }
 
+    const initialMemo = buildInitialLeaveMemoDraft({
+      leaveTypeKey,
+      leaveYearPeriod: YEAR_PERIOD,
+      preferredStartDate: preferred_start_date,
+      preferredEndDate: preferred_end_date,
+      requestedDays,
+      submittedAt: new Date().toISOString(),
+    })
+
     const { data: requestRow, error: requestError } = await admin
       .from("leave_plan_requests")
       .insert({
+        memo_subject: initialMemo.subject,
+        memo_body: initialMemo.body,
+        memo_draft_subject: initialMemo.subject,
+        memo_draft_body: initialMemo.body,
         user_id: user.id,
         leave_year_period: YEAR_PERIOD,
         preferred_start_date,
@@ -628,6 +695,8 @@ export async function POST(request: NextRequest) {
         user_signature_image_url: user_signature_image_url || null,
         user_signature_data_url: user_signature_data_url || null,
         user_signature_hologram_code: buildHologramCode("USR"),
+        memo_generated: true,
+        memo_generated_at: new Date().toISOString(),
       })
       .select("*")
       .single()
