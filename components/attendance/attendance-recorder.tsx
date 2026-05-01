@@ -198,6 +198,8 @@ export function AttendanceRecorder({
   const [earlyCheckoutProvedBy, setEarlyCheckoutProvedBy] = useState("")
   const [loginIssueRecoveryCheckout, setLoginIssueRecoveryCheckout] = useState(false)
   const [earlyCheckoutReasonRequired, setEarlyCheckoutReasonRequired] = useState(true)
+  // "early" = before standard end time, "out_of_location" = server rejected checkout needing a location reason
+  const [checkoutReasonContext, setCheckoutReasonContext] = useState<"early" | "out_of_location">("early")
   const [pendingCheckoutData, setPendingCheckoutData] = useState<{
     location: LocationData | null
     nearestLocation: any
@@ -2074,6 +2076,14 @@ export function AttendanceRecorder({
         setTimeout(() => {
           fetchTodayAttendance()
         }, 500)
+      } else if (result.requiresOutOfLocationReason || result.requiresEarlyCheckoutReason) {
+        // API wants a reason — show the reason modal instead of the error banner
+        setPendingCheckoutData((prev) => prev ?? { location: locationData, nearestLocation })
+        setEarlyCheckoutReasonRequired(true)
+        setCheckoutReasonContext(result.requiresOutOfLocationReason ? "out_of_location" : "early")
+        setEarlyCheckoutReason("")
+        setShowEarlyCheckoutDialog(true)
+        return
       } else if (result.error) {
         throw new Error(result.error)
       } else {
@@ -3437,15 +3447,19 @@ export function AttendanceRecorder({
             <CardContent className="p-5 space-y-4">
               {/* Header */}
               <div className="flex items-start gap-3">
-                <div className="rounded-full bg-orange-100 dark:bg-orange-900/40 p-2.5 shrink-0">
-                  <LogOut className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                <div className={`rounded-full p-2.5 shrink-0 ${checkoutReasonContext === "out_of_location" ? "bg-amber-100 dark:bg-amber-900/40" : "bg-orange-100 dark:bg-orange-900/40"}`}>
+                  <LogOut className={`h-5 w-5 ${checkoutReasonContext === "out_of_location" ? "text-amber-600 dark:text-amber-400" : "text-orange-600 dark:text-orange-400"}`} />
                 </div>
                 <div>
                   <h3 className="font-semibold text-base text-foreground">
-                    {earlyCheckoutReasonRequired ? "Early Checkout" : "Confirm Checkout"}
+                    {checkoutReasonContext === "out_of_location"
+                      ? "Checkout Outside QCC Location"
+                      : earlyCheckoutReasonRequired ? "Early Checkout" : "Confirm Checkout"}
                   </h3>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {getFormattedCheckoutTime()}
+                    {checkoutReasonContext === "out_of_location"
+                      ? "You appear to be outside a registered QCC location. Please provide a brief reason to proceed."
+                      : getFormattedCheckoutTime()}
                   </p>
                 </div>
               </div>
@@ -3459,9 +3473,11 @@ export function AttendanceRecorder({
                   id="early-checkout-reason"
                   value={earlyCheckoutReason}
                   onChange={(e) => setEarlyCheckoutReason(e.target.value)}
-                  placeholder={earlyCheckoutReasonRequired
-                    ? "e.g., Medical appointment, family emergency, approved leave…"
-                    : "Add a note (optional)…"}
+                  placeholder={checkoutReasonContext === "out_of_location"
+                    ? "e.g., Working from home, field assignment, on-site client visit…"
+                    : earlyCheckoutReasonRequired
+                      ? "e.g., Medical appointment, family emergency, approved leave…"
+                      : "Add a note (optional)…"}
                   className="w-full min-h-[90px] p-3 text-sm border rounded-xl resize-none bg-muted/40 focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none transition"
                   maxLength={500}
                   autoFocus
