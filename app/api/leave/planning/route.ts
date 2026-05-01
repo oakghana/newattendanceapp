@@ -459,7 +459,7 @@ async function fetchHrOfficeAnalytics(admin: any) {
         last_name,
         employee_id,
         departments(name, code),
-        geofence_locations(name, address)
+        geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
       )
     `)
     .eq("is_archived", false)
@@ -597,7 +597,7 @@ export async function GET(request: NextRequest) {
           user:user_profiles!leave_plan_requests_user_id_fkey (
             id, first_name, last_name, employee_id,
             departments(name, code),
-            geofence_locations(name, address)
+            geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
           )
         `)
         .in("status", [...HR_OFFICE_PENDING_STATUSES])

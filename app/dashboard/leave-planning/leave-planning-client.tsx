@@ -55,6 +55,28 @@ import {
   Users,
 } from "lucide-react"
 
+interface LeaveAnalyticsRecord {
+  id: string
+  user_id: string
+  staff_name: string
+  employee_id?: string | null
+  rank?: string | null
+  leave_type_key: string
+  start_date: string
+  end_date: string
+  days: number
+  submitted_at?: string | null
+  location_name?: string | null
+  location_address?: string | null
+  department_name?: string | null
+}
+
+interface LeaveAnalyticsPayload {
+  rangeStart: string
+  rangeEnd: string
+  analytics: typeof EMPTY_HR_ANALYTICS
+}
+
 interface HrTemplateOption {
   id: string
   template_key: string
@@ -114,6 +136,89 @@ function leaveTypeLabelShort(key: string) {
     no_pay: "No Pay", casual: "Casual",
   }
   return map[key] || key
+}
+
+function toIsoDate(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
+function getCurrentMonthRange() {
+  const now = new Date()
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0))
+  return { start: toIsoDate(start), end: toIsoDate(end) }
+}
+
+function downloadLeaveAnalyticsCsv(rows: LeaveAnalyticsRecord[], fileName: string) {
+  const headers = [
+    "Staff Name",
+    "Employee ID",
+    "Rank",
+    "Leave Type",
+    "Start Date",
+    "End Date",
+    "Days",
+    "Location",
+    "Department",
+    "Submitted At",
+  ]
+
+  const body = rows.map((row) => [
+    row.staff_name,
+    row.employee_id || "",
+    row.rank || "",
+    leaveTypeLabelShort(row.leave_type_key),
+    row.start_date,
+    row.end_date,
+    String(row.days || 0),
+    row.location_name || "",
+    row.department_name || "",
+    row.submitted_at ? fmtDate(row.submitted_at) : "",
+  ])
+
+  const csv = [headers, ...body]
+    .map((line) => line.map((cell) => `"${String(cell).replaceAll("\"", "\"\"")}"`).join(","))
+    .join("\n")
+
+  const blob = new Blob([csv], { type: "text/csv" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName: string, title: string) {
+  const [{ jsPDF }, autoTableMod] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ])
+  const autoTable = autoTableMod.default
+  const doc = new jsPDF({ orientation: "landscape" })
+
+  doc.setFontSize(14)
+  doc.text(title, 14, 15)
+
+  autoTable(doc, {
+    startY: 22,
+    head: [["Staff Name", "Employee ID", "Leave Type", "Start", "End", "Days", "Location"]],
+    body: rows.map((row) => [
+      row.staff_name,
+      row.employee_id || "",
+      leaveTypeLabelShort(row.leave_type_key),
+      row.start_date,
+      row.end_date,
+      String(row.days || 0),
+      row.location_name || row.department_name || "",
+    ]),
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [10, 122, 117] },
+  })
+
+  doc.save(fileName)
 }
 
 // ─── Stage Progress Indicator ────────────────────────────────────────────────
@@ -334,11 +439,15 @@ const EMPTY_HR_ANALYTICS = {
     staff_yet_to_enjoy: 0,
     staff_completed_leave: 0,
     completed_leave_requests: 0,
+    unique_staff_in_range: 0,
   },
   outstanding_by_status: [],
   leave_type_breakdown: [],
   location_ranking: [],
   current_leave_roster: [],
+  daily_leave_counts: [],
+  monthly_leave_counts: [],
+  records: [],
 }
 // ─── Leave Request Card ───────────────────────────────────────────────────────
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
@@ -448,6 +557,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrOfficeSortBy, setHrOfficeSortBy] = useState("priority")
   const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
   const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
+  const [analyticsRange, setAnalyticsRange] = useState(() => getCurrentMonthRange())
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
   // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -572,6 +684,40 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return () => clearInterval(timer)
   }, [activeTab, hrOfficeAutoRefresh, loadData])
 
+  useEffect(() => {
+    if (!isHrOffice) return
+
+    let cancelled = false
+    const loadAnalytics = async () => {
+      setAnalyticsLoading(true)
+      try {
+        const params = new URLSearchParams({
+          start: analyticsRange.start,
+          end: analyticsRange.end,
+        })
+        const res = await fetch(`/api/leave/analytics?${params.toString()}`, { cache: "no-store" })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || "Failed to load leave analytics")
+        if (!cancelled) setAnalyticsData(json)
+      } catch (e) {
+        if (!cancelled) {
+          toast({
+            title: "Analytics load failed",
+            description: e instanceof Error ? e.message : "Failed to load leave analytics",
+            variant: "destructive",
+          })
+        }
+      } finally {
+        if (!cancelled) setAnalyticsLoading(false)
+      }
+    }
+
+    void loadAnalytics()
+    return () => {
+      cancelled = true
+    }
+  }, [analyticsRange.end, analyticsRange.start, isHrOffice, toast])
+
   // ── Derived lists ────────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
 
@@ -670,9 +816,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [data])
 
   const hrOfficeAnalytics = useMemo(() => {
+    if (analyticsData?.analytics) return analyticsData.analytics
     if (!data?.analytics) return EMPTY_HR_ANALYTICS
     return data.analytics
-  }, [data])
+  }, [analyticsData, data])
 
   // ── Actions ──────────────────────────────────────────────────────────
 
@@ -1361,6 +1508,63 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               </TabsList>
 
               <TabsContent value="analytics" className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Analytics Range</p>
+                      <p className="mt-1 text-sm text-slate-600">Filter the HR Leave Office graphics board and export only the visible date window.</p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[170px_170px_auto_auto_auto]">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Start Date</Label>
+                        <Input
+                          type="date"
+                          value={analyticsRange.start}
+                          max={analyticsRange.end}
+                          onChange={(e) => setAnalyticsRange((prev) => ({ ...prev, start: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">End Date</Label>
+                        <Input
+                          type="date"
+                          value={analyticsRange.end}
+                          min={analyticsRange.start}
+                          onChange={(e) => setAnalyticsRange((prev) => ({ ...prev, end: e.target.value }))}
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="xl:self-end"
+                        onClick={() => setAnalyticsRange(getCurrentMonthRange())}
+                      >
+                        <CalendarDays className="mr-2 h-4 w-4" /> Current Month
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="xl:self-end"
+                        onClick={() => downloadLeaveAnalyticsCsv(hrOfficeAnalytics.records as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.csv`)}
+                        disabled={analyticsLoading || hrOfficeAnalytics.records.length === 0}
+                      >
+                        <Download className="mr-2 h-4 w-4" /> Export CSV
+                      </Button>
+                      <Button
+                        className="bg-emerald-700 hover:bg-emerald-800 xl:self-end"
+                        onClick={() => void downloadLeaveAnalyticsPdf(hrOfficeAnalytics.records as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.pdf`, `HR Leave Office Analytics ${analyticsRange.start} to ${analyticsRange.end}`)}
+                        disabled={analyticsLoading || hrOfficeAnalytics.records.length === 0}
+                      >
+                        <Download className="mr-2 h-4 w-4" /> Export PDF
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                    <span>Range: {analyticsData?.rangeStart || analyticsRange.start} to {analyticsData?.rangeEnd || analyticsRange.end}</span>
+                    <span>Visible records: {hrOfficeAnalytics.records.length}</span>
+                    <span>Unique staff: {Number(hrOfficeAnalytics.totals.unique_staff_in_range || 0)}</span>
+                    {analyticsLoading && <span className="font-medium text-emerald-700">Refreshing analytics…</span>}
+                  </div>
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <ScientificMetricCard
                     label="Outstanding Requests"
