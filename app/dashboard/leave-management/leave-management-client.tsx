@@ -6,6 +6,8 @@ import {
   ArrowUpRight,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Copy,
   FileClock,
   Info,
@@ -120,6 +122,9 @@ export function LeaveManagementClient({
   const [creatingTemplate, setCreatingTemplate] = useState(false)
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState("all")
   const [templateActionKey, setTemplateActionKey] = useState<string | null>(null)
+  const [showTemplateComposer, setShowTemplateComposer] = useState(false)
+  const [showPlaceholderGuide, setShowPlaceholderGuide] = useState(false)
+  const [expandedTemplateKey, setExpandedTemplateKey] = useState<string | null>(null)
   const [newTemplate, setNewTemplate] = useState({
     template_key: "",
     template_name: "",
@@ -201,6 +206,8 @@ export function LeaveManagementClient({
       const created = result.template as HrMemoTemplate
       setHrTemplates((prev) => [...prev, created].sort((a, b) => a.template_name.localeCompare(b.template_name)))
       setTemplateDrafts((prev) => ({ ...prev, [created.template_key]: created }))
+      setExpandedTemplateKey(created.template_key)
+      setShowTemplateComposer(false)
       setNewTemplate({
         template_key: "",
         template_name: "",
@@ -520,6 +527,17 @@ export function LeaveManagementClient({
     return String(template.category || "general") === templateCategoryFilter
   })
 
+  const templateCategoryOptions = [
+    "all",
+    ...Array.from(new Set(hrTemplates.map((template) => String(template.category || "general")))).sort((a, b) => a.localeCompare(b)),
+  ]
+
+  const templateStats = {
+    total: hrTemplates.length,
+    active: hrTemplates.filter((template) => template.is_active).length,
+    inactive: hrTemplates.filter((template) => !template.is_active).length,
+  }
+
   const saveTemplate = async (templateKey: string) => {
     if (!canEditHrTemplates) {
       toast({
@@ -716,19 +734,93 @@ export function LeaveManagementClient({
       )}
 
       {canViewHrTemplates && (
-        <Card className="border-blue-200 bg-blue-50/60 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-blue-900">HR Response Templates</CardTitle>
-            <CardDescription>
-              Fine-tune reusable leave templates used by Director HR, Manager HR, and HR Leave Office.
-            </CardDescription>
+        <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-slate-200 bg-[linear-gradient(135deg,_#eef6ff_0%,_#f8fbff_55%,_#eefaf5_100%)] pb-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <CardTitle className="text-xl text-slate-900">HR Memo Templates</CardTitle>
+                <CardDescription className="mt-1 max-w-2xl text-slate-600">
+                  A simpler workspace for HR staff to browse, copy, update, and create leave memo templates without seeing every advanced field at once.
+                </CardDescription>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
+                <div className="rounded-2xl border border-white/80 bg-white/80 px-3 py-3 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Total</p>
+                  <p className="mt-1 text-2xl font-semibold text-slate-900">{templateStats.total}</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-3 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wide text-emerald-700">Active</p>
+                  <p className="mt-1 text-2xl font-semibold text-emerald-900">{templateStats.active}</p>
+                </div>
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-3 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wide text-amber-700">Inactive</p>
+                  <p className="mt-1 text-2xl font-semibold text-amber-900">{templateStats.inactive}</p>
+                </div>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {canEditHrTemplates && (
-              <div className="rounded-xl border border-emerald-200 bg-white p-4 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Create New Template</p>
-                  <p className="text-xs text-slate-500 mt-1">Add a new reusable memo template for special leave cases or revised wording.</p>
+          <CardContent className="space-y-4 p-5">
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Quick View</p>
+                <p className="mt-1 text-sm text-slate-600">Filter by template purpose and open only the template you want to work on.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {templateCategoryOptions.map((option) => {
+                  const active = templateCategoryFilter === option
+                  return (
+                    <Button
+                      key={`template-category-${option}`}
+                      type="button"
+                      size="sm"
+                      variant={active ? "default" : "outline"}
+                      className={active ? "bg-slate-900 hover:bg-slate-800" : "bg-white"}
+                      onClick={() => setTemplateCategoryFilter(option)}
+                    >
+                      {option.replaceAll("_", " ")}
+                    </Button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto]">
+              {canEditHrTemplates ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="justify-between rounded-2xl border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                  onClick={() => setShowTemplateComposer((prev) => !prev)}
+                >
+                  <span>{showTemplateComposer ? "Hide New Template Composer" : "Create New Template"}</span>
+                  {showTemplateComposer ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              ) : <div />}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-between rounded-2xl bg-white"
+                onClick={() => setShowPlaceholderGuide((prev) => !prev)}
+              >
+                <span>{showPlaceholderGuide ? "Hide Placeholder Guide" : "Show Placeholder Guide"}</span>
+                {showPlaceholderGuide ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-sm text-blue-900">
+                <p className="font-medium">Visible templates</p>
+                <p className="mt-1 text-2xl font-semibold">{filteredTemplates.length}</p>
+              </div>
+            </div>
+
+            {canEditHrTemplates && showTemplateComposer && (
+              <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">New Template Composer</p>
+                    <p className="mt-1 text-sm text-slate-600">Keep the wording clean and reusable. The key will be normalized automatically.</p>
+                  </div>
+                  <Badge className="bg-emerald-700 text-white">Simple Create</Badge>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1">
@@ -749,6 +841,24 @@ export function LeaveManagementClient({
                       value={newTemplate.template_key}
                       onChange={(e) => setNewTemplate((prev) => ({ ...prev, template_key: slugifyTemplateKey(e.target.value) }))}
                       placeholder="annual_leave_approval_revised"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Category</Label>
+                    <Input
+                      value={newTemplate.category}
+                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, category: e.target.value.toLowerCase().trim() || "general" }))}
+                      placeholder="approval, rejection, deferment"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">CC Recipients</Label>
+                    <Input
+                      value={newTemplate.cc_recipients}
+                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, cc_recipients: e.target.value }))}
+                      placeholder="Managing Director, HR Head"
                     />
                   </div>
                 </div>
@@ -778,23 +888,8 @@ export function LeaveManagementClient({
                     className="text-xs"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">CC Recipients</Label>
-                  <Input
-                    value={newTemplate.cc_recipients}
-                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, cc_recipients: e.target.value }))}
-                    placeholder="Managing Director, HR Head, Accounts Manager"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Category</Label>
-                  <Input
-                    value={newTemplate.category}
-                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, category: e.target.value.toLowerCase().trim() || "general" }))}
-                    placeholder="approval, rejection, deferment, special-case"
-                  />
-                </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setShowTemplateComposer(false)}>Cancel</Button>
                   <Button onClick={handleCreateTemplate} disabled={creatingTemplate} className="bg-emerald-700 hover:bg-emerald-800">
                     {creatingTemplate ? "Creating..." : "Create Template"}
                   </Button>
@@ -802,162 +897,173 @@ export function LeaveManagementClient({
               </div>
             )}
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Template Filter</p>
-                  <p className="text-xs text-slate-500">Quickly switch between approval, rejection, deferment, and special-case templates.</p>
+            {showPlaceholderGuide && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-amber-900">
+                  <Info className="h-4 w-4" />
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">Available Placeholders</p>
                 </div>
-                <Input
-                  value={templateCategoryFilter}
-                  onChange={(e) => setTemplateCategoryFilter(e.target.value.toLowerCase().trim() || "all")}
-                  className="w-full md:w-[220px]"
-                  placeholder="all / approval / rejection"
-                />
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {Object.entries(placeholderDescriptions).map(([key, description]) => (
+                    <div key={key} className="rounded-xl border border-amber-200 bg-white px-3 py-2">
+                      <p className="text-[11px] font-semibold text-amber-900">{key}</p>
+                      <p className="mt-1 text-[11px] text-slate-600">{description}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-
-            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Available Placeholders</p>
-              <div className="grid gap-2 md:grid-cols-2">
-                {Object.entries(placeholderDescriptions).map(([key, description]) => (
-                  <div key={key} className="rounded-lg border border-amber-200 bg-white px-3 py-2">
-                    <p className="text-[11px] font-semibold text-amber-900">{key}</p>
-                    <p className="text-[11px] text-slate-600 mt-1">{description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
 
             {templatesLoading ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
                 Loading templates...
               </div>
             ) : filteredTemplates.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
                 No templates found for this filter.
               </div>
             ) : (
-              filteredTemplates.map((template) => {
-                const draft = templateDrafts[template.template_key] || template
-                return (
-                  <div key={template.template_key} className="rounded-xl border border-blue-200 bg-white p-3 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{draft.template_name}</p>
-                        <p className="text-[11px] text-slate-500">Key: {draft.template_key}</p>
-                        <p className="text-[11px] text-slate-500">Category: {String(draft.category || "general")}</p>
+              <div className="grid gap-4">
+                {filteredTemplates.map((template) => {
+                  const draft = templateDrafts[template.template_key] || template
+                  const isExpanded = expandedTemplateKey === draft.template_key
+                  return (
+                    <div key={template.template_key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-base font-semibold text-slate-900">{draft.template_name}</p>
+                            <Badge variant={draft.is_active ? "default" : "outline"} className={draft.is_active ? "bg-emerald-600" : ""}>
+                              {draft.is_active ? "Active" : "Inactive"}
+                            </Badge>
+                            <Badge variant="outline">{String(draft.category || "general")}</Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-slate-500">{draft.description || "No description added yet."}</p>
+                          <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-slate-500">
+                            <span>Key: {draft.template_key}</span>
+                            <span>Updated: {draft.updated_at ? format(new Date(draft.updated_at), "dd MMM yyyy, HH:mm") : "Not available"}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyTemplate(`${draft.subject_template}\n\n${draft.body_template}`, `${draft.template_name} template`)}
+                          >
+                            <Copy className="mr-1 h-4 w-4" /> Copy
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setExpandedTemplateKey((current) => current === draft.template_key ? null : draft.template_key)}
+                          >
+                            {isExpanded ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
+                            {isExpanded ? "Hide Editor" : "Open Editor"}
+                          </Button>
+                          {canEditHrTemplates && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => runTemplateAction(draft.template_key, "duplicate")}
+                                disabled={templateActionKey === `duplicate:${draft.template_key}`}
+                              >
+                                Duplicate
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => runTemplateAction(draft.template_key, draft.is_active ? "deactivate" : "activate")}
+                                disabled={templateActionKey === `${draft.is_active ? "deactivate" : "activate"}:${draft.template_key}`}
+                              >
+                                {draft.is_active ? "Deactivate" : "Activate"}
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <Badge variant={draft.is_active ? "default" : "outline"} className={draft.is_active ? "bg-emerald-600" : ""}>
-                        {draft.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Template Name</Label>
-                      <Input
-                        value={draft.template_name}
-                        onChange={(e) => updateTemplateDraft(draft.template_key, { template_name: e.target.value })}
-                        disabled={!canEditHrTemplates}
-                      />
-                    </div>
+                      {isExpanded && (
+                        <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Template Name</Label>
+                              <Input
+                                value={draft.template_name}
+                                onChange={(e) => updateTemplateDraft(draft.template_key, { template_name: e.target.value })}
+                                disabled={!canEditHrTemplates}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Category</Label>
+                              <Input
+                                value={draft.category || "general"}
+                                onChange={(e) => updateTemplateDraft(draft.template_key, { category: e.target.value.toLowerCase().trim() || "general" })}
+                                disabled={!canEditHrTemplates}
+                              />
+                            </div>
+                          </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Description</Label>
-                      <Input
-                        value={draft.description || ""}
-                        onChange={(e) => updateTemplateDraft(draft.template_key, { description: e.target.value })}
-                        disabled={!canEditHrTemplates}
-                      />
-                    </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Description</Label>
+                            <Input
+                              value={draft.description || ""}
+                              onChange={(e) => updateTemplateDraft(draft.template_key, { description: e.target.value })}
+                              disabled={!canEditHrTemplates}
+                            />
+                          </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Subject Template</Label>
-                      <Input
-                        value={draft.subject_template}
-                        onChange={(e) => updateTemplateDraft(draft.template_key, { subject_template: e.target.value })}
-                        disabled={!canEditHrTemplates}
-                      />
-                    </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Subject Template</Label>
+                            <Input
+                              value={draft.subject_template}
+                              onChange={(e) => updateTemplateDraft(draft.template_key, { subject_template: e.target.value })}
+                              disabled={!canEditHrTemplates}
+                            />
+                          </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Body Template</Label>
-                      <Textarea
-                        rows={7}
-                        value={draft.body_template}
-                        onChange={(e) => updateTemplateDraft(draft.template_key, { body_template: e.target.value })}
-                        disabled={!canEditHrTemplates}
-                        className="whitespace-pre-wrap text-xs"
-                      />
-                    </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Body Template</Label>
+                            <Textarea
+                              rows={7}
+                              value={draft.body_template}
+                              onChange={(e) => updateTemplateDraft(draft.template_key, { body_template: e.target.value })}
+                              disabled={!canEditHrTemplates}
+                              className="whitespace-pre-wrap text-xs"
+                            />
+                          </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">CC Recipients</Label>
-                      <Input
-                        value={draft.cc_recipients || ""}
-                        onChange={(e) => updateTemplateDraft(draft.template_key, { cc_recipients: e.target.value })}
-                        disabled={!canEditHrTemplates}
-                      />
-                    </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">CC Recipients</Label>
+                            <Input
+                              value={draft.cc_recipients || ""}
+                              onChange={(e) => updateTemplateDraft(draft.template_key, { cc_recipients: e.target.value })}
+                              disabled={!canEditHrTemplates}
+                            />
+                          </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Category</Label>
-                      <Input
-                        value={draft.category || "general"}
-                        onChange={(e) => updateTemplateDraft(draft.template_key, { category: e.target.value.toLowerCase().trim() || "general" })}
-                        disabled={!canEditHrTemplates}
-                      />
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyTemplate(`${draft.subject_template}\n\n${draft.body_template}`, `${draft.template_name} template`)}
-                      >
-                        <Copy className="h-4 w-4 mr-1" />
-                        Copy Template
-                      </Button>
-
-                      {canEditHrTemplates && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => resetTemplateDraft(draft.template_key)}
-                          >
-                            Reset
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => runTemplateAction(draft.template_key, "duplicate")}
-                            disabled={templateActionKey === `duplicate:${draft.template_key}`}
-                          >
-                            Duplicate
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => runTemplateAction(draft.template_key, draft.is_active ? "deactivate" : "activate")}
-                            disabled={templateActionKey === `${draft.is_active ? "deactivate" : "activate"}:${draft.template_key}`}
-                          >
-                            {draft.is_active ? "Deactivate" : "Activate"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => saveTemplate(draft.template_key)}
-                            disabled={savingTemplateKey === draft.template_key}
-                            className="bg-blue-700 hover:bg-blue-800"
-                          >
-                            {savingTemplateKey === draft.template_key ? "Saving..." : "Save Changes"}
-                          </Button>
-                        </>
+                          {canEditHrTemplates && (
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button size="sm" variant="outline" onClick={() => resetTemplateDraft(draft.template_key)}>
+                                Reset
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => saveTemplate(draft.template_key)}
+                                disabled={savingTemplateKey === draft.template_key}
+                                className="bg-blue-700 hover:bg-blue-800"
+                              >
+                                {savingTemplateKey === draft.template_key ? "Saving..." : "Save Changes"}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </div>
-                )
-              })
+                  )
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
