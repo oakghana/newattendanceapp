@@ -274,7 +274,6 @@ export async function GET(
     const rightBlockX = pageWidth - marginRight - 14
     doc.text("P.O Box M14", rightBlockX, 19)
     doc.text("Accra Ghana", rightBlockX, 24)
-    doc.text(`Date: ${fmtDate(lr.hr_approved_at || lr.created_at)}`, rightBlockX, 29)
 
     doc.setDrawColor(44, 98, 22)
     doc.setLineWidth(0.5)
@@ -290,6 +289,7 @@ export async function GET(
     doc.setFontSize(9)
     const refNum = `QCC/HRD/LV/${new Date(lr.hr_approved_at || lr.created_at).getFullYear()}/${String(lr.id || "").slice(-6).toUpperCase()}`
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
+    doc.text(`Date:  ${fmtDate(lr.hr_approved_at || lr.created_at)}`, pageWidth - marginRight - 42, y)
     y += 5.5
     doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10

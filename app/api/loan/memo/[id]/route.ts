@@ -337,7 +337,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const rightBlockX = pageWidth - marginRight - 14
     doc.text("P.O Box M14", rightBlockX, 19)
     doc.text("Accra Ghana", rightBlockX, 24)
-    doc.text(`Date:  ${memoDate}`, rightBlockX, 29)
 
     // Green separator under header
     doc.setDrawColor(44, 98, 22)
@@ -348,11 +347,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     let y = 46
 
-    // ─── Our Ref No ───────────────────────────────────────────────────
+    // ─── Our Ref No + Date ────────────────────────────────────────────
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
     doc.text(`Our Ref No:  ${refNumber}`, marginLeft, y)
+    doc.text(`Date:  ${memoDate}`, pageWidth - marginRight - 42, y)
     y += 5.5
     doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10
