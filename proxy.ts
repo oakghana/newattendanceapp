@@ -9,7 +9,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/admin": ["admin"],
   "/dashboard/admin": ["admin"],
   "/dashboard/settings": ["admin"],
-  "/dashboard/loan-app": ["admin", "director_hr", "manager_hr", "hr_officer", "loan_office", "accounts"],
+  "/dashboard/loan-app": ["admin", "director_hr", "manager_hr", "hr_officer", "loan_office", "hr_leave_office", "accounts"],
   
   // HR/Leave Management
   "/dashboard/leave-management": [

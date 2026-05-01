@@ -127,11 +127,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    if (profile.role === "it-admin" && role && (role === "admin" || role === "it-admin")) {
-      console.error("[v0] Staff API PUT - IT-Admin tried to promote user to admin/it-admin")
+    const allowedRolesForItAdmin = ["staff", "nsp", "contract", "department_head", "it-admin", "intern"]
+    if (profile.role === "it-admin" && role && !allowedRolesForItAdmin.includes(role)) {
+      console.error("[v0] Staff API PUT - IT-Admin tried to assign restricted role:", role)
       return NextResponse.json(
         {
-          error: "IT-Admin users cannot promote users to Admin or IT-Admin roles",
+          error: "IT-Admin users cannot assign this role",
+          details: `IT-Admin may only assign the following roles: ${allowedRolesForItAdmin.join(", ")}`,
         },
         { status: 403 },
       )
