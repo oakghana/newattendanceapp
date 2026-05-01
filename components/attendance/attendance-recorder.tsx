@@ -266,6 +266,15 @@ export function AttendanceRecorder({
   const [deviceInfo, setDeviceInfo] = useState(() => getDeviceInfo())
   const [timeRestrictionWarning, setTimeRestrictionWarning] = useState<{ type: 'checkin' | 'checkout'; message: string } | null>(null)
 
+  const clearPendingDeviceSharingWarning = useCallback(() => {
+    try {
+      window.sessionStorage.removeItem(DEVICE_SHARING_WARNING_STORAGE_KEY)
+    } catch {
+      // Ignore storage failures and continue attendance flow.
+    }
+    setPendingDeviceSharingWarning(null)
+  }, [])
+
   const loadRuntimeFlags = useCallback(async () => {
     try {
       const response = await fetch("/api/settings/runtime", { cache: "no-store" })

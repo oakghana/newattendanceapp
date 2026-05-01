@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import {
   ArrowUpRight,
@@ -59,6 +59,18 @@ interface LeaveManagementClientProps {
   initialManagerNotifications: LeaveNotification[]
 }
 
+interface HrMemoTemplate {
+  id: string
+  template_key: string
+  template_name: string
+  description: string | null
+  subject_template: string
+  body_template: string
+  cc_recipients: string | null
+  is_active: boolean
+  updated_at: string | null
+}
+
 export function LeaveManagementClient({
   userRole,
   userDepartment,
@@ -99,10 +111,10 @@ export function LeaveManagementClient({
   const [editEndDate, setEditEndDate] = useState("")
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
-
-  const leaveApprovalTemplate = `QUALITY CONTROL COMPANY LTD.\nHUMAN RESOURCE DIRECTORATE\n\nSUBJECT: LEAVE APPROVAL NOTICE\n\nYour leave request has been reviewed and approved.\n\nKindly proceed based on the approved period and handover guidance from your supervisor.\n\nRegards,\nHR Administration\nQuality Control Company Ltd.`
-
-  const leaveRejectionTemplate = `QUALITY CONTROL COMPANY LTD.\nHUMAN RESOURCE DIRECTORATE\n\nSUBJECT: LEAVE REQUEST FEEDBACK\n\nYour leave request has not been approved at this time.\n\nReason: [Insert review reason here]\n\nYou may reapply with updated dates or documentation where applicable.\n\nRegards,\nHR Administration\nQuality Control Company Ltd.`
+  const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
+  const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [savingTemplateKey, setSavingTemplateKey] = useState<string | null>(null)
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -111,6 +123,29 @@ export function LeaveManagementClient({
     } catch {
       toast({ title: "Copy failed", description: "Please copy manually.", variant: "destructive" })
     }
+  }
+
+  const updateTemplateDraft = (templateKey: string, patch: Partial<HrMemoTemplate>) => {
+    setTemplateDrafts((prev) => {
+      const current = prev[templateKey]
+      if (!current) return prev
+      return {
+        ...prev,
+        [templateKey]: {
+          ...current,
+          ...patch,
+        },
+      }
+    })
+  }
+
+  const resetTemplateDraft = (templateKey: string) => {
+    const original = hrTemplates.find((t) => t.template_key === templateKey)
+    if (!original) return
+    setTemplateDrafts((prev) => ({
+      ...prev,
+      [templateKey]: { ...original },
+    }))
   }
 
   const showUnderReviewToast = () => {
@@ -327,7 +362,96 @@ export function LeaveManagementClient({
   const isManagerView = ["admin", "regional_manager", "department_head", "it-admin", "hr_officer", "manager_hr", "director_hr", "hr_director"].includes(userRole || "")
   const isAdminView = String(userRole || "").toLowerCase() === "admin"
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director"].includes(normalizedRole)
+  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
+
+  useEffect(() => {
+    const loadTemplates = async () => {
+      if (!canViewHrTemplates) return
+      setTemplatesLoading(true)
+      try {
+        const response = await fetch("/api/leave/templates", { cache: "no-store" })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(result?.error || "Failed to load templates")
+        }
+
+        const rows = Array.isArray(result?.templates) ? (result.templates as HrMemoTemplate[]) : []
+        setHrTemplates(rows)
+        const nextDrafts: Record<string, HrMemoTemplate> = {}
+        rows.forEach((row) => {
+          nextDrafts[row.template_key] = { ...row }
+        })
+        setTemplateDrafts(nextDrafts)
+      } catch (error) {
+        toast({
+          title: "Template loading failed",
+          description: error instanceof Error ? error.message : "Could not load templates",
+          variant: "destructive",
+        })
+      } finally {
+        setTemplatesLoading(false)
+      }
+    }
+
+    void loadTemplates()
+  }, [canViewHrTemplates, toast])
+
+  const saveTemplate = async (templateKey: string) => {
+    if (!canEditHrTemplates) {
+      toast({
+        title: "Forbidden",
+        description: "Only Director HR, Manager HR, and HR Leave Office can edit templates.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const draft = templateDrafts[templateKey]
+    if (!draft) return
+
+    setSavingTemplateKey(templateKey)
+    try {
+      const response = await fetch("/api/leave/templates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template_key: draft.template_key,
+          template_name: draft.template_name,
+          description: draft.description,
+          subject_template: draft.subject_template,
+          body_template: draft.body_template,
+          cc_recipients: draft.cc_recipients,
+          is_active: draft.is_active,
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error || "Failed to save template")
+      }
+
+      const updated = result?.template as HrMemoTemplate
+      setHrTemplates((prev) => prev.map((row) => (row.template_key === templateKey ? updated : row)))
+      setTemplateDrafts((prev) => ({
+        ...prev,
+        [templateKey]: updated,
+      }))
+
+      toast({
+        title: "Template saved",
+        description: `${updated.template_name} has been updated for app-wide use.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Save failed",
+        description: error instanceof Error ? error.message : "Could not save template",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingTemplateKey(null)
+    }
+  }
 
   const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string) => {
     if (rows.length === 0) {
@@ -473,27 +597,114 @@ export function LeaveManagementClient({
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-blue-900">HR Response Templates</CardTitle>
             <CardDescription>
-              Professional approval and rejection templates for endorsed leave requests.
+              Fine-tune reusable leave templates used by Director HR, Manager HR, and HR Leave Office.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="rounded-xl border border-blue-200 bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Approval Template</p>
-              <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-700">{leaveApprovalTemplate}</pre>
-              <Button size="sm" variant="outline" className="mt-3" onClick={() => copyTemplate(leaveApprovalTemplate, "Approval template")}>
-                <Copy className="h-4 w-4 mr-1" />
-                Copy Approval Template
-              </Button>
-            </div>
+            {templatesLoading ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                Loading templates...
+              </div>
+            ) : hrTemplates.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                No templates found. Run template migration to seed defaults.
+              </div>
+            ) : (
+              hrTemplates.map((template) => {
+                const draft = templateDrafts[template.template_key] || template
+                return (
+                  <div key={template.template_key} className="rounded-xl border border-blue-200 bg-white p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{draft.template_name}</p>
+                        <p className="text-[11px] text-slate-500">Key: {draft.template_key}</p>
+                      </div>
+                      <Badge variant={draft.is_active ? "default" : "outline"} className={draft.is_active ? "bg-emerald-600" : ""}>
+                        {draft.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
 
-            <div className="rounded-xl border border-rose-200 bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Rejection Template</p>
-              <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-700">{leaveRejectionTemplate}</pre>
-              <Button size="sm" variant="outline" className="mt-3" onClick={() => copyTemplate(leaveRejectionTemplate, "Rejection template")}>
-                <Copy className="h-4 w-4 mr-1" />
-                Copy Rejection Template
-              </Button>
-            </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Template Name</Label>
+                      <Input
+                        value={draft.template_name}
+                        onChange={(e) => updateTemplateDraft(draft.template_key, { template_name: e.target.value })}
+                        disabled={!canEditHrTemplates}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Description</Label>
+                      <Input
+                        value={draft.description || ""}
+                        onChange={(e) => updateTemplateDraft(draft.template_key, { description: e.target.value })}
+                        disabled={!canEditHrTemplates}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Subject Template</Label>
+                      <Input
+                        value={draft.subject_template}
+                        onChange={(e) => updateTemplateDraft(draft.template_key, { subject_template: e.target.value })}
+                        disabled={!canEditHrTemplates}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Body Template</Label>
+                      <Textarea
+                        rows={7}
+                        value={draft.body_template}
+                        onChange={(e) => updateTemplateDraft(draft.template_key, { body_template: e.target.value })}
+                        disabled={!canEditHrTemplates}
+                        className="whitespace-pre-wrap text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">CC Recipients</Label>
+                      <Input
+                        value={draft.cc_recipients || ""}
+                        onChange={(e) => updateTemplateDraft(draft.template_key, { cc_recipients: e.target.value })}
+                        disabled={!canEditHrTemplates}
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyTemplate(`${draft.subject_template}\n\n${draft.body_template}`, `${draft.template_name} template`)}
+                      >
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy Template
+                      </Button>
+
+                      {canEditHrTemplates && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => resetTemplateDraft(draft.template_key)}
+                          >
+                            Reset
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => saveTemplate(draft.template_key)}
+                            disabled={savingTemplateKey === draft.template_key}
+                            className="bg-blue-700 hover:bg-blue-800"
+                          >
+                            {savingTemplateKey === draft.template_key ? "Saving..." : "Save Changes"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </CardContent>
         </Card>
       )}
