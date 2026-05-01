@@ -135,7 +135,7 @@ function leaveTypeLabelShort(key: string) {
   const map: Record<string, string> = {
     annual: "Annual", sick: "Sick", maternity: "Maternity", paternity: "Paternity",
     study: "Study", compassionate: "Compassionate", part_leave: "Part Leave",
-    no_pay: "No Pay", casual: "Casual",
+    no_pay: "Leave Without Pay", casual: "Casual", leave_of_absence: "Leave of Absence",
   }
   return map[key] || key
 }
@@ -145,102 +145,260 @@ function toIsoDate(value: Date) {
 }
 
 // ─── Corporate Memo Template Builder ────────────────────────────────────────
-function buildMemoTemplate(req: any): { subject: string; body: string } {
-  const leaveType = String(req.leave_type_key || "annual")
-  const labelMap: Record<string, string> = {
-    annual: "Annual Leave",
-    sick: "Sick Leave",
-    maternity: "Maternity Leave",
-    paternity: "Paternity Leave",
-    study: "Study Leave",
-    compassionate: "Compassionate Leave",
-    part_leave: "Part Leave",
-    no_pay: "Leave Without Pay",
-    casual: "Casual Leave",
+function fmtLongDate(val?: string | null) {
+  if (!val) return "—"
+  try {
+    return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
+  } catch {
+    return val
   }
-  const leaveLabel = labelMap[leaveType] || leaveTypeLabelShort(leaveType)
-  const yearPeriod = String(req.leave_year_period || "2026/2027")
-  const staffName = String(req.staff_name || "")
-  const employeeId = String(req.employee_id || "")
-  const rank = String(req.rank || "")
-  const deptName = String(req.department_name || "")
+}
+
+function nextBusinessDate(val?: string | null) {
+  if (!val) return "—"
+  const ret = new Date(val)
+  ret.setDate(ret.getDate() + 1)
+  if (ret.getDay() === 6) ret.setDate(ret.getDate() + 2)
+  if (ret.getDay() === 0) ret.setDate(ret.getDate() + 1)
+  return fmtLongDate(ret.toISOString().slice(0, 10))
+}
+
+function renderMemoDraftTemplate(template: string, data: Record<string, string>) {
+  return String(template || "")
+    .replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => data[key] ?? "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+function buildMemoTemplateData(req: any): Record<string, string> {
+  const leaveType = String(req.leave_type_key || "annual")
   const effectiveStart = req.adjusted_start_date || req.preferred_start_date
   const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
-  const effectiveDays = Number(req.adjusted_days || req.requested_days || 0)
+  const effectiveDays = String(req.adjusted_days || req.requested_days || 0)
+  const holidayDays = Number(req.holiday_days_deducted || 0)
+  const priorLeaveDays = Number(req.prior_leave_days_deducted || 0)
+  const travellingDays = Number(req.travelling_days_added || 0)
+  const adjustmentLines = [
+    holidayDays > 0 ? `Less public holidays: ${holidayDays} day(s).` : "",
+    priorLeaveDays > 0 ? `Less prior leave enjoyed: ${priorLeaveDays} day(s).` : "",
+    travellingDays > 0 ? `Travelling days added: ${travellingDays} day(s).` : "",
+  ].filter(Boolean)
 
-  const fmtLong = (val?: string | null) => {
-    if (!val) return "—"
-    try {
-      return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
-    } catch { return val }
+  const adjustmentParagraph = req.adjustment_reason
+    ? `Adjustment details: ${adjustmentLines.join(" ")} Reason for adjustment: ${String(req.adjustment_reason || "").trim()}.\n\n`
+    : ""
+
+  const travellingParagraph = travellingDays > 0
+    ? `This approval includes ${travellingDays} travelling day(s) as part of the approved leave arrangement.\n\n`
+    : ""
+
+  return {
+    leave_type: leaveTypeLabelShort(leaveType),
+    leave_type_full: leaveTypeLabelShort(leaveType).toUpperCase(),
+    submitted_date: fmtLongDate(req.submitted_at || req.created_at),
+    leave_start_date: fmtLongDate(effectiveStart),
+    leave_end_date: fmtLongDate(effectiveEnd),
+    approved_days: effectiveDays,
+    return_to_work_date: nextBusinessDate(effectiveEnd),
+    leave_year_period: String(req.leave_year_period || "2026/2027"),
+    staff_name: String(req.staff_name || ""),
+    employee_id: String(req.employee_id || ""),
+    department_name: String(req.department_name || ""),
+    rank: String(req.rank || ""),
+    adjustment_paragraph: adjustmentParagraph,
+    travelling_paragraph: travellingParagraph,
   }
+}
 
-  const startStr = fmtLong(effectiveStart)
-  const endStr = fmtLong(effectiveEnd)
+function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
+  const commonCc = "Managing Director\nDeputy Managing Director\nHR Leave Office\nFile"
+  return [
+    {
+      id: "builtin-annual-leave-approval",
+      template_key: "builtin_leave_annual_approval",
+      template_name: "Annual Leave Approval",
+      description: "Official QCC annual leave approval wording",
+      subject_template: "APPLICATION FOR ANNUAL LEAVE",
+      body_template: [
+        "We refer to your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your annual leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} working day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "{{adjustment_paragraph}}{{travelling_paragraph}}Please ensure that all official duties are properly handed over before proceeding on leave.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-casual-leave-approval",
+      template_key: "builtin_leave_casual_approval",
+      template_name: "Casual Leave Approval",
+      description: "Based on the current QCC casual leave response style",
+      subject_template: "APPLICATION FOR A CASUAL LEAVE",
+      body_template: [
+        "We acknowledge receipt of your letter dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has given approval for you to proceed on {{approved_days}} working day(s) casual leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "You are expected to resume duty on {{return_to_work_date}}.",
+        "{{adjustment_paragraph}}{{travelling_paragraph}}You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-part-leave-approval",
+      template_key: "builtin_leave_part_leave_approval",
+      template_name: "Part Leave Approval",
+      description: "Formal part leave approval wording for HR office use",
+      subject_template: "PART LEAVE",
+      body_template: [
+        "We refer to your application dated {{submitted_date}} in respect of the above subject and wish to inform you that Management has approved your part leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "{{adjustment_paragraph}}{{travelling_paragraph}}Please make the necessary handing-over arrangements before proceeding on leave.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-maternity-leave-approval",
+      template_key: "builtin_leave_maternity_approval",
+      template_name: "Maternity Leave Approval",
+      description: "Based on the current QCC maternity leave response style",
+      subject_template: "MATERNITY LEAVE",
+      body_template: [
+        "We refer to the maternity leave certificate / supporting medical recommendation received in relation to the above subject and wish to inform you that, in accordance with company policy, Management has approved your maternity leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "{{adjustment_paragraph}}{{travelling_paragraph}}You will be entitled to one (1) hour off duty upon resumption until your child attains one (1) year, subject to company policy.",
+        "We congratulate you on the delivery of your baby.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-leave-of-absence-approval",
+      template_key: "builtin_leave_leave_of_absence_approval",
+      template_name: "Leave of Absence Approval",
+      description: "Based on the current QCC leave of absence response style",
+      subject_template: "LEAVE OF ABSENCE",
+      body_template: [
+        "We acknowledge receipt of your application for leave of absence dated {{submitted_date}} on the above subject and wish to inform you that Management has approved your request for leave of absence with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "Please note that the period of leave of absence shall not count towards your length of service and placement upon resumption shall depend on the availability of vacancy at the time.",
+        "You are advised to notify Management at least one (1) month prior to your resumption of duty for further action.",
+        "By copy of this letter, the Accounts Manager is advised to take note and delete your name from the payroll till otherwise advised.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: `${commonCc}\nAccounts Manager`,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-sick-leave-approval",
+      template_key: "builtin_leave_sick_approval",
+      template_name: "Sick Leave Approval",
+      description: "Professional sick leave approval wording",
+      subject_template: "SICK LEAVE APPROVAL",
+      body_template: [
+        "We refer to your sick leave application dated {{submitted_date}} in respect of the above subject and wish to inform you that Management has approved your sick leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "Management wishes you a speedy recovery. Kindly ensure that your medical certificate and related documents are regularised with Human Resources.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-paternity-leave-approval",
+      template_key: "builtin_leave_paternity_approval",
+      template_name: "Paternity Leave Approval",
+      description: "Professional paternity leave approval wording",
+      subject_template: "PATERNITY LEAVE",
+      body_template: [
+        "We refer to your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your paternity leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "Management extends its congratulations to you and your family.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-study-leave-approval",
+      template_key: "builtin_leave_study_approval",
+      template_name: "Study Leave Approval",
+      description: "Professional study leave approval wording",
+      subject_template: "STUDY LEAVE",
+      body_template: [
+        "We refer to your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your study leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "Please ensure that all official duties are properly handed over and that your progress report is submitted to Human Resources after the study period where applicable.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-compassionate-leave-approval",
+      template_key: "builtin_leave_compassionate_approval",
+      template_name: "Compassionate Leave Approval",
+      description: "Professional compassionate leave approval wording",
+      subject_template: "COMPASSIONATE LEAVE",
+      body_template: [
+        "We acknowledge receipt of your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your compassionate leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "Management extends its sympathies to you and your family.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: commonCc,
+      is_active: true,
+      category: "builtin",
+    },
+    {
+      id: "builtin-no-pay-leave-approval",
+      template_key: "builtin_leave_no_pay_approval",
+      template_name: "Leave Without Pay Approval",
+      description: "Professional leave without pay approval wording",
+      subject_template: "LEAVE WITHOUT PAY",
+      body_template: [
+        "We refer to your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your leave without pay with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
+        "Please note that this leave is approved without pay for the entire approved period.",
+        "You can count on our co-operation.",
+      ].join("\n\n"),
+      cc_recipients: `${commonCc}\nAccounts Manager`,
+      is_active: true,
+      category: "builtin",
+    },
+  ]
+}
 
-  // Return-to-work: next business day after leave end
-  let returnStr = "—"
-  if (effectiveEnd) {
-    const ret = new Date(effectiveEnd)
-    ret.setDate(ret.getDate() + 1)
-    if (ret.getDay() === 6) ret.setDate(ret.getDate() + 2)
-    if (ret.getDay() === 0) ret.setDate(ret.getDate() + 1)
-    returnStr = fmtLong(ret.toISOString().slice(0, 10))
+function getDefaultMemoTemplateKey(leaveTypeKey: string) {
+  return `builtin_leave_${String(leaveTypeKey || "annual")}_approval`
+}
+
+function renderTemplateForRequest(template: Pick<HrTemplateOption, "subject_template" | "body_template" | "cc_recipients">, req: any) {
+  const data = buildMemoTemplateData(req)
+  return {
+    subject: renderMemoDraftTemplate(template.subject_template || "", data),
+    body: renderMemoDraftTemplate(template.body_template || "", data),
+    cc: renderMemoDraftTemplate(template.cc_recipients || "", data),
   }
+}
 
-  const submittedStr = fmtLong(req.submitted_at || req.created_at)
-
-  const refCodeMap: Record<string, string> = {
-    annual: "AL",
-    sick: "SL",
-    maternity: "MAT",
-    paternity: "PAT",
-    study: "STL",
-    compassionate: "CL",
-    part_leave: "PL",
-    no_pay: "LWP",
-    casual: "CSL",
+function buildMemoTemplate(req: any): { subject: string; body: string; cc: string; templateKey: string } {
+  const leaveType = String(req.leave_type_key || "annual")
+  const fallbackTemplate = getBuiltinHrTemplateOptions().find((template) => template.template_key === getDefaultMemoTemplateKey(leaveType))
+    || getBuiltinHrTemplateOptions()[0]
+  const rendered = renderTemplateForRequest(fallbackTemplate, req)
+  return {
+    ...rendered,
+    templateKey: fallbackTemplate.template_key,
   }
-  const refCode = refCodeMap[leaveType] || "LV"
-  const yearShort = yearPeriod.slice(-4)
-
-  const subject = `APPLICATION FOR ${leaveLabel.toUpperCase()} — ${yearPeriod}`
-
-  const header = [
-    `TO: ${staffName}${employeeId ? ` (${employeeId})` : ""}`,
-    rank ? `POSITION: ${rank}` : "",
-    deptName ? `DEPARTMENT: ${deptName}` : "",
-    `REF: QCC/HRD/LV/${refCode}/${yearShort}`,
-    `DATE: ${new Date().toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })}`,
-  ].filter(Boolean).join("\n")
-
-  const opening = `We refer to your application for ${leaveLabel} dated ${submittedStr} on the above subject and wish to inform you that Management has approved your leave request as follows:`
-
-  const details = [
-    `Leave Type:          ${leaveLabel}`,
-    `Leave Period:        ${startStr} to ${endStr}`,
-    `Approved Days:       ${effectiveDays} day(s)`,
-    `Return to Work Date: ${returnStr}`,
-  ].join("\n")
-
-  const specificParagraphMap: Record<string, string> = {
-    annual: `You are requested to ensure that all official duties are properly handed over before proceeding on leave. You are expected to resume duty on ${returnStr}.`,
-    sick: `Management wishes you a speedy recovery. Please ensure that you submit your medical certificate / sick sheet to the Human Resource Department upon your return to duty on ${returnStr}.`,
-    maternity: `Management extends its congratulations to you on this occasion. You are expected to resume duty on ${returnStr}. Please ensure that all relevant documentation is submitted to the Human Resource Department upon your return.`,
-    paternity: `Management extends its congratulations to you on the occasion of the birth of your child. You are expected to resume duty on ${returnStr}.`,
-    study: `You are to ensure that all your official duties are properly handed over before proceeding on leave. You are required to submit your academic results or progress report to the Human Resource Department upon your return on ${returnStr}.`,
-    compassionate: `Management extends its sympathies during this difficult period. You are expected to resume duty on ${returnStr}.`,
-    part_leave: `You are requested to ensure that all official duties are properly handed over before proceeding on leave. You are expected to resume duty on ${returnStr}.`,
-    no_pay: `Please note that this leave is approved without pay for the entire approved period. You are expected to resume duty on ${returnStr}.`,
-    casual: `Please note that casual leave is granted at the discretion of Management. You are expected to resume duty on ${returnStr}.`,
-  }
-  const specificPara = specificParagraphMap[leaveType] || `You are expected to resume duty on ${returnStr}.`
-
-  const closing = `By a copy of this letter, the relevant departments are notified of your approved leave period.\n\nYou can count on our co-operation.`
-
-  const body = [header, "", subject, "", opening, "", details, "", specificPara, "", closing].join("\n")
-
-  return { subject, body }
 }
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -813,9 +971,12 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const res = await fetch("/api/leave/templates", { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) return
-      setTemplateOptions(Array.isArray(json.templates) ? json.templates.filter((row: HrTemplateOption) => row.is_active !== false) : [])
+      const remoteTemplates = Array.isArray(json.templates)
+        ? json.templates.filter((row: HrTemplateOption) => row.is_active !== false)
+        : []
+      setTemplateOptions([...getBuiltinHrTemplateOptions(), ...remoteTemplates])
     } catch {
-      // silent
+      setTemplateOptions(getBuiltinHrTemplateOptions())
     }
   }, [])
 
@@ -1883,18 +2044,19 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                           onClick={() => {
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
-                              const matchingTemplate = templateOptions.find((template) => {
+                              const matchingTemplate = templateOptions.find((template) => template.template_key === getDefaultMemoTemplateKey(String(req.leave_type_key || "annual"))) || templateOptions.find((template) => {
                                 const key = String(template.template_key || "")
                                 const leaveType = String(req.leave_type_key || "")
                                 return key.includes(leaveType) || key.includes("approval")
                               }) || templateOptions[0]
                               setOfficeAdjStart((p) => ({ ...p, [req.id]: req.preferred_start_date || "" }))
                               setOfficeAdjEnd((p) => ({ ...p, [req.id]: req.preferred_end_date || "" }))
-                              setOfficeTemplateKey((p) => ({ ...p, [req.id]: matchingTemplate?.template_key || "" }))
+                              setOfficeTemplateKey((p) => ({ ...p, [req.id]: matchingTemplate?.template_key || getDefaultMemoTemplateKey(String(req.leave_type_key || "annual")) }))
                               const memoTpl = buildMemoTemplate(req)
-                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || matchingTemplate?.subject_template || memoTpl.subject }))
-                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || matchingTemplate?.body_template || memoTpl.body }))
-                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || matchingTemplate?.cc_recipients || "" }))
+                              const renderedTemplate = matchingTemplate ? renderTemplateForRequest(matchingTemplate, req) : memoTpl
+                              setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || renderedTemplate.subject || memoTpl.subject }))
+                              setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || renderedTemplate.body || memoTpl.body }))
+                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
                             }
                           }}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50">
@@ -2003,9 +2165,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                     setOfficeTemplateKey((p) => ({ ...p, [req.id]: value }))
                                     const selected = templateOptions.find((template) => template.template_key === value)
                                     if (selected) {
-                                      setOfficeMemoSubject((p) => ({ ...p, [req.id]: selected.subject_template || "" }))
-                                      setOfficeMemoBody((p) => ({ ...p, [req.id]: selected.body_template || "" }))
-                                      setOfficeMemoCc((p) => ({ ...p, [req.id]: selected.cc_recipients || "" }))
+                                      const rendered = renderTemplateForRequest(selected, req)
+                                      setOfficeMemoSubject((p) => ({ ...p, [req.id]: rendered.subject || "" }))
+                                      setOfficeMemoBody((p) => ({ ...p, [req.id]: rendered.body || "" }))
+                                      setOfficeMemoCc((p) => ({ ...p, [req.id]: rendered.cc || "" }))
                                     }
                                   }}
                                 >
@@ -2194,7 +2357,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                             const hrMemoTpl = buildMemoTemplate(req)
                             setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || hrMemoTpl.subject }))
                             setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || hrMemoTpl.body }))
-                            setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || "" }))
+                            setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || hrMemoTpl.cc }))
                           }}
                           className="text-xs h-8">
                           {isExpanded ? "▲ Collapse" : "▼ Review & Decide"}
