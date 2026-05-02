@@ -8,7 +8,7 @@ import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 
-const HR_ANALYTICS_ROLES = ["loan_office"]
+const HR_ANALYTICS_ROLES = ["loan_office", "hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr"]
 
 function isHrAnalyticsRole(role: string) {
   const normalized = role.toLowerCase().trim().replace(/[-\s]+/g, "_")
