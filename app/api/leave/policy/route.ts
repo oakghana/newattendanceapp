@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
           sort_order: typeof sortOrder === "number" ? sortOrder : 100,
           updated_at: new Date().toISOString(),
           created_by: user.id,
-        })
+        }, { onConflict: "leave_year_period,leave_type_key" })
 
       if (error) {
         if (isSchemaMissing(error)) {
