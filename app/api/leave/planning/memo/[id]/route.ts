@@ -600,8 +600,12 @@ export async function GET(
 
       const totalGranted = effectiveDays + tableTravellingDays
 
-      const shouldShowRemarks = Number(lr.adjusted_days || 0) > Number(lr.requested_days || 0)
-      const remarksText = shouldShowRemarks ? String(lr.adjustment_reason || "").trim() : ""
+      const originalRequested = Number(
+        lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
+      )
+      const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
+      const hasIncrease = adjustedRequested > originalRequested || Number(lr.travelling_days_added || 0) > 0
+      const remarksText = String(lr.adjustment_reason || "").trim()
 
       autoTable(doc, {
         startY: y,
@@ -624,7 +628,7 @@ export async function GET(
             String(totalGranted || effectiveDays),
             fmtFormalDate(effectiveStart),
             fmtFormalDate(effectiveEnd),
-            remarksText,
+            hasIncrease && remarksText ? remarksText : "",
           ],
           [
             { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold" } },
@@ -655,9 +659,33 @@ export async function GET(
     y += closingLines.length * 5.5 + 12
 
     // ── Signature block ───────────────────────────────────────────────
-    const sigMode   = String(lr.hr_signature_mode || (hrSignatureData as any)?.signature_mode || "typed")
-    const sigText   = String(lr.hr_signature_text   || (hrSignatureData as any)?.signature_text   || "")
-    const sigDataUrl = String(lr.hr_signature_data_url || (hrSignatureData as any)?.signature_data_url || "")
+    const requestSigMode = String(lr.hr_signature_mode || "").trim().toLowerCase()
+    const requestSigText = String(lr.hr_signature_text || "").trim()
+    const requestSigDataUrl = String(lr.hr_signature_data_url || "").trim()
+    const registrySigMode = String((hrSignatureData as any)?.signature_mode || "").trim().toLowerCase()
+    const registrySigText = String((hrSignatureData as any)?.signature_text || "").trim()
+    const registrySigDataUrl = String((hrSignatureData as any)?.signature_data_url || "").trim()
+
+    const requestHasImageSignature =
+      (requestSigMode === "draw" || requestSigMode === "upload") && requestSigDataUrl.length > 0
+    const registryHasImageSignature =
+      (registrySigMode === "draw" || registrySigMode === "upload") && registrySigDataUrl.length > 0
+
+    const sigMode = requestHasImageSignature
+      ? requestSigMode
+      : registryHasImageSignature
+        ? registrySigMode
+        : (requestSigMode || registrySigMode || "typed")
+
+    const sigDataUrl = requestHasImageSignature
+      ? requestSigDataUrl
+      : registryHasImageSignature
+        ? registrySigDataUrl
+        : ""
+
+    const sigText = sigMode === "typed"
+      ? (requestSigText || registrySigText)
+      : ""
     const hrName    = fmtName(hrApproverProfile || {
       first_name: (lr.hr_approver_name || "").split(" ")[0],
       last_name:  (lr.hr_approver_name || "").split(" ").slice(1).join(" "),
