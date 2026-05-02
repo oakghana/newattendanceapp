@@ -83,6 +83,13 @@ export function LeaveManagementClient({
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementClientProps) {
+    const formatDateSafe = (value?: string | null) => {
+      if (!value) return "-"
+      const parsed = new Date(value)
+      if (Number.isNaN(parsed.getTime())) return "-"
+      return format(parsed, "MMM dd, yyyy")
+    }
+
     const pendingStatuses = new Set([
       "pending",
       "pending_hod",
@@ -624,20 +631,26 @@ export function LeaveManagementClient({
               </thead>
               <tbody>
                 {rows.map((notification) => {
-                  const leave = notification.leave_requests
+                  const leave = notification.leave_requests || {
+                    id: String(notification.leave_plan_request_id || ""),
+                    leave_type: "annual",
+                    start_date: null,
+                    end_date: null,
+                    reason: "",
+                  }
                   return (
                     <tr key={notification.id} className="border-t border-slate-100 align-top">
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-900">{notification.requester_name || "Staff"}</div>
                         <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(leave.leave_type)}</td>
-                      <td className="px-4 py-3">{format(new Date(leave.start_date), "MMM dd, yyyy")}</td>
-                      <td className="px-4 py-3">{format(new Date(leave.end_date), "MMM dd, yyyy")}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(String(leave.leave_type || "annual"))}</td>
+                      <td className="px-4 py-3">{formatDateSafe(leave.start_date)}</td>
+                      <td className="px-4 py-3">{formatDateSafe(leave.end_date)}</td>
                       <td className="px-4 py-3">
                         <Badge variant="outline">{formatLeaveType(String(notification.status || "pending"))}</Badge>
                       </td>
-                      <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{leave.reason}</td>
+                      <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <Button

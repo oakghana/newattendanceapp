@@ -410,8 +410,16 @@ export async function GET(
     // Load QCC logo
     let logoBase64: string | null = null
     try {
-      const logoPath = path.join(process.cwd(), "public", "images", "qcc-logo.png")
-      logoBase64 = fs.readFileSync(logoPath).toString("base64")
+      const possibleLogoPaths = [
+        path.join(process.cwd(), "public", "images", "qcc-logo.png"),
+        path.join(process.cwd(), "newattendanceapp", "public", "images", "qcc-logo.png"),
+        path.join(process.cwd(), "public", "qcc-logo.png"),
+      ]
+
+      const resolvedLogoPath = possibleLogoPaths.find((candidate) => fs.existsSync(candidate))
+      if (resolvedLogoPath) {
+        logoBase64 = fs.readFileSync(resolvedLogoPath).toString("base64")
+      }
     } catch {
       // continue without logo
     }
