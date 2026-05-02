@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(currentStatus)) {
       return NextResponse.json(
         {
-          error: `This request cannot be processed in its current state (${currentStatus}). It must be HOD-approved first.`,
+          error: `This request cannot be processed in its current state (${currentStatus}). It must be HOD-approved or have HOD changes requested first.`,
         },
         { status: 400 },
       )

@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     const [approvedRes, outstandingRes] = await Promise.all([
       admin
         .from("leave_plan_requests")
-        .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days, entitlement_days, status, submitted_at, created_at, adjusted_at, is_archived")
+        .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days, entitlement_days, status, submitted_at, created_at, is_archived")
         .eq("is_archived", false)
         .eq("status", "hr_approved")
         .order("created_at", { ascending: false }),
