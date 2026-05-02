@@ -285,6 +285,35 @@ export async function POST(request: NextRequest) {
     // Generate a secure memo token for PDF download
     const memoToken = crypto.randomBytes(32).toString("hex")
 
+    const inputSigMode = String(hr_signature_mode || "").trim().toLowerCase()
+    const inputSigText = String(hr_signature_text || "").trim()
+    const inputSigDataUrl = String(hr_signature_data_url || "").trim()
+    const registrySigMode = String((approverSignature as any)?.signature_mode || "").trim().toLowerCase()
+    const registrySigText = String((approverSignature as any)?.signature_text || "").trim()
+    const registrySigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
+
+    const hasInputSignature =
+      (inputSigMode === "typed" && inputSigText.length > 0)
+      || ((inputSigMode === "draw" || inputSigMode === "upload") && inputSigDataUrl.length > 0)
+
+    const hasRegistrySignature =
+      (registrySigMode === "typed" && registrySigText.length > 0)
+      || ((registrySigMode === "draw" || registrySigMode === "upload") && registrySigDataUrl.length > 0)
+
+    const resolvedSigMode = hasInputSignature
+      ? inputSigMode
+      : hasRegistrySignature
+        ? registrySigMode
+        : "typed"
+
+    const resolvedSigText = resolvedSigMode === "typed"
+      ? (hasInputSignature ? inputSigText : (hasRegistrySignature ? registrySigText : approverName))
+      : null
+
+    const resolvedSigDataUrl = resolvedSigMode === "draw" || resolvedSigMode === "upload"
+      ? (hasInputSignature ? inputSigDataUrl : (hasRegistrySignature ? registrySigDataUrl : null))
+      : null
+
     const { error: approveError } = await admin
       .from("leave_plan_requests")
       .update({
@@ -299,10 +328,10 @@ export async function POST(request: NextRequest) {
         memo_draft_cc: resolvedCc,
         memo_token: memoToken,
         memo_generated_at: now,
-        hr_signature_mode: hr_signature_mode || (approverSignature as any)?.signature_mode || "typed",
-        hr_signature_text: hr_signature_text || (approverSignature as any)?.signature_text || approverName,
+        hr_signature_mode: resolvedSigMode,
+        hr_signature_text: resolvedSigText,
         hr_signature_image_url: hr_signature_image_url || null,
-        hr_signature_data_url: hr_signature_data_url || (approverSignature as any)?.signature_data_url || null,
+        hr_signature_data_url: resolvedSigDataUrl,
         hr_signature_hologram_code: buildHologramCode("HR"),
         updated_at: now,
       })

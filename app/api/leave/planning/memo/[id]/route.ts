@@ -504,16 +504,6 @@ export async function GET(
     doc.setFontSize(13)
     doc.text("(COCOBOD)", pageWidth / 2, 26, { align: "center" })
 
-    // ISO certifications (small, centred)
-    doc.setFont("times", "normal")
-    doc.setFontSize(7)
-    doc.setTextColor(60, 60, 60)
-    doc.text("ISO/IEC 17020 : 2012", pageWidth / 2, 31, { align: "center" })
-    doc.text("ISO/IEC 17025 : 2017", pageWidth / 2, 35, { align: "center" })
-    doc.setFont("times", "bold")
-    doc.setFontSize(7.5)
-    doc.text("ACCREDITED", pageWidth / 2, 39, { align: "center" })
-
     // P.O. Box block (top-right)
     doc.setFont("times", "italic")
     doc.setFontSize(8)
@@ -610,6 +600,9 @@ export async function GET(
 
       const totalGranted = effectiveDays + tableTravellingDays
 
+      const shouldShowRemarks = Number(lr.adjusted_days || 0) > Number(lr.requested_days || 0)
+      const remarksText = shouldShowRemarks ? String(lr.adjustment_reason || "").trim() : ""
+
       autoTable(doc, {
         startY: y,
         margin: { left: marginLeft, right: marginRight },
@@ -631,7 +624,7 @@ export async function GET(
             String(totalGranted || effectiveDays),
             fmtFormalDate(effectiveStart),
             fmtFormalDate(effectiveEnd),
-            "",
+            remarksText,
           ],
           [
             { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold" } },
@@ -671,7 +664,7 @@ export async function GET(
     })
     const hrPosition = String((hrApproverProfile as any)?.position || "HR Officer")
 
-    if ((sigMode === "draw" || sigMode === "upload") && sigDataUrl) {
+    if (sigMode !== "typed" && sigDataUrl) {
       try {
         const b64 = sigDataUrl.replace(/^data:image\/\w+;base64,/, "")
         doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
