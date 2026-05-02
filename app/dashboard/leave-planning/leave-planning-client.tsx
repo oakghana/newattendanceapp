@@ -153,6 +153,14 @@ function toIsoDate(value: Date) {
   return value.toISOString().slice(0, 10)
 }
 
+function normalizeLeaveTypeKey(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+}
+
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
   const leaveSignatures = signatures.filter((signature) => signature.workflow_domain === "leave")
   const stagePriority = ["hr_approver", "director_hr", "manager_hr"]
@@ -866,6 +874,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const isAdmin = normalizedRole === "admin"
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin || ["loan_office"].includes(normalizedRole)
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
+  const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const canSelfApply = isStaff || isHod || isAdmin ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "loan_office"].includes(normalizedRole)
 
@@ -897,6 +906,12 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [leaveType, setLeaveType] = useState("annual")
   const [reason, setReason] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
+  const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
+  const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string }>>({})
+  const [newLeaveTypeKey, setNewLeaveTypeKey] = useState("")
+  const [newLeaveTypeLabel, setNewLeaveTypeLabel] = useState("")
+  const [newLeaveTypeDays, setNewLeaveTypeDays] = useState("")
+  const [leaveTypeSavingKey, setLeaveTypeSavingKey] = useState<string | null>(null)
   const [signatureMode, setSignatureMode] = useState<SignatureMode>("typed")
   const [typedSignature, setTypedSignature] = useState("")
   const [uploadedSigUrl, setUploadedSigUrl] = useState<string | null>(null)
@@ -1027,6 +1042,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const res = await fetch("/api/leave/policy", { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) return
+      setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
       const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes) ? json.leaveTypes : []
       const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
       setLeaveTypes(hasPartLeave ? types : [
@@ -1131,6 +1147,102 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     setHrSigDataUrl(null)
   }, [])
 
+  const saveLeaveTypePolicy = useCallback(async (payload: {
+    leaveTypeKey: string
+    leaveTypeLabel: string
+    entitlementDays: number
+    sortOrder: number
+  }) => {
+    setLeaveTypeSavingKey(payload.leaveTypeKey)
+    try {
+      const res = await fetch("/api/leave/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "upsert_leave_type",
+          leaveYearPeriod: policyActivePeriod,
+          leaveTypeKey: payload.leaveTypeKey,
+          leaveTypeLabel: payload.leaveTypeLabel,
+          entitlementDays: payload.entitlementDays,
+          isEnabled: true,
+          sortOrder: payload.sortOrder,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to save leave type")
+
+      toast({ title: "Leave type saved", description: `${payload.leaveTypeLabel} updated for ${policyActivePeriod}.` })
+      await loadPolicy()
+    } catch (e) {
+      toast({
+        title: "Leave type save failed",
+        description: e instanceof Error ? e.message : "Failed to save leave type",
+        variant: "destructive",
+      })
+    } finally {
+      setLeaveTypeSavingKey(null)
+    }
+  }, [loadPolicy, policyActivePeriod, toast])
+
+  const saveExistingLeaveType = useCallback(async (leaveTypeKey: string) => {
+    const draft = leaveTypeDrafts[leaveTypeKey]
+    if (!draft) return
+
+    const label = String(draft.leaveTypeLabel || "").trim()
+    const entitlementDays = Number(draft.entitlementDays)
+    if (!label || Number.isNaN(entitlementDays) || entitlementDays < 0) {
+      toast({
+        title: "Invalid leave type",
+        description: "Provide a valid leave type label and a non-negative entitlement days value.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const index = leaveTypes.findIndex((item) => item.leaveTypeKey === leaveTypeKey)
+    await saveLeaveTypePolicy({
+      leaveTypeKey,
+      leaveTypeLabel: label,
+      entitlementDays,
+      sortOrder: index >= 0 ? index + 1 : 100,
+    })
+  }, [leaveTypeDrafts, leaveTypes, saveLeaveTypePolicy, toast])
+
+  const addNewLeaveType = useCallback(async () => {
+    const normalizedKey = normalizeLeaveTypeKey(newLeaveTypeKey || newLeaveTypeLabel)
+    const label = String(newLeaveTypeLabel || "").trim()
+    const entitlementDays = Number(newLeaveTypeDays)
+
+    if (!normalizedKey || !label || Number.isNaN(entitlementDays) || entitlementDays < 0) {
+      toast({
+        title: "Invalid leave type",
+        description: "Provide a key/label and a non-negative entitlement days value before adding.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (leaveTypes.some((type) => String(type.leaveTypeKey || "") === normalizedKey)) {
+      toast({
+        title: "Leave type exists",
+        description: "A leave type with that key already exists in the active period.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    await saveLeaveTypePolicy({
+      leaveTypeKey: normalizedKey,
+      leaveTypeLabel: label,
+      entitlementDays,
+      sortOrder: leaveTypes.length + 1,
+    })
+
+    setNewLeaveTypeKey("")
+    setNewLeaveTypeLabel("")
+    setNewLeaveTypeDays("")
+  }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
+
   useEffect(() => {
     // Staff requests should default to typed signature using their profile name.
     if (canSelfApply) {
@@ -1151,6 +1263,20 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     if (!isHrApprover && !isAdmin) return
     void loadHrSignatureRegistry()
   }, [isAdmin, isHrApprover, loadHrSignatureRegistry])
+
+  useEffect(() => {
+    setLeaveTypeDrafts((prev) => {
+      const next: Record<string, { leaveTypeLabel: string; entitlementDays: string }> = {}
+      for (const leaveTypeOption of leaveTypes) {
+        const existing = prev[leaveTypeOption.leaveTypeKey]
+        next[leaveTypeOption.leaveTypeKey] = {
+          leaveTypeLabel: existing?.leaveTypeLabel ?? leaveTypeOption.leaveTypeLabel,
+          entitlementDays: existing?.entitlementDays ?? String(leaveTypeOption.entitlementDays ?? 0),
+        }
+      }
+      return next
+    })
+  }, [leaveTypes])
 
   useEffect(() => {
     setHrOfficePage(1)
@@ -2165,6 +2291,103 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               )}
 
               <TabsContent value="operations">
+                {canManageLeaveTypePolicy && (
+                  <Card className="border border-emerald-200 bg-emerald-50/40">
+                    <CardContent className="p-4 space-y-4">
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-900">Leave Type Policy Management</p>
+                        <p className="text-xs text-emerald-800/80 mt-1">
+                          Edit entitlement days and labels, or add a new leave type for {policyActivePeriod}.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3">
+                        {leaveTypes.map((leaveTypeOption, index) => {
+                          const draft = leaveTypeDrafts[leaveTypeOption.leaveTypeKey] || {
+                            leaveTypeLabel: leaveTypeOption.leaveTypeLabel,
+                            entitlementDays: String(leaveTypeOption.entitlementDays || 0),
+                          }
+                          const isSaving = leaveTypeSavingKey === leaveTypeOption.leaveTypeKey
+
+                          return (
+                            <div
+                              key={leaveTypeOption.leaveTypeKey}
+                              className="grid gap-2 rounded-lg border border-emerald-200 bg-white p-3 md:grid-cols-[1fr_140px_auto]"
+                            >
+                              <Input
+                                value={draft.leaveTypeLabel}
+                                onChange={(e) => setLeaveTypeDrafts((prev) => ({
+                                  ...prev,
+                                  [leaveTypeOption.leaveTypeKey]: {
+                                    ...(prev[leaveTypeOption.leaveTypeKey] || draft),
+                                    leaveTypeLabel: e.target.value,
+                                  },
+                                }))}
+                                placeholder="Leave type label"
+                              />
+                              <Input
+                                type="number"
+                                min="0"
+                                value={draft.entitlementDays}
+                                onChange={(e) => setLeaveTypeDrafts((prev) => ({
+                                  ...prev,
+                                  [leaveTypeOption.leaveTypeKey]: {
+                                    ...(prev[leaveTypeOption.leaveTypeKey] || draft),
+                                    entitlementDays: e.target.value,
+                                  },
+                                }))}
+                                placeholder="Days"
+                              />
+                              <Button
+                                size="sm"
+                                className="bg-emerald-700 hover:bg-emerald-800"
+                                disabled={Boolean(leaveTypeSavingKey)}
+                                onClick={() => void saveExistingLeaveType(leaveTypeOption.leaveTypeKey)}
+                              >
+                                {isSaving ? "Saving..." : "Save"}
+                              </Button>
+                              <p className="text-[11px] text-slate-500 md:col-span-3">
+                                Key: {leaveTypeOption.leaveTypeKey} · Order: {index + 1}
+                              </p>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="rounded-lg border border-dashed border-emerald-300 bg-white p-3 space-y-2">
+                        <p className="text-xs font-semibold text-emerald-900 uppercase tracking-wide">Add New Leave Type</p>
+                        <div className="grid gap-2 md:grid-cols-[1fr_1fr_140px_auto]">
+                          <Input
+                            value={newLeaveTypeKey}
+                            onChange={(e) => setNewLeaveTypeKey(e.target.value)}
+                            placeholder="Key (e.g. exam_leave)"
+                          />
+                          <Input
+                            value={newLeaveTypeLabel}
+                            onChange={(e) => setNewLeaveTypeLabel(e.target.value)}
+                            placeholder="Label (e.g. Exam Leave)"
+                          />
+                          <Input
+                            type="number"
+                            min="0"
+                            value={newLeaveTypeDays}
+                            onChange={(e) => setNewLeaveTypeDays(e.target.value)}
+                            placeholder="Days"
+                          />
+                          <Button
+                            size="sm"
+                            className="bg-emerald-700 hover:bg-emerald-800"
+                            disabled={Boolean(leaveTypeSavingKey)}
+                            onClick={() => void addNewLeaveType()}
+                          >
+                            Add Type
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {hrOfficeFilteredQueue.length === 0 ? (
                   <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                     <ClipboardList className="w-10 h-10 mx-auto mb-3 text-slate-300" />

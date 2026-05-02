@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 import { DEFAULT_LEAVE_TYPES, getLeaveYearPeriods } from "@/lib/leave-policy"
 import { isHrDepartment } from "@/lib/leave-planning"
 
+function normalizeRole(value: string | null | undefined) {
+  return String(value || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
 function isSchemaMissing(error: any) {
   const code = error?.code || ""
   const message = String(error?.message || "").toLowerCase()
@@ -113,13 +117,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
+    const role = normalizeRole((profile as any)?.role)
     const canManagePolicy =
-      profile.role === "admin" ||
-      (profile.role === "department_head" &&
+      role === "admin" ||
+      role === "hr_leave_office" ||
+      role === "hr_office" ||
+      (role === "department_head" &&
         isHrDepartment((profile as any)?.departments?.name, (profile as any)?.departments?.code))
 
     if (!canManagePolicy) {
-      return NextResponse.json({ error: "Only Admin and HR Head of Department can update leave policy." }, { status: 403 })
+      return NextResponse.json({ error: "Only Admin, HR Leave Office, and HR Head of Department can update leave policy." }, { status: 403 })
     }
 
     const body = await request.json()
