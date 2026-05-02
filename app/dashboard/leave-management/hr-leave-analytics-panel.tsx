@@ -159,8 +159,8 @@ export function HrLeaveAnalyticsPanel() {
   const typeBreakdown: any[] = analytics?.leave_type_breakdown ?? []
   const locationRanking: any[] = analytics?.location_ranking ?? []
   const totals = analytics?.totals ?? {}
-  const maxType = Math.max(...typeBreakdown.map((t: any) => t.count), 1)
-  const maxLoc = Math.max(...locationRanking.map((l: any) => l.count), 1)
+  const maxType = Math.max(...typeBreakdown.map((t: any) => Number(t.total || 0)), 1)
+  const maxLoc = Math.max(...locationRanking.map((l: any) => Number(l.total || 0)), 1)
   const rangeStart = data?.rangeStart ?? range.start
   const rangeEnd = data?.rangeEnd ?? range.end
 

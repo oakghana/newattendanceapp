@@ -133,8 +133,7 @@ export async function GET(request: NextRequest) {
             last_name,
             employee_id,
             position,
-            departments(name, code),
-            geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
+            departments(name, code)
           )
         `)
         .eq("is_archived", false)
@@ -173,8 +172,8 @@ export async function GET(request: NextRequest) {
         end_date: effectiveEnd,
         days: Number(row?.adjusted_days || row?.requested_days || 0),
         submitted_at: row?.submitted_at || row?.created_at || null,
-        location_name: row?.user?.geofence_locations?.name || row?.user?.departments?.name || "Unassigned Location",
-        location_address: row?.user?.geofence_locations?.address || null,
+        location_name: row?.user?.departments?.name || "Unassigned Location",
+        location_address: null,
         department_name: row?.user?.departments?.name || null,
       }]
     })
