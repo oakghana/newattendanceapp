@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { DEFAULT_LEAVE_TYPES, getLeaveYearPeriods } from "@/lib/leave-policy"
 import { isHrDepartment } from "@/lib/leave-planning"
 
@@ -132,6 +132,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { action } = body
 
+    // Use admin client for writes to bypass potential RLS/grant issues on leave_policy_catalog
+    const adminSupabase = await createAdminClient()
+
     if (action === "upsert_leave_type") {
       const { leaveYearPeriod, leaveTypeKey, leaveTypeLabel, entitlementDays, isEnabled, sortOrder } = body
 
@@ -139,7 +142,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Missing required leave type policy fields." }, { status: 400 })
       }
 
-      const { error } = await supabase
+      const { error } = await adminSupabase
         .from("leave_policy_catalog")
         .upsert({
           leave_year_period: leaveYearPeriod,
@@ -153,6 +156,7 @@ export async function POST(request: NextRequest) {
         }, { onConflict: "leave_year_period,leave_type_key" })
 
       if (error) {
+        console.error("[v0] Leave policy upsert error:", error)
         if (isSchemaMissing(error)) {
           return NextResponse.json(
             {
@@ -162,7 +166,7 @@ export async function POST(request: NextRequest) {
             { status: 503 },
           )
         }
-        throw error
+        return NextResponse.json({ error: error.message || "Failed to update leave policy" }, { status: 500 })
       }
 
       return NextResponse.json({ success: true })
@@ -182,19 +186,25 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const { error: resetError } = await supabase
+      const { error: resetError } = await adminSupabase
         .from("leave_policy_catalog")
         .update({ is_active_period: false, updated_at: new Date().toISOString() })
         .neq("leave_year_period", "")
 
-      if (resetError) throw resetError
+      if (resetError) {
+        console.error("[v0] Leave policy reset active period error:", resetError)
+        return NextResponse.json({ error: resetError.message || "Failed to reset active period" }, { status: 500 })
+      }
 
-      const { error: activateError } = await supabase
+      const { error: activateError } = await adminSupabase
         .from("leave_policy_catalog")
         .update({ is_active_period: true, updated_at: new Date().toISOString() })
         .eq("leave_year_period", leaveYearPeriod)
 
-      if (activateError) throw activateError
+      if (activateError) {
+        console.error("[v0] Leave policy set active period error:", activateError)
+        return NextResponse.json({ error: activateError.message || "Failed to set active period" }, { status: 500 })
+      }
 
       return NextResponse.json({ success: true })
     }
@@ -202,6 +212,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid action." }, { status: 400 })
   } catch (error) {
     console.error("[v0] Leave policy POST error:", error)
-    return NextResponse.json({ error: "Failed to update leave policy" }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update leave policy" }, { status: 500 })
   }
 }
