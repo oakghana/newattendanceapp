@@ -8,6 +8,7 @@ import { PersonalAttendanceHistory } from "@/components/attendance/personal-atte
 import { LocationPreviewCard } from "@/components/attendance/location-preview-card"
 import { LeaveStatusCard } from "@/components/leave/leave-status-card"
 import { StaffStatusBadge } from "@/components/attendance/staff-status-badge"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Clock, History, ArrowLeft, Home } from "lucide-react"
@@ -189,22 +190,26 @@ export default function AttendancePage() {
           </TabsList>
 
           <TabsContent value="today" className="space-y-6 mt-8">
-            <LocationPreviewCard
-              assignedLocation={assignedLocation}
-              locations={locations}
-              rangeMode={isCheckedIn ? "checkout" : "checkin"}
-              onRangeStatusChange={setPreviewRangeStatus}
-            />
-            <AttendanceRecorder
-              todayAttendance={todayAttendance}
-              userLeaveStatus={userProfile?.leave_status}
-              previewRangeResolved={previewRangeStatus.resolved}
-              previewInRange={previewRangeStatus.inRange}
-            />
+            <ErrorBoundary>
+              <LocationPreviewCard
+                assignedLocation={assignedLocation}
+                locations={locations}
+                rangeMode={isCheckedIn ? "checkout" : "checkin"}
+                onRangeStatusChange={setPreviewRangeStatus}
+              />
+              <AttendanceRecorder
+                todayAttendance={todayAttendance}
+                userLeaveStatus={userProfile?.leave_status}
+                previewRangeResolved={previewRangeStatus.resolved}
+                previewInRange={previewRangeStatus.inRange}
+              />
+            </ErrorBoundary>
           </TabsContent>
 
           <TabsContent value="history" className="space-y-6 mt-8">
-            <PersonalAttendanceHistory />
+            <ErrorBoundary>
+              <PersonalAttendanceHistory />
+            </ErrorBoundary>
           </TabsContent>
         </Tabs>
       </div>

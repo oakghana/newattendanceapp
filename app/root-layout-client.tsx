@@ -36,7 +36,12 @@ export default function RootLayoutClient({
 
     const recover = async () => {
       const now = Date.now()
-      const rawState = window.sessionStorage.getItem(reloadStateKey)
+      let rawState: string | null = null
+      try {
+        rawState = window.sessionStorage.getItem(reloadStateKey)
+      } catch {
+        rawState = null
+      }
       let parsedState: { attempts: number; firstAt: number } | null = null
       if (rawState) {
         try {
@@ -56,7 +61,11 @@ export default function RootLayoutClient({
         attempts: attempts + 1,
         firstAt: inWindow && parsedState ? parsedState.firstAt : now,
       }
-      window.sessionStorage.setItem(reloadStateKey, JSON.stringify(nextState))
+      try {
+        window.sessionStorage.setItem(reloadStateKey, JSON.stringify(nextState))
+      } catch {
+        // Storage can be unavailable in strict browser/privacy modes.
+      }
 
       try {
         if (typeof window !== "undefined" && "caches" in window) {
@@ -90,7 +99,11 @@ export default function RootLayoutClient({
     }
 
     const clearRecoveryState = window.setTimeout(() => {
-      window.sessionStorage.removeItem(reloadStateKey)
+      try {
+        window.sessionStorage.removeItem(reloadStateKey)
+      } catch {
+        // Ignore storage cleanup failures.
+      }
     }, 15_000)
 
     window.addEventListener("error", handleError)
