@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { jsPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
 import fs from "fs"
 import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
@@ -23,6 +24,29 @@ function fmtDate(value?: string | null): string {
   return date.toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
 }
 
+function ordinalSuffix(n: number): string {
+  const v = n % 100
+  const s = ["th", "st", "nd", "rd"]
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+const DAY_NAMES   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+
+function fmtFormalDate(value?: string | null): string {
+  if (!value) return ""
+  const date = new Date(value)
+  if (isNaN(date.getTime())) return fmtDate(value)
+  return `${ordinalSuffix(date.getDate())} ${MONTH_NAMES[date.getMonth()]}, ${date.getFullYear()}`
+}
+
+function fmtFormalDateWithWeekday(value?: string | null): string {
+  if (!value) return ""
+  const date = new Date(value)
+  if (isNaN(date.getTime())) return fmtDate(value)
+  return `${DAY_NAMES[date.getDay()]}, ${ordinalSuffix(date.getDate())} ${MONTH_NAMES[date.getMonth()]}, ${date.getFullYear()}`
+}
+
 function normalizeRole(r: string | null | undefined): string {
   return String(r || "")
     .toLowerCase()
@@ -41,6 +65,7 @@ function leaveTypeLabel(key: string): string {
     part_leave: "Part Leave",
     no_pay: "Leave Without Pay",
     casual: "Casual Leave",
+    leave_of_absence: "Leave of Absence",
   }
   return map[key] || String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -51,9 +76,7 @@ function renderMemoTemplate(template: string, data: Record<string, any>) {
       const value = data[key]
       return value === null || value === undefined ? "" : String(value)
     })
-    // Remove any unresolved placeholders to avoid exposing raw template tags in official memos.
     .replace(/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/g, "")
-
   return rendered.replace(/[ \t]+\n/g, "\n").trim()
 }
 
@@ -71,6 +94,180 @@ function leaveReferenceCode(leaveTypeKey: string) {
     leave_of_absence: "LOA",
   }
   return map[String(leaveTypeKey || "").toLowerCase()] || "LV"
+}
+
+/** Returns the official subject heading per leave type (no "RE:" prefix). */
+function getMemoSubject(leaveTypeKey: string, leavePeriod: string, draftSubject?: string | null): string {
+  if (draftSubject && draftSubject.trim()) return draftSubject.trim()
+  const yearPart = String(leavePeriod || "2026/2027").split("/")[0]
+  const map: Record<string, string> = {
+    annual:           `ANNUAL LEAVE ADVICE FOR ${yearPart}`,
+    casual:           "CASUAL LEAVE",
+    sick:             "SICK LEAVE",
+    maternity:        "MATERNITY LEAVE",
+    paternity:        "PATERNITY LEAVE",
+    study:            "STUDY LEAVE",
+    compassionate:    "COMPASSIONATE LEAVE",
+    part_leave:       "PART LEAVE",
+    no_pay:           "LEAVE WITHOUT PAY",
+    leave_of_absence: "LEAVE OF ABSENCE",
+  }
+  return map[String(leaveTypeKey || "annual").toLowerCase()] || `${leaveTypeLabel(leaveTypeKey).toUpperCase()} ADVICE FOR ${yearPart}`
+}
+
+/**
+ * Builds the body paragraphs for each leave type when no memo_draft_body exists.
+ * Returns { paragraphs: string[], closing: string, useTable: boolean } where
+ * useTable=true means annual leave table format should be rendered by the PDF layer.
+ */
+function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string, effectiveDays: number, returnDateIso: string): {
+  paragraphs: string[]
+  closing: string
+  useTable: boolean
+  tableEntitlement?: number
+  tableTravellingDays?: number
+} {
+  const leaveType = String(lr.leave_type_key || "annual").toLowerCase()
+  const submittedFormal = fmtFormalDate(lr.submitted_at || lr.created_at)
+  const startFormal = fmtFormalDate(effectiveStart)
+  const endFormal = fmtFormalDate(effectiveEnd)
+  const returnFormal = fmtFormalDateWithWeekday(returnDateIso)
+  const yearPart = String(lr.leave_year_period || "2026/2027")
+  const calYear = yearPart.split("/")[0]
+  const travellingDays = Number(lr.travelling_days_added || 0)
+  const entitlementDays = Number(lr.entitlement_days || 0)
+
+  const adjustmentParagraph = lr.adjustment_reason
+    ? `Adjustment Details: ${String(lr.adjustment_reason).trim()}`
+    : ""
+
+  switch (leaveType) {
+    case "annual": {
+      const yearRange = `January to December ${calYear}`
+      return {
+        useTable: true,
+        paragraphs: [
+          `In accordance with COCOBOD's vacation leave policy, we wish to inform you that approval has been granted for you to proceed on your annual leave in respect of the year ${yearRange}.`,
+          "Your leave details are shown below.",
+        ],
+        closing: "We wish you a pleasant and relaxing vacation.",
+        tableEntitlement: entitlementDays,
+        tableTravellingDays: travellingDays,
+      }
+    }
+
+    case "casual":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We acknowledge receipt of your letter dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has given approval for you to proceed on ${effectiveDays} working day(s) casual leave with effect from ${startFormal} to ${endFormal}.`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    case "part_leave":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We acknowledge receipt of your letter dated ${submittedFormal} in connection with the above-mentioned subject and wish to inform you that approval has been given for you to proceed on ${effectiveDays} working day(s) part leave with effect from ${startFormal} to ${endFormal}.`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    case "leave_of_absence": {
+      const months = Math.max(1, Math.round(effectiveDays / 22))
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your application for leave of absence for a period of ${months} (${months}) month${months === 1 ? "" : "s"} with effect from ${startFormal} to ${endFormal}.`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+    }
+
+    case "maternity":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your maternity leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} working days).`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    case "paternity":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your paternity leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} working days).`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    case "sick":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your sick leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} day(s)).`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    case "study":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your study leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} day(s)).`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    case "compassionate":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your compassionate leave with effect from ${startFormal} to ${endFormal} (${effectiveDays} day(s)).`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    case "no_pay":
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has approved your leave without pay with effect from ${startFormal} to ${endFormal} (${effectiveDays} day(s)).`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+
+    default:
+      return {
+        useTable: false,
+        paragraphs: [
+          `We refer to your application dated ${submittedFormal} on the above subject and wish to inform you that Management has approved your ${leaveTypeLabel(leaveType).toLowerCase()} with effect from ${startFormal} to ${endFormal} (${effectiveDays} day(s)).`,
+          `You are expected to resume duty on ${returnFormal}.`,
+          ...(adjustmentParagraph ? [adjustmentParagraph] : []),
+        ],
+        closing: "You can count on our co-operation.",
+      }
+  }
 }
 
 export async function GET(
@@ -224,157 +421,136 @@ export async function GET(
     const ap = applicantProfile as any
 
     const effectiveStart = lr.adjusted_start_date || lr.preferred_start_date
-    const effectiveEnd = lr.adjusted_end_date || lr.preferred_end_date
-    const effectiveDays = lr.adjusted_days || lr.requested_days
-    const wasAdjusted = !!lr.adjusted_days && lr.adjusted_days !== lr.original_requested_days
-
-    const leaveLabel = leaveTypeLabel(String(lr.leave_type_key || "annual"))
+    const effectiveEnd   = lr.adjusted_end_date   || lr.preferred_end_date
+    const effectiveDays  = Number(lr.adjusted_days || lr.requested_days || 0)
 
     // Return-to-work date (next business day after leave end)
     const returnDate = new Date(effectiveEnd)
     returnDate.setDate(returnDate.getDate() + 1)
-    // Skip weekend
     if (returnDate.getDay() === 6) returnDate.setDate(returnDate.getDate() + 2)
     if (returnDate.getDay() === 0) returnDate.setDate(returnDate.getDate() + 1)
+    const returnDateIso = returnDate.toISOString()
 
+    const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
+    const leaveLabel   = leaveTypeLabel(leaveTypeKey)
+
+    // Subject (use memo_draft_subject override if present, else per-type heading)
+    const subject = getMemoSubject(leaveTypeKey, String(lr.leave_year_period || "2026/2027"), lr.memo_draft_subject)
+
+    // Body paragraphs
     const templateData = {
-      staff_name: fmtName(ap),
-      staff_number: String(ap?.employee_id || ap?.staff_number || ""),
       leave_type: leaveLabel,
-      leave_year_period: String(lr.leave_year_period || "2026/2027"),
-      leave_start_date: fmtDate(effectiveStart),
-      leave_end_date: fmtDate(effectiveEnd),
+      leave_start_date: fmtFormalDate(effectiveStart),
+      leave_end_date: fmtFormalDate(effectiveEnd),
       approved_days: String(effectiveDays),
-      submitted_date: fmtDate(lr.submitted_at || lr.created_at),
-      return_to_work_date: fmtDate(returnDate.toISOString()),
-      travelling_days: String(Number(lr.travelling_days_added || 0)),
-      travelling_days_info:
-        Number(lr.travelling_days_added || 0) > 0
-          ? `Travelling Days: ${Number(lr.travelling_days_added || 0)} day(s)\n`
-          : "",
-      adjustment_details: lr.adjustment_reason ? `Adjustment Details: ${String(lr.adjustment_reason)}\n\n` : "",
+      submitted_date: fmtFormalDate(lr.submitted_at || lr.created_at),
+      return_to_work_date: fmtFormalDateWithWeekday(returnDateIso),
     }
-
-    const renderedSubject = renderMemoTemplate(
-      String(lr.memo_draft_subject || "").trim() || `APPLICATION FOR ${leaveLabel.toUpperCase()} - ${lr.leave_year_period || "2026/2027"}`,
-      templateData,
-    )
-    const subject = renderedSubject || `APPLICATION FOR ${leaveLabel.toUpperCase()} - ${lr.leave_year_period || "2026/2027"}`
-
-    const paragraphs: string[] = []
     const draftBody = renderMemoTemplate(String(lr.memo_draft_body || "").trim(), templateData)
+
+    let paragraphs: string[]
+    let closingLine: string
+    let useTable = false
+    let tableEntitlement = 0
+    let tableTravellingDays = 0
+
     if (draftBody) {
-      for (const block of draftBody.split(/\n\s*\n/)) {
-        const trimmed = block.trim()
-        if (trimmed) paragraphs.push(trimmed)
-      }
+      const blocks = draftBody.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean)
+      paragraphs  = blocks.slice(0, -1).length > 0 ? blocks.slice(0, -1) : blocks
+      closingLine = blocks.length > 1 ? blocks[blocks.length - 1] : "You can count on our co-operation."
     } else {
-      paragraphs.push(
-        `We refer to your application for ${leaveLabel} dated ${fmtDate(lr.submitted_at)} on the above subject and wish to inform you that Management has approved your leave request as follows:`,
-      )
-      paragraphs.push(
-        `Leave Type: ${leaveLabel}\nLeave Period: ${fmtDate(effectiveStart)} to ${fmtDate(effectiveEnd)}\nApproved Days: ${effectiveDays} day(s)\nReturn to Work Date: ${fmtDate(returnDate.toISOString())}`,
-      )
+      const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso)
+      paragraphs        = built.paragraphs
+      closingLine       = built.closing
+      useTable          = built.useTable
+      tableEntitlement  = built.tableEntitlement  ?? 0
+      tableTravellingDays = built.tableTravellingDays ?? 0
     }
-
-    if (wasAdjusted && lr.adjustment_reason) {
-      const breakdown: string[] = [`Original Requested Days: ${lr.original_requested_days || lr.requested_days}`]
-      if (Number(lr.holiday_days_deducted) > 0)
-        breakdown.push(`Less Public Holiday Days: -${lr.holiday_days_deducted}`)
-      if (Number(lr.prior_leave_days_deducted) > 0)
-        breakdown.push(`Less Prior Leave Enjoyed: -${lr.prior_leave_days_deducted}`)
-      if (Number(lr.travelling_days_added) > 0)
-        breakdown.push(`Plus Travelling Days: +${lr.travelling_days_added}`)
-      breakdown.push(`Adjusted Days: ${effectiveDays}`)
-      paragraphs.push(`Leave Days Adjustment:\n${breakdown.join("\n")}\n\nReason for Adjustment: ${lr.adjustment_reason}`)
-    }
-
-    if (lr.hr_approval_note) {
-      paragraphs.push(`HR Note: ${lr.hr_approval_note}`)
-    }
-
-    paragraphs.push(
-      `By a copy of this letter, the relevant departments are notified of your approved leave period.`,
-    )
-    paragraphs.push("You can count on our co-operation.")
 
     // ─── Generate PDF ────────────────────────────────────────────────
     const doc = new jsPDF({ unit: "mm", format: "a4" })
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const marginLeft = 24
-    const marginRight = 20
+    const pageWidth    = doc.internal.pageSize.getWidth()
+    const pageHeight   = doc.internal.pageSize.getHeight()
+    const marginLeft   = 24
+    const marginRight  = 20
     const contentWidth = pageWidth - marginLeft - marginRight
 
-    // Header
+    // ── Letterhead ──────────────────────────────────────────────────
     if (logoBase64) {
       try {
-        doc.addImage(`data:image/png;base64,${logoBase64}`, "PNG", marginLeft, 13, 22, 22)
+        doc.addImage(`data:image/png;base64,${logoBase64}`, "PNG", marginLeft, 10, 26, 26)
       } catch { /* skip */ }
     }
 
-    doc.setTextColor(44, 98, 22)
+    // Company name block (centred)
+    doc.setTextColor(0, 0, 0)
     doc.setFont("times", "bold")
-    doc.setFontSize(15)
-    doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, 20, { align: "center" })
+    doc.setFontSize(16)
+    doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, 18, { align: "center" })
     doc.setFontSize(13)
-    doc.text("(COCOBOD)", pageWidth / 2, 28, { align: "center" })
+    doc.text("(COCOBOD)", pageWidth / 2, 26, { align: "center" })
 
+    // ISO certifications (small, centred)
+    doc.setFont("times", "normal")
+    doc.setFontSize(7)
+    doc.setTextColor(60, 60, 60)
+    doc.text("ISO/IEC 17020 : 2012", pageWidth / 2, 31, { align: "center" })
+    doc.text("ISO/IEC 17025 : 2017", pageWidth / 2, 35, { align: "center" })
+    doc.setFont("times", "bold")
+    doc.setFontSize(7.5)
+    doc.text("ACCREDITED", pageWidth / 2, 39, { align: "center" })
+
+    // P.O. Box block (top-right)
     doc.setFont("times", "italic")
     doc.setFontSize(8)
-    doc.setTextColor(70, 70, 70)
-    const rightBlockX = pageWidth - marginRight - 14
-    doc.text("P.O Box M14", rightBlockX, 19)
-    doc.text("Accra Ghana", rightBlockX, 24)
+    doc.setTextColor(0, 0, 0)
+    const rightX = pageWidth - marginRight
+    doc.text("P.O. Box M54", rightX, 19, { align: "right" })
+    doc.text("Accra", rightX, 24, { align: "right" })
+    doc.text("Ghana", rightX, 29, { align: "right" })
 
+    // Green divider line
     doc.setDrawColor(44, 98, 22)
-    doc.setLineWidth(0.5)
-    doc.line(marginLeft, 38, pageWidth - marginRight, 38)
+    doc.setLineWidth(0.7)
+    doc.line(marginLeft, 43, pageWidth - marginRight, 43)
     doc.setLineWidth(0.2)
-    doc.setDrawColor(210, 210, 210)
+    doc.setDrawColor(200, 200, 200)
 
-    let y = 46
+    let y = 51
 
-    // Ref + Date
+    // Ref No + Date row
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
-    const refYear = new Date(lr.hr_approved_at || lr.created_at).getFullYear()
-    const refCode = leaveReferenceCode(String(lr.leave_type_key || "annual"))
-    const refNum = `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
+    const approvalDate = lr.hr_approved_at || lr.created_at
+    const refYear  = new Date(approvalDate).getFullYear()
+    const refCode  = leaveReferenceCode(leaveTypeKey)
+    const refNum   = `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
-    doc.text(`Date:  ${fmtDate(lr.hr_approved_at || lr.created_at)}`, pageWidth - marginRight - 42, y)
+    doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
     y += 5.5
     doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10
 
-    // Applicant block
-    const applicantFullName = (fmtName(ap) || "REQUESTING STAFF").toUpperCase()
-    const applicantStaffNo = String(ap?.employee_id || ap?.staff_number || "")
+    // ── Recipient block ──────────────────────────────────────────────
+    const applicantFullName = fmtName(ap).toUpperCase() || "REQUESTING STAFF"
+    const staffNo           = String(ap?.employee_id || ap?.staff_number || "")
     const applicantPosition = String(ap?.position || "STAFF").toUpperCase()
-    const applicantDept = String(ap?.departments?.name || "").toUpperCase()
+    const applicantDept     = String((ap?.departments as any)?.name || "").toUpperCase()
 
     doc.setFont("times", "bold")
     doc.setFontSize(9.5)
-    doc.text(
-      applicantStaffNo
-        ? `${applicantFullName}  (S/No.:  ${applicantStaffNo})`
-        : applicantFullName,
-      marginLeft,
-      y,
-    )
+    doc.text(staffNo ? `${applicantFullName}  (S/NO.:  ${staffNo})` : applicantFullName, marginLeft, y)
     y += 5.5
     doc.text(applicantPosition, marginLeft, y)
     y += 5.5
-    if (applicantDept) {
-      doc.text(applicantDept, marginLeft, y)
-      y += 5.5
-    }
+    if (applicantDept) { doc.text(applicantDept, marginLeft, y); y += 5.5 }
     y += 4
 
-    // THRO block
+    // ── THRO block ───────────────────────────────────────────────────
     if (hodProfile) {
       const hodName = fmtName(hodProfile).toUpperCase().trim() || "HOD"
-      const hodPos = String(hodProfile?.position || hodProfile?.role || "").toUpperCase()
+      const hodPos  = String((hodProfile as any)?.position || (hodProfile as any)?.role || "").toUpperCase()
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)
       doc.text("THRO:", marginLeft, y)
@@ -384,59 +560,116 @@ export async function GET(
       y += 10
     }
 
-    // RE: Subject
+    // ── Subject line ─────────────────────────────────────────────────
     doc.setFont("times", "bold")
     doc.setFontSize(9.5)
-    const reText = `RE:  ${subject}`
-    const reLines = doc.splitTextToSize(reText, contentWidth)
-    doc.text(reLines, marginLeft, y)
-    // Underline the RE subject
-    const reWidth = doc.getTextWidth(reText) > contentWidth ? contentWidth : doc.getTextWidth(reText)
+    doc.setTextColor(0, 0, 0)
+    const subjectLines = doc.splitTextToSize(subject, contentWidth)
+    doc.text(subjectLines, marginLeft, y)
+    // Underline each subject line
     doc.setDrawColor(0, 0, 0)
     doc.setLineWidth(0.3)
-    doc.line(marginLeft, y + 1.5, marginLeft + Math.min(reWidth, contentWidth), y + 1.5)
-    y += reLines.length * 5.5 + 8
+    let underlineY = y + 1.5
+    for (const line of subjectLines) {
+      const w = doc.getTextWidth(line)
+      doc.line(marginLeft, underlineY, marginLeft + Math.min(w, contentWidth), underlineY)
+      underlineY += 5.5
+    }
+    y += subjectLines.length * 5.5 + 8
 
-    // Body paragraphs
+    // ── Body paragraphs ──────────────────────────────────────────────
     doc.setFont("times", "normal")
     doc.setFontSize(9.5)
+    doc.setTextColor(0, 0, 0)
+
     for (const para of paragraphs) {
       const lines = doc.splitTextToSize(para, contentWidth)
       doc.text(lines, marginLeft, y)
       y += lines.length * 5.5 + 5
     }
 
-    y += 10
+    // ── Annual leave table ───────────────────────────────────────────
+    if (useTable) {
+      const entitlementLabel = tableTravellingDays > 0
+        ? `${tableEntitlement} plus ${tableTravellingDays} travelling day${tableTravellingDays !== 1 ? "s" : ""}`
+        : String(tableEntitlement || effectiveDays)
 
-    // Signature block
-    const sigMode = String(lr.hr_signature_mode || (hrSignatureData as any)?.signature_mode || "typed")
-    const sigText = String(lr.hr_signature_text || (hrSignatureData as any)?.signature_text || "")
+      const totalGranted = effectiveDays + tableTravellingDays
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: marginLeft, right: marginRight },
+        tableWidth: contentWidth,
+        styles: {
+          font: "times",
+          fontSize: 9,
+          textColor: [0, 0, 0],
+          lineColor: [0, 0, 0],
+          lineWidth: 0.3,
+          cellPadding: 2,
+        },
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: "bold", halign: "center" },
+        bodyStyles: { halign: "center" },
+        head: [["Number of Days\nEntitled", "Number of Days\nGranted", "From", "To", "Remarks"]],
+        body: [
+          [
+            entitlementLabel,
+            String(totalGranted || effectiveDays),
+            fmtFormalDate(effectiveStart),
+            fmtFormalDate(effectiveEnd),
+            "",
+          ],
+          [
+            { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold" } },
+          ],
+        ],
+      })
+
+      y = (doc as any).lastAutoTable.finalY + 8
+
+      // Resume duty line (bold date)
+      const resumeLabel  = "You are to resume duty on "
+      const resumeDate   = fmtFormalDate(returnDateIso)
+      const resumeWidth  = doc.getTextWidth(resumeLabel)
+      doc.setFont("times", "normal")
+      doc.text(resumeLabel, marginLeft, y)
+      doc.setFont("times", "bold")
+      doc.text(`${resumeDate}.`, marginLeft + resumeWidth, y)
+      y += 8
+    } else {
+      // For non-table types, resume duty is already in the paragraphs
+    }
+
+    // ── Closing line ─────────────────────────────────────────────────
+    doc.setFont("times", "normal")
+    doc.setFontSize(9.5)
+    const closingLines = doc.splitTextToSize(closingLine, contentWidth)
+    doc.text(closingLines, marginLeft, y)
+    y += closingLines.length * 5.5 + 12
+
+    // ── Signature block ───────────────────────────────────────────────
+    const sigMode   = String(lr.hr_signature_mode || (hrSignatureData as any)?.signature_mode || "typed")
+    const sigText   = String(lr.hr_signature_text   || (hrSignatureData as any)?.signature_text   || "")
     const sigDataUrl = String(lr.hr_signature_data_url || (hrSignatureData as any)?.signature_data_url || "")
-    const hrName = fmtName(hrApproverProfile || { first_name: (lr.hr_approver_name || "").split(" ")[0], last_name: (lr.hr_approver_name || "").split(" ").slice(1).join(" ") })
+    const hrName    = fmtName(hrApproverProfile || {
+      first_name: (lr.hr_approver_name || "").split(" ")[0],
+      last_name:  (lr.hr_approver_name || "").split(" ").slice(1).join(" "),
+    })
     const hrPosition = String((hrApproverProfile as any)?.position || "HR Officer")
 
-    if (sigMode === "draw" && sigDataUrl) {
+    if ((sigMode === "draw" || sigMode === "upload") && sigDataUrl) {
       try {
-        const base64 = sigDataUrl.replace(/^data:image\/\w+;base64,/, "")
-        doc.addImage(`data:image/png;base64,${base64}`, "PNG", marginLeft, y, 50, 18)
+        const b64 = sigDataUrl.replace(/^data:image\/\w+;base64,/, "")
+        doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
         y += 20
       } catch {
         doc.setFont("times", "italic")
+        doc.setTextColor(20, 20, 120)
         doc.text(sigText || hrName, marginLeft, y)
-        y += 7
-      }
-    } else if (sigMode === "upload" && sigDataUrl) {
-      try {
-        const base64 = sigDataUrl.replace(/^data:image\/\w+;base64,/, "")
-        doc.addImage(`data:image/png;base64,${base64}`, "PNG", marginLeft, y, 50, 18)
-        y += 20
-      } catch {
-        doc.setFont("times", "italic")
-        doc.text(sigText || hrName, marginLeft, y)
+        doc.setTextColor(0, 0, 0)
         y += 7
       }
     } else {
-      // Typed signature
       doc.setFont("times", "italic")
       doc.setFontSize(11)
       doc.setTextColor(20, 20, 120)
@@ -447,53 +680,56 @@ export async function GET(
 
     doc.setFont("times", "normal")
     doc.setFontSize(9.5)
+    doc.setTextColor(0, 0, 0)
     doc.text("_".repeat(35), marginLeft, y)
     y += 5.5
     doc.setFont("times", "bold")
-    doc.text(hrName.toUpperCase() || "HR OFFICER", marginLeft, y)
+    doc.text((hrName || "HR OFFICER").toUpperCase(), marginLeft, y)
     y += 5
     doc.setFont("times", "normal")
-    doc.text(hrPosition.toUpperCase() || "HUMAN RESOURCES", marginLeft, y)
+    doc.text((hrPosition || "HUMAN RESOURCES").toUpperCase(), marginLeft, y)
     y += 5
-    doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft, y)
+    doc.text("FOR: MANAGING DIRECTOR", marginLeft, y)
     y += 14
 
-    // CC block
+    // ── CC block ─────────────────────────────────────────────────────
     doc.setFont("times", "bold")
-    doc.setFontSize(9)
-    doc.text("CC:", marginLeft, y)
+    doc.setFontSize(8.5)
+    doc.text("cc:", marginLeft, y)
     doc.setFont("times", "normal")
-    const ccEntries: string[] = []
-    const draftCc = String(lr.memo_draft_cc || "").trim()
-    if (draftCc) {
-      for (const line of draftCc.split(/\r?\n/)) {
-        const trimmed = line.trim()
-        if (trimmed) ccEntries.push(trimmed)
-      }
-    } else {
-      if (hodProfile) {
-        ccEntries.push(`${fmtName(hodProfile).toUpperCase()} — ${String(hodProfile?.position || hodProfile?.role || "HOD").toUpperCase()}`)
-      }
-      ccEntries.push("ACCOUNTS MANAGER — QUALITY CONTROL COMPANY LIMITED")
-      ccEntries.push("HR LEAVE OFFICE — HUMAN RESOURCES DEPARTMENT")
-      ccEntries.push("FILE")
+    const ccRaw = String(lr.memo_draft_cc || "").trim()
+    const ccList: string[] = ccRaw
+      ? ccRaw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+      : [
+          "Managing Director",
+          "Deputy Director, HR (QCC)",
+          "Accounts Manager",
+          "Dep. Audit Manager",
+        ]
+    const ccIndent = marginLeft + 10
+    for (const cc of ccList) {
+      doc.text(cc, ccIndent, y)
+      y += 4.8
     }
+    y += 3
 
-    let ccX = marginLeft + 10
-    for (const cc of ccEntries) {
-      doc.text(cc, ccX, y)
-      y += 5
-    }
+    // Marks line (approval date)
+    doc.setFont("times", "italic")
+    doc.setFontSize(8)
+    const marksDate = fmtDate(approvalDate).replace(/\s/g, "")
+    doc.text(`Marks (${marksDate})`, marginLeft, y)
 
-    // Footer border
-    const pageHeight = doc.internal.pageSize.getHeight()
+    // ── Footer ────────────────────────────────────────────────────────
     doc.setDrawColor(44, 98, 22)
     doc.setLineWidth(0.5)
     doc.line(marginLeft, pageHeight - 18, pageWidth - marginRight, pageHeight - 18)
-    doc.setFont("times", "italic")
+    doc.setFont("times", "normal")
     doc.setFontSize(7.5)
-    doc.setTextColor(100, 100, 100)
-    doc.text("QUALITY CONTROL COMPANY LIMITED (COCOBOD) — Confidential HR Document", pageWidth / 2, pageHeight - 13, { align: "center" })
+    doc.setTextColor(80, 80, 80)
+    doc.text(
+      "Tel: +233-571-461-114  |  +233-571-461-113  |  Fax: GA-105-8378  |  Email: info@qccgh.com  |  www.qccgh.com",
+      pageWidth / 2, pageHeight - 12, { align: "center" }
+    )
 
     const pdfBytes = doc.output("arraybuffer")
 
