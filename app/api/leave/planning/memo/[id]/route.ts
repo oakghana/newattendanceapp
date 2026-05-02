@@ -442,8 +442,14 @@ export async function GET(
     const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
     const leaveLabel   = leaveTypeLabel(leaveTypeKey)
 
+    const rawDraftSubject = String(lr.memo_draft_subject || "").trim()
+    const rawDraftBody = String(lr.memo_draft_body || "").trim()
+    const looksLikeInterimWorkflowMemo = /leave request received|workflow review|current stage\s*:/i.test(`${rawDraftSubject}\n${rawDraftBody}`)
+    const safeDraftSubject = looksLikeInterimWorkflowMemo ? "" : rawDraftSubject
+    const safeDraftBody = looksLikeInterimWorkflowMemo ? "" : rawDraftBody
+
     // Subject (use memo_draft_subject override if present, else per-type heading)
-    const subject = getMemoSubject(leaveTypeKey, String(lr.leave_year_period || "2026/2027"), lr.memo_draft_subject)
+    const subject = getMemoSubject(leaveTypeKey, String(lr.leave_year_period || "2026/2027"), safeDraftSubject)
 
     // Body paragraphs
     const templateData = {
@@ -454,7 +460,7 @@ export async function GET(
       submitted_date: fmtFormalDate(lr.submitted_at || lr.created_at),
       return_to_work_date: fmtFormalDateWithWeekday(returnDateIso),
     }
-    const draftBody = renderMemoTemplate(String(lr.memo_draft_body || "").trim(), templateData)
+    const draftBody = renderMemoTemplate(safeDraftBody, templateData)
 
     let paragraphs: string[]
     let closingLine: string

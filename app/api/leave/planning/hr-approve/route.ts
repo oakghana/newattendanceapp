@@ -144,6 +144,13 @@ export async function POST(request: NextRequest) {
       .join(" ")
       .trim() || "HR Approver"
 
+    const { data: approverSignature } = await admin
+      .from("approval_signature_registry")
+      .select("signature_mode, signature_text, signature_data_url")
+      .eq("workflow_domain", "leave")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
     const now = new Date().toISOString()
     const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
     const effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
@@ -209,17 +216,21 @@ export async function POST(request: NextRequest) {
       : null
     const fallbackRejectionCc = rejectionTemplate?.cc_recipients ? String(rejectionTemplate.cc_recipients) : null
 
-    const resolvedSubject = memo_draft_subject
-      ? String(memo_draft_subject).trim()
-      : String((leaveRequest as any).memo_draft_subject || "").trim() || fallbackApprovalSubject
+    const providedSubject = memo_draft_subject ? String(memo_draft_subject).trim() : ""
+    const providedBody = memo_draft_body ? String(memo_draft_body).trim() : ""
+    const providedCc = memo_draft_cc ? String(memo_draft_cc).trim() : ""
 
-    const resolvedBody = memo_draft_body
-      ? String(memo_draft_body).trim()
-      : String((leaveRequest as any).memo_draft_body || "").trim() || fallbackApprovalBody
+    const resolvedSubject = providedSubject
+      || fallbackApprovalSubject
+      || String((leaveRequest as any).memo_draft_subject || "").trim()
 
-    const resolvedCc = memo_draft_cc
-      ? String(memo_draft_cc).trim()
-      : String((leaveRequest as any).memo_draft_cc || "").trim() || fallbackApprovalCc
+    const resolvedBody = providedBody
+      || fallbackApprovalBody
+      || String((leaveRequest as any).memo_draft_body || "").trim()
+
+    const resolvedCc = providedCc
+      || fallbackApprovalCc
+      || String((leaveRequest as any).memo_draft_cc || "").trim()
 
     const resolvedRejectSubject = memo_draft_subject
       ? String(memo_draft_subject).trim()
@@ -288,10 +299,10 @@ export async function POST(request: NextRequest) {
         memo_draft_cc: resolvedCc,
         memo_token: memoToken,
         memo_generated_at: now,
-        hr_signature_mode: hr_signature_mode || "typed",
-        hr_signature_text: hr_signature_text || null,
+        hr_signature_mode: hr_signature_mode || (approverSignature as any)?.signature_mode || "typed",
+        hr_signature_text: hr_signature_text || (approverSignature as any)?.signature_text || approverName,
         hr_signature_image_url: hr_signature_image_url || null,
-        hr_signature_data_url: hr_signature_data_url || null,
+        hr_signature_data_url: hr_signature_data_url || (approverSignature as any)?.signature_data_url || null,
         hr_signature_hologram_code: buildHologramCode("HR"),
         updated_at: now,
       })
