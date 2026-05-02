@@ -111,31 +111,7 @@ export async function GET(request: NextRequest) {
     const [approvedRes, outstandingRes] = await Promise.all([
       admin
         .from("leave_plan_requests")
-        .select(`
-          id,
-          user_id,
-          leave_type_key,
-          preferred_start_date,
-          preferred_end_date,
-          adjusted_start_date,
-          adjusted_end_date,
-          requested_days,
-          adjusted_days,
-          entitlement_days,
-          status,
-          submitted_at,
-          created_at,
-          adjusted_at,
-          is_archived,
-          user:user_profiles!leave_plan_requests_user_id_fkey (
-            id,
-            first_name,
-            last_name,
-            employee_id,
-            position,
-            departments(name, code)
-          )
-        `)
+        .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, requested_days, adjusted_days, entitlement_days, status, submitted_at, created_at, adjusted_at, is_archived")
         .eq("is_archived", false)
         .eq("status", "hr_approved")
         .order("created_at", { ascending: false }),
@@ -150,10 +126,54 @@ export async function GET(request: NextRequest) {
     if (approvedRes.error) throw approvedRes.error
     if (outstandingRes.error) throw outstandingRes.error
 
+    const approvedRowsRaw = approvedRes.data || []
+    const approvedUserIds = Array.from(new Set(approvedRowsRaw.map((row: any) => String(row?.user_id || "")).filter(Boolean)))
+
+    let profileRows: any[] = []
+    if (approvedUserIds.length > 0) {
+      const { data, error } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, position, department_id, assigned_location_id")
+        .in("id", approvedUserIds)
+      if (error) throw error
+      profileRows = data || []
+    }
+
+    const profileMap = new Map(profileRows.map((row: any) => [String(row.id), row]))
+
+    const departmentIds = Array.from(
+      new Set(profileRows.map((row: any) => String(row?.department_id || "")).filter(Boolean)),
+    )
+    const locationIds = Array.from(
+      new Set(profileRows.map((row: any) => String(row?.assigned_location_id || "")).filter(Boolean)),
+    )
+
+    let departmentLookup = new Map<string, any>()
+    if (departmentIds.length > 0) {
+      const { data, error } = await admin
+        .from("departments")
+        .select("id, name, code")
+        .in("id", departmentIds)
+      if (!error && data) {
+        departmentLookup = new Map(data.map((row: any) => [String(row.id), row]))
+      }
+    }
+
+    let locationLookup = new Map<string, any>()
+    if (locationIds.length > 0) {
+      const { data, error } = await admin
+        .from("geofence_locations")
+        .select("id, name, address")
+        .in("id", locationIds)
+      if (!error && data) {
+        locationLookup = new Map(data.map((row: any) => [String(row.id), row]))
+      }
+    }
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const approvedRows = (approvedRes.data || []).flatMap((row: any) => {
+    const approvedRows = approvedRowsRaw.flatMap((row: any) => {
       const effectiveStart = String(row?.adjusted_start_date || row?.preferred_start_date || "")
       const effectiveEnd = String(row?.adjusted_end_date || row?.preferred_end_date || "")
       const startDate = parseDateOnly(effectiveStart)
@@ -161,20 +181,24 @@ export async function GET(request: NextRequest) {
       if (!startDate || !endDate) return []
       if (!overlaps(startDate, endDate, start, end)) return []
 
+      const profileRow = profileMap.get(String(row?.user_id || ""))
+      const deptRow = departmentLookup.get(String(profileRow?.department_id || ""))
+      const locRow = locationLookup.get(String(profileRow?.assigned_location_id || ""))
+
       return [{
         id: String(row.id),
         user_id: String(row.user_id || ""),
-        staff_name: [row?.user?.first_name, row?.user?.last_name].filter(Boolean).join(" ") || row?.user?.employee_id || "Staff",
-        employee_id: row?.user?.employee_id || null,
-        rank: row?.user?.position || null,
+        staff_name: [profileRow?.first_name, profileRow?.last_name].filter(Boolean).join(" ") || profileRow?.employee_id || "Staff",
+        employee_id: profileRow?.employee_id || null,
+        rank: profileRow?.position || null,
         leave_type_key: String(row?.leave_type_key || "annual"),
         start_date: effectiveStart,
         end_date: effectiveEnd,
         days: Number(row?.adjusted_days || row?.requested_days || 0),
         submitted_at: row?.submitted_at || row?.created_at || null,
-        location_name: row?.user?.departments?.name || "Unassigned Location",
-        location_address: null,
-        department_name: row?.user?.departments?.name || null,
+        location_name: locRow?.name || deptRow?.name || "Unassigned Location",
+        location_address: locRow?.address || null,
+        department_name: deptRow?.name || null,
       }]
     })
 
