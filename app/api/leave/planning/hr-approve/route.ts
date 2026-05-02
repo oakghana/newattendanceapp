@@ -37,6 +37,23 @@ function getApprovalTemplateKey(leaveTypeKey: string) {
   return "annual_leave_approval"
 }
 
+function pickBestSignature(rows: any[]): any | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null
+  const active = rows.filter((row) => row?.is_active !== false)
+  const pool = active.length > 0 ? active : rows
+
+  const score = (row: any) => {
+    const mode = String(row?.signature_mode || "").toLowerCase()
+    const hasImage = (mode === "draw" || mode === "upload") && String(row?.signature_data_url || "").trim().length > 0
+    const hasTyped = mode === "typed" && String(row?.signature_text || "").trim().length > 0
+    const stage = String(row?.approval_stage || "").toLowerCase()
+    const stageBoost = stage === "hr_approver" ? 50 : stage === "director_hr" ? 40 : stage === "manager_hr" ? 30 : 0
+    return (hasImage ? 100 : hasTyped ? 10 : 0) + stageBoost
+  }
+
+  return [...pool].sort((a, b) => score(b) - score(a))[0] || null
+}
+
 async function fetchTemplate(admin: any, templateKey: string) {
   const { data } = await admin
     .from("leave_memo_templates")
@@ -144,12 +161,14 @@ export async function POST(request: NextRequest) {
       .join(" ")
       .trim() || "HR Approver"
 
-    const { data: approverSignature } = await admin
+    const { data: approverSignatureRows } = await admin
       .from("approval_signature_registry")
-      .select("signature_mode, signature_text, signature_data_url")
-      .eq("workflow_domain", "leave")
+      .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
+      .in("workflow_domain", ["leave", "loan"])
       .eq("user_id", user.id)
-      .maybeSingle()
+      .order("updated_at", { ascending: false })
+
+    const approverSignature = pickBestSignature(approverSignatureRows || [])
 
     const now = new Date().toISOString()
     const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")

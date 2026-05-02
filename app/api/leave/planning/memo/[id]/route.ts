@@ -96,6 +96,23 @@ function leaveReferenceCode(leaveTypeKey: string) {
   return map[String(leaveTypeKey || "").toLowerCase()] || "LV"
 }
 
+function pickBestSignature(rows: any[]): any | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null
+  const active = rows.filter((row) => row?.is_active !== false)
+  const pool = active.length > 0 ? active : rows
+
+  const score = (row: any) => {
+    const mode = String(row?.signature_mode || "").toLowerCase()
+    const hasImage = (mode === "draw" || mode === "upload") && String(row?.signature_data_url || "").trim().length > 0
+    const hasTyped = mode === "typed" && String(row?.signature_text || "").trim().length > 0
+    const stage = String(row?.approval_stage || "").toLowerCase()
+    const stageBoost = stage === "hr_approver" ? 50 : stage === "director_hr" ? 40 : stage === "manager_hr" ? 30 : 0
+    return (hasImage ? 100 : hasTyped ? 10 : 0) + stageBoost
+  }
+
+  return [...pool].sort((a, b) => score(b) - score(a))[0] || null
+}
+
 /** Returns the official subject heading per leave type (no "RE:" prefix). */
 function getMemoSubject(leaveTypeKey: string, leavePeriod: string, draftSubject?: string | null): string {
   if (draftSubject && draftSubject.trim()) return draftSubject.trim()
@@ -390,7 +407,7 @@ export async function GET(
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
     if (hrApproverId) {
-      const [{ data: hrProf }, { data: hrSig }] = await Promise.all([
+      const [{ data: hrProf }, { data: hrSigRows }] = await Promise.all([
         admin
           .from("user_profiles")
           .select("id, first_name, last_name, position, role")
@@ -398,13 +415,13 @@ export async function GET(
           .maybeSingle(),
         admin
           .from("approval_signature_registry")
-          .select("signature_mode, signature_text, signature_data_url")
-          .eq("workflow_domain", "leave")
+          .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
+          .in("workflow_domain", ["leave", "loan"])
           .eq("user_id", hrApproverId)
-          .maybeSingle(),
+          .order("updated_at", { ascending: false }),
       ])
       hrApproverProfile = hrProf
-      hrSignatureData = hrSig
+      hrSignatureData = pickBestSignature(hrSigRows || [])
     }
 
     // Load QCC logo
