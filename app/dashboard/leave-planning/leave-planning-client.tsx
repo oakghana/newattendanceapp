@@ -155,13 +155,40 @@ function fmtLongDate(val?: string | null) {
   }
 }
 
-function nextBusinessDate(val?: string | null) {
+function fmtFormalDate(val?: string | null) {
   if (!val) return "—"
+  try {
+    const d = new Date(val)
+    if (Number.isNaN(d.getTime())) return String(val)
+    const day = d.getDate()
+    const month = d.toLocaleDateString("en-GH", { month: "long" })
+    const year = d.getFullYear()
+    return `${day}${getOrdinalSuffix(day)} ${month}, ${year}`
+  } catch {
+    return String(val)
+  }
+}
+
+function fmtFormalDateWithWeekday(val?: string | null) {
+  if (!val) return "—"
+  try {
+    const d = new Date(val)
+    if (Number.isNaN(d.getTime())) return String(val)
+    const weekday = d.toLocaleDateString("en-GH", { weekday: "long" })
+    return `${weekday}, ${fmtFormalDate(val)}`
+  } catch {
+    return String(val)
+  }
+}
+
+function nextBusinessDateIso(val?: string | null) {
+  if (!val) return null
   const ret = new Date(val)
+  if (Number.isNaN(ret.getTime())) return null
   ret.setDate(ret.getDate() + 1)
   if (ret.getDay() === 6) ret.setDate(ret.getDate() + 2)
   if (ret.getDay() === 0) ret.setDate(ret.getDate() + 1)
-  return fmtLongDate(ret.toISOString().slice(0, 10))
+  return ret.toISOString().slice(0, 10)
 }
 
 function renderMemoDraftTemplate(template: string, data: Record<string, string>) {
@@ -176,6 +203,10 @@ function buildMemoTemplateData(req: any): Record<string, string> {
   const effectiveStart = req.adjusted_start_date || req.preferred_start_date
   const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
   const effectiveDays = String(req.adjusted_days || req.requested_days || 0)
+  const effectiveDaysNumber = Number(req.adjusted_days || req.requested_days || 0)
+  const approvedMonths = Number(req.approved_months || req.requested_months || Math.max(1, Math.round(effectiveDaysNumber / 30)))
+  const entitlementDays = Number(req.entitlement_days || 0)
+  const outstandingLeaveDays = Math.max(0, entitlementDays - effectiveDaysNumber)
   const holidayDays = Number(req.holiday_days_deducted || 0)
   const priorLeaveDays = Number(req.prior_leave_days_deducted || 0)
   const travellingDays = Number(req.travelling_days_added || 0)
@@ -193,15 +224,25 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     ? `This approval includes ${travellingDays} travelling day(s) as part of the approved leave arrangement.\n\n`
     : ""
 
+  const returnDateIso = nextBusinessDateIso(effectiveEnd)
+
   return {
     leave_type: leaveTypeLabelShort(leaveType),
     leave_type_full: leaveTypeLabelShort(leaveType).toUpperCase(),
     submitted_date: fmtLongDate(req.submitted_at || req.created_at),
+    submitted_date_formal: fmtFormalDate(req.submitted_at || req.created_at),
     leave_start_date: fmtLongDate(effectiveStart),
     leave_end_date: fmtLongDate(effectiveEnd),
+    leave_start_date_formal: fmtFormalDate(effectiveStart),
+    leave_end_date_formal: fmtFormalDate(effectiveEnd),
     approved_days: effectiveDays,
-    return_to_work_date: nextBusinessDate(effectiveEnd),
+    approved_months: String(approvedMonths),
+    approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
+    return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "—",
+    return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "—",
     leave_year_period: String(req.leave_year_period || "2026/2027"),
+    outstanding_leave_days: String(outstandingLeaveDays),
+    travelling_days_balance_sentence: travellingDays > 0 ? ` plus ${travellingDays} travelling day(s)` : "",
     staff_name: String(req.staff_name || ""),
     employee_id: String(req.employee_id || ""),
     department_name: String(req.department_name || ""),
@@ -235,10 +276,10 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_casual_approval",
       template_name: "Casual Leave Approval",
       description: "Based on the current QCC casual leave response style",
-      subject_template: "APPLICATION FOR A CASUAL LEAVE",
+      subject_template: "CASUAL LEAVE",
       body_template: [
-        "We acknowledge receipt of your letter dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has given approval for you to proceed on {{approved_days}} working day(s) casual leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
-        "You are expected to resume duty on {{return_to_work_date}}.",
+        "We acknowledge receipt of your letter dated {{submitted_date_formal}} in relation to the above-mentioned subject and wish to inform you that Management has given approval for you to proceed on {{approved_days}} working day(s) casual leave with effect from {{leave_start_date_formal}} to {{leave_end_date_formal}}.",
+        "You are expected to resume duty on {{return_to_work_date_formal}}.",
         "{{adjustment_paragraph}}{{travelling_paragraph}}You can count on our co-operation.",
       ].join("\n\n"),
       cc_recipients: commonCc,
@@ -249,12 +290,13 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       id: "builtin-part-leave-approval",
       template_key: "builtin_leave_part_leave_approval",
       template_name: "Part Leave Approval",
-      description: "Formal part leave approval wording for HR office use",
-      subject_template: "PART LEAVE",
+      description: "Official QCC part leave response style (formal letter wording)",
+      subject_template: "RE: APPLICATION FOR {{approved_days}} DAYS PART LEAVE",
       body_template: [
-        "We refer to your application dated {{submitted_date}} in respect of the above subject and wish to inform you that Management has approved your part leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
-        "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
-        "{{adjustment_paragraph}}{{travelling_paragraph}}Please make the necessary handing-over arrangements before proceeding on leave.",
+        "We acknowledge receipt of your letter dated {{submitted_date_formal}} in connection with the above-mentioned subject and wish to inform you that approval has been given for you to proceed on {{approved_days}} working days part leave with effect from {{leave_start_date_formal}} to {{leave_end_date_formal}}.",
+        "You are expected to resume duty on {{return_to_work_date_formal}}.",
+        "Your outstanding leave days for {{leave_year_period}} stands at {{outstanding_leave_days}} working day(s){{travelling_days_balance_sentence}}.",
+        "{{adjustment_paragraph}}",
         "You can count on our co-operation.",
       ].join("\n\n"),
       cc_recipients: commonCc,
@@ -282,14 +324,15 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       id: "builtin-leave-of-absence-approval",
       template_key: "builtin_leave_leave_of_absence_approval",
       template_name: "Leave of Absence Approval",
-      description: "Based on the current QCC leave of absence response style",
+      description: "Official QCC Leave of Absence approval wording (formal letter style)",
       subject_template: "LEAVE OF ABSENCE",
       body_template: [
-        "We acknowledge receipt of your application for leave of absence dated {{submitted_date}} on the above subject and wish to inform you that Management has approved your request for leave of absence with effect from {{leave_start_date}} to {{leave_end_date}}.",
+        "We acknowledge receipt of your letter dated {{submitted_date}} on the above subject and wish to inform you that Management has approved your request for {{approved_months_text}} Leave of Absence effective {{leave_start_date}}.",
+        "Leave Period: {{leave_start_date}} to {{leave_end_date}}.",
         "Please note that the period of leave of absence shall not count towards your length of service and placement upon resumption shall depend on the availability of vacancy at the time.",
         "You are advised to notify Management at least one (1) month prior to your resumption of duty for further action.",
         "By copy of this letter, the Accounts Manager is advised to take note and delete your name from the payroll till otherwise advised.",
-        "You can count on our co-operation.",
+        "{{adjustment_paragraph}}You can count on our co-operation.",
       ].join("\n\n"),
       cc_recipients: `${commonCc}\nAccounts Manager`,
       is_active: true,

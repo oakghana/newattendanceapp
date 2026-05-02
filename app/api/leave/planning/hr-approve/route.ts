@@ -31,6 +31,7 @@ function fmtDate(value?: string | null) {
 
 function getApprovalTemplateKey(leaveTypeKey: string) {
   const normalized = String(leaveTypeKey || "annual").toLowerCase()
+  if (normalized === "leave_of_absence") return "leave_of_absence_approval"
   if (normalized === "sick") return "sick_leave_approval"
   if (normalized === "no_pay") return "leave_of_absence"
   return "annual_leave_approval"
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
     const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
     const effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
     const effectiveDays = Number((leaveRequest as any).adjusted_days || (leaveRequest as any).requested_days || 0)
+    const approvedMonths = Number((leaveRequest as any).approved_months || Math.max(1, Math.round(effectiveDays / 30)))
     const returnDate = new Date(effectiveEnd)
     if (!Number.isNaN(returnDate.getTime())) {
       returnDate.setDate(returnDate.getDate() + 1)
@@ -176,6 +178,8 @@ export async function POST(request: NextRequest) {
       leave_start_date: fmtDate(effectiveStart),
       leave_end_date: fmtDate(effectiveEnd),
       approved_days: effectiveDays,
+      approved_months: approvedMonths,
+      approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
       submitted_date: fmtDate((leaveRequest as any).submitted_at || (leaveRequest as any).created_at || now),
       return_to_work_date: fmtDate(returnDate.toISOString()),
       travelling_days: Number((leaveRequest as any).travelling_days_added || 0),

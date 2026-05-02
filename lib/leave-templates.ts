@@ -56,8 +56,8 @@ Please ensure to provide the required medical documentation within the approved 
     key: "leave_of_absence",
     name: "Leave of Absence Approval",
     category: "leave_approval",
-    subject: "APPROVAL FOR LEAVE OF ABSENCE",
-    body: `We acknowledge receipt of your letter dated {{submitted_date}} on the above subject and wish to inform you that Management has approved of your request for {{approved_months}} months leave of absence effective {{leave_start_date}}.
+    subject: "LEAVE OF ABSENCE",
+    body: `We acknowledge receipt of your letter dated {{submitted_date}} on the above subject and wish to inform you that Management has approved your request for {{approved_months_text}} Leave of Absence effective {{leave_start_date}}.
 
 Leave Period: {{leave_start_date}} to {{leave_end_date}}
 
@@ -229,6 +229,7 @@ export const placeholderDescriptions: Record<string, string> = {
   "{{new_start_date}}": "New deferred leave start date",
   "{{new_end_date}}": "New deferred leave end date",
   "{{approved_months}}": "Number of months for leave of absence",
+  "{{approved_months_text}}": "Formatted months text for leave of absence (e.g., 24 (24) months)",
 }
 
 /**
