@@ -727,12 +727,6 @@ export async function GET(
     }
     y += 3
 
-    // Marks line (approval date)
-    doc.setFont("times", "italic")
-    doc.setFontSize(8)
-    const marksDate = fmtDate(approvalDate).replace(/\s/g, "")
-    doc.text(`Marks (${marksDate})`, marginLeft, y)
-
     // ── Footer ────────────────────────────────────────────────────────
     doc.setDrawColor(44, 98, 22)
     doc.setLineWidth(0.5)

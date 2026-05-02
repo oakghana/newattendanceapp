@@ -139,13 +139,22 @@ export function HrLeaveAnalyticsPanel() {
   const [range, setRange] = useState(getCurrentMonthRange)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const params = new URLSearchParams({ start: range.start, end: range.end })
       const res = await fetch(`/api/leave/analytics?${params}`, { cache: "no-store" })
-      if (res.ok) setData(await res.json())
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Failed to load leave analytics")
+      }
+      setData(json)
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Failed to load leave analytics")
+      setData(null)
     } finally {
       setLoading(false)
     }
@@ -255,7 +264,7 @@ export function HrLeaveAnalyticsPanel() {
                 {typeBreakdown.map((t: any) => (
                   <MiniBar key={t.leave_type_key}
                     label={leaveLabel(t.leave_type_key)}
-                    value={t.count}
+                    value={Number(t.total || 0)}
                     max={maxType}
                     color="bg-purple-500" />
                 ))}
@@ -272,9 +281,9 @@ export function HrLeaveAnalyticsPanel() {
               <CardContent className="space-y-2">
                 {locationRanking.length === 0 && <p className="text-xs text-slate-400 py-4 text-center">No data for period</p>}
                 {locationRanking.map((l: any) => (
-                  <MiniBar key={l.location_name}
-                    label={l.location_name || "Unknown"}
-                    value={l.count}
+                  <MiniBar key={l.name || "Unknown"}
+                    label={l.name || "Unknown"}
+                    value={Number(l.total || 0)}
                     max={maxLoc}
                     color="bg-emerald-500" />
                 ))}
@@ -390,6 +399,12 @@ export function HrLeaveAnalyticsPanel() {
             </div>
           )}
         </>
+      )}
+
+      {!loading && loadError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          {loadError}
+        </div>
       )}
     </div>
   )

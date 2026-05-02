@@ -861,6 +861,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrOfficeSearch, setHrOfficeSearch] = useState("")
   const [hrOfficeStatusFilter, setHrOfficeStatusFilter] = useState("all")
   const [hrOfficeSortBy, setHrOfficeSortBy] = useState("priority")
+  const [hrOfficeTab, setHrOfficeTab] = useState("operations")
   const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
   const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
@@ -1057,6 +1058,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
   useEffect(() => {
     if (!canViewLeaveAnalytics) return
+    if (activeTab !== "hr-office") return
+    if (hrOfficeTab !== "analytics") return
 
     let cancelled = false
     const loadAnalytics = async () => {
@@ -1087,7 +1090,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return () => {
       cancelled = true
     }
-  }, [analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, toast])
+  }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
 
   // ── Derived lists ────────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
@@ -1904,7 +1907,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 </Select>
               </div>
             </div>
-            <Tabs defaultValue="operations" className="space-y-4">
+            <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
               <TabsList className={`grid h-auto w-full ${canViewLeaveAnalytics ? "grid-cols-2" : "grid-cols-1"} rounded-xl border border-slate-200 bg-slate-50 p-1.5`}>
                 <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Operations</TabsTrigger>
                 {canViewLeaveAnalytics && (
