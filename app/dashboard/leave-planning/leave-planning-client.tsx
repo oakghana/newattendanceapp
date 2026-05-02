@@ -90,6 +90,14 @@ interface HrTemplateOption {
   category?: string | null
 }
 
+interface RegistrySignature {
+  workflow_domain: string
+  approval_stage: string
+  signature_mode: SignatureMode
+  signature_text: string | null
+  signature_data_url: string | null
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 type SignatureMode = "typed" | "upload" | "draw"
@@ -143,6 +151,18 @@ function leaveTypeLabelShort(key: string) {
 
 function toIsoDate(value: Date) {
   return value.toISOString().slice(0, 10)
+}
+
+function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
+  const leaveSignatures = signatures.filter((signature) => signature.workflow_domain === "leave")
+  const stagePriority = ["hr_approver", "director_hr", "manager_hr"]
+
+  for (const stage of stagePriority) {
+    const match = leaveSignatures.find((signature) => signature.approval_stage === stage)
+    if (match) return match
+  }
+
+  return leaveSignatures[0] || null
 }
 
 // ─── Corporate Memo Template Builder ────────────────────────────────────────
@@ -916,6 +936,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
   const [hrSigDataUrl, setHrSigDataUrl] = useState<string | null>(null)
+  const [hrSignatureRegistryLoading, setHrSignatureRegistryLoading] = useState(false)
+  const [hrSignatureRegistrySaving, setHrSignatureRegistrySaving] = useState(false)
   const [hrMemoSubject, setHrMemoSubject] = useState<Record<string, string>>({})
   const [hrMemoBody, setHrMemoBody] = useState<Record<string, string>>({})
   const [hrMemoCc, setHrMemoCc] = useState<Record<string, string>>({})
@@ -1028,6 +1050,87 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     }
   }, [])
 
+  const loadHrSignatureRegistry = useCallback(async () => {
+    if (!isHrApprover && !isAdmin) return
+
+    setHrSignatureRegistryLoading(true)
+    try {
+      const res = await fetch("/api/workflow/registry?domains=leave", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load saved HR signature")
+
+      const savedSignature = pickSavedLeaveSignature(
+        Array.isArray(json.signatures) ? (json.signatures as RegistrySignature[]) : [],
+      )
+
+      if (savedSignature) {
+        setHrSigMode(savedSignature.signature_mode)
+        setHrSigTyped(savedSignature.signature_text || "")
+        setHrSigDataUrl(savedSignature.signature_data_url || null)
+      }
+    } catch (e) {
+      toast({
+        title: "Saved signature unavailable",
+        description: e instanceof Error ? e.message : "Failed to load saved HR signature",
+        variant: "destructive",
+      })
+    } finally {
+      setHrSignatureRegistryLoading(false)
+    }
+  }, [isAdmin, isHrApprover, toast])
+
+  const saveHrSignatureRegistry = useCallback(async () => {
+    const trimmedSignature = hrSigTyped.trim()
+    const hasSignature = hrSigMode === "typed" ? trimmedSignature.length > 0 : Boolean(hrSigDataUrl)
+
+    if (!hasSignature) {
+      toast({
+        title: "Signature required",
+        description: "Enter, draw, or upload a signature before saving it for future leave approvals.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setHrSignatureRegistrySaving(true)
+    try {
+      const res = await fetch("/api/workflow/registry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "upsert_signature",
+          workflow_domain: "leave",
+          approval_stage: "hr_approver",
+          signature_mode: hrSigMode,
+          signature_text: hrSigMode === "typed" ? trimmedSignature : null,
+          signature_data_url: hrSigMode !== "typed" ? hrSigDataUrl : null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to save HR signature")
+
+      toast({
+        title: "Signature saved",
+        description: "Your leave approval signature will keep applying until you replace it.",
+      })
+      await loadHrSignatureRegistry()
+    } catch (e) {
+      toast({
+        title: "Signature save failed",
+        description: e instanceof Error ? e.message : "Failed to save HR signature",
+        variant: "destructive",
+      })
+    } finally {
+      setHrSignatureRegistrySaving(false)
+    }
+  }, [hrSigDataUrl, hrSigMode, hrSigTyped, loadHrSignatureRegistry, toast])
+
+  const clearHrSignatureSelection = useCallback(() => {
+    setHrSigMode("typed")
+    setHrSigTyped("")
+    setHrSigDataUrl(null)
+  }, [])
+
   useEffect(() => {
     // Staff requests should default to typed signature using their profile name.
     if (canSelfApply) {
@@ -1043,6 +1146,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     void loadPolicy()
     void loadTemplateOptions()
   }, [loadData, loadPolicy, loadTemplateOptions])
+
+  useEffect(() => {
+    if (!isHrApprover && !isAdmin) return
+    void loadHrSignatureRegistry()
+  }, [isAdmin, isHrApprover, loadHrSignatureRegistry])
 
   useEffect(() => {
     setHrOfficePage(1)
@@ -2344,6 +2452,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     <p className="text-xs font-semibold text-green-800 uppercase tracking-wide mb-3">
                       Your HR Signature (applied to all approved memos)
                     </p>
+                    <p className="mb-3 text-xs text-green-800/80">
+                      Save it once here and the leave module will reuse it until you replace it.
+                    </p>
                     <div className="flex gap-2 mb-2 flex-wrap">
                       {(["typed", "draw", "upload"] as SignatureMode[]).map((m) => (
                         <Button key={m} size="sm"
@@ -2374,6 +2485,34 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                         className="bg-white"
                       />
                     )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-green-700 hover:bg-green-800 text-white"
+                        disabled={hrSignatureRegistrySaving || hrSignatureRegistryLoading}
+                        onClick={() => void saveHrSignatureRegistry()}
+                      >
+                        {hrSignatureRegistrySaving ? "Saving..." : "Save Signature"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-green-300 bg-white"
+                        disabled={hrSignatureRegistryLoading || hrSignatureRegistrySaving}
+                        onClick={() => void loadHrSignatureRegistry()}
+                      >
+                        {hrSignatureRegistryLoading ? "Loading..." : "Reload Saved"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-green-900 hover:bg-green-100"
+                        disabled={hrSignatureRegistrySaving}
+                        onClick={clearHrSignatureSelection}
+                      >
+                        Clear Current
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
 
