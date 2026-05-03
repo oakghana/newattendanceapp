@@ -50,13 +50,14 @@ function fmtDate(value?: string | null) {
 
 const MEMO_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
 
-function applySignatureSideWatermark(doc: jsPDF, pageHeight: number, marginLeft: number) {
+function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: number) {
+  if (sigY <= 0) return
   const targetPage = doc.getNumberOfPages()
   doc.setPage(targetPage)
-  doc.setTextColor(212, 230, 246)
+  doc.setTextColor(200, 200, 200)
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(16)
-  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 6, pageHeight - 72, { angle: -22 })
+  doc.setFontSize(9)
+  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 15, { angle: -15 })
 }
 
 async function resolveThroRecipient(admin: any, loan: any, applicantId: string) {
@@ -442,8 +443,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
 
     const sigRecord = directorSignature as any
+    let sigImgY = -1
     if (sigRecord?.signature_data_url) {
       try {
+        sigImgY = y
         doc.addImage(sigRecord.signature_data_url, "PNG", marginLeft, y, 50, 18)
         y += 20
       } catch {
@@ -510,7 +513,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     })
     y += (ccList.length + 1) * 4.5 + 4
 
-    applySignatureSideWatermark(doc, pageHeight, marginLeft)
+    applySignatureSideWatermark(doc, sigImgY, marginLeft)
 
     const pdfBytes = Buffer.from(doc.output("arraybuffer"))
 

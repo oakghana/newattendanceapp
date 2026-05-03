@@ -98,13 +98,14 @@ function leaveReferenceCode(leaveTypeKey: string) {
 
 const MEMO_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
 
-function applySignatureSideWatermark(doc: jsPDF, pageWidth: number, pageHeight: number, marginLeft: number) {
+function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: number) {
+  if (sigY <= 0) return
   const targetPage = doc.getNumberOfPages()
   doc.setPage(targetPage)
-  doc.setTextColor(212, 230, 246)
+  doc.setTextColor(200, 200, 200)
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(16)
-  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 6, pageHeight - 72, { angle: -22 })
+  doc.setFontSize(9)
+  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 15, { angle: -15 })
 }
 
 function pickBestSignature(rows: any[]): any | null {
@@ -720,9 +721,11 @@ export async function GET(
     })
     const hrPosition = String((hrApproverProfile as any)?.position || "HR Officer")
 
+    let sigImgY = -1
     if (sigMode !== "typed" && sigDataUrl) {
       try {
         const b64 = sigDataUrl.replace(/^data:image\/\w+;base64,/, "")
+        sigImgY = y
         doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
         y += 20
       } catch {
@@ -788,7 +791,7 @@ export async function GET(
       pageWidth / 2, pageHeight - 12, { align: "center" }
     )
 
-    applySignatureSideWatermark(doc, pageWidth, pageHeight, marginLeft)
+    applySignatureSideWatermark(doc, sigImgY, marginLeft)
 
     const pdfBytes = doc.output("arraybuffer")
 

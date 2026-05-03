@@ -1826,10 +1826,10 @@ export default function LoanAppPage() {
         const applySignatureSideWatermark = () => {
           const targetPage = doc.getNumberOfPages()
           doc.setPage(targetPage)
-          doc.setTextColor(212, 230, 246)
+          doc.setTextColor(200, 200, 200)
           doc.setFont("helvetica", "bold")
-          doc.setFontSize(16)
-          doc.text(watermarkText, marginLeft + 6, pageHeight - 72, { angle: -22 })
+          doc.setFontSize(9)
+          doc.text(watermarkText, marginLeft + 6, pageHeight - 72, { angle: -15 })
         }
 
         const addPageFrame = () => {
