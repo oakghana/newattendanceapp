@@ -1816,11 +1816,27 @@ export default function LoanAppPage() {
         const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
         const pageWidth = doc.internal.pageSize.getWidth()
         const pageHeight = doc.internal.pageSize.getHeight()
+        const watermarkText = "QCC-LOANLEAVE-APP"
         const marginLeft = 28
         const marginRight = 25
         const topMargin = 18
         const usableWidth = pageWidth - marginLeft - marginRight
         const logoDataUrl = await loadImageAsDataUrl(`${window.location.origin}/images/qcc-logo.png`)
+
+        const applyWatermarkToAllPages = () => {
+          const pageCount = doc.getNumberOfPages()
+          for (let page = 1; page <= pageCount; page += 1) {
+            doc.setPage(page)
+            doc.setTextColor(185, 216, 244)
+            doc.setFont("helvetica", "bold")
+            doc.setFontSize(23)
+            for (let x = -40; x < pageWidth + 120; x += 82) {
+              for (let y = 30; y < pageHeight + 55; y += 52) {
+                doc.text(watermarkText, x, y, { angle: -28 })
+              }
+            }
+          }
+        }
 
         const addPageFrame = () => {
           doc.setDrawColor(210, 210, 210)
@@ -1912,10 +1928,7 @@ export default function LoanAppPage() {
           y += 4.9
         }
 
-        doc.setFont("times", "bold")
-        doc.setFontSize(28)
-        doc.setTextColor(235, 235, 235)
-        doc.text("Loan App", pageWidth / 2 - 25, pageHeight / 2 + 10, { angle: -28 })
+        applyWatermarkToAllPages()
 
         doc.save(`${row.request_number || "memo"}-qcc-loan-memo.pdf`)
       }

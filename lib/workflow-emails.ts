@@ -18,6 +18,18 @@ const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").r
 // ─── colour palette shared by all templates ─────────────────────────────────
 const GREEN = "#2c6216"
 const LIGHT_GREEN = "#f0f7ec"
+const WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
+
+function watermarkLayer(): string {
+  const line = Array.from({ length: 3 }).map(() => WATERMARK_TEXT).join("   ")
+  return `
+    <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;">
+      <div style="position:absolute;left:-10%;top:12%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:44%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:76%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+    </div>
+  `
+}
 
 function baseLayout(title: string, body: string): string {
   return `
@@ -26,8 +38,11 @@ function baseLayout(title: string, body: string): string {
     <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">${title}</h2>
     <p style="margin:3px 0 0;color:#cde8ba;font-size:12px;">Quality Control Company Ltd. (COCOBOD) — HR System</p>
   </div>
-  <div style="padding:24px 28px;background:${LIGHT_GREEN};">
-    ${body}
+  <div style="padding:24px 28px;background:${LIGHT_GREEN};position:relative;">
+    ${watermarkLayer()}
+    <div style="position:relative;z-index:2;">
+      ${body}
+    </div>
   </div>
   <div style="padding:12px 28px;background:#f8f8f8;border-top:1px solid #e2e8f0;">
     <p style="margin:0;color:#888;font-size:11px;">This is an automated notification from the QCC HR &amp; Loans System. Do not reply to this email.<br/>If you believe this email was sent in error, please contact your HR department.</p>

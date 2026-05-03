@@ -18,6 +18,32 @@ interface EmailTemplate {
   text: string
 }
 
+const EMAIL_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
+
+function buildEmailWatermarkLayer(): string {
+  const line = Array.from({ length: 3 }).map(() => EMAIL_WATERMARK_TEXT).join("   ")
+  return `
+    <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;">
+      <div style="position:absolute;left:-10%;top:12%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:44%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:76%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+    </div>
+  `
+}
+
+function wrapEmailWithWatermark(content: string): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;">
+      <div style="position: relative; background: #f0f7ec; padding: 20px 22px;">
+        ${buildEmailWatermarkLayer()}
+        <div style="position: relative; z-index: 2;">
+          ${content}
+        </div>
+      </div>
+    </div>
+  `
+}
+
 class EmailService {
   private transporter: nodemailer.Transporter | null = null
   private isConfigured = false
@@ -212,8 +238,7 @@ class EmailService {
   static templates = {
     passwordReset: {
       subject: "QCC Attendance - Password Reset Request",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      html: wrapEmailWithWatermark(`
           <h2 style="color: #d97706;">Password Reset Request</h2>
           <p>Hello {{firstName}},</p>
           <p>You have requested to reset your password for your QCC Attendance account.</p>
@@ -222,14 +247,12 @@ class EmailService {
           <p>If you did not request this password reset, please contact your administrator.</p>
           <hr style="margin: 20px 0;">
           <p style="color: #666; font-size: 12px;">This is an automated message from QCC Attendance System.</p>
-        </div>
-      `,
+      `),
       text: "Hello {{firstName}}, You have requested to reset your password. Your temporary password is: {{tempPassword}}. Please log in and change your password immediately.",
     },
     attendanceReminder: {
       subject: "QCC Attendance - Daily Check-in Reminder",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      html: wrapEmailWithWatermark(`
           <h2 style="color: #d97706;">Daily Check-in Reminder</h2>
           <p>Hello {{firstName}},</p>
           <p>This is a friendly reminder to check in for your shift today.</p>
@@ -238,14 +261,12 @@ class EmailService {
           <p>Please ensure you check in on time to maintain accurate attendance records.</p>
           <hr style="margin: 20px 0;">
           <p style="color: #666; font-size: 12px;">This is an automated reminder from QCC Attendance System.</p>
-        </div>
-      `,
+      `),
       text: "Hello {{firstName}}, This is a reminder to check in for your shift today at {{scheduledTime}} at {{location}}.",
     },
     weeklyReport: {
       subject: "QCC Attendance - Weekly Report for {{weekOf}}",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      html: wrapEmailWithWatermark(`
           <h2 style="color: #d97706;">Weekly Attendance Report</h2>
           <p>Hello {{firstName}},</p>
           <p>Here's your attendance summary for the week of {{weekOf}}:</p>
@@ -258,8 +279,7 @@ class EmailService {
           <p>Keep up the great work!</p>
           <hr style="margin: 20px 0;">
           <p style="color: #666; font-size: 12px;">This is an automated report from QCC Attendance System.</p>
-        </div>
-      `,
+      `),
       text: "Weekly Attendance Report for {{weekOf}}: Total Hours: {{totalHours}}, Days Present: {{daysPresent}}, Days Absent: {{daysAbsent}}, Late Check-ins: {{lateCheckins}}",
     },
   }
@@ -288,8 +308,7 @@ export async function sendEmergencyCheckoutNotification(payload: {
     }
 
     const subject = `Emergency Check-out: ${payload.userName} (${payload.employeeId})`
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    const html = wrapEmailWithWatermark(`
         <h2 style="color: #dc2626">Emergency Check-out Notification</h2>
         <p><strong>Employee:</strong> ${payload.userName} (${payload.employeeId})</p>
         <p><strong>Department:</strong> ${payload.department}</p>
@@ -300,8 +319,7 @@ export async function sendEmergencyCheckoutNotification(payload: {
         <p><strong>Reason:</strong> ${payload.emergencyReason}</p>
         <hr>
         <p style="color:#666; font-size:12px">This is an automated notification from QCC Attendance System.</p>
-      </div>
-    `
+    `)
 
     const text = `Emergency Check-out by ${payload.userName} (${payload.employeeId})\nDepartment: ${payload.department}\nLocation: ${payload.location}\nCheck-in: ${payload.checkInTime}\nCheck-out: ${payload.checkOutTime}\nWork Hours: ${payload.workHours}\nReason: ${payload.emergencyReason}`
 

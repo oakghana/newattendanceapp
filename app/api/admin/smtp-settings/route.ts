@@ -12,6 +12,32 @@ type SmtpSettingsShape = {
   enabled: boolean
 }
 
+const SMTP_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
+
+function buildSmtpWatermarkLayer(): string {
+  const line = Array.from({ length: 3 }).map(() => SMTP_WATERMARK_TEXT).join("   ")
+  return `
+    <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;">
+      <div style="position:absolute;left:-10%;top:12%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:44%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:76%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+    </div>
+  `
+}
+
+function wrapSmtpTestEmail(content: string): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;">
+      <div style="position: relative; background: #f0f7ec; padding: 20px 22px;">
+        ${buildSmtpWatermarkLayer()}
+        <div style="position: relative; z-index: 2;">
+          ${content}
+        </div>
+      </div>
+    </div>
+  `
+}
+
 function boolFromUnknown(value: unknown, fallback = false): boolean {
   if (typeof value === "boolean") return value
   if (typeof value === "string") return value.toLowerCase() === "true"
@@ -223,7 +249,7 @@ export async function POST(request: NextRequest) {
       recipients.map((to) =>
         emailService.sendEmail(to, {
           subject: "QCC SMTP Test Email",
-          html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;"><h2 style="color:#2c6216;">SMTP Test Successful</h2><p>This is a test email from QCC Electronic Attendance.</p><p><strong>Timestamp:</strong> ${now}</p><p>If you received this message, your SMTP setup is working.</p></div>`,
+          html: wrapSmtpTestEmail(`<h2 style="color:#2c6216;">SMTP Test Successful</h2><p>This is a test email from QCC Electronic Attendance.</p><p><strong>Timestamp:</strong> ${now}</p><p>If you received this message, your SMTP setup is working.</p>`),
           text: `SMTP test successful. Timestamp: ${now}. If you received this message, your SMTP setup is working.`,
         }),
       ),

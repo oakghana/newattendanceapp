@@ -12,7 +12,7 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawingRef = useRef(false)
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
-  const [hologram] = useState("QCC-LOAN-APP")
+  const [hologram] = useState("QCC-LOANLEAVE-APP")
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -141,12 +141,12 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
 
 function drawHologramOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, hologram: string) {
   ctx.save()
-  ctx.globalAlpha = 0.08
+  ctx.globalAlpha = 0.14
   ctx.fillStyle = "#0ea5e9"
   ctx.font = "bold 16px monospace"
   ctx.rotate((-12 * Math.PI) / 180)
-  for (let x = -width; x < width * 1.5; x += 170) {
-    for (let y = 0; y < height * 2; y += 60) {
+  for (let x = -width; x < width * 1.7; x += 145) {
+    for (let y = -20; y < height * 2; y += 48) {
       ctx.fillText(hologram, x, y)
     }
   }

@@ -48,6 +48,24 @@ function fmtDate(value?: string | null) {
   return date.toISOString().slice(0, 10)
 }
 
+const MEMO_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
+
+function applyWatermarkToAllPages(doc: jsPDF, pageWidth: number, pageHeight: number) {
+  const pageCount = doc.getNumberOfPages()
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page)
+    doc.setTextColor(185, 216, 244)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(23)
+
+    for (let x = -40; x < pageWidth + 120; x += 82) {
+      for (let y = 30; y < pageHeight + 55; y += 52) {
+        doc.text(MEMO_WATERMARK_TEXT, x, y, { angle: -28 })
+      }
+    }
+  }
+}
+
 async function resolveThroRecipient(admin: any, loan: any, applicantId: string) {
   let reviewerId = loan.hod_reviewer_id ? String(loan.hod_reviewer_id) : ""
 
@@ -498,6 +516,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
     })
     y += (ccList.length + 1) * 4.5 + 4
+
+    applyWatermarkToAllPages(doc, pageWidth, pageHeight)
 
     const pdfBytes = Buffer.from(doc.output("arraybuffer"))
 

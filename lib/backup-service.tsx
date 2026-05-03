@@ -19,6 +19,32 @@ interface BackupResult {
   error?: string
 }
 
+const BACKUP_EMAIL_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
+
+function buildBackupWatermarkLayer(): string {
+  const line = Array.from({ length: 3 }).map(() => BACKUP_EMAIL_WATERMARK_TEXT).join("   ")
+  return `
+    <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;">
+      <div style="position:absolute;left:-10%;top:12%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:44%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+      <div style="position:absolute;left:-10%;top:76%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
+    </div>
+  `
+}
+
+function wrapBackupEmail(content: string): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;">
+      <div style="position: relative; background: #f0f7ec; padding: 20px 22px;">
+        ${buildBackupWatermarkLayer()}
+        <div style="position: relative; z-index: 2;">
+          ${content}
+        </div>
+      </div>
+    </div>
+  `
+}
+
 class BackupService {
   private static instance: BackupService
   private isRunning = false
@@ -237,8 +263,7 @@ class BackupService {
   private async notifyBackupCompletion(backupId: string, metadata: any, adminEmails: string[]) {
     const template = {
       subject: "QCC Attendance - Backup Completed Successfully",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      html: wrapBackupEmail(`
           <h2 style="color: #d97706;">System Backup Completed</h2>
           <p>A scheduled backup has been completed successfully.</p>
           <h3>Backup Details:</h3>
@@ -254,8 +279,7 @@ class BackupService {
           </ul>
           <hr style="margin: 20px 0;">
           <p style="color: #666; font-size: 12px;">This is an automated notification from QCC Attendance System.</p>
-        </div>
-      `,
+      `),
       text: "System backup completed successfully. Backup ID: {{backupId}}, Size: {{sizeKB}} KB, Tables: {{tableCount}}",
     }
 

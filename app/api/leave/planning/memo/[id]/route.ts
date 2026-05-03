@@ -96,6 +96,24 @@ function leaveReferenceCode(leaveTypeKey: string) {
   return map[String(leaveTypeKey || "").toLowerCase()] || "LV"
 }
 
+const MEMO_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
+
+function applyWatermarkToAllPages(doc: jsPDF, pageWidth: number, pageHeight: number) {
+  const pageCount = doc.getNumberOfPages()
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page)
+    doc.setTextColor(185, 216, 244)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(23)
+
+    for (let x = -40; x < pageWidth + 120; x += 82) {
+      for (let y = 30; y < pageHeight + 55; y += 52) {
+        doc.text(MEMO_WATERMARK_TEXT, x, y, { angle: -28 })
+      }
+    }
+  }
+}
+
 function pickBestSignature(rows: any[]): any | null {
   if (!Array.isArray(rows) || rows.length === 0) return null
   const active = rows.filter((row) => row?.is_active !== false)
@@ -776,6 +794,8 @@ export async function GET(
       "Tel: +233-571-461-114  |  +233-571-461-113  |  Fax: GA-105-8378  |  Email: info@qccgh.com  |  www.qccgh.com",
       pageWidth / 2, pageHeight - 12, { align: "center" }
     )
+
+    applyWatermarkToAllPages(doc, pageWidth, pageHeight)
 
     const pdfBytes = doc.output("arraybuffer")
 
