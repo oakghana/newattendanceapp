@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import { DEFAULT_LEAVE_TYPES, getLeaveYearPeriods } from "@/lib/leave-policy"
 import { isHrDepartment } from "@/lib/leave-planning"
 
@@ -132,9 +132,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { action } = body
 
-    // Use admin client for writes to bypass potential RLS/grant issues on leave_policy_catalog
-    const adminSupabase = await createAdminClient()
-
     if (action === "upsert_leave_type") {
       const { leaveYearPeriod, leaveTypeKey, leaveTypeLabel, entitlementDays, isEnabled, sortOrder } = body
 
@@ -142,7 +139,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Missing required leave type policy fields." }, { status: 400 })
       }
 
-      const { error } = await adminSupabase
+      const { error } = await supabase
         .from("leave_policy_catalog")
         .upsert({
           leave_year_period: leaveYearPeriod,
@@ -186,7 +183,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const { error: resetError } = await adminSupabase
+      const { error: resetError } = await supabase
         .from("leave_policy_catalog")
         .update({ is_active_period: false, updated_at: new Date().toISOString() })
         .neq("leave_year_period", "")
@@ -196,7 +193,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: resetError.message || "Failed to reset active period" }, { status: 500 })
       }
 
-      const { error: activateError } = await adminSupabase
+      const { error: activateError } = await supabase
         .from("leave_policy_catalog")
         .update({ is_active_period: true, updated_at: new Date().toISOString() })
         .eq("leave_year_period", leaveYearPeriod)
