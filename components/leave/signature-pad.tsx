@@ -141,14 +141,11 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
 
 function drawHologramOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, hologram: string) {
   ctx.save()
-  ctx.globalAlpha = 0.14
+  ctx.globalAlpha = 0.07
   ctx.fillStyle = "#0ea5e9"
-  ctx.font = "bold 16px monospace"
-  ctx.rotate((-12 * Math.PI) / 180)
-  for (let x = -width; x < width * 1.7; x += 145) {
-    for (let y = -20; y < height * 2; y += 48) {
-      ctx.fillText(hologram, x, y)
-    }
-  }
+  ctx.font = "bold 14px monospace"
+  ctx.translate(width * 0.62, height * 0.72)
+  ctx.rotate((-18 * Math.PI) / 180)
+  ctx.fillText(hologram, 0, 0)
   ctx.restore()
 }

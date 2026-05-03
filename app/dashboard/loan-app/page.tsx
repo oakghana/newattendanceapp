@@ -1823,19 +1823,13 @@ export default function LoanAppPage() {
         const usableWidth = pageWidth - marginLeft - marginRight
         const logoDataUrl = await loadImageAsDataUrl(`${window.location.origin}/images/qcc-logo.png`)
 
-        const applyWatermarkToAllPages = () => {
-          const pageCount = doc.getNumberOfPages()
-          for (let page = 1; page <= pageCount; page += 1) {
-            doc.setPage(page)
-            doc.setTextColor(185, 216, 244)
-            doc.setFont("helvetica", "bold")
-            doc.setFontSize(23)
-            for (let x = -40; x < pageWidth + 120; x += 82) {
-              for (let y = 30; y < pageHeight + 55; y += 52) {
-                doc.text(watermarkText, x, y, { angle: -28 })
-              }
-            }
-          }
+        const applySignatureSideWatermark = () => {
+          const targetPage = doc.getNumberOfPages()
+          doc.setPage(targetPage)
+          doc.setTextColor(212, 230, 246)
+          doc.setFont("helvetica", "bold")
+          doc.setFontSize(16)
+          doc.text(watermarkText, marginLeft + 6, pageHeight - 72, { angle: -22 })
         }
 
         const addPageFrame = () => {
@@ -1928,7 +1922,7 @@ export default function LoanAppPage() {
           y += 4.9
         }
 
-        applyWatermarkToAllPages()
+        applySignatureSideWatermark()
 
         doc.save(`${row.request_number || "memo"}-qcc-loan-memo.pdf`)
       }
