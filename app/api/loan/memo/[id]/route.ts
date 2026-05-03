@@ -56,8 +56,8 @@ function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: numbe
   doc.setPage(targetPage)
   doc.setTextColor(200, 200, 200)
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(9)
-  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 15, { angle: -15 })
+  doc.setFontSize(12)
+  doc.text(MEMO_WATERMARK_TEXT, marginLeft + 2, sigY + 8, { angle: -15 })
 }
 
 async function resolveThroRecipient(admin: any, loan: any, applicantId: string) {
