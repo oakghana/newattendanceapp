@@ -623,18 +623,32 @@ export async function GET(
 
     // ── Annual leave table ───────────────────────────────────────────
     if (useTable) {
+      const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
+      const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
+      const grossEntitledDays = Math.max(0, Number(tableEntitlement || 0) + Number(tableTravellingDays || 0))
+      const totalDeductions = Math.max(0, holidayDaysDeducted + priorLeaveDaysDeducted)
+
       const entitlementLabel = tableTravellingDays > 0
         ? `${tableEntitlement} plus ${tableTravellingDays} travelling day${tableTravellingDays !== 1 ? "s" : ""}`
         : String(tableEntitlement || effectiveDays)
 
-      const totalGranted = effectiveDays + tableTravellingDays
+      // Annual memo should reflect entitlement arithmetic: entitlement + travel - deductions.
+      const totalGranted = grossEntitledDays > 0
+        ? Math.max(0, grossEntitledDays - totalDeductions)
+        : Math.max(0, effectiveDays)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
       )
       const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
       const hasIncrease = adjustedRequested > originalRequested || Number(lr.travelling_days_added || 0) > 0
+      const remarksParts: string[] = []
+      if (holidayDaysDeducted > 0) remarksParts.push(`${holidayDaysDeducted} day(s) public holiday`) 
+      if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`) 
       const remarksText = String(lr.adjustment_reason || "").trim()
+      const remarksSummary = remarksParts.length > 0
+        ? `Less ${remarksParts.join(" + ")}${remarksText ? `; ${remarksText}` : ""}`
+        : (hasIncrease && remarksText ? remarksText : "")
 
       autoTable(doc, {
         startY: y,
@@ -657,7 +671,7 @@ export async function GET(
             String(totalGranted || effectiveDays),
             fmtFormalDate(effectiveStart),
             fmtFormalDate(effectiveEnd),
-            hasIncrease && remarksText ? remarksText : "",
+            remarksSummary,
           ],
           [
             { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold" } },

@@ -59,6 +59,7 @@ type LoanRequest = {
   staff_district_name?: string | null
   loan_type_key: string
   loan_type_label: string
+  loan_office_note?: string | null
   requested_amount: number | null
   fixed_amount: number | null
   reason: string | null
@@ -490,9 +491,26 @@ function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: 
   return deriveMemoRef(requestNumber)
 }
 
+function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: string; throTelephone: string } {
+  const raw = String(note || "").trim()
+  if (!raw) return { cleanedNote: "", throTelephone: "" }
+  const match = raw.match(/\[THRO_TEL:([^\]]+)\]/i)
+  if (!match) return { cleanedNote: raw, throTelephone: "" }
+  const telephone = String(match[1] || "").trim()
+  const cleaned = raw.replace(match[0], "").replace(/\s{2,}/g, " ").trim()
+  return { cleanedNote: cleaned, throTelephone: telephone }
+}
+
+function buildHrNoteWithThroTelephone(note: string, throTelephone: string) {
+  const trimmedNote = String(note || "").trim()
+  const trimmedTelephone = String(throTelephone || "").trim()
+  if (!trimmedTelephone) return trimmedNote
+  return `[THRO_TEL:${trimmedTelephone}]${trimmedNote ? ` ${trimmedNote}` : ""}`
+}
+
 function buildDirectorAutoMemoDraft(
   row: LoanRequest,
-  entry?: { hodName?: string; hodLocation?: string; memoRef?: string },
+  entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string },
 ) {
   const amount = row.fixed_amount || row.requested_amount || 0
   const amtNum = Number(amount)
@@ -503,7 +521,9 @@ function buildDirectorAutoMemoDraft(
   const staffNo = row.staff_number || "—"
   const staffRank = (row.staff_rank || "").toUpperCase()
   const hodName = (entry?.hodName || row.hod_name || "THE REGIONAL MANAGER").toUpperCase()
+  const hodRank = (entry?.hodRank || row.hod_rank || "").toUpperCase()
   const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || "—"
+  const hodTelephone = String(entry?.hodTelephone || "").trim()
   const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
@@ -524,8 +544,10 @@ function buildDirectorAutoMemoDraft(
     `${staffRank}`,
     "",
     `THRO'   ${hodName}`,
+    ...(hodRank ? [`        ${hodRank}`] : []),
     `        QUALITY CONTROL COMPANY LIMITED`,
     `        ${hodLocation}`,
+    ...(hodTelephone ? [`        TEL: ${hodTelephone}`] : []),
     "",
     `RE: APPLICATION FOR ${loanLabel.toUpperCase()}`,
     "",
@@ -698,7 +720,7 @@ export default function LoanAppPage() {
   const [loanOfficeNotes, setLoanOfficeNotes] = useState<Record<string, string>>({})
   const [fdInputs, setFdInputs] = useState<Record<string, { score: string; note: string }>>({})
   const [committeeNotes, setCommitteeNotes] = useState<Record<string, string>>({})
-  const [hrInputs, setHrInputs] = useState<Record<string, { disbursement: string; recovery: string; months: string; note: string; hodName: string; hodLocation: string; memoRef: string }>>({})
+  const [hrInputs, setHrInputs] = useState<Record<string, { disbursement: string; recovery: string; months: string; note: string; hodName: string; hodRank: string; hodLocation: string; hodTelephone: string; memoRef: string }>>({})
 
   const [directorDecision, setDirectorDecision] = useState<"approve" | "reject">("approve")
   const [directorLetter, setDirectorLetter] = useState("")
@@ -716,7 +738,9 @@ export default function LoanAppPage() {
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
   const [modalHodName, setModalHodName] = useState("")
+  const [modalHodRank, setModalHodRank] = useState("")
   const [modalHodLocation, setModalHodLocation] = useState("")
+  const [modalHodTelephone, setModalHodTelephone] = useState("")
   const [modalMemoRef, setModalMemoRef] = useState("")
   const [modalMemoText, setModalMemoText] = useState("")
   const [modalStaffFullName, setModalStaffFullName] = useState("")
@@ -1818,7 +1842,9 @@ export default function LoanAppPage() {
         setModalRecovery("")
         setModalMonths("")
         setModalHodName("")
+        setModalHodRank("")
         setModalHodLocation("")
+        setModalHodTelephone("")
         setModalMemoRef("")
         setModalMemoText("")
         setModalStaffFullName("")
@@ -1832,14 +1858,20 @@ export default function LoanAppPage() {
         setModalSignatureDataUrl(null)
         setModalSignatureMode("typed")
         if (actionType === "loan_office") {
+          const parsedLoanOfficeNote = splitHrNoteAndThroTelephone(loanOfficeNotes[row.id] || row.loan_office_note || "")
           setModalNote(loanOfficeNotes[row.id] || "")
           setModalStaffFullName(row.staff_full_name || "")
           setModalStaffNumber(row.staff_number || "")
           setModalStaffRank(row.staff_rank || "")
           setModalCorporateEmail(row.corporate_email || "")
           setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
+          setModalHodName(row.hod_name || "")
+          setModalHodRank(row.hod_rank || "")
+          setModalHodLocation(row.hod_location || row.staff_location_name || "")
+          setModalHodTelephone(parsedLoanOfficeNote.throTelephone || "")
           setModalHodReviewerId(row.hod_reviewer_id || "")
           setModalDirectorApproverId(row.director_hr_id || "")
+          setModalNote(parsedLoanOfficeNote.cleanedNote)
         }
         if (actionType === "accounts") {
           const fd = fdInputs[row.id]
@@ -1851,12 +1883,15 @@ export default function LoanAppPage() {
           const configuredLoanType = (lookupData?.loanTypes || []).find((loanType) => loanType.loan_key === row.loan_type_key)
           const fallbackMonths = configuredLoanType?.default_recovery_months ? String(configuredLoanType.default_recovery_months) : ""
           const fallbackTerms = String(configuredLoanType?.loan_terms || "").trim()
+          const parsedHrNote = splitHrNoteAndThroTelephone(entry?.note || row.hr_note || fallbackTerms || "")
           setModalDisbursement(entry?.disbursement || "")
           setModalRecovery(entry?.recovery || "")
           setModalMonths(entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths))
-          setModalNote(entry?.note || row.hr_note || fallbackTerms || "")
+          setModalNote(parsedHrNote.cleanedNote)
           setModalHodName(entry?.hodName || row.hod_name || "")
+          setModalHodRank(entry?.hodRank || row.hod_rank || "")
           setModalHodLocation(entry?.hodLocation || row.hod_location || row.staff_location_name || "")
+          setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
           setModalDirectorApproverId(row.director_hr_id || "")
         }
@@ -4051,6 +4086,24 @@ export default function LoanAppPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>THRO Name</Label>
+                    <Input value={modalHodName} onChange={(e) => setModalHodName(e.target.value)} placeholder="e.g. HEAD OF IT" />
+                  </div>
+                  <div>
+                    <Label>THRO Rank</Label>
+                    <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. IT MANAGER" />
+                  </div>
+                  <div>
+                    <Label>THRO Location</Label>
+                    <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. HEAD OFFICE" />
+                  </div>
+                  <div>
+                    <Label>THRO Telephone</Label>
+                    <Input value={modalHodTelephone} onChange={(e) => setModalHodTelephone(e.target.value)} placeholder="e.g. +233 24 000 0000" />
+                  </div>
+                </div>
                 <Label>Assigned Director HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
                   <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
@@ -4111,8 +4164,12 @@ export default function LoanAppPage() {
                 </div>
                 <Label>HOD / Regional Manager Name</Label>
                 <Input value={modalHodName} onChange={(e) => setModalHodName(e.target.value)} placeholder="e.g. THE REGIONAL MANAGER" />
+                <Label>HOD / Regional Manager Rank</Label>
+                <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Regional Manager / Department Head" />
                 <Label>HOD Location (Station)</Label>
                 <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Breman Asikuma" />
+                <Label>HOD Telephone</Label>
+                <Input value={modalHodTelephone} onChange={(e) => setModalHodTelephone(e.target.value)} placeholder="e.g. +233 24 000 0000" />
                 <Label>Assigned Director HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
                   <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
@@ -4143,30 +4200,38 @@ export default function LoanAppPage() {
             {actionModal.actionType === "loan_office" && actionModal.row && (
               <>
                 <Button variant="outline" onClick={() => {
+                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone)
                   runAction({
                     action: "loan_office_update_request",
                     id: actionModal.row!.id,
-                    note: modalNote || null,
+                    note: noteForSave || null,
                     staff_full_name: modalStaffFullName || null,
                     staff_number: modalStaffNumber || null,
                     staff_rank: modalStaffRank || null,
                     corporate_email: modalCorporateEmail || null,
                     reference_number: modalReferenceNumber || null,
+                    hod_name: modalHodName || null,
+                    hod_rank: modalHodRank || null,
+                    hod_location: modalHodLocation || null,
                     hod_reviewer_id: modalHodReviewerId || null,
                     director_approver_id: modalDirectorApproverId || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save Edits</Button>
                 <Button onClick={() => {
+                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone)
                   runAction({
                     action: "loan_office_forward",
                     id: actionModal.row!.id,
-                    note: modalNote || null,
+                    note: noteForSave || null,
                     staff_full_name: modalStaffFullName || null,
                     staff_number: modalStaffNumber || null,
                     staff_rank: modalStaffRank || null,
                     corporate_email: modalCorporateEmail || null,
                     reference_number: modalReferenceNumber || null,
+                    hod_name: modalHodName || null,
+                    hod_rank: modalHodRank || null,
+                    hod_location: modalHodLocation || null,
                     hod_reviewer_id: modalHodReviewerId || null,
                     director_approver_id: modalDirectorApproverId || null,
                   })
@@ -4191,12 +4256,29 @@ export default function LoanAppPage() {
             {actionModal.actionType === "hr_terms" && actionModal.row && (
               <>
                 <Button variant="outline" onClick={() => {
-                  setMemoReviewModal({ open: true, row: { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null, hod_name: modalHodName, hod_location: modalHodLocation } })
-                  const draft = buildDirectorAutoMemoDraft({ ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null }, { hodName: modalHodName, hodLocation: modalHodLocation, memoRef: modalMemoRef })
+                  setMemoReviewModal({ open: true, row: { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null, hod_name: modalHodName, hod_rank: modalHodRank, hod_location: modalHodLocation } })
+                  const draft = buildDirectorAutoMemoDraft(
+                    { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null },
+                    { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef },
+                  )
                   setModalMemoText(draft)
                 }}>Preview Memo</Button>
                 <Button onClick={() => {
-                  setHrInputs((s) => ({ ...s, [actionModal.row!.id]: { disbursement: modalDisbursement, recovery: modalRecovery, months: modalMonths, note: modalNote, hodName: modalHodName, hodLocation: modalHodLocation, memoRef: modalMemoRef } }))
+                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone)
+                  setHrInputs((s) => ({
+                    ...s,
+                    [actionModal.row!.id]: {
+                      disbursement: modalDisbursement,
+                      recovery: modalRecovery,
+                      months: modalMonths,
+                      note: noteForSave,
+                      hodName: modalHodName,
+                      hodRank: modalHodRank,
+                      hodLocation: modalHodLocation,
+                      hodTelephone: modalHodTelephone,
+                      memoRef: modalMemoRef,
+                    },
+                  }))
                   runAction({
                     action: "hr_set_terms",
                     id: actionModal.row!.id,
@@ -4205,9 +4287,10 @@ export default function LoanAppPage() {
                     recovery_months: Number(modalMonths || 0),
                     reference_number: modalMemoRef || null,
                     hod_name: modalHodName || null,
+                    hod_rank: modalHodRank || null,
                     hod_location: modalHodLocation || null,
                     director_approver_id: modalDirectorApproverId || null,
-                    note: modalNote || null,
+                    note: noteForSave || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Set Terms &amp; Forward to Director HR</Button>

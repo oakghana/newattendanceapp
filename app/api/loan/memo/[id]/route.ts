@@ -41,6 +41,16 @@ function canonicalReference(referenceNumber?: string | null, requestNumber?: str
   return `QCC/HRD/SWL/V.2/${fallbackSeq}`
 }
 
+function splitThroTelephoneFromNote(note?: string | null): { cleanedNote: string; telephone: string } {
+  const raw = String(note || "").trim()
+  if (!raw) return { cleanedNote: "", telephone: "" }
+  const match = raw.match(/\[THRO_TEL:([^\]]+)\]/i)
+  if (!match) return { cleanedNote: raw, telephone: "" }
+  const telephone = String(match[1] || "").trim()
+  const cleaned = raw.replace(match[0], "").replace(/\s{2,}/g, " ").trim()
+  return { cleanedNote: cleaned, telephone }
+}
+
 function fmtDate(value?: string | null) {
   if (!value) return new Date().toISOString().slice(0, 10)
   const date = new Date(value)
@@ -107,6 +117,8 @@ async function resolveThroRecipient(admin: any, loan: any, applicantId: string) 
 }
 
 function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
+  const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
+  const cleanedHrNote = parsedHrNote.cleanedNote
   const amount = `GHc ${fmtAmount(loan.fixed_amount || loan.requested_amount)}`
 
   if (loan.status === "rejected_fd") {
@@ -142,7 +154,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
         `Proposed Disbursement Date: ${fmtDate(loan.disbursement_date)}`,
         `Proposed Recovery Start Date: ${fmtDate(loan.recovery_start_date)}`,
         `Proposed Recovery Duration: ${loan.recovery_months || "TBD"} month(s)`,
-        ...(loan.hr_note ? [`HR Note: ${loan.hr_note}`] : []),
+        ...(cleanedHrNote ? [`HR Note: ${cleanedHrNote}`] : []),
         "You will receive a final memo once Director HR concludes review.",
         "You can count on our co-operation.",
       ],
@@ -393,17 +405,28 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += 10
 
     // ─── THRO section ─────────────────────────────────────────────────
-    const hodName = String(throRecipient?.display || loan.hod_name || "").toUpperCase().trim()
-    const hodLocation = String(throRecipient?.location || loan.hod_location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
+    const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
+    const hodName = String(loan.hod_name || throRecipient?.name || "").toUpperCase().trim()
+    const hodRank = String(loan.hod_rank || throRecipient?.position || "").toUpperCase().trim()
+    const hodLocation = String(loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
+    const hodTelephone = parsedHrNote.telephone
     if (hodName) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)
       doc.text("THRO:", marginLeft, y)
       doc.text(hodName, marginLeft + 14, y)
       y += 5.5
+      if (hodRank) {
+        doc.text(hodRank, marginLeft + 14, y)
+        y += 5.5
+      }
       doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
       y += 5.5
       doc.text(hodLocation, marginLeft + 14, y)
+      if (hodTelephone) {
+        y += 5.5
+        doc.text(`TEL: ${hodTelephone}`, marginLeft + 14, y)
+      }
       y += 10
     }
 

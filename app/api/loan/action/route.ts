@@ -352,6 +352,9 @@ export async function POST(request: NextRequest) {
       if (body.staff_number !== undefined) update.staff_number = String(body.staff_number || "").trim() || null
       if (body.staff_rank !== undefined) update.staff_rank = String(body.staff_rank || "").trim() || null
       if (body.corporate_email !== undefined) update.corporate_email = String(body.corporate_email || "").trim() || null
+      if (body.hod_name !== undefined) update.hod_name = String(body.hod_name || "").trim() || null
+      if (body.hod_rank !== undefined) update.hod_rank = String(body.hod_rank || "").trim() || null
+      if (body.hod_location !== undefined) update.hod_location = String(body.hod_location || "").trim() || null
       if (body.hod_reviewer_id !== undefined) update.hod_reviewer_id = String(body.hod_reviewer_id || "").trim() || null
       if (normalizedReference) update.reference_number = normalizedReference
       if (selectedDirectorApproverId) {
@@ -588,6 +591,9 @@ export async function POST(request: NextRequest) {
       update.disbursement_date = disbursementDate
       update.recovery_start_date = recoveryStartDate
       update.recovery_months = recoveryMonths
+      if (body.hod_name !== undefined) update.hod_name = String(body.hod_name || "").trim() || null
+      if (body.hod_rank !== undefined) update.hod_rank = String(body.hod_rank || "").trim() || null
+      if (body.hod_location !== undefined) update.hod_location = String(body.hod_location || "").trim() || null
       update.hr_forwarded_at = new Date().toISOString()
 
       // Track who is expected to sign/finalize the memo.
