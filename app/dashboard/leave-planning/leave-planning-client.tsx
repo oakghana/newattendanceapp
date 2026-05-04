@@ -1421,6 +1421,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return rows
   }, [hodPendingReviews, hodLocationFilter, hodDeptFilter])
 
+  const hrApproverQueue: any[] = useMemo(() => {
+    if (!data) return []
+    return (data.requests || []).filter((r: any) =>
+      ["hod_approved", "manager_confirmed", ...(HR_APPROVER_PENDING_STATUSES as string[])].includes(String(r?.status || "")),
+    )
+  }, [data])
+
   const hrApproverQueueFiltered: any[] = useMemo(() => {
     let rows = [...hrApproverQueue]
     if (hrApproverLocationFilter !== "all") {
@@ -1562,13 +1569,6 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     }
     return rows.sort((a: any, b: any) => new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime())
   }, [data, allRequestsSearch, allRequestsStatusFilter, allRequestsLocationFilter, allRequestsDeptFilter])
-
-  const hrApproverQueue: any[] = useMemo(() => {
-    if (!data) return []
-    return (data.requests || []).filter((r: any) =>
-      ["hod_approved", "manager_confirmed", ...(HR_APPROVER_PENDING_STATUSES as string[])].includes(String(r?.status || "")),
-    )
-  }, [data])
 
   const hrOfficeAnalytics = useMemo(() => {
     if (analyticsData?.analytics) return analyticsData.analytics
