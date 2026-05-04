@@ -41,14 +41,22 @@ function canonicalReference(referenceNumber?: string | null, requestNumber?: str
   return `QCC/HRD/SWL/V.2/${fallbackSeq}`
 }
 
-function splitThroTelephoneFromNote(note?: string | null): { cleanedNote: string; telephone: string } {
+function splitThroTelephoneFromNote(note?: string | null): { cleanedNote: string; telephone: string; throName: string; throRank: string; throLocation: string } {
   const raw = String(note || "").trim()
-  if (!raw) return { cleanedNote: "", telephone: "" }
-  const match = raw.match(/\[THRO_TEL:([^\]]+)\]/i)
-  if (!match) return { cleanedNote: raw, telephone: "" }
-  const telephone = String(match[1] || "").trim()
-  const cleaned = raw.replace(match[0], "").replace(/\s{2,}/g, " ").trim()
-  return { cleanedNote: cleaned, telephone }
+  if (!raw) return { cleanedNote: "", telephone: "", throName: "", throRank: "", throLocation: "" }
+  let cleaned = raw
+  const extract = (token: string) => {
+    const re = new RegExp(`\\[${token}:([^\\]]+)\\]`, "i")
+    const m = cleaned.match(re)
+    if (!m) return ""
+    cleaned = cleaned.replace(m[0], "").replace(/\s{2,}/g, " ").trim()
+    return String(m[1] || "").trim()
+  }
+  const telephone = extract("THRO_TEL")
+  const throName = extract("THRO_NAME")
+  const throRank = extract("THRO_RANK")
+  const throLocation = extract("THRO_LOC")
+  return { cleanedNote: cleaned, telephone, throName, throRank, throLocation }
 }
 
 function fmtDate(value?: string | null) {
@@ -406,10 +414,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // ─── THRO section ─────────────────────────────────────────────────
     const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
-    const hodName = String(loan.hod_name || throRecipient?.name || "").toUpperCase().trim()
-    const hodRank = String(loan.hod_rank || throRecipient?.position || "").toUpperCase().trim()
-    const hodLocation = String(loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
-    const hodTelephone = parsedHrNote.telephone
+    const parsedLoanOfficeNote = splitThroTelephoneFromNote(loan.loan_office_note)
+    const hodName = String(parsedHrNote.throName || parsedLoanOfficeNote.throName || loan.hod_name || throRecipient?.name || "").toUpperCase().trim()
+    const hodRank = String(parsedHrNote.throRank || parsedLoanOfficeNote.throRank || loan.hod_rank || throRecipient?.position || "").toUpperCase().trim()
+    const hodLocation = String(parsedHrNote.throLocation || parsedLoanOfficeNote.throLocation || loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
+    const hodTelephone = parsedHrNote.telephone || parsedLoanOfficeNote.telephone
     if (hodName) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)

@@ -491,21 +491,37 @@ function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: 
   return deriveMemoRef(requestNumber)
 }
 
-function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: string; throTelephone: string } {
+function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: string; throTelephone: string; throName: string; throRank: string; throLocation: string } {
   const raw = String(note || "").trim()
-  if (!raw) return { cleanedNote: "", throTelephone: "" }
-  const match = raw.match(/\[THRO_TEL:([^\]]+)\]/i)
-  if (!match) return { cleanedNote: raw, throTelephone: "" }
-  const telephone = String(match[1] || "").trim()
-  const cleaned = raw.replace(match[0], "").replace(/\s{2,}/g, " ").trim()
-  return { cleanedNote: cleaned, throTelephone: telephone }
+  if (!raw) return { cleanedNote: "", throTelephone: "", throName: "", throRank: "", throLocation: "" }
+  let cleaned = raw
+  const extract = (token: string) => {
+    const re = new RegExp(`\\[${token}:([^\\]]+)\\]`, "i")
+    const m = cleaned.match(re)
+    if (!m) return ""
+    cleaned = cleaned.replace(m[0], "").replace(/\s{2,}/g, " ").trim()
+    return String(m[1] || "").trim()
+  }
+  const throTelephone = extract("THRO_TEL")
+  const throName = extract("THRO_NAME")
+  const throRank = extract("THRO_RANK")
+  const throLocation = extract("THRO_LOC")
+  return { cleanedNote: cleaned, throTelephone, throName, throRank, throLocation }
 }
 
-function buildHrNoteWithThroTelephone(note: string, throTelephone: string) {
+function buildHrNoteWithThroTelephone(note: string, throTelephone: string, throName?: string, throRank?: string, throLocation?: string) {
   const trimmedNote = String(note || "").trim()
-  const trimmedTelephone = String(throTelephone || "").trim()
-  if (!trimmedTelephone) return trimmedNote
-  return `[THRO_TEL:${trimmedTelephone}]${trimmedNote ? ` ${trimmedNote}` : ""}`
+  const tokens: string[] = []
+  const tel = String(throTelephone || "").trim()
+  const name = String(throName || "").trim()
+  const rank = String(throRank || "").trim()
+  const loc = String(throLocation || "").trim()
+  if (tel) tokens.push(`[THRO_TEL:${tel}]`)
+  if (name) tokens.push(`[THRO_NAME:${name}]`)
+  if (rank) tokens.push(`[THRO_RANK:${rank}]`)
+  if (loc) tokens.push(`[THRO_LOC:${loc}]`)
+  const tokenStr = tokens.join(" ")
+  return [tokenStr, trimmedNote].filter(Boolean).join(" ")
 }
 
 function buildDirectorAutoMemoDraft(
@@ -1865,9 +1881,9 @@ export default function LoanAppPage() {
           setModalStaffRank(row.staff_rank || "")
           setModalCorporateEmail(row.corporate_email || "")
           setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
-          setModalHodName(row.hod_name || "")
-          setModalHodRank(row.hod_rank || "")
-          setModalHodLocation(row.hod_location || row.staff_location_name || "")
+          setModalHodName(parsedLoanOfficeNote.throName || row.hod_name || "")
+          setModalHodRank(parsedLoanOfficeNote.throRank || row.hod_rank || "")
+          setModalHodLocation(parsedLoanOfficeNote.throLocation || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(parsedLoanOfficeNote.throTelephone || "")
           setModalHodReviewerId(row.hod_reviewer_id || "")
           setModalDirectorApproverId(row.director_hr_id || "")
@@ -1888,9 +1904,9 @@ export default function LoanAppPage() {
           setModalRecovery(entry?.recovery || "")
           setModalMonths(entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths))
           setModalNote(parsedHrNote.cleanedNote)
-          setModalHodName(entry?.hodName || row.hod_name || "")
-          setModalHodRank(entry?.hodRank || row.hod_rank || "")
-          setModalHodLocation(entry?.hodLocation || row.hod_location || row.staff_location_name || "")
+          setModalHodName(entry?.hodName || parsedHrNote.throName || row.hod_name || "")
+          setModalHodRank(entry?.hodRank || parsedHrNote.throRank || row.hod_rank || "")
+          setModalHodLocation(entry?.hodLocation || parsedHrNote.throLocation || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
           setModalDirectorApproverId(row.director_hr_id || "")
@@ -4200,7 +4216,7 @@ export default function LoanAppPage() {
             {actionModal.actionType === "loan_office" && actionModal.row && (
               <>
                 <Button variant="outline" onClick={() => {
-                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone)
+                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
                   runAction({
                     action: "loan_office_update_request",
                     id: actionModal.row!.id,
@@ -4219,7 +4235,7 @@ export default function LoanAppPage() {
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save Edits</Button>
                 <Button onClick={() => {
-                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone)
+                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
                   runAction({
                     action: "loan_office_forward",
                     id: actionModal.row!.id,
@@ -4264,7 +4280,7 @@ export default function LoanAppPage() {
                   setModalMemoText(draft)
                 }}>Preview Memo</Button>
                 <Button onClick={() => {
-                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone)
+                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
                   setHrInputs((s) => ({
                     ...s,
                     [actionModal.row!.id]: {
