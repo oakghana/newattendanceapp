@@ -11,13 +11,17 @@ import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
 const HR_ANALYTICS_ROLES = ["loan_office", "hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr"]
 
-function isHrAnalyticsRole(role: string) {
-  const normalized = role.toLowerCase().trim().replace(/[-\s]+/g, "_")
+function normalizeRole(role: string | null | undefined) {
+  return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
+function isHrAnalyticsRole(role: string | null | undefined) {
+  const normalized = normalizeRole(role)
   return HR_ANALYTICS_ROLES.includes(normalized)
 }
 
 interface LeaveManagementModuleClientProps {
-  userRole: string
+  userRole: string | null
   userDepartment: string | null
   inactivityDays: number
   userDepartmentName: string | null
@@ -38,7 +42,7 @@ export function LeaveManagementModuleClient({
   initialManagerNotifications,
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
-  const normalizedRole = userRole.toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
 
   return (
