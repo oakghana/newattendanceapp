@@ -63,7 +63,11 @@ function isoDate(y: number, m: number, d: number) {
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"]
 const DAY_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
 
-export function TeamCalendarView() {
+interface TeamCalendarViewProps {
+  isHrOffice?: boolean
+}
+
+export function TeamCalendarView({ isHrOffice = false }: TeamCalendarViewProps) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -114,6 +118,9 @@ export function TeamCalendarView() {
   }
 
   const selectedEntries = selected ? (dayMap[selected] ?? []) : []
+  const monthEntries = [...(data?.entries ?? [])].sort(
+    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+  )
   const todayStr = today.toISOString().split("T")[0]
 
   return (
@@ -219,31 +226,67 @@ export function TeamCalendarView() {
 
             {/* Selected day detail */}
             {selected && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {new Date(selected + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                </p>
-                {selectedEntries.length === 0 ? (
-                  <p className="text-sm text-slate-400">No approved leave on this day.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedEntries.map((e) => {
-                      const meta = getTypeMeta(e.leaveType)
-                      return (
-                        <div key={e.id} className="flex items-center justify-between rounded-xl bg-white px-4 py-2.5 shadow-sm">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`rounded-lg p-1.5 ${meta.bg} ${meta.colour}`}>{meta.icon}</div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{e.name || "Staff Member"}</p>
-                              {e.department && <p className="text-xs text-slate-400">{e.department}</p>}
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {new Date(selected + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                  {selectedEntries.length === 0 ? (
+                    <p className="text-sm text-slate-400">No approved leave on this day.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedEntries.map((e) => {
+                        const meta = getTypeMeta(e.leaveType)
+                        return (
+                          <div key={e.id} className="flex items-center justify-between rounded-xl bg-white px-4 py-2.5 shadow-sm">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`rounded-lg p-1.5 ${meta.bg} ${meta.colour}`}>{meta.icon}</div>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">{e.name || "Staff Member"}</p>
+                                {e.department && <p className="text-xs text-slate-400">{e.department}</p>}
+                              </div>
                             </div>
+                            <Badge variant="outline" className={`border text-xs ${meta.bg} ${meta.colour}`}>
+                              {meta.label}
+                            </Badge>
                           </div>
-                          <Badge variant="outline" className={`border text-xs ${meta.bg} ${meta.colour}`}>
-                            {meta.label}
-                          </Badge>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {isHrOffice && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      All approved leaves for {MONTH_NAMES[month]} {year}
+                    </p>
+                    {monthEntries.length === 0 ? (
+                      <p className="text-sm text-slate-400">No approved leave entries found for this month.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {monthEntries.map((e) => {
+                          const meta = getTypeMeta(e.leaveType)
+                          return (
+                            <div key={`month-${e.id}`} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2.5">
+                              <div className="flex items-center gap-2.5">
+                                <div className={`rounded-lg p-1.5 ${meta.bg} ${meta.colour}`}>{meta.icon}</div>
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-800">{e.name || "Staff Member"}</p>
+                                  <p className="text-xs text-slate-500">
+                                    {new Date(e.startDate + "T12:00:00").toLocaleDateString("en-GB")} - {new Date(e.endDate + "T12:00:00").toLocaleDateString("en-GB")}
+                                  </p>
+                                  {e.department && <p className="text-xs text-slate-400">{e.department}</p>}
+                                </div>
+                              </div>
+                              <Badge variant="outline" className={`border text-xs ${meta.bg} ${meta.colour}`}>
+                                {meta.label}
+                              </Badge>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

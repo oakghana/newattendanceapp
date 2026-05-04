@@ -131,12 +131,16 @@ async function loadLoanType(admin: any, loanTypeKey: string) {
 }
 
 async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
+  // Require at least one check-in within the last 2 calendar months (current + previous month)
+  const now = new Date()
+  const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const twoMonthsAgoIso = twoMonthsAgo.toISOString()
+
   const { data: attendanceRows, error } = await admin
     .from("attendance_records")
-    .select("id, check_in_time, check_out_time")
+    .select("id, check_in_time")
     .eq("user_id", userId)
-    .gte("check_in_time", `${new Date().toISOString().slice(0, 10)}T00:00:00`)
-    .lt("check_in_time", `${new Date().toISOString().slice(0, 10)}T23:59:59`)
+    .gte("check_in_time", twoMonthsAgoIso)
     .order("check_in_time", { ascending: false })
     .limit(5)
 
@@ -145,16 +149,14 @@ async function validateAttendanceEngagementForRequest(admin: any, userId: string
   }
 
   const rows = attendanceRows || []
-  const hasTodayCheckIn = rows.some((row: any) => Boolean(row?.check_in_time))
-
-  if (!hasTodayCheckIn) {
+  if (!rows.some((row: any) => Boolean(row?.check_in_time))) {
     return {
       ok: false as const,
       status: 403,
       error:
-        "Attendance check-in for today is required before requesting loan or leave. Please check in first using the Attendance module.",
+        "No attendance check-in found in the last two months. Please check in using the Attendance module at least once to submit a loan request.",
       message:
-        "Please check in for today in Attendance first, then submit your loan/leave request.",
+        "Check in using the Attendance module (at least once in the last two months) then submit your loan request.",
     }
   }
 

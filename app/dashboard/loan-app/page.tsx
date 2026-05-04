@@ -551,6 +551,8 @@ function filterAndSortRows(
   search: string,
   status: string,
   sort: "newest" | "oldest",
+  location?: string,
+  dept?: string,
 ) {
   let next = [...rows]
   if (search.trim()) {
@@ -562,6 +564,18 @@ function filterAndSortRows(
     )
   }
   if (status !== "all") next = next.filter((r) => r.status === status)
+  if (location && location !== "all") {
+    next = next.filter((r) => {
+      const loc = String((r as any).staff_location_name || (r as any).staff_district_name || "")
+      return loc === location
+    })
+  }
+  if (dept && dept !== "all") {
+    next = next.filter((r) => {
+      const d = String((r as any).user?.departments?.name || (r as any).departments?.name || (r as any).department_name || "")
+      return d === dept
+    })
+  }
   next.sort((a, b) => {
     const ad = new Date(a.updated_at || a.created_at).getTime()
     const bd = new Date(b.updated_at || b.created_at).getTime()
@@ -751,6 +765,8 @@ export default function LoanAppPage() {
   const [hodStatus, setHodStatus] = useState("all")
   const [hodSort, setHodSort] = useState<"newest" | "oldest">("newest")
   const [hodPage, setHodPage] = useState(1)
+  const [hodLocation, setHodLocation] = useState("all")
+  const [hodDept, setHodDept] = useState("all")
 
   const [loanOfficeSearch, setLoanOfficeSearch] = useState("")
   const [loanOfficeStatus, setLoanOfficeStatus] = useState("all")
@@ -759,30 +775,40 @@ export default function LoanAppPage() {
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
   const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
+  const [loanOfficeLocation, setLoanOfficeLocation] = useState("all")
+  const [loanOfficeDept, setLoanOfficeDept] = useState("all")
 
   const [accountsSearch, setAccountsSearch] = useState("")
   const [accountsStatus, setAccountsStatus] = useState("all")
   const [accountsSort, setAccountsSort] = useState<"newest" | "oldest">("newest")
   const [accountsPage, setAccountsPage] = useState(1)
   const [accountsViewMode, setAccountsViewMode] = useState<"table" | "card">("table")
+  const [accountsLocation, setAccountsLocation] = useState("all")
+  const [accountsDept, setAccountsDept] = useState("all")
 
   const [committeeSearch, setCommitteeSearch] = useState("")
   const [committeeStatus, setCommitteeStatus] = useState("all")
   const [committeeSort, setCommitteeSort] = useState<"newest" | "oldest">("newest")
   const [committeePage, setCommitteePage] = useState(1)
   const [committeeViewMode, setCommitteeViewMode] = useState<"table" | "card">("table")
+  const [committeeLocation, setCommitteeLocation] = useState("all")
+  const [committeeDept, setCommitteeDept] = useState("all")
 
   const [hrSearch, setHrSearch] = useState("")
   const [hrStatus, setHrStatus] = useState("all")
   const [hrSort, setHrSort] = useState<"newest" | "oldest">("newest")
   const [hrPage, setHrPage] = useState(1)
   const [hrViewMode, setHrViewMode] = useState<"table" | "card">("table")
+  const [hrLocation, setHrLocation] = useState("all")
+  const [hrDept, setHrDept] = useState("all")
 
   const [directorSearch, setDirectorSearch] = useState("")
   const [directorStatus, setDirectorStatus] = useState("all")
   const [directorSort, setDirectorSort] = useState<"newest" | "oldest">("newest")
   const [directorPage, setDirectorPage] = useState(1)
   const [directorViewMode, setDirectorViewMode] = useState<"table" | "card">("table")
+  const [directorLocation, setDirectorLocation] = useState("all")
+  const [directorDept, setDirectorDept] = useState("all")
 
   const [hodViewMode, setHodViewMode] = useState<"table" | "card">("table")
 
@@ -795,6 +821,8 @@ export default function LoanAppPage() {
   const [allStatus, setAllStatus] = useState("all")
   const [allSort, setAllSort] = useState<"newest" | "oldest">("newest")
   const [allPage, setAllPage] = useState(1)
+  const [allLocation, setAllLocation] = useState("all")
+  const [allDept, setAllDept] = useState("all")
   const pageSize = 10
   const previousHodQueueCountRef = useRef<number | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -854,8 +882,8 @@ export default function LoanAppPage() {
   const defaultTab = visibleTabs[0]?.key || "staff"
 
   const filteredHod = useMemo(
-    () => filterAndSortRows(data?.inbox?.hod || [], hodSearch, hodStatus, hodSort),
-    [data?.inbox?.hod, hodSearch, hodStatus, hodSort],
+    () => filterAndSortRows(data?.inbox?.hod || [], hodSearch, hodStatus, hodSort, hodLocation, hodDept),
+    [data?.inbox?.hod, hodSearch, hodStatus, hodSort, hodLocation, hodDept],
   )
   const filteredLoanOffice = useMemo(
     () => filterAndSortRows(data?.inbox?.loanOffice || [], loanOfficeSearch, loanOfficeStatus, loanOfficeSort),
@@ -960,8 +988,8 @@ export default function LoanAppPage() {
 
   const filteredLoanOfficeStageRows = useMemo(() => {
     const bucketRows = loanOfficeStageBuckets[loanOfficeStageTab as keyof typeof loanOfficeStageBuckets] || []
-    return filterAndSortRows(bucketRows, loanOfficeSearch, loanOfficeStatus, loanOfficeSort)
-  }, [loanOfficeStageBuckets, loanOfficeStageTab, loanOfficeSearch, loanOfficeStatus, loanOfficeSort])
+    return filterAndSortRows(bucketRows, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept)
+  }, [loanOfficeStageBuckets, loanOfficeStageTab, loanOfficeSearch, loanOfficeStatus, loanOfficeSort, loanOfficeLocation, loanOfficeDept])
 
   const loanOfficeAnalytics = useMemo(() => {
     const rows = loanOfficeWorkspaceRows
@@ -1018,20 +1046,20 @@ export default function LoanAppPage() {
   }, [loanOfficeWorkspaceRows])
 
   const filteredAccounts = useMemo(
-    () => filterAndSortRows(data?.inbox?.accounts || [], accountsSearch, accountsStatus, accountsSort),
-    [data?.inbox?.accounts, accountsSearch, accountsStatus, accountsSort],
+    () => filterAndSortRows(data?.inbox?.accounts || [], accountsSearch, accountsStatus, accountsSort, accountsLocation, accountsDept),
+    [data?.inbox?.accounts, accountsSearch, accountsStatus, accountsSort, accountsLocation, accountsDept],
   )
   const filteredCommittee = useMemo(
-    () => filterAndSortRows(data?.inbox?.committee || [], committeeSearch, committeeStatus, committeeSort),
-    [data?.inbox?.committee, committeeSearch, committeeStatus, committeeSort],
+    () => filterAndSortRows(data?.inbox?.committee || [], committeeSearch, committeeStatus, committeeSort, committeeLocation, committeeDept),
+    [data?.inbox?.committee, committeeSearch, committeeStatus, committeeSort, committeeLocation, committeeDept],
   )
   const filteredHr = useMemo(
-    () => filterAndSortRows(data?.inbox?.hrOffice || [], hrSearch, hrStatus, hrSort),
-    [data?.inbox?.hrOffice, hrSearch, hrStatus, hrSort],
+    () => filterAndSortRows(data?.inbox?.hrOffice || [], hrSearch, hrStatus, hrSort, hrLocation, hrDept),
+    [data?.inbox?.hrOffice, hrSearch, hrStatus, hrSort, hrLocation, hrDept],
   )
   const filteredDirector = useMemo(
-    () => filterAndSortRows(data?.inbox?.directorHr || [], directorSearch, directorStatus, directorSort),
-    [data?.inbox?.directorHr, directorSearch, directorStatus, directorSort],
+    () => filterAndSortRows(data?.inbox?.directorHr || [], directorSearch, directorStatus, directorSort, directorLocation, directorDept),
+    [data?.inbox?.directorHr, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
   )
 
   const filteredMyTasks = useMemo(() => {
@@ -1039,8 +1067,45 @@ export default function LoanAppPage() {
   }, [data?.myTasks, tasksSearch, tasksStatus, tasksSort])
 
   const filteredAllLoans = useMemo(() => {
-    return filterAndSortRows(data?.inbox?.allLoans || [], allSearch, allStatus, allSort)
-  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort])
+    return filterAndSortRows(data?.inbox?.allLoans || [], allSearch, allStatus, allSort, allLocation, allDept)
+  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept])
+
+  // Unique location and department options for loan filters
+  const allLoanLocations = useMemo(() => {
+    const allRows = [
+      ...(data?.inbox?.hod || []),
+      ...(data?.inbox?.loanOffice || []),
+      ...(data?.inbox?.accounts || []),
+      ...(data?.inbox?.committee || []),
+      ...(data?.inbox?.hrOffice || []),
+      ...(data?.inbox?.directorHr || []),
+      ...(data?.inbox?.allLoans || []),
+    ]
+    const set = new Set<string>()
+    for (const r of allRows) {
+      const loc = String((r as any).staff_location_name || (r as any).staff_district_name || "")
+      if (loc) set.add(loc)
+    }
+    return Array.from(set).sort()
+  }, [data?.inbox])
+
+  const allLoanDepts = useMemo(() => {
+    const allRows = [
+      ...(data?.inbox?.hod || []),
+      ...(data?.inbox?.loanOffice || []),
+      ...(data?.inbox?.accounts || []),
+      ...(data?.inbox?.committee || []),
+      ...(data?.inbox?.hrOffice || []),
+      ...(data?.inbox?.directorHr || []),
+      ...(data?.inbox?.allLoans || []),
+    ]
+    const set = new Set<string>()
+    for (const r of allRows) {
+      const dept = String((r as any).user?.departments?.name || (r as any).departments?.name || (r as any).department_name || "")
+      if (dept) set.add(dept)
+    }
+    return Array.from(set).sort()
+  }, [data?.inbox])
 
   const pagedHod = useMemo(() => filteredHod.slice((hodPage - 1) * pageSize, hodPage * pageSize), [filteredHod, hodPage])
   const pagedLoanOffice = useMemo(
@@ -2229,7 +2294,7 @@ export default function LoanAppPage() {
                 </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredHod, "hod-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
                 <Input value={hodSearch} onChange={(e) => setHodSearch(e.target.value)} placeholder="Search requests" />
                 <Select value={hodStatus} onValueChange={setHodStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -2245,6 +2310,20 @@ export default function LoanAppPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={hodLocation} onValueChange={setHodLocation}>
+                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={hodDept} onValueChange={setHodDept}>
+                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedHod.length} of {filteredHod.length}</div>
@@ -2312,89 +2391,6 @@ export default function LoanAppPage() {
 
         <TabsContent value="loan-office" className="space-y-3">
           <ReadOnlyHint canAct={Boolean(p?.loanOffice || p?.hrOffice)} roleLabel="Loan Office / HR Office" />
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <LoanAnalyticsMetricCard
-              label="Total Loan Requests"
-              value={loanOfficeAnalytics.totals.total_requests}
-              hint="Cross-board loan volume in the current workspace"
-              accent="border-cyan-200"
-              icon={<Wallet className="h-5 w-5" />}
-            />
-            <LoanAnalyticsMetricCard
-              label="Worked On"
-              value={loanOfficeAnalytics.totals.worked_on}
-              hint="Requests already advanced beyond the first waiting stages"
-              accent="border-emerald-200"
-              icon={<Activity className="h-5 w-5" />}
-            />
-            <LoanAnalyticsMetricCard
-              label="Yet To Work On"
-              value={loanOfficeAnalytics.totals.yet_to_be_worked}
-              hint="Requests still waiting at HOD or ready for Loan Office attention"
-              accent="border-amber-200"
-              icon={<Clock className="h-5 w-5" />}
-            />
-            <LoanAnalyticsMetricCard
-              label="Finalized"
-              value={loanOfficeAnalytics.totals.finalized}
-              hint="Approved or closed requests across the board"
-              accent="border-violet-200"
-              icon={<CheckCircle2 className="h-5 w-5" />}
-            />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-            <Card className="overflow-hidden border border-slate-200 bg-[linear-gradient(135deg,_#250b2c_0%,_#4b1366_52%,_#8a1b5c_100%)] text-white shadow-lg">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.24em] text-fuchsia-100">Loan Office Intelligence</p>
-                    <h3 className="mt-2 text-2xl font-semibold tracking-tight">Processing Analytics Board</h3>
-                    <p className="mt-2 max-w-2xl text-sm text-fuchsia-100/90">
-                      Track worked-on requests, untouched queue segments, FD quality, loan-location concentration, and live leave exposure affecting operational staffing decisions.
-                    </p>
-                  </div>
-                  <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                    <BarChart3 className="h-7 w-7 text-fuchsia-100" />
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3 text-xs text-fuchsia-100/90">
-                  <span>Active pipeline: {loanOfficeAnalytics.totals.active_pipeline}</span>
-                  <span>FD good: {loanOfficeAnalytics.totals.good_fd}</span>
-                  <span>FD poor: {loanOfficeAnalytics.totals.poor_fd}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <LoanAnalyticsBarChart
-              title="Stage Distribution"
-              rows={loanOfficeAnalytics.stageBreakdown}
-              valueKey="total"
-              colorClass="bg-gradient-to-r from-fuchsia-500 to-violet-600"
-              emptyMessage="No loan requests available for stage analysis."
-              formatter={(row) => statusText(String(row?.status || "unknown"))}
-            />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <LoanAnalyticsBarChart
-              title="Loan Intake Trend"
-              rows={loanOfficeAnalytics.monthlyIntake}
-              valueKey="total"
-              colorClass="bg-gradient-to-r from-emerald-500 to-teal-500"
-              emptyMessage="No monthly loan intake data available."
-              formatter={(row) => monthLabel(String(row?.month || currentMonthValue()))}
-            />
-            <LoanAnalyticsBarChart
-              title="Location Exposure"
-              rows={loanOfficeAnalytics.locationRanking}
-              valueKey="total"
-              colorClass="bg-gradient-to-r from-cyan-500 to-blue-600"
-              emptyMessage="No location analytics available for the current loan workspace."
-              formatter={(row) => String(row?.name || "Unassigned")}
-            />
-          </div>
-
           <Card>
             <CardHeader>
               <CardTitle>Loan Office Processing Queue</CardTitle>
@@ -2424,7 +2420,7 @@ export default function LoanAppPage() {
                 </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredLoanOfficeStageRows, "loan-office-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
                 <Input value={loanOfficeSearch} onChange={(e) => setLoanOfficeSearch(e.target.value)} placeholder="Search requests" />
                 <Select value={loanOfficeStatus} onValueChange={setLoanOfficeStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -2440,6 +2436,20 @@ export default function LoanAppPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={loanOfficeLocation} onValueChange={setLoanOfficeLocation}>
+                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={loanOfficeDept} onValueChange={setLoanOfficeDept}>
+                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedLoanOfficeStage.length} of {filteredLoanOfficeStageRows.length}</div>
@@ -2610,7 +2620,10 @@ export default function LoanAppPage() {
                 <Button variant={hrViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setHrViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
                 <Button variant={hrViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setHrViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="flex items-center justify-end gap-2 pb-1">
+                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredHr, "hr-terms-queue-filtered.csv")}>Export Filtered CSV</Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
                 <Input value={hrSearch} onChange={(e) => setHrSearch(e.target.value)} placeholder="Search requests" />
                 <Select value={hrStatus} onValueChange={setHrStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -2626,6 +2639,20 @@ export default function LoanAppPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={hrLocation} onValueChange={setHrLocation}>
+                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={hrDept} onValueChange={setHrDept}>
+                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedHr.length} of {filteredHr.length}</div>
@@ -2694,6 +2721,89 @@ export default function LoanAppPage() {
             <span className="text-xs text-muted-foreground">Page {hrPage} of {totalHrPages}</span>
             <Button variant="outline" size="sm" onClick={() => setHrPage((n) => Math.min(totalHrPages, n + 1))} disabled={hrPage >= totalHrPages}>Next</Button>
           </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <LoanAnalyticsMetricCard
+              label="Total Loan Requests"
+              value={loanOfficeAnalytics.totals.total_requests}
+              hint="Cross-board loan volume in the current workspace"
+              accent="border-cyan-200"
+              icon={<Wallet className="h-5 w-5" />}
+            />
+            <LoanAnalyticsMetricCard
+              label="Worked On"
+              value={loanOfficeAnalytics.totals.worked_on}
+              hint="Requests already advanced beyond the first waiting stages"
+              accent="border-emerald-200"
+              icon={<Activity className="h-5 w-5" />}
+            />
+            <LoanAnalyticsMetricCard
+              label="Yet To Work On"
+              value={loanOfficeAnalytics.totals.yet_to_be_worked}
+              hint="Requests still waiting at HOD or ready for Loan Office attention"
+              accent="border-amber-200"
+              icon={<Clock className="h-5 w-5" />}
+            />
+            <LoanAnalyticsMetricCard
+              label="Finalized"
+              value={loanOfficeAnalytics.totals.finalized}
+              hint="Approved or closed requests across the board"
+              accent="border-violet-200"
+              icon={<CheckCircle2 className="h-5 w-5" />}
+            />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <Card className="overflow-hidden border border-slate-200 bg-[linear-gradient(135deg,_#250b2c_0%,_#4b1366_52%,_#8a1b5c_100%)] text-white shadow-lg">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-fuchsia-100">Loan Office Intelligence</p>
+                    <h3 className="mt-2 text-2xl font-semibold tracking-tight">Processing Analytics Board</h3>
+                    <p className="mt-2 max-w-2xl text-sm text-fuchsia-100/90">
+                      Track worked-on requests, untouched queue segments, FD quality, loan-location concentration, and live leave exposure affecting operational staffing decisions.
+                    </p>
+                  </div>
+                  <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                    <BarChart3 className="h-7 w-7 text-fuchsia-100" />
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3 text-xs text-fuchsia-100/90">
+                  <span>Active pipeline: {loanOfficeAnalytics.totals.active_pipeline}</span>
+                  <span>FD good: {loanOfficeAnalytics.totals.good_fd}</span>
+                  <span>FD poor: {loanOfficeAnalytics.totals.poor_fd}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <LoanAnalyticsBarChart
+              title="Stage Distribution"
+              rows={loanOfficeAnalytics.stageBreakdown}
+              valueKey="total"
+              colorClass="bg-gradient-to-r from-fuchsia-500 to-violet-600"
+              emptyMessage="No loan requests available for stage analysis."
+              formatter={(row) => statusText(String(row?.status || "unknown"))}
+            />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <LoanAnalyticsBarChart
+              title="Loan Intake Trend"
+              rows={loanOfficeAnalytics.monthlyIntake}
+              valueKey="total"
+              colorClass="bg-gradient-to-r from-emerald-500 to-teal-500"
+              emptyMessage="No monthly loan intake data available."
+              formatter={(row) => monthLabel(String(row?.month || currentMonthValue()))}
+            />
+            <LoanAnalyticsBarChart
+              title="Location Exposure"
+              rows={loanOfficeAnalytics.locationRanking}
+              valueKey="total"
+              colorClass="bg-gradient-to-r from-cyan-500 to-blue-600"
+              emptyMessage="No location analytics available for the current loan workspace."
+              formatter={(row) => String(row?.name || "Unassigned")}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="accounts" className="space-y-3">
@@ -2711,7 +2821,7 @@ export default function LoanAppPage() {
                 </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredAccounts, "accounts-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
                 <Input value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} placeholder="Search requests" />
                 <Select value={accountsStatus} onValueChange={setAccountsStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -2727,6 +2837,20 @@ export default function LoanAppPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={accountsLocation} onValueChange={setAccountsLocation}>
+                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={accountsDept} onValueChange={setAccountsDept}>
+                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedAccounts.length} of {filteredAccounts.length}</div>
@@ -2841,7 +2965,7 @@ export default function LoanAppPage() {
                 </div>
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredCommittee, "committee-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
                 <Input value={committeeSearch} onChange={(e) => setCommitteeSearch(e.target.value)} placeholder="Search requests" />
                 <Select value={committeeStatus} onValueChange={setCommitteeStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -2857,6 +2981,20 @@ export default function LoanAppPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={committeeLocation} onValueChange={setCommitteeLocation}>
+                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={committeeDept} onValueChange={setCommitteeDept}>
+                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedCommittee.length} of {filteredCommittee.length}</div>
@@ -2962,7 +3100,7 @@ export default function LoanAppPage() {
                 <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredDirector, "director-queue-filtered.csv")}>Export Filtered CSV</Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
                 <Input value={directorSearch} onChange={(e) => setDirectorSearch(e.target.value)} placeholder="Search requests" />
                 <Select value={directorStatus} onValueChange={setDirectorStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -2978,6 +3116,20 @@ export default function LoanAppPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={directorLocation} onValueChange={setDirectorLocation}>
+                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={directorDept} onValueChange={setDirectorDept}>
+                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedDirector.length} of {filteredDirector.length}</div>
@@ -3209,7 +3361,7 @@ export default function LoanAppPage() {
               <CardDescription>Full cross-organization visibility for admin, HR loan office, and Director HR.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
                 <Input
                   value={allSearch}
                   onChange={(e) => setAllSearch(e.target.value)}
@@ -3229,6 +3381,20 @@ export default function LoanAppPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={allLocation} onValueChange={setAllLocation}>
+                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={allDept} onValueChange={setAllDept}>
+                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">

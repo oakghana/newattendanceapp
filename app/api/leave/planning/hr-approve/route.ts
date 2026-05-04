@@ -47,7 +47,7 @@ function pickBestSignature(rows: any[]): any | null {
     const hasImage = (mode === "draw" || mode === "upload") && String(row?.signature_data_url || "").trim().length > 0
     const hasTyped = mode === "typed" && String(row?.signature_text || "").trim().length > 0
     const stage = String(row?.approval_stage || "").toLowerCase()
-    const stageBoost = stage === "hr_approver" ? 50 : stage === "director_hr" ? 40 : stage === "manager_hr" ? 30 : 0
+    const stageBoost = stage === "hr_approver" ? 50 : 0
     return (hasImage ? 100 : hasTyped ? 10 : 0) + stageBoost
   }
 
@@ -164,7 +164,8 @@ export async function POST(request: NextRequest) {
     const { data: approverSignatureRows } = await admin
       .from("approval_signature_registry")
       .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
-      .in("workflow_domain", ["leave", "loan"])
+      .eq("workflow_domain", "leave")
+      .eq("approval_stage", "hr_approver")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
 
@@ -304,34 +305,27 @@ export async function POST(request: NextRequest) {
     // Generate a secure memo token for PDF download
     const memoToken = crypto.randomBytes(32).toString("hex")
 
-    const inputSigMode = String(hr_signature_mode || "").trim().toLowerCase()
-    const inputSigText = String(hr_signature_text || "").trim()
-    const inputSigDataUrl = String(hr_signature_data_url || "").trim()
     const registrySigMode = String((approverSignature as any)?.signature_mode || "").trim().toLowerCase()
     const registrySigText = String((approverSignature as any)?.signature_text || "").trim()
     const registrySigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
-
-    const hasInputSignature =
-      (inputSigMode === "typed" && inputSigText.length > 0)
-      || ((inputSigMode === "draw" || inputSigMode === "upload") && inputSigDataUrl.length > 0)
 
     const hasRegistrySignature =
       (registrySigMode === "typed" && registrySigText.length > 0)
       || ((registrySigMode === "draw" || registrySigMode === "upload") && registrySigDataUrl.length > 0)
 
-    const resolvedSigMode = hasInputSignature
-      ? inputSigMode
-      : hasRegistrySignature
-        ? registrySigMode
-        : "typed"
+    if (!hasRegistrySignature) {
+      return NextResponse.json(
+        {
+          error:
+            "No saved HR approval signature found for your account. Save your own signature in the signature section before approving leave requests.",
+        },
+        { status: 400 },
+      )
+    }
 
-    const resolvedSigText = resolvedSigMode === "typed"
-      ? (hasInputSignature ? inputSigText : (hasRegistrySignature ? registrySigText : approverName))
-      : null
-
-    const resolvedSigDataUrl = resolvedSigMode === "draw" || resolvedSigMode === "upload"
-      ? (hasInputSignature ? inputSigDataUrl : (hasRegistrySignature ? registrySigDataUrl : null))
-      : null
+    const resolvedSigMode = registrySigMode
+    const resolvedSigText = resolvedSigMode === "typed" ? registrySigText : null
+    const resolvedSigDataUrl = resolvedSigMode === "draw" || resolvedSigMode === "upload" ? registrySigDataUrl : null
 
     const { error: approveError } = await admin
       .from("leave_plan_requests")
@@ -349,7 +343,7 @@ export async function POST(request: NextRequest) {
         memo_generated_at: now,
         hr_signature_mode: resolvedSigMode,
         hr_signature_text: resolvedSigText,
-        hr_signature_image_url: hr_signature_image_url || null,
+        hr_signature_image_url: null,
         hr_signature_data_url: resolvedSigDataUrl,
         hr_signature_hologram_code: buildHologramCode("HR"),
         updated_at: now,

@@ -95,54 +95,28 @@ function handleMissingSchema(error: any) {
 }
 
 async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
+  // Require at least one check-in within the last 2 calendar months (current + previous month)
+  const now = new Date()
+  const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const twoMonthsAgoIso = twoMonthsAgo.toISOString()
+
   const { data: attendanceRows, error } = await admin
     .from("attendance_records")
-    .select("id, check_in_time, check_out_time")
+    .select("id, check_in_time")
     .eq("user_id", userId)
+    .gte("check_in_time", twoMonthsAgoIso)
     .order("check_in_time", { ascending: false })
-    .limit(60)
+    .limit(5)
 
   if (error) return { ok: true as const }
 
   const rows = attendanceRows || []
-  const now = new Date()
-  const todayStr = now.toDateString()
-
-  // If user has checked in today (with or without checkout), allow immediately
-  const hasTodayCheckIn = rows.some((row: any) => {
-    if (!row?.check_in_time) return false
-    return new Date(row.check_in_time).toDateString() === todayStr
-  })
-  if (hasTodayCheckIn) return { ok: true as const }
-
-  const sevenDaysAgo = new Date(now)
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-
-  const staleOpenCheckout = rows.find((row: any) => {
-    if (!row?.check_in_time || row?.check_out_time) return false
-    return new Date(row.check_in_time).toDateString() !== todayStr
-  })
-
-  if (staleOpenCheckout) {
+  if (!rows.some((row: any) => Boolean(row?.check_in_time))) {
     return {
       ok: false as const,
       status: 403,
       error:
-        "Please complete your pending check-out first in Attendance before submitting a leave planning request.",
-    }
-  }
-
-  const hasRecentAttendance = rows.some((row: any) => {
-    if (!row?.check_in_time) return false
-    return new Date(row.check_in_time) >= sevenDaysAgo
-  })
-
-  if (!hasRecentAttendance) {
-    return {
-      ok: false as const,
-      status: 403,
-      error:
-        "Attendance activity is required before submitting leave planning. Please use Attendance check-in and check-out first.",
+        "No attendance check-in found in the last two months. Please check in using the Attendance module at least once to submit a leave request.",
     }
   }
 

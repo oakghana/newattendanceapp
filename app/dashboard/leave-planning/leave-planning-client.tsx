@@ -523,6 +523,39 @@ function downloadLeaveAnalyticsCsv(rows: LeaveAnalyticsRecord[], fileName: strin
   URL.revokeObjectURL(url)
 }
 
+function downloadLeaveRequestsCsv(rows: any[], fileName: string) {
+  const headers = ["Staff Name", "Employee ID", "Rank", "Department", "Location", "Leave Type", "Start Date", "End Date", "Days", "Status", "Submitted At"]
+  const body = rows.map((r: any) => {
+    const user = r?.user || r?.leave_plan_request?.user
+    const req = r?.leave_plan_request || r
+    return [
+      [user?.first_name, user?.last_name].filter(Boolean).join(" ") || String(r?.staff_name || ""),
+      String(user?.employee_id || ""),
+      String(user?.rank || req?.rank || ""),
+      String(user?.departments?.name || user?.department_name || req?.department_name || ""),
+      String(user?.geofence_locations?.name || user?.location_name || req?.location_name || ""),
+      leaveTypeLabelShort(String(req?.leave_type_key || "")),
+      String(req?.adjusted_start_date || req?.preferred_start_date || ""),
+      String(req?.adjusted_end_date || req?.preferred_end_date || ""),
+      String(req?.adjusted_days || req?.requested_days || ""),
+      getStatusLabel(String(req?.status || "")),
+      req?.submitted_at ? fmtDate(req.submitted_at) : req?.created_at ? fmtDate(req.created_at) : "",
+    ]
+  })
+  const csv = [headers, ...body]
+    .map((line) => line.map((cell) => `"${String(cell).replaceAll("\"", "\"\"")}"`).join(","))
+    .join("\n")
+  const blob = new Blob([csv], { type: "text/csv" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName: string, title: string) {
   const [{ jsPDF }, autoTableMod] = await Promise.all([
     import("jspdf"),
@@ -895,6 +928,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
   const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
+  const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
+  const [allRequestsDeptFilter, setAllRequestsDeptFilter] = useState("all")
+  const [hodLocationFilter, setHodLocationFilter] = useState("all")
+  const [hodDeptFilter, setHodDeptFilter] = useState("all")
+  const [hrOfficeLocationFilter, setHrOfficeLocationFilter] = useState("all")
+  const [hrOfficeDeptFilter, setHrOfficeDeptFilter] = useState("all")
+  const [hrApproverLocationFilter, setHrApproverLocationFilter] = useState("all")
+  const [hrApproverDeptFilter, setHrApproverDeptFilter] = useState("all")
   const [analyticsRange, setAnalyticsRange] = useState(() => getCurrentMonthRange())
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
@@ -1254,6 +1295,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [canSelfApply, defaultStaffSignature, typedSignature])
 
   useEffect(() => {
+    // New requests use a single selected date and HR Leave Office finalizes adjusted range later.
+    if (!editingId) {
+      setEndDate(startDate || "")
+    }
+  }, [editingId, startDate])
+
+  useEffect(() => {
     void loadData()
     void loadPolicy()
     void loadTemplateOptions()
@@ -1354,6 +1402,61 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     })
   }, [hodAssignedReviews])
 
+  const hodPendingReviewsFiltered: any[] = useMemo(() => {
+    let rows = [...hodPendingReviews]
+    if (hodLocationFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const u = r?.leave_plan_request?.user || r?.user
+        const loc = String(u?.geofence_locations?.name || u?.location_name || "")
+        return loc === hodLocationFilter
+      })
+    }
+    if (hodDeptFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const u = r?.leave_plan_request?.user || r?.user
+        const dept = String(u?.departments?.name || u?.department_name || "")
+        return dept === hodDeptFilter
+      })
+    }
+    return rows
+  }, [hodPendingReviews, hodLocationFilter, hodDeptFilter])
+
+  const hrApproverQueueFiltered: any[] = useMemo(() => {
+    let rows = [...hrApproverQueue]
+    if (hrApproverLocationFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
+        return loc === hrApproverLocationFilter
+      })
+    }
+    if (hrApproverDeptFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
+        return dept === hrApproverDeptFilter
+      })
+    }
+    return rows
+  }, [hrApproverQueue, hrApproverLocationFilter, hrApproverDeptFilter])
+
+  // Unique location and department options derived from all loaded request data
+  const allLeaveLocations: string[] = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of (data?.requests || [])) {
+      const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
+      if (loc) set.add(loc)
+    }
+    return Array.from(set).sort()
+  }, [data?.requests])
+
+  const allLeaveDepts: string[] = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of (data?.requests || [])) {
+      const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
+      if (dept) set.add(dept)
+    }
+    return Array.from(set).sort()
+  }, [data?.requests])
+
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
     return (data.requests || []).filter((r: any) =>
@@ -1384,6 +1487,19 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       })
     }
 
+    if (hrOfficeLocationFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
+        return loc === hrOfficeLocationFilter
+      })
+    }
+    if (hrOfficeDeptFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
+        return dept === hrOfficeDeptFilter
+      })
+    }
+
     const statusRank: Record<string, number> = {
       hod_approved: 0,
       manager_confirmed: 1,
@@ -1405,7 +1521,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     })
 
     return rows
-  }, [hrOfficeQueue, hrOfficeSearch, hrOfficeSortBy, hrOfficeStatusFilter])
+  }, [hrOfficeQueue, hrOfficeSearch, hrOfficeSortBy, hrOfficeStatusFilter, hrOfficeLocationFilter, hrOfficeDeptFilter])
 
   const hrOfficeVisibleRows = useMemo(() => {
     const start = (hrOfficePage - 1) * hrOfficePageSize
@@ -1432,8 +1548,20 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
         return name.includes(search) || empId.includes(search) || lt.includes(search) || st.includes(search)
       })
     }
+    if (allRequestsLocationFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const loc = String(r?.user?.geofence_locations?.name || r?.user?.location_name || r?.location_name || "")
+        return loc === allRequestsLocationFilter
+      })
+    }
+    if (allRequestsDeptFilter !== "all") {
+      rows = rows.filter((r: any) => {
+        const dept = String(r?.user?.departments?.name || r?.user?.department_name || r?.department_name || "")
+        return dept === allRequestsDeptFilter
+      })
+    }
     return rows.sort((a: any, b: any) => new Date(String(b?.created_at || 0)).getTime() - new Date(String(a?.created_at || 0)).getTime())
-  }, [data, allRequestsSearch, allRequestsStatusFilter])
+  }, [data, allRequestsSearch, allRequestsStatusFilter, allRequestsLocationFilter, allRequestsDeptFilter])
 
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
@@ -1689,7 +1817,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Tab config ────────────────────────────────────────────────────────
   const tabs = useMemo(() => {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
-    if (canSelfApply) t.push({ value: "my-leaves", label: "My Leaves", Icon: CalendarDays, count: myRequests.length })
+    if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
@@ -1826,16 +1954,22 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className={editingId ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
                     <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
-                    <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
-                  </div>
+                  {editingId && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
+                      <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
+                    </div>
+                  )}
                 </div>
+
+                {!editingId && (
+                  <p className="text-xs text-slate-500">End date is hidden for new requests. HR Leave Office will review and finalize the leave range.</p>
+                )}
 
                 {sameMonthConflict && (
                   <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-700">
@@ -1907,7 +2041,27 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               </div>
             ) : (
               <div className="space-y-4">
-                {hodPendingReviews.length > 0 && hodPendingReviews.map((review: any) => {
+                <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                  <Select value={hodLocationFilter} onValueChange={setHodLocationFilter}>
+                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All locations</SelectItem>
+                      {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={hodDeptFilter} onValueChange={setHodDeptFilter}>
+                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All departments</SelectItem>
+                      {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hodPendingReviewsFiltered, "hod-pending-reviews.csv")}>
+                    <Download className="w-3 h-3 mr-1" /> Export CSV
+                  </Button>
+                  <span className="w-full text-xs text-slate-500 sm:ml-auto sm:w-auto">{hodPendingReviewsFiltered.length} of {hodPendingReviews.length} shown</span>
+                </div>
+                {hodPendingReviewsFiltered.length > 0 && hodPendingReviewsFiltered.map((review: any) => {
                   const req = review.leave_plan_request
                   if (!req) return null
                   const rId = review.id
@@ -2107,8 +2261,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 </div>
               </div>
 
-              <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-[1fr_auto_auto]">
-                <div className="relative">
+              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                <div className="relative flex-1 min-w-[220px]">
                   <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
                   <Input
                     value={hrOfficeSearch}
@@ -2118,17 +2272,29 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   />
                 </div>
                 <Select value={hrOfficeStatusFilter} onValueChange={setHrOfficeStatusFilter}>
-                  <SelectTrigger className="h-9 w-full md:w-[190px]">
-                    <SelectValue placeholder="Filter status" />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-9 w-40"><SelectValue placeholder="Filter status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All statuses</SelectItem>
                     <SelectItem value="hod_approved">HOD Approved</SelectItem>
                     <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={hrOfficeLocationFilter} onValueChange={setHrOfficeLocationFilter}>
+                  <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={hrOfficeDeptFilter} onValueChange={setHrOfficeDeptFilter}>
+                  <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 <Select value={hrOfficeSortBy} onValueChange={setHrOfficeSortBy}>
-                  <SelectTrigger className="h-9 w-full md:w-[190px]">
+                  <SelectTrigger className="h-9 w-40">
                     <ArrowUpDown className="mr-2 h-3.5 w-3.5 text-slate-500" />
                     <SelectValue placeholder="Sort" />
                   </SelectTrigger>
@@ -2139,6 +2305,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     <SelectItem value="longest">Longest leave days</SelectItem>
                   </SelectContent>
                 </Select>
+                <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hrOfficeFilteredQueue, "hr-office-queue.csv")}>
+                  <Download className="w-3 h-3 mr-1" /> Export CSV
+                </Button>
               </div>
             </div>
             <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
@@ -2739,7 +2908,28 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </CardContent>
                 </Card>
 
-                {hrApproverQueue.map((req: any) => {
+                <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                  <Select value={hrApproverLocationFilter} onValueChange={setHrApproverLocationFilter}>
+                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All locations</SelectItem>
+                      {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={hrApproverDeptFilter} onValueChange={setHrApproverDeptFilter}>
+                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All departments</SelectItem>
+                      {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hrApproverQueueFiltered, "hr-approvals-queue.csv")}>
+                    <Download className="w-3 h-3 mr-1" /> Export CSV
+                  </Button>
+                  <span className="w-full text-xs text-slate-500 sm:ml-auto sm:w-auto">{hrApproverQueueFiltered.length} of {hrApproverQueue.length} shown</span>
+                </div>
+
+                {hrApproverQueueFiltered.map((req: any) => {
                   const isExpanded = hrExpandedId === req.id
                   const effectiveStart = req.adjusted_start_date || req.preferred_start_date
                   const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
@@ -2874,23 +3064,28 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           <TabsContent value="all-requests">
             <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">All Leave Requests</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {(data?.requests || []).length} total</p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">All Leave Requests</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{allRequestsFiltered.length} of {(data?.requests || []).length} total</p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(allRequestsFiltered, "all-leave-requests.csv")}>
+                      <Download className="w-3 h-3 mr-1" /> Export CSV
+                    </Button>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <div className="relative">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="relative min-w-[220px]">
                       <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
                       <Input
                         value={allRequestsSearch}
                         onChange={(e) => setAllRequestsSearch(e.target.value)}
-                        className="pl-8 h-9 w-56"
+                        className="pl-8 h-9 w-48"
                         placeholder="Search staff, type, status"
                       />
                     </div>
                     <Select value={allRequestsStatusFilter} onValueChange={setAllRequestsStatusFilter}>
-                      <SelectTrigger className="h-9 w-48">
+                      <SelectTrigger className="h-9 w-44">
                         <SelectValue placeholder="Filter by status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2903,6 +3098,20 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                         <SelectItem value="hr_office_forwarded">Forwarded to HR Approvers</SelectItem>
                         <SelectItem value="hr_approved">HR Approved</SelectItem>
                         <SelectItem value="hr_rejected">HR Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={allRequestsLocationFilter} onValueChange={setAllRequestsLocationFilter}>
+                      <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All locations</SelectItem>
+                        {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={allRequestsDeptFilter} onValueChange={setAllRequestsDeptFilter}>
+                      <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All departments</SelectItem>
+                        {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>

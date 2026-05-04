@@ -7,6 +7,7 @@ import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
+import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
 const HR_ANALYTICS_ROLES = ["loan_office", "hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr"]
 
@@ -37,6 +38,8 @@ export function LeaveManagementModuleClient({
   initialManagerNotifications,
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
+  const normalizedRole = userRole.toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
 
   return (
     <div className="space-y-6">
@@ -88,7 +91,7 @@ export function LeaveManagementModuleClient({
         <TabsContent value="insights" className="space-y-6">
           <div className="grid gap-6 xl:grid-cols-2">
             <LeaveBalanceWidget />
-            <TeamCalendarView />
+            <TeamCalendarView isHrOffice={isHrOffice} />
           </div>
         </TabsContent>
       </Tabs>

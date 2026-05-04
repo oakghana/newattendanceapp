@@ -75,6 +75,41 @@ async function validateDirectorApprover(admin: any, approverId: string) {
   return Boolean((data as any).is_active) && ["director_hr", "manager_hr", "hr_director", "admin"].includes(role)
 }
 
+async function getDirectorSavedSignature(admin: any, userId: string) {
+  const { data, error } = await admin
+    .from("approval_signature_registry")
+    .select("signature_mode, signature_text, signature_data_url, is_active, updated_at")
+    .eq("workflow_domain", "loan")
+    .eq("approval_stage", "director_hr")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    const message = String(error.message || "")
+    if (/does not exist|schema cache|relation/i.test(message)) {
+      return null
+    }
+    throw error
+  }
+
+  const mode = String((data as any)?.signature_mode || "").trim().toLowerCase()
+  const text = String((data as any)?.signature_text || "").trim()
+  const dataUrl = String((data as any)?.signature_data_url || "").trim()
+  const hasTyped = mode === "typed" && text.length > 0
+  const hasImage = (mode === "draw" || mode === "upload") && dataUrl.length > 0
+
+  if (!hasTyped && !hasImage) return null
+
+  return {
+    mode,
+    text: hasTyped ? text : null,
+    dataUrl: hasImage ? dataUrl : null,
+  }
+}
+
 function buildAutoMemo(req: any) {
   return [
     "QUALITY CONTROL COMPANY LIMITED",
@@ -639,21 +674,25 @@ export async function POST(request: NextRequest) {
       }
 
       const decision = body.decision === "reject" ? "reject" : "approve"
-      const signatureMode = String(body.signature_mode || "typed")
-      const signatureText = String(body.signature_text || "").trim() || null
-      const signatureDataUrl = String(body.signature_data_url || "").trim() || null
       const directorLetter = String(body.director_letter || "").trim() || null
+      const savedSignature = await getDirectorSavedSignature(admin, user.id)
 
-      if (!signatureText && !signatureDataUrl) {
-        return NextResponse.json({ error: "Director HR signature is required" }, { status: 400 })
+      if (!savedSignature) {
+        return NextResponse.json(
+          {
+            error:
+              "No saved Director HR signature found for your account. Save your own signature before finalizing loan approvals.",
+          },
+          { status: 400 },
+        )
       }
 
       toStatus = decision === "approve" ? "approved_director" : "director_rejected"
       update.status = toStatus
       update.director_hr_id = user.id
-      update.director_signature_mode = signatureMode
-      update.director_signature_text = signatureText
-      update.director_signature_data_url = signatureDataUrl
+      update.director_signature_mode = savedSignature.mode
+      update.director_signature_text = savedSignature.text
+      update.director_signature_data_url = savedSignature.dataUrl
       const autoMemo = decision === "approve" ? buildAutoMemo(req) : null
       update.director_letter = directorLetter || autoMemo
       update.director_note = note
@@ -764,30 +803,6 @@ export async function POST(request: NextRequest) {
         .from("user_profiles")
         .update({ first_name: firstName, last_name: lastName, updated_at: new Date().toISOString() })
         .eq("id", req.user_id)
-    }
-
-    if (action === "director_finalize") {
-      const signaturePayload = {
-        user_id: user.id,
-        workflow_domain: "loan",
-        approval_stage: "director_hr",
-        signature_mode: update.director_signature_mode || "typed",
-        signature_text: update.director_signature_text || null,
-        signature_data_url: update.director_signature_data_url || null,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      }
-
-      const { error: signatureError } = await admin
-        .from("approval_signature_registry")
-        .upsert(signaturePayload, { onConflict: "user_id,workflow_domain,approval_stage" })
-
-      if (signatureError) {
-        const signatureMessage = String(signatureError.message || "")
-        if (!/does not exist|schema cache|relation/i.test(signatureMessage)) {
-          throw signatureError
-        }
-      }
     }
 
     await timeline(admin, {

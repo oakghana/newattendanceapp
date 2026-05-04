@@ -354,7 +354,7 @@ export async function GET() {
       allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
     }
 
-    // HOD query: linked HODs can review linked staff requests; first approval is enough to move forward.
+    // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
     const hodPromise: Promise<any> = (async () => {
       if (!(permissions.hod || viewAllTabs)) return { data: [], error: null }
       if (viewAllTabs || !["department_head", "regional_manager"].includes(role)) {
@@ -365,12 +365,15 @@ export async function GET() {
           .order("created_at", { ascending: false })
       }
 
-      if (reviewerScopedStaffIds.length === 0) return { data: [], error: null }
+      const scopedFilter = reviewerScopedStaffIds.length > 0
+        ? `,user_id.in.(${reviewerScopedStaffIds.join(",")})`
+        : ""
+
       return admin
         .from("loan_requests")
         .select("*")
         .eq("status", "pending_hod")
-        .in("user_id", reviewerScopedStaffIds)
+        .or(`hod_reviewer_id.eq.${user.id}${scopedFilter}`)
         .order("created_at", { ascending: false })
     })()
 
@@ -420,11 +423,15 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       (viewAllTabs || permissions.allLoans)
         ? admin.from("loan_requests").select("*").order("created_at", { ascending: false })
-        : (isRegionalManager || isDepartmentHead) && reviewerScopedStaffIds.length > 0
+        : (isRegionalManager || isDepartmentHead)
           ? admin
               .from("loan_requests")
               .select("*")
-              .in("user_id", reviewerScopedStaffIds)
+              .or(
+                `hod_reviewer_id.eq.${user.id}${
+                  reviewerScopedStaffIds.length > 0 ? `,user_id.in.(${reviewerScopedStaffIds.join(",")})` : ""
+                }`,
+              )
               .order("created_at", { ascending: false })
           : Promise.resolve({ data: [], error: null } as any),
       myRequestIds.length > 0
