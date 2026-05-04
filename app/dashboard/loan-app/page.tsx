@@ -2455,41 +2455,6 @@ export default function LoanAppPage() {
                 <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedLoanOfficeStage.length} of {filteredLoanOfficeStageRows.length}</div>
               </div>
 
-              <div className="rounded-md border border-pink-200 bg-pink-50/70 p-2">
-                <div className="text-xs font-medium text-fuchsia-800 mb-2">Loan Type Counter Summary (across 5 stage tabs)</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-                  {loanOfficeTypeSummary.map((item) => (
-                    <div key={`loan-summary-${item.loanKey}`} className="rounded border border-pink-100 bg-white/90 p-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold truncate" title={item.loanLabel}>{item.loanLabel}</span>
-                        <Badge className="bg-fuchsia-700 text-white">{item.totalUnique}</Badge>
-                      </div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
-                        G:{item.goodFd} | P:{item.poorFd} | NP:{item.goodFdNotPushed} | S:{item.sentForApproval} | A:{item.archivable}
-                      </div>
-                    </div>
-                  ))}
-                  {loanOfficeTypeSummary.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No loan type counters available yet.</p>
-                  )}
-                </div>
-              </div>
-
-              <Tabs value={loanOfficeTypeTab} onValueChange={setLoanOfficeTypeTab} className="space-y-2">
-                <TabsList className="flex w-full flex-wrap gap-2 h-auto bg-transparent p-0">
-                  <TabsTrigger value="all" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">All Loan Types</TabsTrigger>
-                  {loanOfficeTypeOptions.map((opt) => (
-                    <TabsTrigger
-                      key={`loan-office-type-${opt.loanKey}`}
-                      value={opt.loanKey}
-                      className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white"
-                    >
-                      {opt.loanLabel}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-
               <Tabs value={loanOfficeStageTab} onValueChange={setLoanOfficeStageTab} className="space-y-2">
                 <TabsList className="flex w-full flex-wrap gap-2 h-auto bg-transparent p-0">
                   <TabsTrigger value="pending" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
@@ -2608,6 +2573,26 @@ export default function LoanAppPage() {
             <Button variant="outline" size="sm" onClick={() => setLoanOfficePage((n) => Math.max(1, n - 1))} disabled={loanOfficePage <= 1}>Prev</Button>
             <span className="text-xs text-muted-foreground">Page {loanOfficePage} of {totalLoanOfficeStagePages}</span>
             <Button variant="outline" size="sm" onClick={() => setLoanOfficePage((n) => Math.min(totalLoanOfficeStagePages, n + 1))} disabled={loanOfficePage >= totalLoanOfficeStagePages}>Next</Button>
+          </div>
+
+          <div className="rounded-md border border-pink-200 bg-pink-50/70 p-2">
+            <div className="text-xs font-medium text-fuchsia-800 mb-2">Loan Type Counter Summary (across 5 stage tabs)</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+              {loanOfficeTypeSummary.map((item) => (
+                <div key={`loan-summary-${item.loanKey}`} className="rounded border border-pink-100 bg-white/90 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold truncate" title={item.loanLabel}>{item.loanLabel}</span>
+                    <Badge className="bg-fuchsia-700 text-white">{item.totalUnique}</Badge>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    G:{item.goodFd} | P:{item.poorFd} | NP:{item.goodFdNotPushed} | S:{item.sentForApproval} | A:{item.archivable}
+                  </div>
+                </div>
+              ))}
+              {loanOfficeTypeSummary.length === 0 && (
+                <p className="text-xs text-muted-foreground">No loan type counters available yet.</p>
+              )}
+            </div>
           </div>
 
           <Card>
