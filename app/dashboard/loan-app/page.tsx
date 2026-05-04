@@ -445,6 +445,12 @@ function normalizeRoleValue(value?: string | null) {
     .replace(/[\s-]+/g, "_")
 }
 
+const ADMIN_ROLE_ALIASES = new Set(["admin", "it_admin", "super_admin", "god"])
+
+function isAdminRoleValue(value?: string | null) {
+  return ADMIN_ROLE_ALIASES.has(normalizeRoleValue(value))
+}
+
 function amountToWords(amount: number): string {
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
     "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
@@ -838,8 +844,8 @@ export default function LoanAppPage() {
   )
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
-  const isAdmin = normalizedRole === "admin"
-  const canAccessLoanOfficeWorkspace = ["admin", "loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
+  const isAdmin = isAdminRoleValue(normalizedRole)
+  const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
@@ -2575,26 +2581,6 @@ export default function LoanAppPage() {
             <Button variant="outline" size="sm" onClick={() => setLoanOfficePage((n) => Math.min(totalLoanOfficeStagePages, n + 1))} disabled={loanOfficePage >= totalLoanOfficeStagePages}>Next</Button>
           </div>
 
-          <div className="rounded-md border border-pink-200 bg-pink-50/70 p-2">
-            <div className="text-xs font-medium text-fuchsia-800 mb-2">Loan Type Counter Summary (across 5 stage tabs)</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-              {loanOfficeTypeSummary.map((item) => (
-                <div key={`loan-summary-${item.loanKey}`} className="rounded border border-pink-100 bg-white/90 p-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold truncate" title={item.loanLabel}>{item.loanLabel}</span>
-                    <Badge className="bg-fuchsia-700 text-white">{item.totalUnique}</Badge>
-                  </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    G:{item.goodFd} | P:{item.poorFd} | NP:{item.goodFdNotPushed} | S:{item.sentForApproval} | A:{item.archivable}
-                  </div>
-                </div>
-              ))}
-              {loanOfficeTypeSummary.length === 0 && (
-                <p className="text-xs text-muted-foreground">No loan type counters available yet.</p>
-              )}
-            </div>
-          </div>
-
           <Card>
             <CardHeader>
               <CardTitle>HR Terms Queue</CardTitle>
@@ -2706,6 +2692,68 @@ export default function LoanAppPage() {
             <span className="text-xs text-muted-foreground">Page {hrPage} of {totalHrPages}</span>
             <Button variant="outline" size="sm" onClick={() => setHrPage((n) => Math.min(totalHrPages, n + 1))} disabled={hrPage >= totalHrPages}>Next</Button>
           </div>
+
+          <Card className="border-fuchsia-200/80 bg-[linear-gradient(135deg,_#fff7ff_0%,_#ffffff_55%,_#eef2ff_100%)] shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base text-fuchsia-900">Loan Type Stage Summary</CardTitle>
+                <Badge className="bg-fuchsia-700 text-white">Across 5 stage tabs</Badge>
+              </div>
+              <CardDescription className="text-xs text-slate-600">
+                Use this to quickly compare each loan type by stage: Good FD, Poor FD, Good FD Not Pushed, Sent for Approval, and Archivable.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5">Good FD</span>
+                <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5">Poor FD</span>
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5">Good FD Not Pushed</span>
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5">Sent for Approval</span>
+                <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5">Archivable</span>
+              </div>
+
+              {loanOfficeTypeSummary.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No loan type counters available yet.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {loanOfficeTypeSummary.map((item) => (
+                    <div key={`loan-summary-${item.loanKey}`} className="rounded-xl border border-fuchsia-100 bg-white/90 p-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900 truncate" title={item.loanLabel}>{item.loanLabel}</p>
+                        <Badge variant="outline" className="border-fuchsia-300 bg-fuchsia-50 text-fuchsia-800">
+                          Total {item.totalUnique}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1">
+                          <p className="text-[11px] text-emerald-700">Good FD</p>
+                          <p className="font-semibold text-emerald-900">{item.goodFd}</p>
+                        </div>
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1">
+                          <p className="text-[11px] text-rose-700">Poor FD</p>
+                          <p className="font-semibold text-rose-900">{item.poorFd}</p>
+                        </div>
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+                          <p className="text-[11px] text-amber-700">Good FD Not Pushed</p>
+                          <p className="font-semibold text-amber-900">{item.goodFdNotPushed}</p>
+                        </div>
+                        <div className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">
+                          <p className="text-[11px] text-sky-700">Sent for Approval</p>
+                          <p className="font-semibold text-sky-900">{item.sentForApproval}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs">
+                        <p className="text-[11px] text-violet-700">Archivable</p>
+                        <p className="font-semibold text-violet-900">{item.archivable}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <LoanAnalyticsMetricCard

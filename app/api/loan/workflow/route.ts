@@ -6,12 +6,14 @@ import {
   canDoDirectorHr,
   canDoHrOffice,
   canDoLoanOffice,
+  isAdminRole,
   isSchemaIssue,
   normalizeRole,
 } from "@/lib/loan-workflow"
 
 const HOD_AUTO_ADVANCE_DAYS = 3
 const POST_LOAN_OFFICE_DELAY_DAYS = 5
+const ADMIN_DB_ROLE_ALIASES = ["admin", "it_admin", "it-admin", "super_admin", "super-admin", "god"]
 
 async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
   if (!userIds.length) return
@@ -60,7 +62,7 @@ async function autoAdvanceStaleHodRequests(admin: any) {
   const { data: loanOfficeUsers } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["loan_officer", "hr_officer", "admin", "director_hr", "hr_director", "loan_office", "manager_hr"])
+    .in("role", ["loan_officer", "hr_officer", "director_hr", "hr_director", "loan_office", "manager_hr", ...ADMIN_DB_ROLE_ALIASES])
     .eq("is_active", true)
 
   const loanOfficeIds = (loanOfficeUsers || []).map((u: any) => u.id)
@@ -271,7 +273,7 @@ export async function GET() {
     const { data: directorApproverRows } = await admin
       .from("user_profiles")
       .select("id, first_name, last_name, position, role")
-      .in("role", ["director_hr", "manager_hr", "hr_director", "admin"])
+      .in("role", ["director_hr", "manager_hr", "hr_director", ...ADMIN_DB_ROLE_ALIASES])
       .eq("is_active", true)
       .order("first_name", { ascending: true })
 
@@ -298,7 +300,7 @@ export async function GET() {
     }
 
     if (resolvedTypesRes.error && isSchemaIssue(resolvedTypesRes.error)) {
-      const viewAllTabs = role === "admin"
+      const viewAllTabs = isAdminRole(role)
       return NextResponse.json(
         {
           degraded: true,
@@ -321,14 +323,14 @@ export async function GET() {
             allLoans: [],
           },
           permissions: {
-            hod: ["department_head", "regional_manager", "admin"].includes(role),
+            hod: isAdminRole(role) || ["department_head", "regional_manager"].includes(role),
             loanOffice: canDoLoanOffice(role, deptName, deptCode),
             accounts: canDoAccounts(role, deptName, deptCode),
             committee: canDoCommittee(role),
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs,
-            allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || ["loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },
@@ -341,17 +343,17 @@ export async function GET() {
     await autoAdvanceStaleHodRequests(admin)
     await broadcastDelayedPostLoanOfficeRequests(admin)
 
-    const viewAllTabs = role === "admin"
+    const viewAllTabs = isAdminRole(role)
 
     const permissions = {
-      hod: ["department_head", "regional_manager", "admin"].includes(role),
+      hod: isAdminRole(role) || ["department_head", "regional_manager"].includes(role),
       loanOffice: canDoLoanOffice(role, deptName, deptCode),
       accounts: canDoAccounts(role, deptName, deptCode),
       committee: canDoCommittee(role),
       hrOffice: canDoHrOffice(role, deptName, deptCode),
       directorHr: canDoDirectorHr(role, deptName, deptCode),
       viewAllTabs,
-      allLoans: ["admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+      allLoans: isAdminRole(role) || ["loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
     }
 
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.

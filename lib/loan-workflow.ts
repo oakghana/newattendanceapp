@@ -30,6 +30,12 @@ export function normalizeRole(role: string | null | undefined): string {
     .replace(/[\s-]+/g, "_")
 }
 
+const ADMIN_ROLE_ALIASES = new Set(["admin", "it_admin", "super_admin", "god"])
+
+export function isAdminRole(role: string | null | undefined): boolean {
+  return ADMIN_ROLE_ALIASES.has(normalizeRole(role))
+}
+
 export function isHrDepartment(name?: string | null, code?: string | null): boolean {
   const n = String(name || "").toLowerCase()
   const c = String(code || "").toLowerCase()
@@ -49,28 +55,28 @@ export function isLoanOfficeDepartment(name?: string | null, code?: string | nul
 }
 
 export function canDoHodReview(role: string): boolean {
-  return ["admin", "regional_manager", "department_head"].includes(role)
+  return isAdminRole(role) || ["regional_manager", "department_head"].includes(role)
 }
 
 export function canDoLoanOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return role === "admin" || role === "loan_officer" || role === "loan_office" || role === "manager_hr" || isLoanOfficeDepartment(deptName, deptCode)
+  return isAdminRole(role) || role === "loan_officer" || role === "loan_office" || role === "manager_hr" || isLoanOfficeDepartment(deptName, deptCode)
 }
 
 export function canDoAccounts(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  const normalizedRole = String(role || "").toLowerCase()
-  return normalizedRole === "admin" || normalizedRole === "accounts" || normalizedRole.includes("account") || isAccountsDepartment(deptName, deptCode)
+  const normalizedRole = normalizeRole(role)
+  return isAdminRole(normalizedRole) || normalizedRole === "accounts" || normalizedRole.includes("account") || isAccountsDepartment(deptName, deptCode)
 }
 
 export function canDoCommittee(role: string): boolean {
-  return role === "admin" || role === "loan_committee" || role === "committee_member" || role === "committee" || role === "director_hr" || role === "manager_hr"
+  return isAdminRole(role) || role === "loan_committee" || role === "committee_member" || role === "committee" || role === "director_hr" || role === "manager_hr"
 }
 
 export function canDoHrOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return role === "admin" || role === "hr_officer" || role === "manager_hr" || role === "loan_office" || isHrDepartment(deptName, deptCode)
+  return isAdminRole(role) || role === "hr_officer" || role === "manager_hr" || role === "loan_office" || isHrDepartment(deptName, deptCode)
 }
 
 export function canDoDirectorHr(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return role === "admin" || role === "director_hr" || role === "manager_hr" || role === "hr_director" || (role === "department_head" && isHrDepartment(deptName, deptCode))
+  return isAdminRole(role) || role === "director_hr" || role === "manager_hr" || role === "hr_director" || (role === "department_head" && isHrDepartment(deptName, deptCode))
 }
 
 export function requestIsEditable(status: string): boolean {
