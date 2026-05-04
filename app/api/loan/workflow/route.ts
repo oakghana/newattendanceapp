@@ -273,7 +273,7 @@ export async function GET() {
     const { data: directorApproverRows } = await admin
       .from("user_profiles")
       .select("id, first_name, last_name, position, role")
-      .in("role", ["director_hr", "manager_hr", "hr_director", ...ADMIN_DB_ROLE_ALIASES])
+      .in("role", ["director_hr", "manager_hr"])
       .eq("is_active", true)
       .order("first_name", { ascending: true })
 

@@ -58,7 +58,7 @@ async function getDirectorApprovers(admin: any) {
   const { data } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["director_hr", "manager_hr", "hr_director", "admin"])
+    .in("role", ["director_hr", "manager_hr"])
     .eq("is_active", true)
   return (data || []).map((row: any) => String(row.id))
 }
@@ -72,7 +72,7 @@ async function validateDirectorApprover(admin: any, approverId: string) {
 
   if (!data) return false
   const role = normalizeRole((data as any).role)
-  return Boolean((data as any).is_active) && ["director_hr", "manager_hr", "hr_director", "admin"].includes(role)
+  return Boolean((data as any).is_active) && ["director_hr", "manager_hr"].includes(role)
 }
 
 async function getDirectorSavedSignature(admin: any, userId: string) {
@@ -352,9 +352,6 @@ export async function POST(request: NextRequest) {
       if (body.staff_number !== undefined) update.staff_number = String(body.staff_number || "").trim() || null
       if (body.staff_rank !== undefined) update.staff_rank = String(body.staff_rank || "").trim() || null
       if (body.corporate_email !== undefined) update.corporate_email = String(body.corporate_email || "").trim() || null
-      if (body.hod_name !== undefined) update.hod_name = String(body.hod_name || "").trim() || null
-      if (body.hod_rank !== undefined) update.hod_rank = String(body.hod_rank || "").trim() || null
-      if (body.hod_location !== undefined) update.hod_location = String(body.hod_location || "").trim() || null
       if (body.hod_reviewer_id !== undefined) update.hod_reviewer_id = String(body.hod_reviewer_id || "").trim() || null
       if (normalizedReference) update.reference_number = normalizedReference
       if (selectedDirectorApproverId) {
@@ -591,9 +588,6 @@ export async function POST(request: NextRequest) {
       update.disbursement_date = disbursementDate
       update.recovery_start_date = recoveryStartDate
       update.recovery_months = recoveryMonths
-      if (body.hod_name !== undefined) update.hod_name = String(body.hod_name || "").trim() || null
-      if (body.hod_rank !== undefined) update.hod_rank = String(body.hod_rank || "").trim() || null
-      if (body.hod_location !== undefined) update.hod_location = String(body.hod_location || "").trim() || null
       update.hr_forwarded_at = new Date().toISOString()
 
       // Track who is expected to sign/finalize the memo.
@@ -603,13 +597,13 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Selected approver is not an active Director HR approver." }, { status: 400 })
         }
         update.director_hr_id = selectedDirectorApproverId
-      } else if (role === "director_hr" || role === "manager_hr" || role === "hr_director") {
+      } else if (role === "director_hr" || role === "manager_hr") {
         update.director_hr_id = user.id
       } else if (!req.director_hr_id) {
         const { data: directorCandidates } = await admin
           .from("user_profiles")
           .select("id, role")
-          .in("role", ["director_hr", "manager_hr", "hr_director"])
+          .in("role", ["director_hr", "manager_hr"])
           .eq("is_active", true)
           .limit(10)
 
@@ -617,7 +611,6 @@ export async function POST(request: NextRequest) {
           const rank = (value: string) => {
             if (value === "director_hr") return 1
             if (value === "manager_hr") return 2
-            if (value === "hr_director") return 3
             return 9
           }
           return rank(String(a.role || "")) - rank(String(b.role || ""))
