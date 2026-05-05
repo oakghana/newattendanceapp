@@ -22,11 +22,14 @@ interface LeaveBalance {
   entitlement: number
   used: number
   remaining: number
+  active_staff_count?: number
 }
 
 interface LeaveBalanceData {
   balances: LeaveBalance[]
   period: string
+  showLeadershipMetrics?: boolean
+  totalActiveStaff?: number
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -116,6 +119,9 @@ export function LeaveBalanceWidget() {
           <div className="text-right">
             <p className="text-2xl font-bold text-white">{totalUsed}</p>
             <p className="text-xs text-slate-300">of {totalEntitlement} days used</p>
+            {data.showLeadershipMetrics && (
+              <p className="text-[11px] text-cyan-200 mt-0.5">{Number(data.totalActiveStaff || 0)} staff currently on leave</p>
+            )}
           </div>
         </div>
         {/* Overall progress bar */}
@@ -147,6 +153,7 @@ export function LeaveBalanceWidget() {
                       <p className="text-sm font-semibold text-slate-800">{balance.label}</p>
                       <p className="text-xs text-slate-400">
                         {balance.used} used · {balance.entitlement} total
+                        {data.showLeadershipMetrics ? ` · ${Number(balance.active_staff_count || 0)} on leave now` : ""}
                       </p>
                     </div>
                   </div>
@@ -156,7 +163,11 @@ export function LeaveBalanceWidget() {
                       isExhausted ? "border-red-200 bg-red-50 text-red-600" : col.badge
                     }`}
                   >
-                    {isExhausted ? "Exhausted" : `${balance.remaining}d left`}
+                    {isExhausted
+                      ? "Exhausted"
+                      : data.showLeadershipMetrics
+                        ? `${balance.remaining}d left · ${Number(balance.active_staff_count || 0)} on leave`
+                        : `${balance.remaining}d left`}
                   </Badge>
                 </div>
                 {/* Per-type progress bar */}
