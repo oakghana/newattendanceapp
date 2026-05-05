@@ -190,10 +190,21 @@ export async function POST(request: NextRequest) {
     }).then(() => {}).catch(() => {}) // Non-fatal
 
 
+    const { data: staffProfile } = await admin
+      .from("user_profiles")
+      .select("first_name, last_name, employee_id")
+      .eq("id", (leaveRequest as any).user_id)
+      .maybeSingle()
+
+    const staffName = [
+      String((staffProfile as any)?.first_name || "").trim(),
+      String((staffProfile as any)?.last_name || "").trim(),
+    ].filter(Boolean).join(" ") || String((staffProfile as any)?.employee_id || "Staff")
+
     // Email HR Approvers that a request is ready for final approval
     notifyLeaveHrOfficeForwarded(admin, {
       leavePlanRequestId: leave_plan_request_id,
-      staffName: "Staff Member",
+      staffName,
       leaveType: String((leaveRequest as any).leave_type_key || "annual"),
       adjustedStartDate: adjusted_start_date,
       adjustedEndDate: adjusted_end_date,

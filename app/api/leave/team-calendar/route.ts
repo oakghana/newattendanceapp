@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -31,35 +32,68 @@ export async function GET(request: NextRequest) {
       rangeEnd = end.toISOString().split("T")[0]
     }
 
-    // Fetch approved leave requests overlapping the range, join with user profile
-    const { data: requests, error } = await supabase
-      .from("leave_requests")
-      .select(
-        `id, user_id, leave_type, start_date, end_date, status,
-         user_profiles!inner(first_name, last_name, employee_id, department_id,
-           departments(name)
-         )`
-      )
-      .eq("status", "approved")
-      .lte("start_date", rangeEnd)
-      .gte("end_date", rangeStart)
-      .order("start_date", { ascending: true })
+    // Current workflow source: leave_plan_requests with final HR approval.
+    const { data: requests, error } = await admin
+      .from("leave_plan_requests")
+      .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, status, is_archived")
+      .eq("status", "hr_approved")
+      .eq("is_archived", false)
+      .order("preferred_start_date", { ascending: true })
 
-    if (error) {
-      // Graceful fallback if schema mismatch
-      return NextResponse.json({ entries: [], rangeStart, rangeEnd })
+    if (error) return NextResponse.json({ entries: [], rangeStart, rangeEnd })
+
+    const normalized = (requests || []).flatMap((r: any) => {
+      const startDate = String(r?.adjusted_start_date || r?.preferred_start_date || "")
+      const endDate = String(r?.adjusted_end_date || r?.preferred_end_date || "")
+      if (!startDate || !endDate) return []
+      if (startDate > rangeEnd || endDate < rangeStart) return []
+      return [{
+        id: String(r.id),
+        userId: String(r.user_id || ""),
+        leaveType: String(r.leave_type_key || "annual"),
+        startDate,
+        endDate,
+      }]
+    })
+
+    const userIds = Array.from(new Set(normalized.map((r: any) => r.userId).filter(Boolean)))
+    let usersById = new Map<string, any>()
+    if (userIds.length > 0) {
+      const { data: profiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, department_id")
+        .in("id", userIds)
+
+      const departmentIds = Array.from(new Set((profiles || []).map((p: any) => String(p?.department_id || "")).filter(Boolean)))
+      let departmentsById = new Map<string, string>()
+      if (departmentIds.length > 0) {
+        const { data: departments } = await admin
+          .from("departments")
+          .select("id, name")
+          .in("id", departmentIds)
+        departmentsById = new Map((departments || []).map((d: any) => [String(d.id), String(d.name || "")]))
+      }
+
+      usersById = new Map((profiles || []).map((p: any) => [String(p.id), {
+        name: `${String(p?.first_name || "")} ${String(p?.last_name || "")}`.trim(),
+        employeeId: p?.employee_id ?? null,
+        department: departmentsById.get(String(p?.department_id || "")) || null,
+      }]))
     }
 
-    const entries = (requests || []).map((r: any) => ({
-      id: r.id,
-      userId: r.user_id,
-      name: `${r.user_profiles?.first_name ?? ""} ${r.user_profiles?.last_name ?? ""}`.trim(),
-      employeeId: r.user_profiles?.employee_id ?? null,
-      department: r.user_profiles?.departments?.name ?? null,
-      leaveType: r.leave_type,
-      startDate: r.start_date,
-      endDate: r.end_date,
-    }))
+    const entries = normalized.map((r: any) => {
+      const profile = usersById.get(r.userId)
+      return {
+        id: r.id,
+        userId: r.userId,
+        name: profile?.name || "Staff Member",
+        employeeId: profile?.employeeId || null,
+        department: profile?.department || null,
+        leaveType: r.leaveType,
+        startDate: r.startDate,
+        endDate: r.endDate,
+      }
+    })
 
     return NextResponse.json({ entries, rangeStart, rangeEnd })
   } catch (err) {

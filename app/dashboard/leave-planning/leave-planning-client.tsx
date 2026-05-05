@@ -2879,7 +2879,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       />
                     )}
                     {hrSigMode === "draw" && (
-                      <SignaturePad onSave={(d) => setHrSigDataUrl(d)} savedDataUrl={hrSigDataUrl} />
+                      <SignaturePad value={hrSigDataUrl} onChange={setHrSigDataUrl} />
                     )}
                     {hrSigMode === "upload" && (
                       <Input type="file" accept="image/*"

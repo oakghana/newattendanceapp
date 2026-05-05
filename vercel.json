@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/monthly-password-reset",
       "schedule": "0 23 28-31 3,6,9,12 *"
+    },
+    {
+      "path": "/api/leave/reminders/resume-five-days",
+      "schedule": "0 6 * * *"
     }
   ]
 }

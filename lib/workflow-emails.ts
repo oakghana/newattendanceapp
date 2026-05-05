@@ -13,53 +13,51 @@
 import "server-only"
 import { emailService } from "@/lib/email-service"
 
-const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
+const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://updates.qccapps.com").replace(/\/$/, "")
 
 // ─── colour palette shared by all templates ─────────────────────────────────
-const GREEN = "#2c6216"
-const LIGHT_GREEN = "#f0f7ec"
-const WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
-
-function watermarkLayer(): string {
-  const line = Array.from({ length: 3 }).map(() => WATERMARK_TEXT).join("   ")
-  return `
-    <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;">
-      <div style="position:absolute;left:-10%;top:12%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
-      <div style="position:absolute;left:-10%;top:44%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
-      <div style="position:absolute;left:-10%;top:76%;width:140%;transform:rotate(-24deg);color:rgba(44,98,22,0.13);font-size:24px;font-weight:700;letter-spacing:1px;white-space:nowrap;">${line}</div>
-    </div>
-  `
-}
+const GREEN = "#1a5c0e"
+const DARK_GREEN = "#134308"
 
 function baseLayout(title: string, body: string): string {
   return `
-<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-  <div style="background:${GREEN};padding:16px 28px;">
-    <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">${title}</h2>
-    <p style="margin:3px 0 0;color:#cde8ba;font-size:12px;">Quality Control Company Ltd. (COCOBOD) — HR System</p>
-  </div>
-  <div style="padding:24px 28px;background:${LIGHT_GREEN};position:relative;">
-    ${watermarkLayer()}
-    <div style="position:relative;z-index:2;">
-      ${body}
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,${DARK_GREEN} 0%,${GREEN} 60%,#2d7a1a 100%);padding:28px 32px 24px;">
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;margin-bottom:10px;">
+      <span style="color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;">QCC HR System</span>
     </div>
+    <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;line-height:1.3;">${title}</h1>
+    <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:12px;">Quality Control Company Ltd. (COCOBOD)</p>
   </div>
-  <div style="padding:12px 28px;background:#f8f8f8;border-top:1px solid #e2e8f0;">
-    <p style="margin:0;color:#888;font-size:11px;">This is an automated notification from the QCC HR &amp; Loans System. Do not reply to this email.<br/>If you believe this email was sent in error, please contact your HR department.</p>
+  <!-- Body -->
+  <div style="padding:28px 32px;background:#f9fafb;">
+    ${body}
+  </div>
+  <!-- Footer -->
+  <div style="padding:16px 32px;background:#f0f4f0;border-top:1px solid #dce8d8;">
+    <p style="margin:0;color:#6b7280;font-size:11px;line-height:1.6;">
+      This is an automated notification from the <strong>QCC HR &amp; Loans System</strong>. Do not reply to this email.<br/>
+      If you believe this email was sent in error, please contact your HR department.
+    </p>
   </div>
 </div>`
 }
 
 function btn(url: string, label: string): string {
-  return `<a href="${url}" style="display:inline-block;margin-top:14px;padding:10px 22px;background:${GREEN};color:#fff;border-radius:5px;text-decoration:none;font-size:13px;font-weight:600;">${label}</a>`
+  const fullUrl = url.startsWith("http") ? url : `${APP_URL}${url.startsWith("/") ? "" : "/"}${url}`
+  return `<div style="margin-top:20px;"><a href="${fullUrl}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,${DARK_GREEN},${GREEN});color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">${label} &rarr;</a></div>`
 }
 
 function row(label: string, value: string): string {
-  return `<tr><td style="padding:5px 0;color:#555;font-size:13px;width:160px;"><strong>${label}</strong></td><td style="padding:5px 0;color:#222;font-size:13px;">${value || "—"}</td></tr>`
+  return `<tr>
+    <td style="padding:8px 12px 8px 0;color:#6b7280;font-size:13px;font-weight:500;white-space:nowrap;vertical-align:top;">${label}</td>
+    <td style="padding:8px 0;color:#111827;font-size:13px;font-weight:600;">${value || "—"}</td>
+  </tr>`
 }
 
 function table(rows: string): string {
-  return `<table style="border-collapse:collapse;margin-bottom:14px;">${rows}</table>`
+  return `<table style="border-collapse:collapse;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;margin-bottom:16px;">${rows}</table>`
 }
 
 // ─── Recipient helpers ──────────────────────────────────────────────────────
@@ -467,6 +465,84 @@ export async function notifyLeaveHrRejected(
 
 // ════════════════════════════════════════════════════════════════════════════
 //  LOAN WORKFLOW EMAILS
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 5-day resume reminder → notify the staff member AND their HOD/RM that the
+ * staff member returns from leave in 5 days.
+ */
+export async function notifyLeaveResumeReminder(
+  admin: AdminClient,
+  opts: {
+    leavePlanRequestId: string
+    staffUserId: string
+    staffName: string
+    leaveType: string
+    endDate: string
+    resumeDate: string
+    daysLeft: number
+  },
+): Promise<void> {
+  try {
+    const [staffEmail, hodEmails] = await Promise.all([
+      emailForUser(admin, opts.staffUserId),
+      hodEmailsFromReviews(admin, opts.leavePlanRequestId),
+    ])
+
+    const dashLink = `${APP_URL}/dashboard/leave-planning`
+
+    // ── Email to the staff member ──
+    if (staffEmail) {
+      const subject = `Reminder: You Return from Leave in ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"}`
+      const html = baseLayout(
+        `Return to Work — ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"} Remaining`,
+        `<p style="margin:0 0 16px;font-size:14px;color:#374151;">Dear <strong>${opts.staffName}</strong>,</p>
+        <p style="margin:0 0 16px;font-size:14px;color:#374151;">
+          This is a friendly reminder that your approved leave ends in
+          <strong style="color:${GREEN};">${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}</strong>.
+          Please prepare to resume your duties on <strong>${opts.resumeDate}</strong>.
+        </p>
+        ${table(
+          row("Leave Type", opts.leaveType) +
+          row("Leave End Date", opts.endDate) +
+          row("Resume Date", opts.resumeDate) +
+          row("Days Remaining", String(opts.daysLeft))
+        )}
+        <p style="margin:0 0 0;font-size:13px;color:#6b7280;">
+          If you need to extend your leave, please contact HR as soon as possible.
+        </p>`,
+      )
+      await send(admin, staffEmail, subject, html, "leave resume reminder staff")
+    }
+
+    // ── Email to HOD / RM ──
+    if (hodEmails.length) {
+      const subject = `Staff Return Notice: ${opts.staffName} resumes in ${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}`
+      const html = baseLayout(
+        "Staff Returning from Leave",
+        `<p style="margin:0 0 16px;font-size:14px;color:#374151;">
+          For your information — a staff member under your supervision will be
+          returning from leave in <strong style="color:${GREEN};">${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}</strong>.
+        </p>
+        ${table(
+          row("Staff", opts.staffName) +
+          row("Leave Type", opts.leaveType) +
+          row("Leave End Date", opts.endDate) +
+          row("Expected Resume Date", opts.resumeDate)
+        )}
+        <p style="margin:0;font-size:13px;color:#6b7280;">
+          Please ensure the staff member's workspace and duties are prepared for their return.
+        </p>
+        ${btn(dashLink, "View Leave Dashboard")}`,
+      )
+      await send(admin, hodEmails, subject, html, "leave resume reminder HOD")
+    }
+  } catch (e) {
+    console.warn("[workflow-emails] notifyLeaveResumeReminder failed:", e)
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════════
 
 /**

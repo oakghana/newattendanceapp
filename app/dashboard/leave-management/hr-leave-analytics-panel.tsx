@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
 import {
   TrendingUp, Download, RefreshCw, Calendar, Users, Clock,
   CheckCircle2, AlertCircle, MapPin, BarChart3, FileText,
-  Activity, Layers, ArrowUpRight,
+  Activity, Layers,
 } from "lucide-react"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -39,6 +40,24 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 
 function leaveLabel(key: string) {
   return LEAVE_TYPE_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function daysLeftToResume(startDate: string, endDate: string) {
+  const today = new Date()
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const leaveStart = new Date(`${startDate}T00:00:00`)
+  const leaveEnd = new Date(`${endDate}T00:00:00`)
+  if (Number.isNaN(leaveStart.getTime()) || Number.isNaN(leaveEnd.getTime())) return "-"
+
+  if (todayStart < leaveStart) {
+    const startsIn = Math.ceil((leaveStart.getTime() - todayStart.getTime()) / 86400000)
+    return `Starts in ${startsIn}d`
+  }
+
+  const resumeDate = new Date(leaveEnd)
+  resumeDate.setDate(resumeDate.getDate() + 1)
+  const diff = Math.ceil((resumeDate.getTime() - todayStart.getTime()) / 86400000)
+  return diff > 0 ? `${diff}d` : "Resumed"
 }
 
 function downloadCsv(rows: any[], fileName: string) {
@@ -145,8 +164,10 @@ function BarRow({ label, value, max, gradient }: { label: string; value: number;
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 export function HrLeaveAnalyticsPanel() {
+  const { toast } = useToast()
   const [range, setRange] = useState(getCurrentMonthRange)
   const [loading, setLoading] = useState(false)
+  const [sendingReminder, setSendingReminder] = useState(false)
   const [data, setData] = useState<any>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -183,6 +204,33 @@ export function HrLeaveAnalyticsPanel() {
   const rangeEnd = data?.rangeEnd ?? range.end
 
   const rangeLabel = `leave_analytics_${range.start}_to_${range.end}`
+
+  const sendFiveDayResumeReminders = useCallback(async () => {
+    setSendingReminder(true)
+    try {
+      const res = await fetch("/api/leave/reminders/resume-five-days", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "hr-leave-analytics-panel" }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error((json && (json.error || json.message)) || "Failed to send reminders")
+      }
+      toast({
+        title: "5-day reminders sent",
+        description: `Sent ${Number(json?.sent || 0)} reminder email(s). Skipped ${Number(json?.skipped || 0)} already-notified request(s).`,
+      })
+    } catch (error) {
+      toast({
+        title: "Reminder send failed",
+        description: error instanceof Error ? error.message : "Failed to send resume reminders",
+        variant: "destructive",
+      })
+    } finally {
+      setSendingReminder(false)
+    }
+  }, [toast])
 
   return (
     <div className="space-y-6">
@@ -221,6 +269,13 @@ export function HrLeaveAnalyticsPanel() {
               onClick={() => downloadPdf(records, `${rangeLabel}.pdf`, "Leave Analytics Report", rangeStart, rangeEnd)}
               disabled={!records.length}>
               <FileText className="w-3.5 h-3.5 mr-1.5" /> PDF
+            </Button>
+            <Button size="sm" variant="ghost"
+              className="h-8 border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              onClick={() => void sendFiveDayResumeReminders()}
+              disabled={sendingReminder}>
+              <Clock className={`w-3.5 h-3.5 mr-1.5 ${sendingReminder ? "animate-pulse" : ""}`} />
+              {sendingReminder ? "Sending..." : "Send 5-Day Reminders"}
             </Button>
           </div>
         </div>
@@ -412,6 +467,7 @@ export function HrLeaveAnalyticsPanel() {
                       <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Type</th>
                       <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Start</th>
                       <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">End</th>
+                      <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Days Left</th>
                       <th className="text-right py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Days</th>
                     </tr>
                   </thead>
@@ -427,6 +483,7 @@ export function HrLeaveAnalyticsPanel() {
                         </td>
                         <td className="py-3 px-3 text-slate-600">{r.start_date}</td>
                         <td className="py-3 px-3 text-slate-600">{r.end_date}</td>
+                        <td className="py-3 px-3 text-slate-600 font-medium">{daysLeftToResume(String(r.start_date || ""), String(r.end_date || ""))}</td>
                         <td className="py-3 px-4 text-right font-bold text-slate-800">{r.days}d</td>
                       </tr>
                     ))}
