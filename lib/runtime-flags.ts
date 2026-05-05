@@ -19,7 +19,7 @@ export type RuntimeFlags = {
 
 export const DEFAULT_RUNTIME_FLAGS: RuntimeFlags = {
   passwordEnforcementEnabled: false,
-  autoCheckInEnabled: false,
+  autoCheckInEnabled: true,
   autoCheckoutEnabled: false,
   deviceSharingEnforcementEnabled: true,
   latenessReasonDeadline: "09:00",

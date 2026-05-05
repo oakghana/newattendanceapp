@@ -2311,8 +2311,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               </div>
             </div>
             <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
-              <TabsList className={`grid h-auto w-full ${canViewLeaveAnalytics ? "grid-cols-2" : "grid-cols-1"} rounded-xl border border-slate-200 bg-slate-50 p-1.5`}>
+              <TabsList className={`grid h-auto w-full ${
+                canViewLeaveAnalytics && canManageLeaveTypePolicy ? "grid-cols-3" :
+                (canViewLeaveAnalytics || canManageLeaveTypePolicy) ? "grid-cols-2" : "grid-cols-1"
+              } rounded-xl border border-slate-200 bg-slate-50 p-1.5`}>
                 <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Operations</TabsTrigger>
+                {canManageLeaveTypePolicy && (
+                  <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Leave Policy</TabsTrigger>
+                )}
                 {canViewLeaveAnalytics && (
                   <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
                 )}
@@ -2459,15 +2465,20 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               </TabsContent>
               )}
 
-              <TabsContent value="operations">
-                {canManageLeaveTypePolicy && (
-                  <Card className="border border-emerald-200 bg-emerald-50/40">
-                    <CardContent className="p-4 space-y-4">
-                      <div>
-                        <p className="text-sm font-semibold text-emerald-900">Leave Type Policy Management</p>
-                        <p className="text-xs text-emerald-800/80 mt-1">
-                          Edit entitlement days and labels, or add a new leave type for {policyActivePeriod}.
-                        </p>
+              {canManageLeaveTypePolicy && (
+                <TabsContent value="leave-policy" className="space-y-6">
+                  <Card className="border border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-white shadow-sm">
+                    <CardContent className="p-6 space-y-5">
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-emerald-100 p-2.5 text-emerald-700">
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        </div>
+                        <div>
+                          <p className="text-base font-semibold text-slate-900">Leave Type Policy Management</p>
+                          <p className="text-sm text-slate-500 mt-0.5">
+                            Edit entitlement days and labels, or add a new leave type for {policyActivePeriod}.
+                          </p>
+                        </div>
                       </div>
 
                       <div className="grid gap-3">
@@ -2481,7 +2492,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                           return (
                             <div
                               key={leaveTypeOption.leaveTypeKey}
-                              className="grid gap-2 rounded-lg border border-emerald-200 bg-white p-3 md:grid-cols-[1fr_140px_auto]"
+                              className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-[1fr_140px_auto]"
                             >
                               <Input
                                 value={draft.leaveTypeLabel}
@@ -2515,15 +2526,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                               >
                                 {isSaving ? "Saving..." : "Save"}
                               </Button>
-                              <p className="text-[11px] text-slate-500 md:col-span-3">
-                                Key: {leaveTypeOption.leaveTypeKey} · Order: {index + 1}
+                              <p className="text-[11px] text-slate-400 md:col-span-3">
+                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1}
                               </p>
                             </div>
                           )
                         })}
                       </div>
 
-                      <div className="rounded-lg border border-dashed border-emerald-300 bg-white p-3 space-y-2">
+                      <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/40 p-4 space-y-3">
                         <p className="text-xs font-semibold text-emerald-900 uppercase tracking-wide">Add New Leave Type</p>
                         <div className="grid gap-2 md:grid-cols-[1fr_1fr_140px_auto]">
                           <Input
@@ -2555,8 +2566,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       </div>
                     </CardContent>
                   </Card>
-                )}
+                </TabsContent>
+              )}
 
+              <TabsContent value="operations">
                 {hrOfficeFilteredQueue.length === 0 ? (
                   <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                     <ClipboardList className="w-10 h-10 mx-auto mb-3 text-slate-300" />

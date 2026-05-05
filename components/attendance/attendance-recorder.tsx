@@ -257,6 +257,9 @@ export function AttendanceRecorder({
   const [, setSystemClockTick] = useState(0)
   const autoCheckoutAttemptedRef = useRef(false)
   const autoCheckInAttemptedRef = useRef(false)
+  const autoTriggeredOffPremisesRef = useRef(false)
+  // Stores the latest handleCheckInOutsidePremises so the auto-check-in effect can call it
+  const handleCheckInOutsidePremisesRef = useRef<(() => Promise<void>) | null>(null)
   const localTodayAttendanceRef = useRef(initialTodayAttendance)
   const [autoCheckInFailureCount, setAutoCheckInFailureCount] = useState(0)
 
@@ -1463,6 +1466,8 @@ export function AttendanceRecorder({
       setCheckingMessage("")
     }
   }
+  // Keep ref current so the auto check-in effect can safely call this without stale closure issues
+  handleCheckInOutsidePremisesRef.current = handleCheckInOutsidePremises
 
   const handleSendOffPremisesRequest = async () => {
     if (!pendingOffPremisesLocation) return
@@ -2218,6 +2223,7 @@ export function AttendanceRecorder({
 
     if (localTodayAttendance?.check_in_time || hasPendingOffPremisesRequest || isOnLeave) {
       autoCheckInAttemptedRef.current = false
+      autoTriggeredOffPremisesRef.current = false
       setAutoCheckInFailureCount((prev) => (prev === 0 ? prev : 0))
       return
     }
@@ -2286,6 +2292,11 @@ export function AttendanceRecorder({
 
         const isExemptDeptUser = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isExemptFromAttendanceReasons(userProfile?.role)
         if (!isExemptDeptUser && (!validation.canCheckIn || !validation.nearestLocation)) {
+          // User is out of range — auto-trigger the off-premises check-in dialog once
+          if (!autoTriggeredOffPremisesRef.current) {
+            autoTriggeredOffPremisesRef.current = true
+            void handleCheckInOutsidePremisesRef.current?.()
+          }
           return
         }
         // For exempt departments, use nearest location even if out of range
@@ -2552,10 +2563,11 @@ export function AttendanceRecorder({
       ? { ok: true, normalized: "", error: null }
       : validateMeaningfulText(offPremisesCheckoutReason, {
           fieldLabel: "Off-premises checkout reason",
-          minLength: 10,
+          minLength: 20,
+          minWords: 20,
         })
     if (!reasonValidation.ok) {
-      toast({ title: "Reason required", description: "Please enter a reason before confirming.", variant: "destructive" })
+      toast({ title: "Reason required", description: reasonValidation.error || "Please provide a detailed reason of at least 20 words.", variant: "destructive" })
       return
     }
     const { location, nearestLocation: nearestLocFromDialog } = pendingOffPremisesCheckoutData
@@ -3235,12 +3247,12 @@ export function AttendanceRecorder({
                 </div>
                 <div>
                   <h3 className="font-semibold text-base">
-                    {pendingOffPremisesIsDirectCheckout ? "Check Out Off-Premises" : "Request Off-Premises Check-Out"}
+                    {pendingOffPremisesIsDirectCheckout ? "Check Out Off-Premises" : "Out-of-Range Check-Out — Reason Required"}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {pendingOffPremisesIsDirectCheckout
                       ? "You started the day on approved off-premises duty and have worked 7+ hours. You can check out immediately."
-                      : "You're outside your registered location. Your supervisor will review and approve your check-out request."}
+                      : "You are currently outside your registered QCC location. You must explain why you are not within range before your check-out can be processed. Your explanation will be reviewed by your supervisor."}
                   </p>
                 </div>
               </div>
@@ -3253,17 +3265,27 @@ export function AttendanceRecorder({
               </div>
               {!pendingOffPremisesIsDirectCheckout && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="offpremises-checkout-reason" className="text-sm font-medium">Reason for Off-Premises Check-Out *</Label>
+                  <Label htmlFor="offpremises-checkout-reason" className="text-sm font-medium">
+                    Why are you not within your registered location? <span className="text-red-500">*</span>
+                  </Label>
                   <textarea
                     id="offpremises-checkout-reason"
                     value={offPremisesCheckoutReason}
                     onChange={(e) => setOffPremisesCheckoutReason(e.target.value)}
-                    placeholder="e.g., Official assignment, field visit, emergency travel, client delivery..."
-                    className="w-full min-h-[90px] p-3 text-sm border rounded-xl resize-none bg-muted/40 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition"
-                    maxLength={500}
+                    placeholder="Provide a full and concrete explanation. For example: I was assigned by my supervisor to conduct a field inspection at the Kumasi branch office and could not return to the main premises before close of work."
+                    className="w-full min-h-[110px] p-3 text-sm border rounded-xl resize-none bg-muted/40 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition"
+                    maxLength={600}
                     autoFocus
                   />
-                  <p className="text-xs text-muted-foreground">{offPremisesCheckoutReason.length}/500</p>
+                  {(() => {
+                    const wordCount = offPremisesCheckoutReason.trim().split(/\s+/).filter(w => /[a-z]/i.test(w)).length
+                    const isEnough = wordCount >= 20
+                    return (
+                      <p className={`text-xs ${isEnough ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+                        {wordCount} / 20 words minimum{isEnough ? " ✓" : " — please add more detail"}
+                      </p>
+                    )
+                  })()}
                 </div>
               )}
               <div className="flex gap-2 pt-1">
@@ -3278,7 +3300,7 @@ export function AttendanceRecorder({
                 <Button
                   onClick={handleOffPremisesCheckoutConfirm}
                   className={cn("flex-1 text-white", pendingOffPremisesIsDirectCheckout ? "bg-emerald-600 hover:bg-emerald-700" : "bg-orange-600 hover:bg-orange-700")}
-                  disabled={isLoading || (!pendingOffPremisesIsDirectCheckout && offPremisesCheckoutReason.trim().length === 0)}
+                  disabled={isLoading || (!pendingOffPremisesIsDirectCheckout && offPremisesCheckoutReason.trim().split(/\s+/).filter(w => /[a-z]/i.test(w)).length < 20)}
                 >
                   {isLoading ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{pendingOffPremisesIsDirectCheckout ? "Checking out..." : "Sending..."}</>
