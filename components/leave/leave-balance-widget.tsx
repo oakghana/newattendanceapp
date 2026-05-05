@@ -15,6 +15,20 @@ import {
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+
+interface ActiveStaffEntry {
+  userId: string
+  staffName: string
+  startDate: string
+  endDate: string
+  days: number
+}
 
 interface LeaveBalance {
   key: string
@@ -23,6 +37,7 @@ interface LeaveBalance {
   used: number
   remaining: number
   active_staff_count?: number
+  active_staff_list?: ActiveStaffEntry[]
 }
 
 interface LeaveBalanceData {
@@ -66,6 +81,7 @@ export function LeaveBalanceWidget() {
   const [data, setData] = useState<LeaveBalanceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedType, setSelectedType] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/leave/balance", { cache: "no-store" })
@@ -153,22 +169,34 @@ export function LeaveBalanceWidget() {
                       <p className="text-sm font-semibold text-slate-800">{balance.label}</p>
                       <p className="text-xs text-slate-400">
                         {balance.used} used · {balance.entitlement} total
-                        {data.showLeadershipMetrics ? ` · ${Number(balance.active_staff_count || 0)} on leave now` : ""}
                       </p>
                     </div>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`shrink-0 border text-xs font-semibold ${
-                      isExhausted ? "border-red-200 bg-red-50 text-red-600" : col.badge
-                    }`}
-                  >
-                    {isExhausted
-                      ? "Exhausted"
-                      : data.showLeadershipMetrics
-                        ? `${balance.remaining}d left · ${Number(balance.active_staff_count || 0)} on leave`
-                        : `${balance.remaining}d left`}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge
+                      variant="outline"
+                      className={`shrink-0 border text-xs font-semibold ${
+                        isExhausted ? "border-red-200 bg-red-50 text-red-600" : col.badge
+                      }`}
+                    >
+                      {isExhausted ? "Exhausted" : `${balance.remaining}d left`}
+                    </Badge>
+                    {data.showLeadershipMetrics && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if ((balance.active_staff_count || 0) > 0) setSelectedType(balance.key)
+                        }}
+                        className={`text-[11px] font-medium rounded-full px-2 py-0.5 border transition-colors ${
+                          (balance.active_staff_count || 0) > 0
+                            ? `${col.badge} cursor-pointer hover:opacity-80`
+                            : "border-slate-200 bg-slate-50 text-slate-400 cursor-default"
+                        }`}
+                      >
+                        {balance.active_staff_count || 0} on leave
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {/* Per-type progress bar */}
                 <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
@@ -182,6 +210,49 @@ export function LeaveBalanceWidget() {
           })}
         </div>
       </CardContent>
+
+      {/* Staff on leave modal */}
+      {data.showLeadershipMetrics && (
+        <Dialog open={Boolean(selectedType)} onOpenChange={() => setSelectedType(null)}>
+          <DialogContent className="max-w-md">
+            {(() => {
+              const sel = data.balances.find((b) => b.key === selectedType)
+              const col = selectedType ? getColour(selectedType) : DEFAULT_COLOUR
+              const icon = selectedType ? (TYPE_ICONS[selectedType] ?? <Activity className="h-4 w-4" />) : null
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      {icon && <span className={`rounded-lg p-1.5 ${col.icon}`}>{icon}</span>}
+                      Staff on {sel?.label ?? "Leave"}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="mt-2 space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {(sel?.active_staff_list?.length ?? 0) === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-6">No staff currently on this leave type.</p>
+                    ) : (
+                      sel!.active_staff_list!.map((s) => (
+                        <div
+                          key={s.userId}
+                          className={`flex items-center justify-between rounded-xl border px-3 py-2.5 ${col.badge} border-opacity-60`}
+                        >
+                          <div>
+                            <p className="text-sm font-semibold">{s.staffName}</p>
+                            <p className="text-[11px] opacity-75">
+                              {s.startDate} – {s.endDate}
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold">{s.days}d</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )
+            })()}
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   )
 }

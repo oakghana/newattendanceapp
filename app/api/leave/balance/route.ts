@@ -114,9 +114,12 @@ export async function GET() {
 
     // Leadership metrics: count how many staff are currently on each leave type.
     const activeStaffCountByType: Record<string, number> = {}
+    const activeStaffListByType: Record<string, { userId: string; staffName: string; startDate: string; endDate: string; days: number }[]> = {}
     if (showLeadershipMetrics) {
       const today = new Date().toISOString().slice(0, 10)
-      const uniqueByType: Record<string, Set<string>> = {}
+
+      // Collect raw records per type
+      const rawByType: Record<string, { userId: string; startDate: string; endDate: string }[]> = {}
 
       const { data: activeV2 } = await admin
         .from("leave_plan_requests")
@@ -131,8 +134,13 @@ export async function GET() {
         const start = String((req as any).adjusted_start_date || (req as any).preferred_start_date || "")
         const end = String((req as any).adjusted_end_date || (req as any).preferred_end_date || "")
         if (!isDateWithinRange(today, start, end)) continue
-        if (!uniqueByType[key]) uniqueByType[key] = new Set()
-        uniqueByType[key].add(String((req as any).user_id || (req as any).id || "unknown"))
+        const userId = String((req as any).user_id || "")
+        if (!userId) continue
+        if (!rawByType[key]) rawByType[key] = []
+        // Deduplicate by userId within same type
+        if (!rawByType[key].some((r) => r.userId === userId)) {
+          rawByType[key].push({ userId, startDate: start, endDate: end })
+        }
       }
 
       const { data: activeLegacy } = await admin
@@ -147,12 +155,39 @@ export async function GET() {
         const start = String((req as any).start_date || "")
         const end = String((req as any).end_date || "")
         if (!isDateWithinRange(today, start, end)) continue
-        if (!uniqueByType[key]) uniqueByType[key] = new Set()
-        uniqueByType[key].add(String((req as any).user_id || (req as any).id || "unknown"))
+        const userId = String((req as any).user_id || "")
+        if (!userId) continue
+        if (!rawByType[key]) rawByType[key] = []
+        if (!rawByType[key].some((r) => r.userId === userId)) {
+          rawByType[key].push({ userId, startDate: start, endDate: end })
+        }
       }
 
-      Object.entries(uniqueByType).forEach(([key, set]) => {
-        activeStaffCountByType[key] = set.size
+      // Fetch staff names for all collected userIds
+      const allUserIds = Array.from(new Set(Object.values(rawByType).flat().map((r) => r.userId)))
+      const nameMap: Record<string, string> = {}
+      if (allUserIds.length > 0) {
+        const { data: profiles } = await admin
+          .from("user_profiles")
+          .select("user_id, first_name, last_name, employee_id")
+          .in("user_id", allUserIds)
+        for (const p of profiles || []) {
+          const fn = String((p as any).first_name || "").trim()
+          const ln = String((p as any).last_name || "").trim()
+          nameMap[String((p as any).user_id)] = [fn, ln].filter(Boolean).join(" ") || String((p as any).employee_id || (p as any).user_id)
+        }
+      }
+
+      // Build final typed lists
+      Object.entries(rawByType).forEach(([key, records]) => {
+        activeStaffCountByType[key] = records.length
+        activeStaffListByType[key] = records.map((r) => ({
+          userId: r.userId,
+          staffName: nameMap[r.userId] || r.userId,
+          startDate: r.startDate,
+          endDate: r.endDate,
+          days: countCalendarDays(r.startDate, r.endDate),
+        }))
       })
     }
 
@@ -167,6 +202,7 @@ export async function GET() {
         used,
         remaining,
         active_staff_count: activeStaffCountByType[key] || 0,
+        active_staff_list: activeStaffListByType[key] || [],
       }
     })
 
