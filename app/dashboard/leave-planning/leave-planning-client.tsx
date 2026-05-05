@@ -1941,7 +1941,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       <SelectContent>
                         {leaveTypes.map((t) => (
                           <SelectItem key={t.leaveTypeKey} value={t.leaveTypeKey}>
-                            {t.leaveTypeLabel} ({t.entitlementDays}d)
+                            {t.leaveTypeLabel}
                           </SelectItem>
                         ))}
                       </SelectContent>

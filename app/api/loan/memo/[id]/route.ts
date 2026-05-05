@@ -415,26 +415,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // ─── THRO section ─────────────────────────────────────────────────
     const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
     const parsedLoanOfficeNote = splitThroTelephoneFromNote(loan.loan_office_note)
-    const hodName = String(parsedHrNote.throName || parsedLoanOfficeNote.throName || loan.hod_name || throRecipient?.name || "").toUpperCase().trim()
     const hodRank = String(parsedHrNote.throRank || parsedLoanOfficeNote.throRank || loan.hod_rank || throRecipient?.position || "").toUpperCase().trim()
     const hodLocation = String(parsedHrNote.throLocation || parsedLoanOfficeNote.throLocation || loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
-    const hodTelephone = parsedHrNote.telephone || parsedLoanOfficeNote.telephone
-    if (hodName) {
+    if (hodRank || hodLocation) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)
       doc.text("THRO:", marginLeft, y)
-      doc.text(hodName, marginLeft + 14, y)
+      doc.text(hodRank || hodLocation, marginLeft + 14, y)
       y += 5.5
       if (hodRank) {
-        doc.text(hodRank, marginLeft + 14, y)
+        doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
         y += 5.5
-      }
-      doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
-      y += 5.5
-      doc.text(hodLocation, marginLeft + 14, y)
-      if (hodTelephone) {
-        y += 5.5
-        doc.text(`TEL: ${hodTelephone}`, marginLeft + 14, y)
+        doc.text(hodLocation, marginLeft + 14, y)
       }
       y += 10
     }

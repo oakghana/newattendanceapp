@@ -582,15 +582,19 @@ export async function GET(
 
     // ── THRO block ───────────────────────────────────────────────────
     if (hodProfile) {
-      const hodName = fmtName(hodProfile).toUpperCase().trim() || "HOD"
-      const hodPos  = String((hodProfile as any)?.position || (hodProfile as any)?.role || "").toUpperCase()
-      doc.setFont("times", "normal")
-      doc.setFontSize(9.2)
-      doc.text("THRO:", marginLeft, y)
-      doc.text(hodName + (hodPos ? ` - ${hodPos}` : ""), marginLeft + 14, y)
-      y += 5.5
-      doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
-      y += 10
+      const hodPos  = String((hodProfile as any)?.position || (hodProfile as any)?.role || "").toUpperCase().trim()
+      const hodLoc  = String(lr.staff_location_name || (ap?.departments as any)?.name || "HEAD OFFICE").toUpperCase()
+      if (hodPos) {
+        doc.setFont("times", "normal")
+        doc.setFontSize(9.2)
+        doc.text("THRO:", marginLeft, y)
+        doc.text(hodPos, marginLeft + 14, y)
+        y += 5.5
+        doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
+        y += 5.5
+        doc.text(hodLoc, marginLeft + 14, y)
+        y += 10
+      }
     }
 
     // ── Subject line ─────────────────────────────────────────────────

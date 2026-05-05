@@ -512,12 +512,8 @@ function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: strin
 function buildHrNoteWithThroTelephone(note: string, throTelephone: string, throName?: string, throRank?: string, throLocation?: string) {
   const trimmedNote = String(note || "").trim()
   const tokens: string[] = []
-  const tel = String(throTelephone || "").trim()
-  const name = String(throName || "").trim()
   const rank = String(throRank || "").trim()
   const loc = String(throLocation || "").trim()
-  if (tel) tokens.push(`[THRO_TEL:${tel}]`)
-  if (name) tokens.push(`[THRO_NAME:${name}]`)
   if (rank) tokens.push(`[THRO_RANK:${rank}]`)
   if (loc) tokens.push(`[THRO_LOC:${loc}]`)
   const tokenStr = tokens.join(" ")
@@ -536,10 +532,8 @@ function buildDirectorAutoMemoDraft(
   const staffName = (row.staff_full_name || "REQUESTING STAFF").toUpperCase()
   const staffNo = row.staff_number || "—"
   const staffRank = (row.staff_rank || "").toUpperCase()
-  const hodName = (entry?.hodName || row.hod_name || "THE REGIONAL MANAGER").toUpperCase()
   const hodRank = (entry?.hodRank || row.hod_rank || "").toUpperCase()
   const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || "—"
-  const hodTelephone = String(entry?.hodTelephone || "").trim()
   const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
@@ -559,11 +553,9 @@ function buildDirectorAutoMemoDraft(
     `${staffName} (S/No.: ${staffNo})`,
     `${staffRank}`,
     "",
-    `THRO'   ${hodName}`,
-    ...(hodRank ? [`        ${hodRank}`] : []),
+    ...(hodRank ? [`THRO'   ${hodRank}`] : []),
     `        QUALITY CONTROL COMPANY LIMITED`,
     `        ${hodLocation}`,
-    ...(hodTelephone ? [`        TEL: ${hodTelephone}`] : []),
     "",
     `RE: APPLICATION FOR ${loanLabel.toUpperCase()}`,
     "",
@@ -4104,20 +4096,12 @@ export default function LoanAppPage() {
                 </Select>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <Label>THRO Name</Label>
-                    <Input value={modalHodName} onChange={(e) => setModalHodName(e.target.value)} placeholder="e.g. HEAD OF IT" />
-                  </div>
-                  <div>
                     <Label>THRO Rank</Label>
                     <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. IT MANAGER" />
                   </div>
                   <div>
                     <Label>THRO Location</Label>
                     <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. HEAD OFFICE" />
-                  </div>
-                  <div>
-                    <Label>THRO Telephone</Label>
-                    <Input value={modalHodTelephone} onChange={(e) => setModalHodTelephone(e.target.value)} placeholder="e.g. +233 24 000 0000" />
                   </div>
                 </div>
                 <Label>Assigned Director HR Approver</Label>
@@ -4178,14 +4162,10 @@ export default function LoanAppPage() {
                     <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="QCC/HRD/SWL/V.2/..." />
                   </div>
                 </div>
-                <Label>HOD / Regional Manager Name</Label>
-                <Input value={modalHodName} onChange={(e) => setModalHodName(e.target.value)} placeholder="e.g. THE REGIONAL MANAGER" />
                 <Label>HOD / Regional Manager Rank</Label>
                 <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Regional Manager / Department Head" />
                 <Label>HOD Location (Station)</Label>
                 <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Breman Asikuma" />
-                <Label>HOD Telephone</Label>
-                <Input value={modalHodTelephone} onChange={(e) => setModalHodTelephone(e.target.value)} placeholder="e.g. +233 24 000 0000" />
                 <Label>Assigned Director HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
                   <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
