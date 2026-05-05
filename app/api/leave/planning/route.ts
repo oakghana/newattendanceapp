@@ -14,7 +14,31 @@ import {
 } from "@/lib/leave-planning"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
 
-const YEAR_PERIOD = "2026/2027"
+function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
+  const year = referenceDate.getFullYear()
+  const month = referenceDate.getMonth()
+  // Leave cycle runs October -> September.
+  if (month >= 9) return `${year}/${year + 1}`
+  return `${year - 1}/${year}`
+}
+
+function getAllowedLeaveYearPeriods(referenceDate: Date = new Date(), forwardCount = 10) {
+  const active = getActiveLeaveYearPeriod(referenceDate)
+  const [startYearRaw] = active.split("/")
+  const startYear = Number(startYearRaw)
+  const periods: string[] = []
+  for (let i = 0; i <= forwardCount; i += 1) {
+    const y = startYear + i
+    periods.push(`${y}/${y + 1}`)
+  }
+  return periods
+}
+
+function normalizeLeaveYearPeriod(value: string | null | undefined) {
+  const input = String(value || "").trim()
+  if (/^\d{4}\/\d{4}$/.test(input)) return input
+  return getActiveLeaveYearPeriod()
+}
 
 const EDITABLE_STATUSES = [
   "pending_manager_review",
@@ -179,13 +203,13 @@ async function syncManagerReviews(admin: any, leavePlanRequestId: string, review
   await admin.from("leave_plan_reviews").insert(reviewRows)
 }
 
-async function resolveEntitlementDays(admin: any, leaveTypeKey: string) {
+async function resolveEntitlementDays(admin: any, leaveTypeKey: string, leaveYearPeriod: string) {
   const normalizedLeaveTypeKey = String(leaveTypeKey || "annual").toLowerCase()
   try {
     const { data: policyRows, error: policyError } = await admin
       .from("leave_policy_catalog")
       .select("leave_type_key, entitlement_days, is_enabled")
-      .eq("leave_year_period", YEAR_PERIOD)
+      .eq("leave_year_period", leaveYearPeriod)
       .eq("leave_type_key", normalizedLeaveTypeKey)
       .limit(1)
 
@@ -1003,13 +1027,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Start and end dates are required." }, { status: 400 })
     }
 
-    if ((leave_year_period || YEAR_PERIOD) !== YEAR_PERIOD) {
-      return NextResponse.json({ error: "Only 2026/2027 leave period is supported in this workflow." }, { status: 400 })
+    const selectedLeaveYearPeriod = normalizeLeaveYearPeriod(leave_year_period)
+    const allowedPeriods = getAllowedLeaveYearPeriods()
+    if (!allowedPeriods.includes(selectedLeaveYearPeriod)) {
+      return NextResponse.json(
+        { error: `Unsupported leave year period. Choose one of: ${allowedPeriods.join(", ")}` },
+        { status: 400 },
+      )
     }
 
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
-    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey)
+    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
     if (entitlementResult.error) {
       return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
     }
@@ -1091,7 +1120,7 @@ export async function POST(request: NextRequest) {
 
     const initialMemo = buildInitialLeaveMemoDraft({
       leaveTypeKey,
-      leaveYearPeriod: YEAR_PERIOD,
+      leaveYearPeriod: selectedLeaveYearPeriod,
       preferredStartDate: preferred_start_date,
       preferredEndDate: preferred_end_date,
       requestedDays,
@@ -1106,7 +1135,7 @@ export async function POST(request: NextRequest) {
         memo_draft_subject: initialMemo.subject,
         memo_draft_body: initialMemo.body,
         user_id: user.id,
-        leave_year_period: YEAR_PERIOD,
+        leave_year_period: selectedLeaveYearPeriod,
         preferred_start_date,
         preferred_end_date,
         leave_type_key: leaveTypeKey,
@@ -1239,8 +1268,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "id, start date, and end date are required." }, { status: 400 })
     }
 
-    if ((leave_year_period || YEAR_PERIOD) !== YEAR_PERIOD) {
-      return NextResponse.json({ error: "Only 2026/2027 leave period is supported in this workflow." }, { status: 400 })
+    const selectedLeaveYearPeriod = normalizeLeaveYearPeriod(leave_year_period)
+    const allowedPeriods = getAllowedLeaveYearPeriods()
+    if (!allowedPeriods.includes(selectedLeaveYearPeriod)) {
+      return NextResponse.json(
+        { error: `Unsupported leave year period. Choose one of: ${allowedPeriods.join(", ")}` },
+        { status: 400 },
+      )
     }
 
     const { data: existing, error: existingError } = await admin
@@ -1286,7 +1320,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
-    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey)
+    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
     if (entitlementResult.error) {
       return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
     }
@@ -1343,7 +1377,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updatePayload: Record<string, any> = {
-      leave_year_period: YEAR_PERIOD,
+      leave_year_period: selectedLeaveYearPeriod,
       preferred_start_date,
       preferred_end_date,
       leave_type_key: leaveTypeKey,

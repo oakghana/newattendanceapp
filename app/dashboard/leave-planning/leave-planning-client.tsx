@@ -161,6 +161,39 @@ function normalizeLeaveTypeKey(value: string) {
     .replace(/^_+|_+$/g, "")
 }
 
+function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
+  const year = referenceDate.getFullYear()
+  const month = referenceDate.getMonth()
+  // Leave cycle runs October -> September.
+  if (month >= 9) return `${year}/${year + 1}`
+  return `${year - 1}/${year}`
+}
+
+function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
+  const active = getActiveLeaveYearPeriod(referenceDate)
+  const [startYearRaw] = active.split("/")
+  const startYear = Number(startYearRaw)
+  const options: string[] = []
+  for (let i = 0; i <= forwardCount; i += 1) {
+    const y = startYear + i
+    options.push(`${y}/${y + 1}`)
+  }
+  return options
+}
+
+function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
+  // First week of October drives planning for the next leave cycle.
+  return referenceDate.getMonth() === 9 && referenceDate.getDate() <= 7
+}
+
+function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
+  const active = getActiveLeaveYearPeriod(referenceDate)
+  if (!isOctoberPlanningWindow(referenceDate)) return active
+  const [startYearRaw] = active.split("/")
+  const nextStartYear = Number(startYearRaw) + 1
+  return `${nextStartYear}/${nextStartYear + 1}`
+}
+
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
   const leaveSignatures = signatures.filter((signature) => signature.workflow_domain === "leave")
   const stagePriority = ["hr_approver", "director_hr", "manager_hr"]
@@ -268,7 +301,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
     return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "—",
     return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "—",
-    leave_year_period: String(req.leave_year_period || "2026/2027"),
+    leave_year_period: String(req.leave_year_period || getActiveLeaveYearPeriod()),
     outstanding_leave_days: String(outstandingLeaveDays),
     travelling_days_balance_sentence: travellingDays > 0 ? ` plus ${travellingDays} travelling day(s)` : "",
     staff_name: String(req.staff_name || ""),
@@ -947,6 +980,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [leaveType, setLeaveType] = useState("annual")
   const [reason, setReason] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
+  const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
   const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string }>>({})
   const [newLeaveTypeKey, setNewLeaveTypeKey] = useState("")
@@ -1017,6 +1051,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     () => leaveTypes.find((t) => t.leaveTypeKey === leaveType),
     [leaveTypes, leaveType],
   )
+  const activeLeaveYearPeriod = useMemo(() => getActiveLeaveYearPeriod(), [])
+  const leaveYearPeriodOptions = useMemo(() => getLeaveYearPeriodOptions(), [])
+  const inOctoberPlanningWindow = useMemo(() => isOctoberPlanningWindow(), [])
 
   // ── Real-time same-month conflict warning ────────────────────────────
   const sameMonthConflict = useMemo(() => {
@@ -1595,7 +1632,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingId,
-          leave_year_period: "2026/2027",
+          leave_year_period: leaveYearPeriod,
           preferred_start_date: startDate,
           preferred_end_date: endDate,
           leave_type: leaveType,
@@ -1627,6 +1664,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
         description: `Return-to-work: ${computeReturnToWorkDate(endDate)}`,
       })
       setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
+      setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
       setTypedSignature(""); setUploadedSigUrl(null); setDrawnSigUrl(null)
       setActiveTab("my-leaves")
       await loadData()
@@ -1834,7 +1872,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Leave Management</h1>
-            <p className="text-green-200 text-sm mt-1">2026/2027 Leave Year · Quality Control Company Limited</p>
+            <p className="text-green-200 text-sm mt-1">{activeLeaveYearPeriod} Leave Year · Quality Control Company Limited</p>
           </div>
           <Button
             variant="outline" size="sm"
@@ -1910,6 +1948,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       setStartDate(req.preferred_start_date || "")
                       setEndDate(req.preferred_end_date || "")
                       setLeaveType(req.leave_type_key || "annual")
+                      setLeaveYearPeriod(req.leave_year_period || activeLeaveYearPeriod)
                       setReason(req.reason || "")
                       setActiveTab("apply")
                     }}
@@ -1928,10 +1967,31 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <CardTitle className="text-base text-green-800">
                   {editingId ? "Edit Leave Request" : "New Leave Application"}
                 </CardTitle>
-                <p className="text-xs text-slate-500">Leave Year Period: 2026/2027</p>
+                <p className="text-xs text-slate-500">Leave Year Period: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
+                    <Select value={leaveYearPeriod} onValueChange={setLeaveYearPeriod}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select leave year period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {leaveYearPeriodOptions.map((period) => (
+                          <SelectItem key={period} value={period}>{period}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-500">
+                      Current cycle auto-detected: <strong>{activeLeaveYearPeriod}</strong> (October to September).
+                    </p>
+                    {inOctoberPlanningWindow && (
+                      <p className="text-xs text-amber-700">
+                        First week of October: staff should submit annual leave for the next leave period.
+                      </p>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Type</Label>
                     <Select value={leaveType} onValueChange={setLeaveType}>
