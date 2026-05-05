@@ -169,12 +169,14 @@ export async function GET() {
       if (allUserIds.length > 0) {
         const { data: profiles } = await admin
           .from("user_profiles")
-          .select("user_id, first_name, last_name, employee_id")
-          .in("user_id", allUserIds)
+          .select("id, first_name, last_name, employee_id")
+          .in("id", allUserIds)
         for (const p of profiles || []) {
           const fn = String((p as any).first_name || "").trim()
           const ln = String((p as any).last_name || "").trim()
-          nameMap[String((p as any).user_id)] = [fn, ln].filter(Boolean).join(" ") || String((p as any).employee_id || (p as any).user_id)
+          const profileId = String((p as any).id || "")
+          if (!profileId) continue
+          nameMap[profileId] = [fn, ln].filter(Boolean).join(" ") || String((p as any).employee_id || profileId)
         }
       }
 
