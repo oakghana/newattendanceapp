@@ -118,6 +118,18 @@ type WindowsCapabilities = ReturnType<typeof detectWindowsLocationCapabilities>
 const REFRESH_PAUSE_DURATION = 50000 // 50 seconds instead of 120000 (2 minutes)
 const MINIMUM_OFF_PREMISES_CHECKOUT_HOURS = 7
 
+function isOffPremisesFallbackError(message: string) {
+  const normalized = String(message || "").toLowerCase()
+  return (
+    normalized.includes("within") ||
+    normalized.includes("location") ||
+    normalized.includes("range") ||
+    normalized.includes("outside") ||
+    normalized.includes("geofence") ||
+    normalized.includes("gps")
+  )
+}
+
 // Helper function to get ordinal suffix for numbers (1st, 2nd, 3rd, etc.)
 function getOrdinalSuffix(num: number): string {
   const j = num % 10
@@ -2317,16 +2329,28 @@ export function AttendanceRecorder({
         })
       } catch (error) {
         console.warn("[v0] Automatic in-range check-in skipped:", error)
+        const errorMessage = error instanceof Error ? error.message : "Automatic check-in was unsuccessful."
         autoCheckInAttemptedRef.current = false
         setAutoCheckInFailureCount((prev) => prev + 1)
         setRecentCheckIn(false)
-        // Notify user immediately so they know to use manual check-in
-        toast({
-          title: "Automatic Check-In Failed",
-          description: "We couldn't check you in automatically. Switching to manual check-in — please use the button below.",
-          variant: "destructive",
-          duration: 8000,
-        })
+
+        // Smart fallback: when location/range blocks automatic check-in, open off-premises flow first.
+        if (isOffPremisesFallbackError(errorMessage) && !autoTriggeredOffPremisesRef.current) {
+          autoTriggeredOffPremisesRef.current = true
+          await handleCheckInOutsidePremisesRef.current?.()
+          toast({
+            title: "Off-Premises Check-In Ready",
+            description: "Automatic check-in is not possible from this location. Off-premises check-in has been opened for you.",
+            duration: 8000,
+          })
+        } else {
+          toast({
+            title: "Automatic Check-In Failed",
+            description: "We couldn't check you in automatically. Switching to manual check-in — please use the button below.",
+            variant: "destructive",
+            duration: 8000,
+          })
+        }
       } finally {
         setIsCheckingIn(false)
         setCheckingMessage("")
