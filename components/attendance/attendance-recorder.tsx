@@ -46,7 +46,7 @@ import { Label } from "@/components/ui/label"
 import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils"
-import { requiresLatenessReason, requiresEarlyCheckoutReason, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
+import { requiresLatenessReason, requiresEarlyCheckoutReason, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline } from "@/lib/attendance-utils"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
@@ -515,7 +515,8 @@ export function AttendanceRecorder({
   const isResolvingCheckInRange = typeof effectiveCanCheckIn !== "boolean"
   const showRegularCheckInButton = isResolvingCheckInRange || effectiveCanCheckIn === true
   const showOffPremisesCheckInButton = isResolvingCheckInRange || effectiveCanCheckIn === false
-  const manualCheckInFallbackEnabled = !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0
+  const manualCheckInFallbackEnabled =
+    !localTodayAttendance?.check_in_time && autoCheckInFailureCount > 0 && effectiveCanCheckIn !== false
   
   const workedHoursForCheckoutPolicy = localTodayAttendance?.check_in_time
     ? (getSystemNow().getTime() - new Date(localTodayAttendance.check_in_time).getTime()) / (1000 * 60 * 60)
@@ -2277,6 +2278,19 @@ export function AttendanceRecorder({
         return
       }
 
+      // If UI/location preview has already resolved user is out-of-range, auto-open off-premises first.
+      if (effectiveCanCheckIn === false && !autoTriggeredOffPremisesRef.current) {
+        autoTriggeredOffPremisesRef.current = true
+        setAutoCheckInFailureCount(0)
+        await handleCheckInOutsidePremisesRef.current?.()
+        toast({
+          title: "Off-Premises Check-In Ready",
+          description: "You are outside range. Off-premises check-in has been opened for you.",
+          duration: 8000,
+        })
+        return
+      }
+
       try {
         let locationData = userLocation
 
@@ -2302,17 +2316,22 @@ export function AttendanceRecorder({
 
         const validation = validateAttendanceLocation(locationData, realTimeLocations || [], checkInRadius)
 
-        const isExemptDeptUser = isSecurityDept(userProfile?.departments) || isTransportDept(userProfile?.departments) || isOperationalDept(userProfile?.departments) || isExemptFromAttendanceReasons(userProfile?.role)
-        if (!isExemptDeptUser && (!validation.canCheckIn || !validation.nearestLocation)) {
-          // User is out of range — auto-trigger the off-premises check-in dialog once
+        if (!validation.canCheckIn || !validation.nearestLocation) {
+          // User is out of range — always prioritize off-premises check-in.
           if (!autoTriggeredOffPremisesRef.current) {
             autoTriggeredOffPremisesRef.current = true
-            void handleCheckInOutsidePremisesRef.current?.()
+            setAutoCheckInFailureCount(0)
+            await handleCheckInOutsidePremisesRef.current?.()
+            toast({
+              title: "Off-Premises Check-In Ready",
+              description: "Automatic check-in is not possible from this location. Off-premises check-in has been opened for you.",
+              duration: 8000,
+            })
           }
           return
         }
-        // For exempt departments, use nearest location even if out of range
-        const nearestForCheckIn = validation.nearestLocation || (realTimeLocations && realTimeLocations.length > 0 ? realTimeLocations[0] : null)
+
+        const nearestForCheckIn = validation.nearestLocation
         if (!nearestForCheckIn) return
 
         autoCheckInAttemptedRef.current = true
@@ -2335,12 +2354,13 @@ export function AttendanceRecorder({
         setRecentCheckIn(false)
 
         // Smart fallback: when location/range blocks automatic check-in, open off-premises flow first.
-        if (isOffPremisesFallbackError(errorMessage) && !autoTriggeredOffPremisesRef.current) {
+        if ((effectiveCanCheckIn === false || isOffPremisesFallbackError(errorMessage)) && !autoTriggeredOffPremisesRef.current) {
           autoTriggeredOffPremisesRef.current = true
+          setAutoCheckInFailureCount(0)
           await handleCheckInOutsidePremisesRef.current?.()
           toast({
             title: "Off-Premises Check-In Ready",
-            description: "Automatic check-in is not possible from this location. Off-premises check-in has been opened for you.",
+            description: "Automatic check-in is not possible right now. Off-premises check-in has been opened for you.",
             duration: 8000,
           })
         } else {
@@ -2393,6 +2413,7 @@ export function AttendanceRecorder({
     realTimeLocations,
     deviceRadiusSettings,
     deviceInfo.device_type,
+    effectiveCanCheckIn,
   ])
 
   // Extracted check-in API call for lateness dialog flow
