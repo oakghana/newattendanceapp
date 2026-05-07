@@ -1,6 +1,7 @@
 type MeaningfulTextOptions = {
   fieldLabel?: string
   minLength?: number
+  minWords?: number
 }
 
 type MeaningfulTextResult = {
@@ -29,6 +30,7 @@ export function validateMeaningfulText(
 ): MeaningfulTextResult {
   const fieldLabel = options.fieldLabel ?? "This entry"
   const minLength = options.minLength ?? 8
+  const minWords = options.minWords ?? 0
   const normalized = String(value || "").replace(/\s+/g, " ").trim()
 
   if (!normalized) {
@@ -49,6 +51,17 @@ export function validateMeaningfulText(
       ok: false,
       normalized,
       error: `${fieldLabel} is too short. Please enter a clear reason.`,
+    }
+  }
+
+  if (minWords > 0) {
+    const wordCount = normalized.split(/\s+/).filter(w => /[a-z]/i.test(w)).length
+    if (wordCount < minWords) {
+      return {
+        ok: false,
+        normalized,
+        error: `${fieldLabel} must be at least ${minWords} words. Please give a concrete explanation.`,
+      }
     }
   }
 

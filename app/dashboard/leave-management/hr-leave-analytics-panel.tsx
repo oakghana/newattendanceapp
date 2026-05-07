@@ -60,24 +60,6 @@ function daysLeftToResume(startDate: string, endDate: string) {
   return diff > 0 ? `${diff}d` : "Resumed"
 }
 
-function remainingApprovedLeaveDays(startDate: string, endDate: string, approvedDays: number) {
-  const totalApproved = Number(approvedDays || 0)
-  if (totalApproved <= 0) return "0d"
-
-  const today = new Date()
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const leaveStart = new Date(`${startDate}T00:00:00`)
-  const leaveEnd = new Date(`${endDate}T00:00:00`)
-
-  if (Number.isNaN(leaveStart.getTime()) || Number.isNaN(leaveEnd.getTime())) return `${totalApproved}d`
-  if (todayStart < leaveStart) return `${totalApproved}d`
-  if (todayStart > leaveEnd) return "0d"
-
-  const elapsedCalendarDays = Math.max(0, Math.ceil((todayStart.getTime() - leaveStart.getTime()) / 86400000) + 1)
-  const remaining = Math.max(0, totalApproved - elapsedCalendarDays)
-  return `${remaining}d`
-}
-
 function downloadCsv(rows: any[], fileName: string) {
   if (!rows.length) return
   const headers = ["Staff Name", "Employee ID", "Department", "Location", "Leave Type", "Start Date", "End Date", "Days", "Submitted"]
@@ -485,8 +467,7 @@ export function HrLeaveAnalyticsPanel() {
                       <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Type</th>
                       <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Start</th>
                       <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">End</th>
-                      <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Calendar Days to Resume</th>
-                      <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Remaining Approved Days</th>
+                      <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Days Left</th>
                       <th className="text-right py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Days</th>
                     </tr>
                   </thead>
@@ -503,7 +484,6 @@ export function HrLeaveAnalyticsPanel() {
                         <td className="py-3 px-3 text-slate-600">{r.start_date}</td>
                         <td className="py-3 px-3 text-slate-600">{r.end_date}</td>
                         <td className="py-3 px-3 text-slate-600 font-medium">{daysLeftToResume(String(r.start_date || ""), String(r.end_date || ""))}</td>
-                        <td className="py-3 px-3 text-slate-600 font-medium">{remainingApprovedLeaveDays(String(r.start_date || ""), String(r.end_date || ""), Number(r.days || 0))}</td>
                         <td className="py-3 px-4 text-right font-bold text-slate-800">{r.days}d</td>
                       </tr>
                     ))}

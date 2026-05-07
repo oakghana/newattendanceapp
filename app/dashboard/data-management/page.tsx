@@ -1,4 +1,5 @@
 import { BulkUpload } from "@/components/admin/bulk-upload"
+import { BulkImportLeaveLoan } from "@/components/admin/bulk-import-leave-loan"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 
@@ -24,6 +25,7 @@ export default async function DataManagementPage() {
         <p className="text-muted-foreground">Bulk upload and manage organizational data for QCC</p>
       </div>
       <BulkUpload />
+      <BulkImportLeaveLoan />
     </div>
   )
 }

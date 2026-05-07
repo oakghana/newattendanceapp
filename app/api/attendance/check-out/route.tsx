@@ -784,10 +784,21 @@ export async function POST(request: NextRequest) {
     }
 
     if (requiresOutOfLocationReason) {
-      if (!early_checkout_reason || String(early_checkout_reason).trim().length === 0) {
+      const reasonText = String(early_checkout_reason || "").trim()
+      const reasonWordCount = reasonText.split(/\s+/).filter(w => /[a-z]/i.test(w)).length
+      if (!reasonText) {
         return NextResponse.json(
           {
             error: "A reason is required when checking out outside registered QCC locations.",
+            requiresOutOfLocationReason: true,
+          },
+          { status: 400 },
+        )
+      }
+      if (reasonWordCount < 20) {
+        return NextResponse.json(
+          {
+            error: `Your reason must be at least 20 words. Please give a full and concrete explanation of why you are not within your registered QCC location. You provided ${reasonWordCount} word${reasonWordCount === 1 ? "" : "s"}.`,
             requiresOutOfLocationReason: true,
           },
           { status: 400 },
