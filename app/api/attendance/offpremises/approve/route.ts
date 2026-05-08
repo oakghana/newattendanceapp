@@ -138,6 +138,14 @@ export async function POST(request: NextRequest) {
 
           if (comments) updatePayload.early_checkout_reason = comments
 
+          const coLat = pendingRequest.latitude
+          const coLon = pendingRequest.longitude
+          const coLocationName = pendingRequest.google_maps_name || pendingRequest.current_location_name || "Off-Premises Location"
+          const coGpsStr = (coLat != null && coLon != null)
+            ? ` GPS: ${Number(coLat).toFixed(5)}°, ${Number(coLon).toFixed(5)}°.`
+            : ""
+          updatePayload.notes = `Off-premises check-out. Location: ${coLocationName}.${coGpsStr}${comments ? " Comments: " + comments : ""}`
+
           const { data: updated, error: updateError } = await supabase
             .from('attendance_records')
             .update(updatePayload)
@@ -235,20 +243,28 @@ export async function POST(request: NextRequest) {
         assignedLocationName = assignedLocation?.name || null
       }
 
+      const offPremisesLocationName = pendingRequest.google_maps_name || pendingRequest.current_location_name || "Off-Premises Location"
+      const offPremisesLat = pendingRequest.latitude
+      const offPremisesLon = pendingRequest.longitude
+      const gpsStr = (offPremisesLat != null && offPremisesLon != null)
+        ? ` GPS: ${Number(offPremisesLat).toFixed(5)}°, ${Number(offPremisesLon).toFixed(5)}°.`
+        : ""
+
       const baseAttendancePayload: any = {
-        actual_location_name: pendingRequest.google_maps_name || pendingRequest.current_location_name,
-        actual_latitude: pendingRequest.latitude,
-        actual_longitude: pendingRequest.longitude,
+        actual_location_name: offPremisesLocationName,
+        actual_latitude: offPremisesLat,
+        actual_longitude: offPremisesLon,
         on_official_duty_outside_premises: true,
         device_info: pendingRequest.device_info,
         check_in_type: "offpremises_confirmed",
         check_in_method: "approved_offpremises",
         is_remote_location: true,
         status: "present",
-        check_in_location_id: assignedLocationId,
-        check_in_location_name: assignedLocationName || "Assigned Location",
+        // Off-premises — do NOT link to the staff member's assigned geofence location
+        check_in_location_id: null,
+        check_in_location_name: offPremisesLocationName,
         updated_at: new Date().toISOString(),
-        notes: `Off-premises check-in approved by manager. ${comments ? "Comments: " + comments : ""}`,
+        notes: `Off-premises check-in. Location: ${offPremisesLocationName}.${gpsStr}${comments ? " Comments: " + comments : ""}`,
       }
 
       const { data: existingAttendance, error: existingAttendanceError } = await supabase
@@ -277,8 +293,10 @@ export async function POST(request: NextRequest) {
           .from("attendance_records")
           .update({
             ...baseAttendancePayload,
-            check_in_location_id: existingAttendance.check_in_location_id || assignedLocationId,
-            check_in_location_name: existingAttendance.check_in_location_name || assignedLocationName || "Assigned Location",
+            // Keep existing check-in location only if it is not the assigned location placeholder;
+            // for off-premises records always prefer the actual off-premises location name.
+            check_in_location_id: null,
+            check_in_location_name: offPremisesLocationName,
             check_in_method: existingAttendance.check_in_method || "approved_offpremises",
             status: existingAttendance.status || "present",
           })

@@ -32,6 +32,10 @@ interface AttendanceRecord {
   id: string
   user_id?: string
   google_maps_name?: string
+  actual_location_name?: string
+  on_official_duty_outside_premises?: boolean
+  actual_latitude?: number
+  actual_longitude?: number
   check_in_time: string
   check_out_time?: string
   work_hours?: number
@@ -1782,7 +1786,27 @@ export function AttendanceReports({
                           >{record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('_', ' ')}</Badge></TableCell>
                           <TableCell className="hidden sm:table-cell py-2">
                             <span className="text-sm text-gray-700 dark:text-slate-300">
-                              {record.notes ? (
+                              {record.on_official_duty_outside_premises && (record.actual_location_name || record.check_in_location_name) ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-start gap-1 text-amber-700 dark:text-amber-400">
+                                    <MapPin className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                                    <span className="font-medium text-xs">Off-Premises:</span>
+                                    <span className="max-w-xs truncate block text-xs" title={record.actual_location_name || record.check_in_location_name}>
+                                      {record.actual_location_name || record.check_in_location_name}
+                                    </span>
+                                  </div>
+                                  {record.actual_latitude != null && record.actual_longitude != null && (
+                                    <div className="text-xs text-gray-500 font-mono pl-1">
+                                      {Number(record.actual_latitude).toFixed(5)}°, {Number(record.actual_longitude).toFixed(5)}°
+                                    </div>
+                                  )}
+                                  {record.notes && (
+                                    <span className="max-w-xs truncate block text-xs text-gray-500" title={record.notes}>
+                                      {record.notes}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : record.notes ? (
                                 <span className="max-w-xs truncate block" title={record.notes}>
                                   {record.notes}
                                 </span>
