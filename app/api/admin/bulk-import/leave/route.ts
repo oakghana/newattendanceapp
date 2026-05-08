@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { computeLeaveDays } from "@/lib/leave-policy"
 import { getNextQccReference } from "@/lib/reference-number"
 
 const VALID_LEAVE_TYPES = new Set([
@@ -17,15 +17,19 @@ const VALID_LEAVE_TYPES = new Set([
   "other",
 ])
 
+function excelSerialToDateStr(serial: number): string | null {
+  // Excel epoch: Dec 30, 1899. Accounts for Excel's leap-year bug (day 60).
+  const ms = (serial - 25569) * 86400 * 1000
+  if (!isFinite(ms)) return null
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return null
+  return d.toISOString().slice(0, 10)
+}
+
 function parseExcelDate(value: unknown): string | null {
   if (!value) return null
   if (typeof value === "number") {
-    // Excel serial date
-    const date = XLSX.SSF.parse_date_code(value)
-    if (!date) return null
-    const mm = String(date.m).padStart(2, "0")
-    const dd = String(date.d).padStart(2, "0")
-    return `${date.y}-${mm}-${dd}`
+    return excelSerialToDateStr(value)
   }
   const str = String(value).trim()
   // Accept YYYY-MM-DD or DD/MM/YYYY

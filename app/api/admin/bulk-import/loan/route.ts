@@ -9,14 +9,18 @@ function genRequestNumber() {
   return `LN-${stamp}-${rand}`
 }
 
+function excelSerialToDateStr(serial: number): string | null {
+  const ms = (serial - 25569) * 86400 * 1000
+  if (!isFinite(ms)) return null
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return null
+  return d.toISOString().slice(0, 10)
+}
+
 function parseExcelDate(value: unknown): string | null {
   if (!value) return null
   if (typeof value === "number") {
-    const date = XLSX.SSF.parse_date_code(value)
-    if (!date) return null
-    const mm = String(date.m).padStart(2, "0")
-    const dd = String(date.d).padStart(2, "0")
-    return `${date.y}-${mm}-${dd}`
+    return excelSerialToDateStr(value)
   }
   const str = String(value).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str

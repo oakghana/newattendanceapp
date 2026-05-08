@@ -95,22 +95,26 @@ export async function POST(request: NextRequest) {
       const isOp = isOperationalDept(userProfile?.departments)
       const isTrans = isTransportDept(userProfile?.departments)
       if (override_request && override_reason && (isSec || isOp || isTrans)) {
-        await supabase.from("emergency_check_in_overrides").insert({
-          user_id: user.id,
-          check_out_time: new Date().toISOString(),
-          override_type: 'leave_override',
-          reason: override_reason,
-          is_security_staff: isSec,
-          is_operational_staff: isOp,
-          is_transport_staff: isTrans,
-        }).catch(() => {})
-        await supabase.from("staff_notifications").insert({
-          user_id: user.id,
-          title: "Emergency override used",
-          message: "An override was used to bypass leave restriction during check-out.",
-          type: "info",
-          is_read: false,
-        }).catch(() => {})
+        try {
+          await supabase.from("emergency_check_in_overrides").insert({
+            user_id: user.id,
+            check_out_time: new Date().toISOString(),
+            override_type: 'leave_override',
+            reason: override_reason,
+            is_security_staff: isSec,
+            is_operational_staff: isOp,
+            is_transport_staff: isTrans,
+          })
+        } catch {}
+        try {
+          await supabase.from("staff_notifications").insert({
+            user_id: user.id,
+            title: "Emergency override used",
+            message: "An override was used to bypass leave restriction during check-out.",
+            type: "info",
+            is_read: false,
+          })
+        } catch {}
         // continue
       } else {
         return NextResponse.json(
@@ -262,36 +266,41 @@ export async function POST(request: NextRequest) {
       const isOp = isOperationalDept(userProfile?.departments)
       const isTrans = isTransportDept(userProfile?.departments)
       if (override_request && override_reason && (isSec || isOp || isTrans)) {
-        await supabase.from("emergency_check_in_overrides").insert({
-          user_id: user.id,
-          check_out_time: now.toISOString(),
-          override_type: 'time_restriction',
-          reason: override_reason,
-          is_security_staff: isSec,
-          is_operational_staff: isOp,
-          is_transport_staff: isTrans,
-        }).catch(() => {})
-        await supabase.from("staff_notifications").insert({
-          user_id: user.id,
-          title: "Emergency override used",
-          message: "An override was used to bypass time restriction during check-out.",
-          type: "info",
-          is_read: false,
-        }).catch(() => {})
+        try {
+          await supabase.from("emergency_check_in_overrides").insert({
+            user_id: user.id,
+            check_out_time: now.toISOString(),
+            override_type: 'time_restriction',
+            reason: override_reason,
+            is_security_staff: isSec,
+            is_operational_staff: isOp,
+            is_transport_staff: isTrans,
+          })
+        } catch {}
+        try {
+          await supabase.from("staff_notifications").insert({
+            user_id: user.id,
+            title: "Emergency override used",
+            message: "An override was used to bypass time restriction during check-out.",
+            type: "info",
+            is_read: false,
+          })
+        } catch {}
         overrideMeta = { type: 'time_restriction' }
         // continue through flow
       } else {
         // Create a notification for users trying to check out after 6 PM
-        await supabase
-          .from("staff_notifications")
-          .insert({
-            user_id: user.id,
-            title: "Check-out Time Exceeded",
-            message: `You attempted to check out after ${getCheckOutDeadline()}. Check-outs are only allowed until ${getCheckOutDeadline()} unless you are in an exempt department (Operational/Security).`,
-            type: "warning",
-            is_read: false,
-          })
-          .catch(() => {}) // Silently fail if notification table doesn't exist
+        try {
+          await supabase
+            .from("staff_notifications")
+            .insert({
+              user_id: user.id,
+              title: "Check-out Time Exceeded",
+              message: `You attempted to check out after ${getCheckOutDeadline()}. Check-outs are only allowed until ${getCheckOutDeadline()} unless you are in an exempt department (Operational/Security).`,
+              type: "warning",
+              is_read: false,
+            })
+        } catch {} // Silently fail if notification table doesn't exist
 
         return NextResponse.json({
           error: `Check-out is only allowed before ${getCheckOutDeadline()}. Your department/role does not have exceptions for late check-outs.`,
