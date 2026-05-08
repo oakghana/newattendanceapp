@@ -206,6 +206,7 @@ const STATUS_COLORS: Record<string, string> = {
   awaiting_director_hr: "bg-indigo-100 text-indigo-800",
   approved_director: "bg-emerald-100 text-emerald-800",
   director_rejected: "bg-red-100 text-red-800",
+  archived: "bg-slate-200 text-slate-700",
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -218,6 +219,7 @@ const STATUS_LABELS: Record<string, string> = {
   committee_rejected: "Committee Rejected",
   awaiting_hr_terms: "Awaiting HR Terms",
   awaiting_director_hr: "Awaiting Director HR",
+  archived: "Archived",
   approved_director: "Approved by Director HR",
   director_rejected: "Director HR Rejected",
 }
@@ -969,12 +971,13 @@ export default function LoanAppPage() {
 
   const loanOfficeStageBuckets = useMemo(() => {
     const isArchivableStatus = (status: string) => ["approved_director", "director_rejected", "rejected_fd", "committee_rejected", "hod_rejected"].includes(status)
+    const isArchivedStatus = (status: string) => status === "archived"
     const isGoodFd = (row: LoanRequest) => row.fd_good === true
     const isPoorFd = (row: LoanRequest) => row.fd_good === false || row.status === "rejected_fd" || (typeof row.fd_score === "number" && row.fd_score < 39)
     const isGoodFdNotPushed = (row: LoanRequest) =>
       isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
     const isPending = (row: LoanRequest) =>
-      row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status)
+      row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
 
     return {
       pending: loanOfficeRowsForSelectedType.filter((row) => isPending(row)),
@@ -983,6 +986,7 @@ export default function LoanAppPage() {
       "good-fd-not-pushed": loanOfficeRowsForSelectedType.filter((row) => isGoodFdNotPushed(row)),
       "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => row.status === "awaiting_director_hr"),
       archivable: loanOfficeRowsForSelectedType.filter((row) => isArchivableStatus(row.status)),
+      archived: loanOfficeRowsForSelectedType.filter((row) => isArchivedStatus(row.status)),
     }
   }, [loanOfficeRowsForSelectedType])
 
@@ -2553,6 +2557,9 @@ export default function LoanAppPage() {
                   </TabsTrigger>
                   <TabsTrigger value="archivable" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
                     Archivable ({loanOfficeStageBuckets.archivable.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="archived" className="data-[state=active]:bg-slate-700 data-[state=active]:text-white">
+                    Archived ({loanOfficeStageBuckets.archived.length})
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
