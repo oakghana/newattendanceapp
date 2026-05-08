@@ -74,7 +74,7 @@ export async function POST(req: Request) {
       message: `Your off‑premises approval for ${pendingReq.google_maps_name || pendingReq.current_location_name} was reverted by ${approverProfile.role}. Please contact your manager for details.`,
       data: { request_id, attendance_record_id },
       is_read: false,
-    }).catch(err => console.warn('[v0] Failed to send revert notification:', err))
+    }).then(() => {}).catch(err => console.warn('[v0] Failed to send revert notification:', err))
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

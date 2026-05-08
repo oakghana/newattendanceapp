@@ -150,25 +150,26 @@ export async function POST(request: NextRequest) {
       const deviceId = request.headers.get("x-device-id") || "unknown"
       const ipAddress = request.ip || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null
 
-      await supabase
-        .from("device_security_violations")
-        .insert({
-          device_id: deviceId,
-          ip_address: ipAddress,
-          attempted_user_id: user.id,
-          bound_user_id: user.id,
-          violation_type: "double_checkout_attempt",
-          device_info: {
-            userAgent: request.headers.get("user-agent"),
-            timestamp: new Date().toISOString(),
-          },
-        })
-        .catch((err) => {
-          // Ignore if table doesn't exist yet
-          if (err.code !== "PGRST205") {
-            console.error("[v0] Failed to log checkout violation:", err)
-          }
-        })
+      try {
+        await supabase
+          .from("device_security_violations")
+          .insert({
+            device_id: deviceId,
+            ip_address: ipAddress,
+            attempted_user_id: user.id,
+            bound_user_id: user.id,
+            violation_type: "double_checkout_attempt",
+            device_info: {
+              userAgent: request.headers.get("user-agent"),
+              timestamp: new Date().toISOString(),
+            },
+          })
+      } catch (err: any) {
+        // Ignore if table doesn't exist yet
+        if (err?.code !== "PGRST205") {
+          console.error("[v0] Failed to log checkout violation:", err)
+        }
+      }
 
       return NextResponse.json(
         {
@@ -411,25 +412,26 @@ export async function POST(request: NextRequest) {
 
           console.warn(`[v0] CHECKOUT - Device Sharing: ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}) used by ${previousUserName}`)
 
-          await supabase
-            .from("device_security_violations")
-            .insert({
-              device_id: device_info.device_id,
-              ip_address: ipAddress,
-              attempted_user_id: user.id,
-              bound_user_id: recentDeviceSession.user_id,
-              violation_type: "checkout_attempt",
-              device_info: {
-                ...device_info,
-                detection_method: "device_fingerprint",
-                previous_user_id: recentDeviceSession.user_id,
-                previous_ip: recentDeviceSession.ip_address,
-                time_since_last_use_minutes: timeSinceLastUse,
-              },
-            })
-            .catch((err) => {
-              console.warn("[v0] Failed to persist checkout device sharing violation:", err)
-            })
+          try {
+            await supabase
+              .from("device_security_violations")
+              .insert({
+                device_id: device_info.device_id,
+                ip_address: ipAddress,
+                attempted_user_id: user.id,
+                bound_user_id: recentDeviceSession.user_id,
+                violation_type: "checkout_attempt",
+                device_info: {
+                  ...device_info,
+                  detection_method: "device_fingerprint",
+                  previous_user_id: recentDeviceSession.user_id,
+                  previous_ip: recentDeviceSession.ip_address,
+                  time_since_last_use_minutes: timeSinceLastUse,
+                },
+              })
+          } catch (err) {
+            console.warn("[v0] Failed to persist checkout device sharing violation:", err)
+          }
 
           await supabase.from("audit_logs").insert({
             user_id: user.id,
@@ -477,25 +479,26 @@ export async function POST(request: NextRequest) {
 
           console.warn(`[v0] CHECKOUT - IP Sharing: Current ${device_info.device_type} (${device_info.device_name}, Device ID ${device_info.device_id}) | Previous Device ID: ${ipSharingSession.device_id}`)
 
-          await supabase
-            .from("device_security_violations")
-            .insert({
-              device_id: device_info.device_id,
-              ip_address: ipAddress,
-              attempted_user_id: user.id,
-              bound_user_id: ipSharingSession.user_id,
-              violation_type: "checkout_attempt",
-              device_info: {
-                ...device_info,
-                detection_method: "ip_address",
-                previous_user_id: ipSharingSession.user_id,
-                previous_device_id: ipSharingSession.device_id,
-                time_since_last_use_minutes: timeSinceLastUse,
-              },
-            })
-            .catch((err) => {
-              console.warn("[v0] Failed to persist checkout IP sharing violation:", err)
-            })
+          try {
+            await supabase
+              .from("device_security_violations")
+              .insert({
+                device_id: device_info.device_id,
+                ip_address: ipAddress,
+                attempted_user_id: user.id,
+                bound_user_id: ipSharingSession.user_id,
+                violation_type: "checkout_attempt",
+                device_info: {
+                  ...device_info,
+                  detection_method: "ip_address",
+                  previous_user_id: ipSharingSession.user_id,
+                  previous_device_id: ipSharingSession.device_id,
+                  time_since_last_use_minutes: timeSinceLastUse,
+                },
+              })
+          } catch (err) {
+            console.warn("[v0] Failed to persist checkout IP sharing violation:", err)
+          }
 
           await supabase.from("audit_logs").insert({
             user_id: user.id,
