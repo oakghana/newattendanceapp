@@ -10,7 +10,7 @@ const ARCHIVABLE_STATUSES = [
   "hod_rejected",
 ]
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     const supabase = await createClient()
     const admin = await createAdminClient()
@@ -39,26 +39,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch all archivable loan requests not yet archived
+    // Fetch all archivable loan requests.
+    // We use status-based archiving to avoid hard dependency on optional archive columns.
     const { data: archivable, error: fetchError } = await admin
       .from("loan_requests")
       .select("id")
       .in("status", ARCHIVABLE_STATUSES)
-      .or("is_archived.is.null,is_archived.eq.false")
 
     if (fetchError) {
-      // Column may not exist yet — surface a clear message
-      const msg = fetchError.message || ""
-      if (msg.includes("is_archived") || msg.includes("column")) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "The 'is_archived' column does not exist on loan_requests. Run: ALTER TABLE loan_requests ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE, ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS archived_by_id UUID;",
-          },
-          { status: 400 },
-        )
-      }
       return NextResponse.json({ success: false, error: fetchError.message }, { status: 500 })
     }
 
@@ -71,9 +59,7 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await admin
       .from("loan_requests")
       .update({
-        is_archived: true,
-        archived_at: new Date().toISOString(),
-        archived_by_id: user.id,
+        status: "archived",
         updated_at: new Date().toISOString(),
       })
       .in("id", ids)
