@@ -8,8 +8,8 @@ export interface RateLimitConfig {
   maxRequests: number // Maximum requests per window
 }
 
-// Temporary operational switch: disable forced password-change enforcement.
-export const PASSWORD_CHANGE_ENFORCEMENT_ENABLED = false
+// Quarterly password change enforcement is active by default.
+export const PASSWORD_CHANGE_ENFORCEMENT_ENABLED = true
 
 export function rateLimit(identifier: string, config: RateLimitConfig): boolean {
   const now = Date.now()
@@ -105,9 +105,6 @@ export function isEndOfQuarter(referenceDate: Date = new Date()): boolean {
 }
 
 export function getPasswordEnforcementMessage(): string {
-  if (!PASSWORD_CHANGE_ENFORCEMENT_ENABLED) {
-    return "Password-change enforcement is temporarily disabled."
-  }
   return "For security, your password must be changed quarterly before you can continue using the app."
 }
 

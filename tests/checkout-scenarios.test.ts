@@ -46,10 +46,19 @@ function evaluateCheckoutRoute(state: AttendanceState): string {
     return 'BLOCKED_MIN_2_HOURS'
   }
 
+  // Approved off-premises sessions should proceed directly without reopening dialog.
+  if (state.localTodayAttendance?.on_official_duty_outside_premises) {
+    return 'DIRECT_CHECKOUT_OFFPREMISES_APPROVED'
+  }
+
   // If out of range on fresh snapshot
   if (!state.freshCheckoutValidation.canCheckOut) {
     // But UI says in-range, trust UI (GPS drift protection)
     if (state.locationValidation?.canCheckOut === true) {
+      console.log('[v0] GPS drift detected', {
+        uiCanCheckOut: state.locationValidation?.canCheckOut,
+        freshCanCheckOut: state.freshCheckoutValidation.canCheckOut,
+      })
       return 'DIRECT_CHECKOUT_UI_OVERRIDE'
     }
     // Genuinely out of range

@@ -66,8 +66,7 @@ export function isExemptFromAttendanceReasons(role?: string | null): boolean {
 /**
  * Returns true when a lateness reason SHOULD be required.
  * - Requires reason only on weekdays (Mon-Fri)
- * - Security and Transport departments are exempt
- * - Admin, Department heads and regional managers are exempt (if config allows)
+ * - Role and department do not bypass this requirement
  */
 export function requiresLatenessReason(
   date: Date = new Date(),
@@ -76,8 +75,9 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
-  if (isSecurityDept(dept) || isTransportDept(dept)) return false
-  if (config?.exemptPrivilegedRolesFromReason !== false && isExemptFromAttendanceReasons(role)) return false
+  void dept
+  void role
+  void config
   // Check if current time is past the configured lateness deadline
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
   const [deadlineHour, deadlineMin] = deadlineStr.split(":").map(Number)
@@ -89,14 +89,13 @@ export function requiresLatenessReason(
 /**
  * Returns true when an early-checkout reason should be enforced.
  * - Enforced only when location-level flag is true and it's not a weekend
- * - Only Security and Transport departments are exempt
- * - Admin, Department heads and regional managers are exempt
+ * - Role and department do not bypass this requirement
  */
 export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null, dept?: DeptInfo): boolean {
   if (!locationRequires) return false
   if (isWeekend(date)) return false
-  if (isSecurityDept(dept) || isTransportDept(dept)) return false
-  if (isExemptFromAttendanceReasons(role)) return false
+  void role
+  void dept
   return true
 }
 
