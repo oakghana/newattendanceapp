@@ -952,6 +952,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [activeTab, setActiveTab] = useState("my-leaves")
   const [hrOfficeShowArchived, setHrOfficeShowArchived] = useState(false)
   const [hrOfficePageSize, setHrOfficePageSize] = useState(100)
+  const [isArchivingAllLeaves, setIsArchivingAllLeaves] = useState(false)
   const [hrOfficePage, setHrOfficePage] = useState(1)
   const [hrOfficeSearch, setHrOfficeSearch] = useState("")
   const [hrOfficeStatusFilter, setHrOfficeStatusFilter] = useState("all")
@@ -2290,6 +2291,31 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   >
                     Archived Queue
                   </Button>
+                  {!hrOfficeShowArchived && hrOfficeQueue.length > 0 && (isAdmin || isHrOffice) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isArchivingAllLeaves}
+                      className="border-violet-300 text-violet-700 hover:bg-violet-50 gap-1"
+                      onClick={async () => {
+                        if (!window.confirm(`Archive all ${hrOfficeQueue.length} leave request${hrOfficeQueue.length !== 1 ? "s" : ""} in the active queue? They will move to the Archived Queue.`)) return
+                        setIsArchivingAllLeaves(true)
+                        try {
+                          const res = await fetch("/api/leave/bulk-archive", { method: "POST" })
+                          const json = await res.json()
+                          if (!res.ok) throw new Error(json.error || "Failed to archive")
+                          toast({ title: "Leaves Archived", description: json.message })
+                          await loadData()
+                        } catch (e: any) {
+                          toast({ title: "Archive Failed", description: e instanceof Error ? e.message : "Unable to archive", variant: "destructive" })
+                        } finally {
+                          setIsArchivingAllLeaves(false)
+                        }
+                      }}
+                    >
+                      {isArchivingAllLeaves ? "Archiving…" : `Archive All (${hrOfficeQueue.length})`}
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-slate-500">

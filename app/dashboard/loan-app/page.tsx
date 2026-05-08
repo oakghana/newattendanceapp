@@ -813,6 +813,7 @@ export default function LoanAppPage() {
   const [loanOfficeTypeTab, setLoanOfficeTypeTab] = useState("all")
   const [loanOfficeStageTab, setLoanOfficeStageTab] = useState("pending")
   const [loanOfficeViewMode, setLoanOfficeViewMode] = useState<"table" | "card">("table")
+  const [isArchivingLoans, setIsArchivingLoans] = useState(false)
   const [loanOfficeLocation, setLoanOfficeLocation] = useState("all")
   const [loanOfficeDept, setLoanOfficeDept] = useState("all")
 
@@ -2448,6 +2449,35 @@ export default function LoanAppPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              {loanOfficeStageTab === "archivable" && p?.loanOffice && loanOfficeStageBuckets.archivable.length > 0 && (
+                <div className="flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 p-3">
+                  <div className="text-sm text-violet-800">
+                    <span className="font-semibold">{loanOfficeStageBuckets.archivable.length}</span> loan request{loanOfficeStageBuckets.archivable.length !== 1 ? "s" : ""} ready to archive
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={isArchivingLoans}
+                    className="bg-violet-700 hover:bg-violet-800 text-white gap-1"
+                    onClick={async () => {
+                      if (!window.confirm(`Archive all ${loanOfficeStageBuckets.archivable.length} archivable loan requests? They will be removed from the active queue.`)) return
+                      setIsArchivingLoans(true)
+                      try {
+                        const res = await fetch("/api/loan/bulk-archive", { method: "POST" })
+                        const json = await res.json()
+                        if (!res.ok) throw new Error(json.error || "Failed to archive")
+                        toast({ title: "Loans Archived", description: json.message })
+                        await loadData()
+                      } catch (e: any) {
+                        toast({ title: "Archive Failed", description: e.message, variant: "destructive" })
+                      } finally {
+                        setIsArchivingLoans(false)
+                      }
+                    }}
+                  >
+                    {isArchivingLoans ? "Archiving…" : `Archive All (${loanOfficeStageBuckets.archivable.length})`}
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
                   <Button
