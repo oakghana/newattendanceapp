@@ -363,11 +363,14 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     }
   }
 
+  const departmentNameLower = (profile?.departments?.name || "").toLowerCase()
+  const departmentCodeLower = (profile?.departments?.code || "").toLowerCase()
+
   const isHRDepartmentHead =
     profile?.role === "department_head" &&
-    (profile?.departments?.name?.toLowerCase().includes("hr") ||
-      profile?.departments?.name?.toLowerCase().includes("human resource") ||
-      profile?.departments?.code?.toLowerCase() === "hr")
+    (departmentNameLower.includes("hr") ||
+      departmentNameLower.includes("human resource") ||
+      departmentCodeLower === "hr")
 
   const shouldShowHRPortal = profile?.role === "admin" || isHRDepartmentHead
 
@@ -401,7 +404,9 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   const adminItems = filteredNavItems.filter((item) => item.category === "admin")
   const settingsItems = filteredNavItems.filter((item) => item.category === "settings")
 
-  const userInitials = profile ? `${profile.first_name[0]}${profile.last_name[0]}` : "U"
+  const firstInitial = profile?.first_name?.trim()?.[0] || ""
+  const lastInitial = profile?.last_name?.trim()?.[0] || ""
+  const userInitials = (firstInitial + lastInitial).toUpperCase() || "U"
 
   return (
     <>
