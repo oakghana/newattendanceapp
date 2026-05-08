@@ -22,12 +22,12 @@ async function createTable() {
 
     // Try creating table through a basic insert check
     // First, test if table exists by trying to query it
-    const { data: checkData, error: checkError } = await supabase
+    const { error: checkError } = await supabase
       .from('pending_offpremises_checkins')
       .select('id')
       .limit(1)
 
-    } else if (checkError && checkError.code === 'PGRST205') {
+    if (checkError && checkError.code === 'PGRST205') {
       console.log('Table does not exist. Creating via Supabase client operations...')
       
       // Since Supabase JS client doesn't support raw SQL execution in production,

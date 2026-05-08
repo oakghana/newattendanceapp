@@ -5,7 +5,8 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "lint": "next lint",
+    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts,.tsx,.js,.jsx",
+    "lint:app-lib": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint app lib --ext .ts,.tsx,.js,.jsx",
     "test": "vitest",
     "start": "next start"
   },
@@ -77,10 +78,16 @@
     "zod": "3.25.67"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
+    "cross-env": "^10.1.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "pg": "^8.17.2",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",

@@ -15,49 +15,201 @@ import { emailService } from "@/lib/email-service"
 
 const APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://updates.qccapps.com").replace(/\/$/, "")
 
-// ─── colour palette shared by all templates ─────────────────────────────────
-const GREEN = "#1a5c0e"
-const DARK_GREEN = "#134308"
+// ─── Brand palette ───────────────────────────────────────────────────────────
+const GREEN       = "#1a6b30"
+const DARK_GREEN  = "#0d3d1a"
+const MID_GREEN   = "#1e7a3e"
+const LOGO_URL    = `${APP_URL}/images/qcc-logo.png`
 
+// ─── Base email shell ────────────────────────────────────────────────────────
 function baseLayout(title: string, body: string): string {
-  return `
-<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-  <!-- Header -->
-  <div style="background:linear-gradient(135deg,${DARK_GREEN} 0%,${GREEN} 60%,#2d7a1a 100%);padding:28px 32px 24px;">
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;margin-bottom:10px;">
-      <span style="color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;">QCC HR System</span>
-    </div>
-    <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;line-height:1.3;">${title}</h1>
-    <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:12px;">Quality Control Company Ltd. (COCOBOD)</p>
-  </div>
-  <!-- Body -->
-  <div style="padding:28px 32px;background:#f9fafb;">
-    ${body}
-  </div>
-  <!-- Footer -->
-  <div style="padding:16px 32px;background:#f0f4f0;border-top:1px solid #dce8d8;">
-    <p style="margin:0;color:#6b7280;font-size:11px;line-height:1.6;">
-      This is an automated notification from the <strong>QCC HR &amp; Loans System</strong>. Do not reply to this email.<br/>
-      If you believe this email was sent in error, please contact your HR department.
-    </p>
-  </div>
-</div>`
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>${title}</title></head>
+<body style="margin:0;padding:0;background-color:#eef2ee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#eef2ee;padding:32px 16px;">
+  <tr><td align="center">
+    <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
+
+      <!-- ── HEADER ── -->
+      <tr>
+        <td style="background:linear-gradient(160deg,${DARK_GREEN} 0%,${GREEN} 55%,${MID_GREEN} 100%);border-radius:12px 12px 0 0;padding:0;">
+          <table cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="padding:24px 32px 0 32px;">
+                <img src="${LOGO_URL}" alt="QCC Logo" height="52" style="display:block;height:52px;width:auto;max-width:160px;" />
+              </td>
+              <td align="right" style="padding:24px 32px 0 0;vertical-align:middle;">
+                <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:4px 12px;color:rgba(255,255,255,0.9);font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">HR &amp; Loans System</span>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:18px 32px 28px 32px;">
+                <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.35;letter-spacing:-0.01em;">${title}</h1>
+                <p style="margin:6px 0 0;color:rgba(255,255,255,0.62);font-size:12px;letter-spacing:0.02em;">Quality Control Company Ltd. (COCOBOD)</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- ── DIVIDER STRIP ── -->
+      <tr>
+        <td style="background:linear-gradient(90deg,${MID_GREEN},#2ecc71,${MID_GREEN});height:4px;font-size:0;line-height:0;">&nbsp;</td>
+      </tr>
+
+      <!-- ── BODY ── -->
+      <tr>
+        <td style="background:#ffffff;padding:32px 32px 24px 32px;">
+          ${body}
+        </td>
+      </tr>
+
+      <!-- ── FOOTER ── -->
+      <tr>
+        <td style="background:#0d3d1a;border-radius:0 0 12px 12px;padding:20px 32px;">
+          <table cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="vertical-align:middle;">
+                <img src="${LOGO_URL}" alt="QCC" height="28" style="display:inline-block;height:28px;width:auto;opacity:0.55;max-width:90px;" />
+              </td>
+              <td align="right" style="vertical-align:middle;">
+                <p style="margin:0;color:rgba(255,255,255,0.5);font-size:10.5px;line-height:1.65;text-align:right;">
+                  This is an automated message from the <strong style="color:rgba(255,255,255,0.75);">QCC HR &amp; Loans System</strong>.<br/>
+                  Do not reply · Contact your HR department for assistance.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
 }
 
+// ─── CTA button ──────────────────────────────────────────────────────────────
 function btn(url: string, label: string): string {
   const fullUrl = url.startsWith("http") ? url : `${APP_URL}${url.startsWith("/") ? "" : "/"}${url}`
-  return `<div style="margin-top:20px;"><a href="${fullUrl}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,${DARK_GREEN},${GREEN});color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">${label} &rarr;</a></div>`
+  return `<table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
+    <tr>
+      <td style="background:linear-gradient(135deg,${DARK_GREEN} 0%,${GREEN} 100%);border-radius:8px;box-shadow:0 2px 8px rgba(13,61,26,0.35);">
+        <a href="${fullUrl}" style="display:inline-block;padding:13px 32px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.02em;white-space:nowrap;">${label} &rarr;</a>
+      </td>
+    </tr>
+  </table>`
 }
 
+// ─── Status badge ─────────────────────────────────────────────────────────────
+function statusBadge(label: string, type: "success" | "danger" | "warning" | "info"): string {
+  const styles: Record<string, string> = {
+    success: "background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;",
+    danger:  "background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;",
+    warning: "background:#fef3c7;color:#92400e;border:1px solid #fcd34d;",
+    info:    "background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;",
+  }
+  return `<span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;${styles[type]}">${label}</span>`
+}
+
+// ─── Detail table row ─────────────────────────────────────────────────────────
 function row(label: string, value: string): string {
   return `<tr>
-    <td style="padding:8px 12px 8px 0;color:#6b7280;font-size:13px;font-weight:500;white-space:nowrap;vertical-align:top;">${label}</td>
-    <td style="padding:8px 0;color:#111827;font-size:13px;font-weight:600;">${value || "—"}</td>
+    <td style="padding:11px 16px;color:#6b7280;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;width:38%;border-bottom:1px solid #f0f0f0;background:#f9fafb;">${label}</td>
+    <td style="padding:11px 16px;color:#111827;font-size:14px;font-weight:600;border-bottom:1px solid #f0f0f0;background:#ffffff;">${value || "—"}</td>
   </tr>`
 }
 
+// ─── Detail table wrapper ─────────────────────────────────────────────────────
 function table(rows: string): string {
-  return `<table style="border-collapse:collapse;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;margin-bottom:16px;">${rows}</table>`
+  return `<table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;margin-bottom:24px;">${rows}</table>`
+}
+
+// ─── Section heading ──────────────────────────────────────────────────────────
+function sectionHeading(text: string): string {
+  return `<p style="margin:0 0 10px;font-size:11px;font-weight:700;color:#6b7280;letter-spacing:0.1em;text-transform:uppercase;">${text}</p>`
+}
+
+export type WorkflowEmailPreviewTemplate =
+  | "leave-submitted"
+  | "leave-hr-approved"
+  | "loan-hod-approved"
+  | "loan-approved"
+
+export function renderWorkflowEmailPreview(template: WorkflowEmailPreviewTemplate): string {
+  const leaveLink = `${APP_URL}/dashboard/leave-planning`
+  const loanLink = `${APP_URL}/dashboard/loans`
+
+  switch (template) {
+    case "leave-submitted":
+      return baseLayout(
+        "New Leave Planning Request",
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A new leave request has been submitted and requires your review.</p>
+        <p style="margin:0 0 22px;">${statusBadge("Pending HOD Review", "warning")}</p>
+        ${sectionHeading("Request Details")}
+        ${table(
+          row("Staff Member", "Staff Member") +
+          row("Leave Type", "Annual Leave") +
+          row("Period", "2026-06-10 — 2026-06-24") +
+          row("Days Requested", "10")
+        )}
+        ${btn(leaveLink, "Review Leave Request")}`,
+      )
+
+    case "leave-hr-approved":
+      return baseLayout(
+        "Leave Request Approved ✓",
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Congratulations, <strong>Staff Member</strong>! Your leave request has been approved by HR.</p>
+        <p style="margin:0 0 22px;">${statusBadge("Fully Approved", "success")}</p>
+        ${sectionHeading("Your Approved Leave")}
+        ${table(
+          row("Leave Type", "Annual Leave") +
+          row("Period", "2026-06-10 — 2026-06-24") +
+          row("Approved Days", "10") +
+          row("Approved by", "HR Approver")
+        )}
+        ${btn(leaveLink, "View My Leave Requests")}`,
+      )
+
+    case "loan-hod-approved":
+      return baseLayout(
+        "Loan Request Ready for Loan Office",
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A loan request has been approved by the HOD and is now awaiting Loan Office processing.</p>
+        <p style="margin:0 0 22px;">${statusBadge("HOD Approved — Awaiting Loan Office", "info")}</p>
+        ${sectionHeading("Loan Request Details")}
+        ${table(
+          row("Staff Member", "Staff Member") +
+          row("Loan Type", "Car Loan (Junior)") +
+          row("Reference No.", "LN-20260506-3307") +
+          row("Amount", "GH₵ 65,000") +
+          row("HOD Approver", "HOD")
+        )}
+        ${btn(loanLink, "Process in Loan Office")}`,
+      )
+
+    case "loan-approved":
+      return baseLayout(
+        "Loan Request Approved ✓",
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Congratulations, <strong>Staff Member</strong>! Your loan request has been approved.</p>
+        <p style="margin:0 0 22px;">${statusBadge("Fully Approved", "success")}</p>
+        ${sectionHeading("Your Approved Loan")}
+        ${table(
+          row("Loan Type", "Car Loan (Junior)") +
+          row("Reference No.", "LN-20260506-3307") +
+          row("Amount", "GH₵ 65,000") +
+          row("Approved by", "Director")
+        )}
+        ${btn(loanLink, "View My Loan Requests")}`,
+      )
+
+    default:
+      return baseLayout(
+        "Workflow Email Preview",
+        `<p style="margin:0;font-size:14px;color:#374151;">No preview template selected.</p>`,
+      )
+  }
 }
 
 // ─── Recipient helpers ──────────────────────────────────────────────────────
@@ -225,9 +377,11 @@ export async function notifyLeaveSubmitted(
     const subject = `[Action Required] New Leave Request from ${opts.staffName}`
     const html = baseLayout(
       "New Leave Planning Request",
-      `<p style="margin:0 0 14px;font-size:14px;">A staff member has submitted a leave request that requires your review.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A new leave request has been submitted and requires your review.</p>
+      <p style="margin:0 0 22px;">${statusBadge("Pending HOD Review", "warning")}</p>
+      ${sectionHeading("Request Details")}
       ${table(
-        row("Staff", opts.staffName) +
+        row("Staff Member", opts.staffName) +
         row("Leave Type", opts.leaveType) +
         row("Period", `${opts.startDate} — ${opts.endDate}`) +
         row("Days Requested", String(opts.requestedDays))
@@ -264,13 +418,15 @@ export async function notifyLeaveHodApproved(
     const subject = `[Action Required] Leave Request Approved by HOD — ${opts.staffName}`
     const html = baseLayout(
       "Leave Request Ready for HR Office Review",
-      `<p style="margin:0 0 14px;font-size:14px;">A leave request has been approved by the HOD and is now awaiting HR Leave Office review and adjustment.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A leave request has been approved by the HOD and is now awaiting HR Leave Office review.</p>
+      <p style="margin:0 0 22px;">${statusBadge("HOD Approved — Awaiting HR Office", "info")}</p>
+      ${sectionHeading("Request Details")}
       ${table(
-        row("Staff", opts.staffName) +
+        row("Staff Member", opts.staffName) +
         row("Leave Type", opts.leaveType) +
         row("Period", `${opts.startDate} — ${opts.endDate}`) +
-        row("Days", String(opts.requestedDays)) +
-        row("HOD", opts.hodName)
+        row("Days Requested", String(opts.requestedDays)) +
+        row("HOD Approver", opts.hodName)
       )}
       ${btn(link, "Process in HR Leave Office")}`,
     )
@@ -305,17 +461,19 @@ export async function notifyLeaveHodDecision(
       : `Changes Requested on Your Leave Request`
     const html = baseLayout(
       isRejected ? "Leave Request Rejected" : "Leave Plan Changes Requested",
-      `<p style="margin:0 0 14px;font-size:14px;">
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">
         ${isRejected
-          ? `Your leave request has been <strong>rejected</strong> by your HOD.`
+          ? `Your leave request has been reviewed by your HOD.`
           : `Your HOD has reviewed your leave request and requested some changes.`}
       </p>
+      <p style="margin:0 0 22px;">${isRejected ? statusBadge("Rejected by HOD", "danger") : statusBadge("Changes Requested", "warning")}</p>
+      ${sectionHeading("Review Details")}
       ${table(
-        row("HOD", opts.hodName) +
+        row("Reviewed by (HOD)", opts.hodName) +
         row("Decision", isRejected ? "Rejected" : "Changes Requested") +
-        row("Reason", opts.reason)
+        row("Reason / Note", opts.reason)
       )}
-      <p style="font-size:13px;color:#444;">Please log in to review the details and resubmit if applicable.</p>
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">Please log in to review the details and resubmit if applicable.</p>
       ${btn(link, "View My Leave Requests")}`,
     )
     await send(admin, email, subject, html, "leave HOD decision notification")
@@ -351,13 +509,15 @@ export async function notifyLeaveHrOfficeForwarded(
     const subject = `[Action Required] Leave Request Ready for Final Approval — ${opts.staffName}`
     const html = baseLayout(
       "Leave Request Awaiting Final HR Approval",
-      `<p style="margin:0 0 14px;font-size:14px;">HR Leave Office has reviewed and forwarded the following leave request for your final approval.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">HR Leave Office has reviewed and forwarded this request for your final approval.</p>
+      <p style="margin:0 0 22px;">${statusBadge("Awaiting Final HR Approval", "info")}</p>
+      ${sectionHeading("Approved Leave Details")}
       ${table(
-        row("Staff", opts.staffName) +
+        row("Staff Member", opts.staffName) +
         row("Leave Type", opts.leaveType) +
         row("Approved Period", `${opts.adjustedStartDate} — ${opts.adjustedEndDate}`) +
         row("Approved Days", String(opts.adjustedDays)) +
-        row("HR Office", opts.reviewerName)
+        row("HR Leave Office", opts.reviewerName)
       )}
       ${btn(link, "Review & Approve")}`,
     )
@@ -397,8 +557,10 @@ export async function notifyLeaveHrApproved(
     if (staffEmail) {
       const subject = `Your Leave Request has been Approved`
       const html = baseLayout(
-        "Leave Request Approved",
-        `<p style="margin:0 0 14px;font-size:14px;">Congratulations! Your leave request has been <strong style="color:${GREEN};">approved</strong> by HR.</p>
+        "Leave Request Approved ✓",
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Congratulations, <strong>${opts.staffName}</strong>! Your leave request has been approved by HR.</p>
+        <p style="margin:0 0 22px;">${statusBadge("Fully Approved", "success")}</p>
+        ${sectionHeading("Your Approved Leave")}
         ${table(
           row("Leave Type", opts.leaveType) +
           row("Period", `${opts.effectiveStart} — ${opts.effectiveEnd}`) +
@@ -414,9 +576,11 @@ export async function notifyLeaveHrApproved(
       const subject = `Leave Approved: ${opts.staffName}`
       const html = baseLayout(
         "Staff Leave Request Approved",
-        `<p style="margin:0 0 14px;font-size:14px;">For your information — the following leave request has received final HR approval.</p>
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">For your information — the following leave request has received final HR approval.</p>
+        <p style="margin:0 0 22px;">${statusBadge("Fully Approved", "success")}</p>
+        ${sectionHeading("Approved Leave Details")}
         ${table(
-          row("Staff", opts.staffName) +
+          row("Staff Member", opts.staffName) +
           row("Leave Type", opts.leaveType) +
           row("Period", `${opts.effectiveStart} — ${opts.effectiveEnd}`) +
           row("Approved Days", String(opts.effectiveDays))
@@ -449,12 +613,14 @@ export async function notifyLeaveHrRejected(
     const subject = `Your Leave Request was Not Approved by HR`
     const html = baseLayout(
       "Leave Request Not Approved",
-      `<p style="margin:0 0 14px;font-size:14px;">Your leave request has been <strong style="color:#dc2626;">rejected</strong> by HR.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Your leave request has been reviewed and was not approved at this time.</p>
+      <p style="margin:0 0 22px;">${statusBadge("Not Approved", "danger")}</p>
+      ${sectionHeading("Decision Details")}
       ${table(
-        row("HR Approver", opts.approverName) +
-        row("Reason", opts.note || "No reason provided")
+        row("Reviewed by (HR)", opts.approverName) +
+        row("Reason / Note", opts.note || "No reason provided")
       )}
-      <p style="font-size:13px;color:#444;">If you have questions, please contact HR directly.</p>
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">If you have questions, please contact HR directly.</p>
       ${btn(link, "View My Leave Requests")}`,
     )
     await send(admin, email, subject, html, "leave HR rejected notification")
@@ -496,19 +662,17 @@ export async function notifyLeaveResumeReminder(
       const subject = `Reminder: You Return from Leave in ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"}`
       const html = baseLayout(
         `Return to Work — ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"} Remaining`,
-        `<p style="margin:0 0 16px;font-size:14px;color:#374151;">Dear <strong>${opts.staffName}</strong>,</p>
-        <p style="margin:0 0 16px;font-size:14px;color:#374151;">
-          This is a friendly reminder that your approved leave ends in
-          <strong style="color:${GREEN};">${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}</strong>.
-          Please prepare to resume your duties on <strong>${opts.resumeDate}</strong>.
-        </p>
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong>${opts.staffName}</strong>,</p>
+        <p style="margin:0 0 6px;font-size:14px;color:#374151;">Your approved leave ends in <strong>${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}</strong>. Please prepare to resume duties on <strong>${opts.resumeDate}</strong>.</p>
+        <p style="margin:0 0 22px;">${statusBadge(`Resume Date: ${opts.resumeDate}`, "info")}</p>
+        ${sectionHeading("Leave Summary")}
         ${table(
           row("Leave Type", opts.leaveType) +
           row("Leave End Date", opts.endDate) +
           row("Resume Date", opts.resumeDate) +
           row("Days Remaining", String(opts.daysLeft))
         )}
-        <p style="margin:0 0 0;font-size:13px;color:#6b7280;">
+        <p style="margin:0;font-size:13px;color:#6b7280;">
           If you need to extend your leave, please contact HR as soon as possible.
         </p>`,
       )
@@ -520,12 +684,11 @@ export async function notifyLeaveResumeReminder(
       const subject = `Staff Return Notice: ${opts.staffName} resumes in ${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}`
       const html = baseLayout(
         "Staff Returning from Leave",
-        `<p style="margin:0 0 16px;font-size:14px;color:#374151;">
-          For your information — a staff member under your supervision will be
-          returning from leave in <strong style="color:${GREEN};">${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}</strong>.
-        </p>
+        `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A staff member under your supervision will be returning from leave soon.</p>
+        <p style="margin:0 0 22px;">${statusBadge(`Returning in ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"}`, "info")}</p>
+        ${sectionHeading("Return Details")}
         ${table(
-          row("Staff", opts.staffName) +
+          row("Staff Member", opts.staffName) +
           row("Leave Type", opts.leaveType) +
           row("Leave End Date", opts.endDate) +
           row("Expected Resume Date", opts.resumeDate)
@@ -567,11 +730,13 @@ export async function notifyLoanSubmitted(
     const subject = `[Action Required] New Loan Request from ${opts.staffName}`
     const html = baseLayout(
       "New Loan Request Awaiting HOD Review",
-      `<p style="margin:0 0 14px;font-size:14px;">A staff member has submitted a loan request that requires your review.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A staff member has submitted a new loan request that requires your approval.</p>
+      <p style="margin:0 0 22px;">${statusBadge("Pending HOD Approval", "warning")}</p>
+      ${sectionHeading("Loan Request Details")}
       ${table(
-        row("Staff", opts.staffName) +
+        row("Staff Member", opts.staffName) +
         row("Loan Type", opts.loanType) +
-        row("Reference", opts.requestNumber) +
+        row("Reference No.", opts.requestNumber) +
         (opts.amount ? row("Amount", `GH₵ ${Number(opts.amount).toLocaleString()}`) : "")
       )}
       ${btn(link, "Review Loan Request")}`,
@@ -605,13 +770,15 @@ export async function notifyLoanHodApproved(
     const subject = `[Action Required] Loan Request Approved by HOD — ${opts.staffName}`
     const html = baseLayout(
       "Loan Request Ready for Loan Office",
-      `<p style="margin:0 0 14px;font-size:14px;">A loan request has been approved by the HOD and is now waiting for Loan Office processing.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A loan request has been approved by the HOD and is now awaiting Loan Office processing.</p>
+      <p style="margin:0 0 22px;">${statusBadge("HOD Approved — Awaiting Loan Office", "info")}</p>
+      ${sectionHeading("Loan Request Details")}
       ${table(
-        row("Staff", opts.staffName) +
+        row("Staff Member", opts.staffName) +
         row("Loan Type", opts.loanType) +
-        row("Reference", opts.requestNumber) +
+        row("Reference No.", opts.requestNumber) +
         (opts.amount ? row("Amount", `GH₵ ${Number(opts.amount).toLocaleString()}`) : "") +
-        row("HOD", opts.hodName)
+        row("HOD Approver", opts.hodName)
       )}
       ${btn(link, "Process in Loan Office")}`,
     )
@@ -643,12 +810,14 @@ export async function notifyLoanHodRejected(
     const subject = `Your Loan Request has been Rejected by HOD`
     const html = baseLayout(
       "Loan Request Rejected by HOD",
-      `<p style="margin:0 0 14px;font-size:14px;">Your loan request has been <strong style="color:#dc2626;">rejected</strong> by your HOD.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Your loan request has been reviewed by your HOD and was not approved.</p>
+      <p style="margin:0 0 22px;">${statusBadge("Rejected by HOD", "danger")}</p>
+      ${sectionHeading("Decision Details")}
       ${table(
         row("Loan Type", opts.loanType) +
-        row("Reference", opts.requestNumber) +
-        row("HOD", opts.hodName) +
-        row("Reason", opts.note || "No reason provided")
+        row("Reference No.", opts.requestNumber) +
+        row("Reviewed by (HOD)", opts.hodName) +
+        row("Reason / Note", opts.note || "No reason provided")
       )}
       ${btn(link, "View My Loan Requests")}`,
     )
@@ -682,11 +851,13 @@ export async function notifyLoanStageAdvanced(
     const subject = `[Action Required] Loan at ${opts.toStage} — ${opts.staffName}`
     const html = baseLayout(
       `Loan Request Advanced to ${opts.toStage}`,
-      `<p style="margin:0 0 14px;font-size:14px;">A loan request has moved from <strong>${opts.fromStage}</strong> to <strong>${opts.toStage}</strong> and requires your attention.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A loan request has advanced through the approval workflow and requires your action.</p>
+      <p style="margin:0 0 22px;">${statusBadge(`${opts.fromStage} → ${opts.toStage}`, "info")}</p>
+      ${sectionHeading("Loan Request Details")}
       ${table(
-        row("Staff", opts.staffName) +
+        row("Staff Member", opts.staffName) +
         row("Loan Type", opts.loanType) +
-        row("Reference", opts.requestNumber) +
+        row("Reference No.", opts.requestNumber) +
         (opts.amount ? row("Amount", `GH₵ ${Number(opts.amount).toLocaleString()}`) : "")
       )}
       ${btn(link, `Review in ${opts.toStage}`)}`,
@@ -718,11 +889,13 @@ export async function notifyLoanApproved(
 
     const subject = `Your Loan Request has been Approved`
     const html = baseLayout(
-      "Loan Request Approved",
-      `<p style="margin:0 0 14px;font-size:14px;">Congratulations! Your loan request has been <strong style="color:${GREEN};">approved</strong>.</p>
+      "Loan Request Approved ✓",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Congratulations, <strong>${opts.staffName}</strong>! Your loan request has been approved.</p>
+      <p style="margin:0 0 22px;">${statusBadge("Fully Approved", "success")}</p>
+      ${sectionHeading("Your Approved Loan")}
       ${table(
         row("Loan Type", opts.loanType) +
-        row("Reference", opts.requestNumber) +
+        row("Reference No.", opts.requestNumber) +
         (opts.amount ? row("Amount", `GH₵ ${Number(opts.amount).toLocaleString()}`) : "") +
         row("Approved by", opts.approverName)
       )}
@@ -756,14 +929,16 @@ export async function notifyLoanRejected(
     const link = `${APP_URL}/dashboard/loans`
     const subject = `Your Loan Request was Not Approved`
     const html = baseLayout(
-      "Loan Request Rejected",
-      `<p style="margin:0 0 14px;font-size:14px;">Your loan request has been <strong style="color:#dc2626;">rejected</strong> at the ${opts.stage} stage.</p>
+      "Loan Request Not Approved",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Your loan request has been reviewed and was not approved at the ${opts.stage} stage.</p>
+      <p style="margin:0 0 22px;">${statusBadge("Not Approved", "danger")}</p>
+      ${sectionHeading("Decision Details")}
       ${table(
         row("Loan Type", opts.loanType) +
-        row("Reference", opts.requestNumber) +
-        row("Rejected by", opts.rejectedBy) +
+        row("Reference No.", opts.requestNumber) +
+        row("Reviewed by", opts.rejectedBy) +
         row("Stage", opts.stage) +
-        row("Reason", opts.note || "No reason provided")
+        row("Reason / Note", opts.note || "No reason provided")
       )}
       ${btn(link, "View My Loan Requests")}`,
     )
