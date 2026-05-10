@@ -335,7 +335,12 @@ function capitalizeLabel(value: string) {
   return String(value || "").replace(/^(.)/, (match) => match.toUpperCase())
 }
 
-function getLoanTypeTier(loanType: LoanType): "junior" | "senior" | "manager" | null {
+function getLoanTypeBaseKey(loanType: LoanType) {
+  const rawKey = String(loanType.loan_key || "").toLowerCase().trim()
+  return rawKey.replace(/_(junior|senior|manager)$/, "")
+}
+
+function getExplicitLoanTypeTier(loanType: LoanType): "junior" | "senior" | "manager" | null {
   const key = String(loanType.loan_key || "").toLowerCase()
   const label = String(loanType.loan_label || "").toLowerCase()
 
@@ -345,46 +350,46 @@ function getLoanTypeTier(loanType: LoanType): "junior" | "senior" | "manager" | 
   return null
 }
 
-function getUserLoanTier(position?: string | null): "junior" | "senior" | "manager" | null {
+function resolveLoanTypeTier(loanType: LoanType, allTypes: LoanType[]) {
+  const explicit = getExplicitLoanTypeTier(loanType)
+  if (explicit) return explicit
+
+  const baseKey = getLoanTypeBaseKey(loanType)
+  const sameGroup = allTypes.filter((type) => getLoanTypeBaseKey(type) === baseKey)
+  const hasHigherTier = sameGroup.some((type) => {
+    const tier = getExplicitLoanTypeTier(type)
+    return tier === "senior" || tier === "manager"
+  })
+
+  return hasHigherTier ? "junior" : null
+}
+
+function getUserLoanTier(position?: string | null, role?: string | null): "junior" | "senior" | "manager" | null {
   const normalizedPosition = String(position || "").toLowerCase()
-  if (/manager|director|head|regional/.test(normalizedPosition)) return "manager"
-  if (/senior|\bsr\b|sr\./.test(normalizedPosition)) return "senior"
-  if (/junior|\bjr\b/.test(normalizedPosition)) return "junior"
+  const normalizedRole = String(role || "").toLowerCase()
+
+  if (/manager|director|head|regional/.test(normalizedPosition) || /manager|director/.test(normalizedRole)) return "manager"
+  if (/senior|\bsr\b|sr\./.test(normalizedPosition) || /senior|sr\b|sr\./.test(normalizedRole)) return "senior"
+  if (/junior|\bjr\b/.test(normalizedPosition) || /junior|\bjr\b/.test(normalizedRole)) return "junior"
   return null
 }
 
-function normalizeLoanTypeLabel(loanType: LoanType) {
-  const key = String(loanType.loan_key || "").toLowerCase()
+function normalizeLoanTypeLabel(loanType: LoanType, allTypes: LoanType[]) {
   const rawLabel = String(loanType.loan_label || "").trim()
   const baseLabel = rawLabel.replace(/\s*\((junior|senior|manager)\)$/i, "").trim() || rawLabel
-  const tier = getLoanTypeTier(loanType)
+  const tier = resolveLoanTypeTier(loanType, allTypes)
 
-  if (key === "vehicle_repair_loan_junior") return "Car Loan (Junior)"
-  if (key === "vehicle_repair_loan_senior") return "Car Loan (Senior)"
-  if (key === "vehicle_insurance_loan_junior") return "Insurance Loan (Junior)"
-  if (key === "vehicle_insurance_loan_senior") return "Insurance Loan (Senior)"
-  if (key === "funeral_loan_junior" || key === "funeral_loan_senior") return `Funeral Loan${tier ? ` (${capitalizeLabel(tier)})` : ""}`
-  if (key === "salary_advance") return "Salary Advance"
-
-  return tier && !/\((junior|senior|manager)\)$/i.test(rawLabel)
-    ? `${baseLabel} (${capitalizeLabel(tier)})`
-    : baseLabel
+  return tier ? `${baseLabel} (${capitalizeLabel(tier)})` : baseLabel
 }
 
 function loanTypeGroupKey(loanType: LoanType) {
-  const label = String(loanType.loan_label || "").replace(/\s*\((junior|senior|manager)\)$/i, "").trim()
-  return label.toLowerCase() || String(loanType.loan_key || "").toLowerCase()
+  return getLoanTypeBaseKey(loanType)
 }
 
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
-  const loanTier = getLoanTypeTier(loanType)
+  const loanTier = resolveLoanTypeTier(loanType, allTypes)
   if (!userTier || !loanTier) return true
-
-  const groupKey = loanTypeGroupKey(loanType)
-  const sameGroup = allTypes.filter((type) => loanTypeGroupKey(type) === groupKey)
-  const hasMatchingTier = sameGroup.some((type) => getLoanTypeTier(type) === userTier)
-
-  return !hasMatchingTier || loanTier === userTier
+  return loanTier === userTier
 }
 
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
@@ -929,11 +934,11 @@ export default function LoanAppPage() {
 
   const filteredLoanTypes = useMemo(() => {
     const rawTypes = data?.loanTypes || []
-    const userTier = getUserLoanTier(data?.profile?.position)
+    const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
 
     const normalizedTypes = rawTypes.map((type) => ({
       ...type,
-      loan_label: normalizeLoanTypeLabel(type),
+      loan_label: normalizeLoanTypeLabel(type, rawTypes),
     }))
 
     return normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
@@ -3731,7 +3736,7 @@ export default function LoanAppPage() {
                       }}
                       placeholder="Choose loan type"
                       searchPlaceholder="Search loan type..."
-                      options={(lookupData?.loanTypes || []).map((lt) => ({ value: lt.loan_key, label: normalizeLoanTypeLabel(lt) }))}
+                      options={(lookupData?.loanTypes || []).map((lt) => ({ value: lt.loan_key, label: normalizeLoanTypeLabel(lt, lookupData?.loanTypes || []) }))}
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">

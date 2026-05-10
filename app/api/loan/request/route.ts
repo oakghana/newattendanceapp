@@ -130,6 +130,13 @@ async function loadLoanType(admin: any, loanTypeKey: string) {
   }
 }
 
+function clampSalaryAdvanceRecoveryMonths(loanTypeKey: string, months?: number | null): number | null {
+  const normalizedKey = String(loanTypeKey || "").toLowerCase()
+  if (normalizedKey !== "salary_advance") return months ?? null
+  if (!Number.isFinite(months) || months < 1) return null
+  return Math.min(3, Math.trunc(months))
+}
+
 function shouldRetryWithoutLocationColumns(error: any): boolean {
   const msg = String(error?.message || "").toLowerCase()
   return (
