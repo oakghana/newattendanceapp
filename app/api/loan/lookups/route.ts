@@ -354,6 +354,8 @@ export async function POST(request: NextRequest) {
 
     if (action === "update_loan_type") {
       const loanKey = String(body?.loan_key || "")
+      const loanLabel = String(body?.loan_label || "").trim() || null
+      const isActive = body?.is_active
       const fixedAmount = Number(body?.fixed_amount)
       const maxAmount = Number(body?.max_amount)
       const minQualification = String(body?.min_qualification_note || "").trim() || null
@@ -369,33 +371,41 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "loan_key, fixed_amount and max_amount are required" }, { status: 400 })
       }
 
+      const updatePayload: any = {
+        fixed_amount: fixedAmount,
+        max_amount: maxAmount,
+        min_qualification_note: minQualification,
+        loan_terms: loanTerms,
+        default_recovery_months: defaultRecoveryMonths,
+        requires_committee: requiresCommittee,
+        requires_fd_check: requiresFdCheck,
+        updated_at: new Date().toISOString(),
+      }
+      if (loanLabel) updatePayload.loan_label = loanLabel
+      if (typeof isActive !== "undefined") updatePayload.is_active = Boolean(isActive)
+
       const { data, error } = await admin
         .from("loan_types")
-        .update({
-          fixed_amount: fixedAmount,
-          max_amount: maxAmount,
-          min_qualification_note: minQualification,
-          loan_terms: loanTerms,
-          default_recovery_months: defaultRecoveryMonths,
-          requires_committee: requiresCommittee,
-          requires_fd_check: requiresFdCheck,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("loan_key", loanKey)
         .select("*")
         .single()
 
       if (error && isSchemaIssue(error)) {
+        const fallbackPayload: any = {
+          fixed_amount: fixedAmount,
+          max_amount: maxAmount,
+          min_qualification_note: minQualification,
+          requires_committee: requiresCommittee,
+          requires_fd_check: requiresFdCheck,
+          updated_at: new Date().toISOString(),
+        }
+        if (loanLabel) fallbackPayload.loan_label = loanLabel
+        if (typeof isActive !== "undefined") fallbackPayload.is_active = Boolean(isActive)
+
         const fallback = await admin
           .from("loan_types")
-          .update({
-            fixed_amount: fixedAmount,
-            max_amount: maxAmount,
-            min_qualification_note: minQualification,
-            requires_committee: requiresCommittee,
-            requires_fd_check: requiresFdCheck,
-            updated_at: new Date().toISOString(),
-          })
+          .update(fallbackPayload)
           .eq("loan_key", loanKey)
           .select("*")
           .single()

@@ -331,6 +331,17 @@ function requiresProofAttachment(
   )
 }
 
+function normalizeLoanTypeLabel(loanType: LoanType) {
+  const key = String(loanType.loan_key || "").toLowerCase()
+  const normalized = String(loanType.loan_label || "").replace(/\s*\((junior|senior|manager)\)$/i, "").trim()
+
+  if (key === "vehicle_repair_loan_junior") return "Motor Loan"
+  if (key === "vehicle_insurance_loan_senior") return "Insurance Loan"
+  if (key === "funeral_loan_junior" || key === "funeral_loan_senior") return "Funeral Loan"
+  if (key === "salary_advance") return "Salary Advance"
+  return normalized || loanType.loan_label || ""
+}
+
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
   const key = String(loanTypeKey || "").toLowerCase()
   const rank = String(staffRank || "").toLowerCase()
@@ -777,6 +788,9 @@ export default function LoanAppPage() {
     const [setupLoanTerms, setSetupLoanTerms] = useState("")
     const [setupDefaultRecoveryMonths, setSetupDefaultRecoveryMonths] = useState("")
   const [setupQualification, setSetupQualification] = useState("")
+  const [setupLoanLabel, setSetupLoanLabel] = useState("")
+  const [setupIsActive, setSetupIsActive] = useState(true)
+  const [salaryAdvanceMonths, setSalaryAdvanceMonths] = useState<number | null>(null)
   const [selectedTemplateDomain, setSelectedTemplateDomain] = useState<"loan" | "leave">("loan")
   const [selectedTemplateKey, setSelectedTemplateKey] = useState("loan_approval")
   const [templateTitle, setTemplateTitle] = useState("")
@@ -869,7 +883,11 @@ export default function LoanAppPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   const filteredLoanTypes = useMemo(() => {
-    return data?.loanTypes || []
+    const rawTypes = data?.loanTypes || []
+    return rawTypes.map((type) => ({
+      ...type,
+      loan_label: normalizeLoanTypeLabel(type),
+    }))
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
@@ -877,6 +895,18 @@ export default function LoanAppPage() {
     () => requiresProofAttachment(loanTypeKey, selectedType?.loan_label, selectedType?.category),
     [loanTypeKey, selectedType],
   )
+  const isSalaryAdvanceRequest = useMemo(() => {
+    const key = String(selectedType?.loan_key || "").toLowerCase()
+    const label = String(selectedType?.loan_label || "").toLowerCase()
+    return key === "salary_advance" || label.includes("salary advance")
+  }, [selectedType])
+
+  useEffect(() => {
+    if (!isSalaryAdvanceRequest) {
+      setSalaryAdvanceMonths(null)
+    }
+  }, [isSalaryAdvanceRequest])
+
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
@@ -1336,8 +1366,16 @@ export default function LoanAppPage() {
     setReason("")
     setSupportingDocumentUrl(null)
     setSupportingDocumentName("")
+    setSalaryAdvanceMonths(null)
     if (filteredLoanTypes.length) setLoanTypeKey(filteredLoanTypes[0].loan_key)
   }
+
+  useEffect(() => {
+    if (!selectedLoanType) return
+    const found = (lookupData?.loanTypes || []).find((t) => t.loan_key === selectedLoanType)
+    setSetupLoanLabel(found?.loan_label || "")
+    setSetupIsActive(found?.is_active ?? true)
+  }, [selectedLoanType, lookupData?.loanTypes])
 
   useEffect(() => {
     if (!loanTypeKey && filteredLoanTypes.length > 0) {
@@ -1442,12 +1480,22 @@ export default function LoanAppPage() {
       return
     }
 
+    if (isSalaryAdvanceRequest && !salaryAdvanceMonths) {
+      toast({
+        title: "Select repayment months",
+        description: "Salary advance requests require a 1-3 month recovery period.",
+        variant: "destructive",
+      })
+      return
+    }
+
     const payload = {
       id: editingId,
       loan_type_key: loanTypeKey,
       requested_amount: selectedType?.fixed_amount || 0,
       reason: trimmedReason,
       supporting_document_url: supportingDocumentUrl,
+      recovery_months: salaryAdvanceMonths,
     }
 
     const res = await fetch("/api/loan/request", {
@@ -2193,12 +2241,25 @@ export default function LoanAppPage() {
                 </div>
               </div>
 
+              {isSalaryAdvanceRequest && (
+                <div className="grid grid-cols-3 gap-3">
+                  {[1, 2, 3].map((months) => (
+                    <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm hover:border-emerald-300">
+                      <input
+                        type="checkbox"
+                        checked={salaryAdvanceMonths === months}
+                        onChange={() => setSalaryAdvanceMonths(salaryAdvanceMonths === months ? null : months)}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>{months} month{months > 1 ? "s" : ""}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
               <div>
                 <Label>Reason (Optional)</Label>
                 <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="You can add reason if needed" />
-                <p className="mt-2 text-xs text-amber-700">
-                  Kindly keep your Attendance check-in and check-out up to date. Missing attendance activity or pending checkout can block new loan and leave requests.
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -3611,6 +3672,8 @@ export default function LoanAppPage() {
                       onChange={(v) => {
                         setSelectedLoanType(v)
                         const found = (lookupData?.loanTypes || []).find((t) => t.loan_key === v)
+                        setSetupLoanLabel(found?.loan_label || "")
+                        setSetupIsActive(found?.is_active ?? true)
                         setSetupFixedAmount(String(found?.fixed_amount || ""))
                         setSetupMaxAmount(String(found?.max_amount || found?.fixed_amount || ""))
                         setSetupQualification(String(found?.min_qualification_note || ""))
@@ -3619,8 +3682,31 @@ export default function LoanAppPage() {
                       }}
                       placeholder="Choose loan type"
                       searchPlaceholder="Search loan type..."
-                      options={(lookupData?.loanTypes || []).map((lt) => ({ value: lt.loan_key, label: lt.loan_label }))}
+                      options={(lookupData?.loanTypes || []).map((lt) => ({ value: lt.loan_key, label: normalizeLoanTypeLabel(lt) }))}
                     />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Loan Label</Label>
+                    <Input
+                      value={setupLoanLabel}
+                      onChange={(e) => setSetupLoanLabel(e.target.value)}
+                      placeholder="Update loan label"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Active</Label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        id="setup-is-active"
+                        type="checkbox"
+                        checked={setupIsActive}
+                        onChange={(e) => setSetupIsActive(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <label htmlFor="setup-is-active" className="text-sm text-slate-700">
+                        Enable this product for new requests
+                      </label>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Fixed Amount (GHc)</Label>
@@ -3657,6 +3743,8 @@ export default function LoanAppPage() {
                   onClick={() => runLookupAction({
                     action: "update_loan_type",
                     loan_key: selectedLoanType,
+                    loan_label: setupLoanLabel,
+                    is_active: setupIsActive,
                     fixed_amount: Number(setupFixedAmount || 0),
                     max_amount: Number(setupMaxAmount || 0),
                     min_qualification_note: setupQualification,

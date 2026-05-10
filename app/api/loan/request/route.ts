@@ -130,39 +130,6 @@ async function loadLoanType(admin: any, loanTypeKey: string) {
   }
 }
 
-async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
-  // Require at least one check-in within the last 2 calendar months (current + previous month)
-  const now = new Date()
-  const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const twoMonthsAgoIso = twoMonthsAgo.toISOString()
-
-  const { data: attendanceRows, error } = await admin
-    .from("attendance_records")
-    .select("id, check_in_time")
-    .eq("user_id", userId)
-    .gte("check_in_time", twoMonthsAgoIso)
-    .order("check_in_time", { ascending: false })
-    .limit(5)
-
-  if (error) {
-    return { ok: true as const }
-  }
-
-  const rows = attendanceRows || []
-  if (!rows.some((row: any) => Boolean(row?.check_in_time))) {
-    return {
-      ok: false as const,
-      status: 403,
-      error:
-        "No attendance check-in found in the last two months. Please check in using the Attendance module at least once to submit a loan request.",
-      message:
-        "Check in using the Attendance module (at least once in the last two months) then submit your loan request.",
-    }
-  }
-
-  return { ok: true as const }
-}
-
 function shouldRetryWithoutLocationColumns(error: any): boolean {
   const msg = String(error?.message || "").toLowerCase()
   return (
@@ -213,6 +180,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
+    const recovery_months = Number(body?.recovery_months)
 
     if (!loan_type_key) {
       return NextResponse.json({ error: "loan_type_key is required" }, { status: 400 })
@@ -240,20 +208,6 @@ export async function POST(request: NextRequest) {
     }
 
     const role = normalizeRole((profile as any).role)
-
-    const shouldEnforceAttendance = !["admin", "regional_manager", "department_head"].includes(role)
-    if (shouldEnforceAttendance) {
-      const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
-      if (!attendanceCheck.ok) {
-        return NextResponse.json(
-          {
-            error: attendanceCheck.error,
-            message: attendanceCheck.message,
-          },
-          { status: attendanceCheck.status },
-        )
-      }
-    }
 
     if (!LOAN_REQUEST_SUBMISSION_ENABLED) {
       return loanSubmissionClosedResponse()
@@ -426,7 +380,10 @@ export async function POST(request: NextRequest) {
       fixed_amount: (loanType as any).fixed_amount || null,
       requested_amount: (loanType as any).fixed_amount || Number(requested_amount || 0) || null,
       hr_note: (loanType as any).loan_terms || null,
-      recovery_months: (loanType as any).default_recovery_months || null,
+      recovery_months:
+        Number.isFinite(recovery_months) && recovery_months > 0
+          ? Math.trunc(recovery_months)
+          : (loanType as any).default_recovery_months || null,
       reason: normalizedReason || null,
       supporting_document_url: supporting_document_url || null,
       committee_required: Boolean(loanType.requires_committee),
@@ -524,6 +481,7 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json()
     const { id, loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
+    const recovery_months = Number(body?.recovery_months)
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
 
@@ -601,7 +559,10 @@ export async function PUT(request: NextRequest) {
         updatePayload.fixed_amount = (loanType as any).fixed_amount || null
         updatePayload.requested_amount = (loanType as any).fixed_amount || null
         updatePayload.hr_note = (loanType as any).loan_terms || null
-        updatePayload.recovery_months = (loanType as any).default_recovery_months || null
+        updatePayload.recovery_months =
+          Number.isFinite(recovery_months) && recovery_months > 0
+            ? Math.trunc(recovery_months)
+            : (loanType as any).default_recovery_months || null
       }
     }
 
