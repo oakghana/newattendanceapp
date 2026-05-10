@@ -181,6 +181,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
     const recovery_months = Number(body?.recovery_months)
+    const initialRecoveryMonths = Number.isFinite(recovery_months) && recovery_months > 0 ? Math.trunc(recovery_months) : null
 
     if (!loan_type_key) {
       return NextResponse.json({ error: "loan_type_key is required" }, { status: 400 })
@@ -366,6 +367,17 @@ export async function POST(request: NextRequest) {
 
     const referenceNumber = await getNextQccReference(admin)
 
+    const requestRecoveryMonths = clampSalaryAdvanceRecoveryMonths(
+      loanType.loan_key,
+      initialRecoveryMonths ?? (loanType as any).default_recovery_months,
+    )
+    if (loanType.loan_key === "salary_advance" && requestRecoveryMonths === null) {
+      return NextResponse.json(
+        { error: "Salary advance requests require recovery months between 1 and 3." },
+        { status: 400 },
+      )
+    }
+
     const payload = {
       request_number: genRequestNumber(),
       reference_number: referenceNumber,
@@ -380,10 +392,7 @@ export async function POST(request: NextRequest) {
       fixed_amount: (loanType as any).fixed_amount || null,
       requested_amount: (loanType as any).fixed_amount || Number(requested_amount || 0) || null,
       hr_note: (loanType as any).loan_terms || null,
-      recovery_months:
-        Number.isFinite(recovery_months) && recovery_months > 0
-          ? Math.trunc(recovery_months)
-          : (loanType as any).default_recovery_months || null,
+      recovery_months: requestRecoveryMonths,
       reason: normalizedReason || null,
       supporting_document_url: supporting_document_url || null,
       committee_required: Boolean(loanType.requires_committee),
@@ -482,6 +491,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
     const recovery_months = Number(body?.recovery_months)
+    const initialRecoveryMonths = Number.isFinite(recovery_months) && recovery_months > 0 ? Math.trunc(recovery_months) : null
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
 
@@ -559,11 +569,30 @@ export async function PUT(request: NextRequest) {
         updatePayload.fixed_amount = (loanType as any).fixed_amount || null
         updatePayload.requested_amount = (loanType as any).fixed_amount || null
         updatePayload.hr_note = (loanType as any).loan_terms || null
-        updatePayload.recovery_months =
-          Number.isFinite(recovery_months) && recovery_months > 0
-            ? Math.trunc(recovery_months)
-            : (loanType as any).default_recovery_months || null
+        const chosenMonths = clampSalaryAdvanceRecoveryMonths(
+          loanType.loan_key,
+          initialRecoveryMonths ?? (loanType as any).default_recovery_months,
+        )
+        if (loanType.loan_key === "salary_advance" && chosenMonths === null) {
+          return NextResponse.json(
+            { error: "Salary advance requests require recovery months between 1 and 3." },
+            { status: 400 },
+          )
+        }
+        updatePayload.recovery_months = chosenMonths
       }
+    }
+
+    if (Number.isFinite(recovery_months) && recovery_months > 0 && updatePayload.recovery_months == null) {
+      const targetLoanTypeKey = String(updatePayload.loan_type_key || existing.loan_type_key || "")
+      const chosenMonths = clampSalaryAdvanceRecoveryMonths(targetLoanTypeKey, initialRecoveryMonths)
+      if (targetLoanTypeKey.toLowerCase() === "salary_advance" && chosenMonths === null) {
+        return NextResponse.json(
+          { error: "Salary advance requests require recovery months between 1 and 3." },
+          { status: 400 },
+        )
+      }
+      updatePayload.recovery_months = chosenMonths
     }
 
     const finalLoanTypeKey = String(updatePayload.loan_type_key || existing.loan_type_key || "")

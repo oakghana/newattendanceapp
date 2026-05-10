@@ -43,6 +43,13 @@ function memoReference(req: any): string {
   return `QCC/HRD/SWL/V.2/${fallbackSeq}`
 }
 
+function clampSalaryAdvanceRecoveryMonths(loanTypeKey: string, months?: number | null): number | null {
+  const normalizedKey = String(loanTypeKey || "").toLowerCase()
+  if (normalizedKey !== "salary_advance") return months ?? null
+  if (!Number.isFinite(months) || months < 1) return null
+  return Math.min(3, Math.trunc(months))
+}
+
 async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
   if (!userIds.length) return
   await admin.from("staff_notifications").insert(
@@ -571,8 +578,9 @@ export async function POST(request: NextRequest) {
       const disbursementDate = String(body.disbursement_date || "")
       const recoveryStartDate = String(body.recovery_start_date || "")
       const recoveryMonths = Number(body.recovery_months)
+      const normalizedRecoveryMonths = Number.isFinite(recoveryMonths) && recoveryMonths > 0 ? Math.trunc(recoveryMonths) : null
 
-      if (!disbursementDate || !recoveryStartDate || !Number.isFinite(recoveryMonths) || recoveryMonths <= 0) {
+      if (!disbursementDate || !recoveryStartDate || normalizedRecoveryMonths === null) {
         return NextResponse.json({ error: "disbursement_date, recovery_start_date, and valid recovery_months are required" }, { status: 400 })
       }
 
@@ -580,6 +588,18 @@ export async function POST(request: NextRequest) {
       update.status = toStatus
       update.hr_officer_id = user.id
       update.hr_note = note
+      if (req.loan_type_key === "salary_advance") {
+        const checkedMonths = clampSalaryAdvanceRecoveryMonths(req.loan_type_key, normalizedRecoveryMonths)
+        if (checkedMonths === null) {
+          return NextResponse.json(
+            { error: "Salary advance requests must have a recovery period of 1 to 3 months." },
+            { status: 400 },
+          )
+        }
+        update.recovery_months = checkedMonths
+      } else {
+        update.recovery_months = normalizedRecoveryMonths
+      }
       const normalizedReference = normalizeReferenceNumber(body.reference_number)
       if (body.reference_number !== undefined && body.reference_number !== null && String(body.reference_number).trim() && !normalizedReference) {
         return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
