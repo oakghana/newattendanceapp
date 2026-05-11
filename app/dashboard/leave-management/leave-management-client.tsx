@@ -245,11 +245,11 @@ export function LeaveManagementClient({
 
   const handleDeleteAllTestingRecords = async () => {
     if (String(userRole || "") !== "admin") {
-      toast({ title: "Forbidden", description: "Only admin can clear leave testing records.", variant: "destructive" })
+      toast({ title: "Forbidden", description: "Only admin can reset the leave system.", variant: "destructive" })
       return
     }
 
-    if (!window.confirm("Delete all leave testing records, notifications, and planning items? This cannot be undone.")) {
+    if (!window.confirm("⚠️ WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
       return
     }
 
@@ -258,14 +258,14 @@ export function LeaveManagementClient({
       const response = await fetch("/api/leave/request", { method: "DELETE" })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(result?.error || "Failed to clear leave testing records")
+        throw new Error(result?.error || "Failed to reset leave system")
       }
-      toast({ title: "Leave records cleared", description: result?.message || "Testing leave records removed successfully." })
+      toast({ title: "Leave System Reset Complete", description: result?.message || "All leave transactions have been deleted. The system is now fresh." })
       window.location.reload()
     } catch (error) {
       toast({
-        title: "Cleanup failed",
-        description: error instanceof Error ? error.message : "Failed to clear leave testing records.",
+        title: "Reset failed",
+        description: error instanceof Error ? error.message : "Failed to reset leave system.",
         variant: "destructive",
       })
     } finally {
@@ -1083,15 +1083,15 @@ export function LeaveManagementClient({
       )}
 
       {String(userRole || "") === "admin" && (
-        <Card className="border-rose-200 bg-rose-50/70 shadow-sm">
+        <Card className="border-red-200 bg-red-50/70 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-rose-900">Testing Data Cleanup</CardTitle>
-            <CardDescription>Clear leave testing data before go-live so management starts from a clean state.</CardDescription>
+            <CardTitle className="text-lg text-red-900">⚠️ Complete Leave System Reset</CardTitle>
+            <CardDescription>Delete ALL leave transactions, requests, and planning data to start the entire leave process from scratch. This action cannot be undone.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="destructive" onClick={handleDeleteAllTestingRecords} disabled={processingId === "leave-testing-cleanup"}>
               {processingId === "leave-testing-cleanup" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Delete All Leave Testing Records
+              Delete All Leave Transactions
             </Button>
           </CardContent>
         </Card>

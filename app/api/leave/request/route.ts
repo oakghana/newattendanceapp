@@ -128,7 +128,7 @@ export async function DELETE() {
 
     const normalizedRole = String((profile as any).role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
     if (normalizedRole !== "admin") {
-      return NextResponse.json({ error: "Only admin can clear testing leave records." }, { status: 403 })
+      return NextResponse.json({ error: "Only admin can reset the complete leave system." }, { status: 403 })
     }
 
     await tryDeleteAll(admin, "leave_plan_stagger_reviews")
@@ -139,7 +139,7 @@ export async function DELETE() {
     await tryDeleteAll(admin, "leave_status")
     await tryDeleteAll(admin, "leave_requests")
 
-    return NextResponse.json({ success: true, message: "All testing leave records have been cleared." })
+    return NextResponse.json({ success: true, message: "Complete leave system reset successful. All transactions, requests, and planning data have been deleted." })
   } catch (error: any) {
     console.error("[v0] Leave request cleanup error:", error)
     return NextResponse.json({ error: error?.message || "Failed to clear leave testing records" }, { status: 500 })
