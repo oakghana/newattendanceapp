@@ -122,6 +122,7 @@ export function LeaveManagementClient({
   const [editEndDate, setEditEndDate] = useState("")
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
+  const [selectedTab, setSelectedTab] = useState("my-requests")
   const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -699,16 +700,27 @@ export function LeaveManagementClient({
                 <Sparkles className="h-3.5 w-3.5" /> Leave Workspace
               </div>
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur">
-                    <Calendar className="h-7 w-7 text-cyan-200" />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur">
+                      <Calendar className="h-7 w-7 text-cyan-200" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Leave Management</h1>
+                      <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">
+                        Review leave activity, track submissions, and move quickly between personal requests and approvals.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Leave Management</h1>
-                    <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">
-                      Review leave activity, track submissions, and move quickly between personal requests and approvals.
-                    </p>
-                  </div>
+                  {canUseStaffLeaveHub && (
+                    <Button
+                      onClick={() => window.dispatchEvent(new CustomEvent('navigate-leave-planning', { detail: { tab: 'leave-planning' } }))}
+                      className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Add Leave Application
+                    </Button>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Badge className="border border-white/10 bg-white/10 px-3 py-1 text-cyan-100 hover:bg-white/10">
@@ -1097,7 +1109,7 @@ export function LeaveManagementClient({
         </Card>
       )}
 
-      <Tabs defaultValue="my-requests" className="space-y-6">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
         <TabsList className="flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
           <>
             <TabsTrigger value="my-requests" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
@@ -1142,7 +1154,15 @@ export function LeaveManagementClient({
                   <CardContent className="py-14 text-center">
                     <Info className="mx-auto mb-4 h-12 w-12 text-cyan-500/70" />
                     <p className="mb-1 font-medium text-slate-800">No leave requests yet</p>
-                    <p className="text-sm text-slate-500">Use Leave Planning 2026/2027 to submit your next leave request.</p>
+                    <p className="mb-6 text-sm text-slate-500">Use "Leave Planning" tab to submit your first leave request.</p>
+                    <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+                      // Scroll to top and dispatch a custom event that the parent can listen to
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      window.dispatchEvent(new CustomEvent('navigate-leave-planning', { detail: { tab: 'leave-planning' } }));
+                    }}>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Add Leave Application
+                    </Button>
                   </CardContent>
                 </Card>
               ) : (

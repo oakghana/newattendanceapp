@@ -41,13 +41,23 @@ export function LeaveManagementModuleClient({
   initialStaffRequests,
   initialManagerNotifications,
 }: LeaveManagementModuleClientProps) {
+  const [activeTab, setActiveTab] = React.useState("leave-management")
   const showAnalytics = isHrAnalyticsRole(userRole)
   const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
 
+  React.useEffect(() => {
+    const handleNavigateLeave = (event: Event) => {
+      const customEvent = event as CustomEvent<{ tab: string }>
+      setActiveTab(customEvent.detail?.tab || "leave-planning")
+    }
+    window.addEventListener("navigate-leave-planning", handleNavigateLeave)
+    return () => window.removeEventListener("navigate-leave-planning", handleNavigateLeave)
+  }, [])
+
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="leave-management" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex h-auto w-full flex-nowrap gap-2 overflow-x-auto rounded-3xl border border-blue-100 bg-blue-50/60 p-2 shadow-sm">
           <TabsTrigger value="leave-management" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white shrink-0">
             <LayoutPanelTop className="h-4 w-4" /> Leave Management
