@@ -607,7 +607,6 @@ export async function POST(request: NextRequest) {
       if (normalizedReference) update.reference_number = normalizedReference
       update.disbursement_date = disbursementDate
       update.recovery_start_date = recoveryStartDate
-      update.recovery_months = recoveryMonths
       update.hr_forwarded_at = new Date().toISOString()
 
       // Track who is expected to sign/finalize the memo.

@@ -66,6 +66,20 @@ function fmtDate(value?: string | null) {
   return date.toISOString().slice(0, 10)
 }
 
+function fmtMemoMonth(value?: string | null) {
+  if (!value) return "TBD"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleDateString("en-GB", { month: "2-digit", year: "numeric" })
+}
+
+function extractMemoCopyRecipient(note?: string | null) {
+  const raw = String(note || "").trim()
+  const match = raw.match(/\[MEMO_COPY:([^\]]+)\]/i)
+  if (!match) return null
+  return String(match[1] || "").trim() || null
+}
+
 const MEMO_WATERMARK_TEXT = "QCC-LOANLEAVE-APP"
 
 function applySignatureSideWatermark(doc: jsPDF, sigY: number, marginLeft: number) {
@@ -169,18 +183,18 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
     }
   }
 
-  const disbMonth = loan.disbursement_date
-    ? new Date(loan.disbursement_date).toLocaleString("en-GH", { month: "long", year: "numeric" })
-    : "TBD"
-  const recovStart = loan.recovery_start_date
-    ? new Date(loan.recovery_start_date).toLocaleString("en-GH", { month: "long", year: "numeric" })
-    : "TBD"
+  const disbMonth = fmtMemoMonth(loan.disbursement_date)
+  const recovStart = fmtMemoMonth(loan.recovery_start_date)
+  const memoCopyRecipient =
+    extractMemoCopyRecipient(loan.hr_note) ||
+    extractMemoCopyRecipient(loan.loan_office_note) ||
+    "Deputy Director Accounts"
   return {
     subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()}`,
     paragraphs: [
       `We refer to your loan application dated ${fmtDate(loan.created_at)} on the above subject and wish to inform you that, Management has given approval for you to be granted a ${loan.loan_type_label || "Loan"} of ${amount}.`,
       `The loan would be recovered in ${loan.recovery_months || "TBD"} Equal Monthly Instalment from your salary effective, ${recovStart}.`,
-      `By a copy of this letter, the Accounts Manager is been advised to release the said amount to you effective, ${disbMonth}.`,
+      `By a copy of this letter, the ${memoCopyRecipient} has been advised to release the said amount to you effective, ${disbMonth}.`,
       "You can count on our co-operation.",
     ],
   }
@@ -525,7 +539,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const ccList = [
       "Managing Director",
       "Deputy Managing Director",
-      "Deputy Director Finance",
+      "Deputy Director Accounts",
       "Deputy Director Human Resource",
       "Audit Manager",
       "Registry Unit",

@@ -537,7 +537,7 @@ function fmtMemoMonth(dateStr: string | null | undefined): string {
   if (!dateStr) return "TBD"
   const d = new Date(dateStr + (dateStr.length === 7 ? "-01" : ""))
   if (isNaN(d.getTime())) return dateStr
-  return d.toLocaleDateString("en-GH", { month: "long", year: "numeric" })
+  return d.toLocaleDateString("en-GB", { month: "2-digit", year: "numeric" })
 }
 
 function deriveMemoRef(requestNumber: string | null | undefined): string {
@@ -554,9 +554,9 @@ function formatReferenceNumber(referenceNumber?: string | null, requestNumber?: 
   return deriveMemoRef(requestNumber)
 }
 
-function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: string; throTelephone: string; throName: string; throRank: string; throLocation: string } {
+function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: string; throTelephone: string; throName: string; throRank: string; throLocation: string; memoRecipient: string } {
   const raw = String(note || "").trim()
-  if (!raw) return { cleanedNote: "", throTelephone: "", throName: "", throRank: "", throLocation: "" }
+  if (!raw) return { cleanedNote: "", throTelephone: "", throName: "", throRank: "", throLocation: "", memoRecipient: "" }
   let cleaned = raw
   const extract = (token: string) => {
     const re = new RegExp(`\\[${token}:([^\\]]+)\\]`, "i")
@@ -569,23 +569,27 @@ function splitHrNoteAndThroTelephone(note?: string | null): { cleanedNote: strin
   const throName = extract("THRO_NAME")
   const throRank = extract("THRO_RANK")
   const throLocation = extract("THRO_LOC")
-  return { cleanedNote: cleaned, throTelephone, throName, throRank, throLocation }
+  const memoRecipient = extract("MEMO_COPY")
+  return { cleanedNote: cleaned, throTelephone, throName, throRank, throLocation, memoRecipient }
 }
 
-function buildHrNoteWithThroTelephone(note: string, throTelephone: string, throName?: string, throRank?: string, throLocation?: string) {
+function buildHrNoteWithThroTelephone(note: string, throTelephone: string, throName?: string, throRank?: string, throLocation?: string, memoCopyRecipient?: string) {
   const trimmedNote = String(note || "").trim()
   const tokens: string[] = []
+  const telephone = String(throTelephone || "").trim()
   const rank = String(throRank || "").trim()
   const loc = String(throLocation || "").trim()
+  if (telephone) tokens.push(`[THRO_TEL:${telephone}]`)
   if (rank) tokens.push(`[THRO_RANK:${rank}]`)
   if (loc) tokens.push(`[THRO_LOC:${loc}]`)
+  if (memoCopyRecipient) tokens.push(`[MEMO_COPY:${memoCopyRecipient}]`)
   const tokenStr = tokens.join(" ")
   return [tokenStr, trimmedNote].filter(Boolean).join(" ")
 }
 
 function buildDirectorAutoMemoDraft(
   row: LoanRequest,
-  entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string },
+  entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string; memoRecipient?: string },
 ) {
   const amount = row.fixed_amount || row.requested_amount || 0
   const amtNum = Number(amount)
@@ -597,6 +601,7 @@ function buildDirectorAutoMemoDraft(
   const staffRank = (row.staff_rank || "").toUpperCase()
   const hodRank = (entry?.hodRank || row.hod_rank || "").toUpperCase()
   const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || "—"
+  const memoRecipient = entry?.memoRecipient || "Deputy Director Accounts"
   const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
@@ -626,7 +631,7 @@ function buildDirectorAutoMemoDraft(
     "",
     `The loan would be recovered in ${months} Equal Monthly Instalment from your salary effective, ${recoveryMonth}.`,
     "",
-    `By a copy of this letter, the Accounts Manager is been advised to release the said amount to you effective, ${disbursementMonth}.`,
+    `By a copy of this letter, the ${memoRecipient} has been advised to release the said amount to you effective, ${disbursementMonth}.`,
     "",
     "You can count on our co-operation.",
     "",
@@ -637,7 +642,7 @@ function buildDirectorAutoMemoDraft(
     "",
     "cc:  Managing Director",
     "     Deputy Managing Director",
-    "     Deputy Director Finance",
+    "     Deputy Director Accounts",
     "     Deputy Director Human Resource",
     "     Audit Manager",
     "     Registry Unit",
@@ -791,7 +796,7 @@ export default function LoanAppPage() {
   const [loanOfficeNotes, setLoanOfficeNotes] = useState<Record<string, string>>({})
   const [fdInputs, setFdInputs] = useState<Record<string, { score: string; note: string }>>({})
   const [committeeNotes, setCommitteeNotes] = useState<Record<string, string>>({})
-  const [hrInputs, setHrInputs] = useState<Record<string, { disbursement: string; recovery: string; months: string; note: string; hodName: string; hodRank: string; hodLocation: string; hodTelephone: string; memoRef: string }>>({})
+  const [hrInputs, setHrInputs] = useState<Record<string, { disbursement: string; recovery: string; months: string; note: string; hodName: string; hodRank: string; hodLocation: string; hodTelephone: string; memoRef: string; memoRecipient: string }>>({})
 
   const [directorDecision, setDirectorDecision] = useState<"approve" | "reject">("approve")
   const [directorLetter, setDirectorLetter] = useState("")
@@ -813,6 +818,7 @@ export default function LoanAppPage() {
   const [modalHodLocation, setModalHodLocation] = useState("")
   const [modalHodTelephone, setModalHodTelephone] = useState("")
   const [modalMemoRef, setModalMemoRef] = useState("")
+  const [modalMemoRecipient, setModalMemoRecipient] = useState("Deputy Director Accounts")
   const [modalMemoText, setModalMemoText] = useState("")
   const [modalStaffFullName, setModalStaffFullName] = useState("")
   const [modalStaffNumber, setModalStaffNumber] = useState("")
@@ -2007,6 +2013,7 @@ export default function LoanAppPage() {
           setModalHodRank(entry?.hodRank || parsedHrNote.throRank || row.hod_rank || "")
           setModalHodLocation(entry?.hodLocation || parsedHrNote.throLocation || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
+          setModalMemoRecipient(entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Accounts")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
           setModalDirectorApproverId(row.director_hr_id || "")
         }
@@ -4354,6 +4361,14 @@ export default function LoanAppPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Label>Memo Copy Recipient</Label>
+                <Select value={modalMemoRecipient} onValueChange={setModalMemoRecipient}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Deputy Director Accounts">Deputy Director Accounts</SelectItem>
+                    <SelectItem value="Deputy Director Human Resource">Deputy Director Human Resource</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Label>HR Note (optional)</Label>
                 <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="HR note" rows={2} />
               </>
@@ -4434,12 +4449,12 @@ export default function LoanAppPage() {
                   setMemoReviewModal({ open: true, row: { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null, hod_name: modalHodName, hod_rank: modalHodRank, hod_location: modalHodLocation } })
                   const draft = buildDirectorAutoMemoDraft(
                     { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null },
-                    { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef },
+                    { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient },
                   )
                   setModalMemoText(draft)
                 }}>Preview Memo</Button>
                 <Button onClick={() => {
-                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation)
+                  const noteForSave = buildHrNoteWithThroTelephone(modalNote, modalHodTelephone, modalHodName, modalHodRank, modalHodLocation, modalMemoRecipient)
                   setHrInputs((s) => ({
                     ...s,
                     [actionModal.row!.id]: {
@@ -4452,6 +4467,7 @@ export default function LoanAppPage() {
                       hodLocation: modalHodLocation,
                       hodTelephone: modalHodTelephone,
                       memoRef: modalMemoRef,
+                      memoRecipient: modalMemoRecipient,
                     },
                   }))
                   runAction({
