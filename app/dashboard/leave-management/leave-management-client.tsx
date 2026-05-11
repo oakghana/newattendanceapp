@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import {
@@ -1155,13 +1156,12 @@ export function LeaveManagementClient({
                     <Info className="mx-auto mb-4 h-12 w-12 text-cyan-500/70" />
                     <p className="mb-1 font-medium text-slate-800">No leave requests yet</p>
                     <p className="mb-6 text-sm text-slate-500">Use the "Leave Planning" tab to submit your first leave request.</p>
-                    <Button 
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => document.querySelector('[value="leave-planning"]')?.parentElement?.click()}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      Add Leave Application
-                    </Button>
+                    <Link href="/dashboard/leave-planning">
+                      <Button className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
+                        <Calendar className="mr-2 h-4 w-4" />
+                        Add Leave Application
+                      </Button>
+                    </Link>
                   </CardContent>
                 </Card>
               ) : (
