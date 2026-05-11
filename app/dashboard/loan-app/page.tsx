@@ -74,6 +74,8 @@ type LoanRequest = {
   director_decision_at: string | null
   supporting_document_url: string | null
   hod_reviewer_id?: string | null
+  accounts_reviewer_id?: string | null
+  accounts_reviewer_name?: string | null
   director_hr_id?: string | null
   hod_review_note?: string | null
   hod_name?: string | null
@@ -537,7 +539,7 @@ function fmtMemoMonth(dateStr: string | null | undefined): string {
   if (!dateStr) return "TBD"
   const d = new Date(dateStr + (dateStr.length === 7 ? "-01" : ""))
   if (isNaN(d.getTime())) return dateStr
-  return d.toLocaleDateString("en-GB", { month: "2-digit", year: "numeric" })
+  return d.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
 }
 
 function deriveMemoRef(requestNumber: string | null | undefined): string {
@@ -601,7 +603,7 @@ function buildDirectorAutoMemoDraft(
   const staffRank = (row.staff_rank || "").toUpperCase()
   const hodRank = (entry?.hodRank || row.hod_rank || "").toUpperCase()
   const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || "—"
-  const memoRecipient = entry?.memoRecipient || "Deputy Director Accounts"
+  const memoRecipient = entry?.memoRecipient || "Deputy Director Finance"
   const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
   const recoveryMonth = fmtMemoMonth(row.recovery_start_date)
@@ -642,7 +644,7 @@ function buildDirectorAutoMemoDraft(
     "",
     "cc:  Managing Director",
     "     Deputy Managing Director",
-    "     Deputy Director Accounts",
+    "     Deputy Director Finance",
     "     Deputy Director Human Resource",
     "     Audit Manager",
     "     Registry Unit",
@@ -818,7 +820,7 @@ export default function LoanAppPage() {
   const [modalHodLocation, setModalHodLocation] = useState("")
   const [modalHodTelephone, setModalHodTelephone] = useState("")
   const [modalMemoRef, setModalMemoRef] = useState("")
-  const [modalMemoRecipient, setModalMemoRecipient] = useState("Deputy Director Accounts")
+  const [modalMemoRecipient, setModalMemoRecipient] = useState("Deputy Director Finance")
   const [modalMemoText, setModalMemoText] = useState("")
   const [modalStaffFullName, setModalStaffFullName] = useState("")
   const [modalStaffNumber, setModalStaffNumber] = useState("")
@@ -2013,7 +2015,7 @@ export default function LoanAppPage() {
           setModalHodRank(entry?.hodRank || parsedHrNote.throRank || row.hod_rank || "")
           setModalHodLocation(entry?.hodLocation || parsedHrNote.throLocation || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
-          setModalMemoRecipient(entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Accounts")
+          setModalMemoRecipient(entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Finance")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
           setModalDirectorApproverId(row.director_hr_id || "")
         }
@@ -3107,6 +3109,8 @@ export default function LoanAppPage() {
                       <TableHead className="whitespace-nowrap">Rank</TableHead>
                       <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                       <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
+                      <TableHead className="whitespace-nowrap">FD Score</TableHead>
+                      <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Submitted</TableHead>
                       {p?.accounts && <TableHead className="whitespace-nowrap">FD Action</TableHead>}
@@ -3123,6 +3127,8 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
@@ -3313,7 +3319,7 @@ export default function LoanAppPage() {
                 <div key={`good-fd-${row.id}`} className="rounded border p-2 text-sm">
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
                   {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
-                  <div>FD: {row.fd_score ?? "N/A"} | Status: {statusText(row.status)}</div>
+                  <div>FD: {row.fd_score ?? "N/A"} | FD Reviewer: {row.accounts_reviewer_name || "—"} | Status: {statusText(row.status)}</div>
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                 </div>
               ))}
@@ -3661,8 +3667,11 @@ export default function LoanAppPage() {
                   <div className="text-muted-foreground">Address: {row.staff_location_address || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Status: {statusText(row.status)}</div>
                   {["approved_director", "director_rejected", "rejected_fd"].includes(row.status) && (
-                    <div className="mt-2">
+                    <div className="mt-2 flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Secure Memo PDF</Button>
+                      {row.accounts_reviewer_id && ["approved_director"].includes(row.status) && (
+                        <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Download Signed Memo</Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -4365,7 +4374,7 @@ export default function LoanAppPage() {
                 <Select value={modalMemoRecipient} onValueChange={setModalMemoRecipient}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Deputy Director Accounts">Deputy Director Accounts</SelectItem>
+                    <SelectItem value="Deputy Director Finance">Deputy Director Finance</SelectItem>
                     <SelectItem value="Deputy Director Human Resource">Deputy Director Human Resource</SelectItem>
                   </SelectContent>
                 </Select>

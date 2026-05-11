@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function tryDeleteAll(admin: any, table: string) {
-  const { error } = await admin.from(table).delete().neq("id", "")
+  const { error } = await admin.from(table).delete()
   if (error) {
     const message = String(error.message || "")
     if (/does not exist|schema cache|relation/i.test(message)) {
@@ -112,7 +112,7 @@ export async function DELETE() {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

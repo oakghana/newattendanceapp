@@ -70,7 +70,7 @@ function fmtMemoMonth(value?: string | null) {
   if (!value) return "TBD"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
-  return date.toLocaleDateString("en-GB", { month: "2-digit", year: "numeric" })
+  return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
 }
 
 function extractMemoCopyRecipient(note?: string | null) {
@@ -188,7 +188,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const memoCopyRecipient =
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
-    "Deputy Director Accounts"
+    "Deputy Director Finance"
   return {
     subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()}`,
     paragraphs: [
@@ -539,7 +539,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const ccList = [
       "Managing Director",
       "Deputy Managing Director",
-      "Deputy Director Accounts",
+      "Deputy Director Finance",
       "Deputy Director Human Resource",
       "Audit Manager",
       "Registry Unit",

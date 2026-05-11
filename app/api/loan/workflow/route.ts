@@ -564,6 +564,30 @@ export async function GET() {
         }
       })
 
+    // Build accounts reviewer info map
+    const accountsRows: any[] = [
+      ...(accountsRes.data || []),
+      ...(accountsSignedRes.data || []),
+    ]
+    const uniqueAccountsReviewerIds = Array.from(
+      new Set(accountsRows.map((r: any) => r.accounts_reviewer_id).filter(Boolean)),
+    ) as string[]
+    let accountsReviewerMap: Map<string, string> = new Map()
+    if (uniqueAccountsReviewerIds.length > 0) {
+      const { data: accountsProfiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name")
+        .in("id", uniqueAccountsReviewerIds)
+      for (const ap of accountsProfiles || []) {
+        accountsReviewerMap.set(ap.id, `${ap.first_name || ""} ${ap.last_name || ""}`.trim() || "—")
+      }
+    }
+    const attachAccountsReviewerName = (rows: any[]) =>
+      rows.map((r: any) => ({
+        ...r,
+        accounts_reviewer_name: r.accounts_reviewer_id ? accountsReviewerMap.get(r.accounts_reviewer_id) || null : null,
+      }))
+
     // Group timelines by loan_request_id
     const timelinesMap: Record<string, any[]> = {}
     for (const entry of (timelinesRes.data || [])) {
@@ -603,13 +627,13 @@ export async function GET() {
       inbox: {
         hod: attachName(hodRes.data || []),
         loanOffice: attachName(loanOfficeRes.data || []),
-        accounts: attachName(accountsRes.data || []),
-        accountsSigned: attachName(accountsSignedRes.data || []),
+        accounts: attachAccountsReviewerName(attachName(accountsRes.data || [])),
+        accountsSigned: attachAccountsReviewerName(attachName(accountsSignedRes.data || [])),
         committee: attachName(committeeRes.data || []),
         hrOffice: attachHodInfo(attachName(hrRes.data || [])),
         directorHr: attachHodInfo(attachName(directorRes.data || [])),
         directorGoodFd: attachHodInfo(attachName(directorGoodFdRes.data || [])),
-        allLoans: attachName(allLoansRes.data || []),
+        allLoans: attachAccountsReviewerName(attachName(allLoansRes.data || [])),
       },
     })
   } catch (error: any) {

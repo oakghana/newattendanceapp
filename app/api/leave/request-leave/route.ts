@@ -15,35 +15,6 @@ const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "special_unpaid",
 ])
 
-async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
-  const { data: attendanceRows, error } = await admin
-    .from("attendance_records")
-    .select("id, check_in_time, check_out_time")
-    .eq("user_id", userId)
-    .gte("check_in_time", `${new Date().toISOString().slice(0, 10)}T00:00:00`)
-    .lt("check_in_time", `${new Date().toISOString().slice(0, 10)}T23:59:59`)
-    .order("check_in_time", { ascending: false })
-    .limit(5)
-
-  if (error) return { ok: true as const }
-
-  const rows = attendanceRows || []
-  const hasTodayCheckIn = rows.some((row: any) => Boolean(row?.check_in_time))
-
-  if (!hasTodayCheckIn) {
-    return {
-      ok: false as const,
-      status: 403,
-      error:
-        "Attendance check-in for today is required before requesting leave. Please check in first using the Attendance module.",
-      message:
-        "Please check in for today in Attendance first, then submit your leave request.",
-    }
-  }
-
-  return { ok: true as const }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -91,20 +62,6 @@ export async function POST(request: NextRequest) {
     const normalizedRole = String((roleProfile as any)?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
     const admin = await createAdminClient()
     const referenceNumber = await getNextQccReference(admin)
-
-    const shouldEnforceAttendance = !["admin", "regional_manager", "department_head"].includes(normalizedRole)
-    if (shouldEnforceAttendance) {
-      const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
-      if (!attendanceCheck.ok) {
-        return NextResponse.json(
-          {
-            error: attendanceCheck.error,
-            message: attendanceCheck.message,
-          },
-          { status: attendanceCheck.status },
-        )
-      }
-    }
 
     const canSubmitBeyondEntitlementForHrAdjustment =
       normalizedRole === "admin" ||

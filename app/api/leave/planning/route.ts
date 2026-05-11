@@ -118,35 +118,6 @@ function handleMissingSchema(error: any) {
   )
 }
 
-async function validateAttendanceEngagementForRequest(admin: any, userId: string) {
-  // Require at least one check-in within the last 2 calendar months (current + previous month)
-  const now = new Date()
-  const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const twoMonthsAgoIso = twoMonthsAgo.toISOString()
-
-  const { data: attendanceRows, error } = await admin
-    .from("attendance_records")
-    .select("id, check_in_time")
-    .eq("user_id", userId)
-    .gte("check_in_time", twoMonthsAgoIso)
-    .order("check_in_time", { ascending: false })
-    .limit(5)
-
-  if (error) return { ok: true as const }
-
-  const rows = attendanceRows || []
-  if (!rows.some((row: any) => Boolean(row?.check_in_time))) {
-    return {
-      ok: false as const,
-      status: 403,
-      error:
-        "No attendance check-in found in the last two months. Please check in using the Attendance module at least once to submit a leave request.",
-    }
-  }
-
-  return { ok: true as const }
-}
-
 async function resolveManagerReviewers(admin: any, userId: string, departmentId: string | null) {
   const linkedReviewerIds: string[] = []
   const { data: linkages } = await admin
@@ -989,25 +960,6 @@ export async function POST(request: NextRequest) {
       ].includes(role)
     if (!canSelfApply) {
       return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
-    }
-
-    const shouldEnforceAttendance = ![
-      "admin",
-      "regional_manager",
-      "department_head",
-      "hr_officer",
-      "hr_director",
-      "director_hr",
-      "manager_hr",
-      "hr_leave_office",
-      "hr_office",
-      "loan_office",
-    ].includes(role)
-    if (shouldEnforceAttendance) {
-      const attendanceCheck = await validateAttendanceEngagementForRequest(admin, user.id)
-      if (!attendanceCheck.ok) {
-        return NextResponse.json({ error: attendanceCheck.error }, { status: attendanceCheck.status })
-      }
     }
 
     const body = await request.json()
