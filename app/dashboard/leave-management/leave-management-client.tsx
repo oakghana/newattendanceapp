@@ -1117,7 +1117,6 @@ export function LeaveManagementClient({
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
         <TabsList className="flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
-          <>
             <TabsTrigger value="my-requests" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
               My Requests ({staffRequests.length})
             </TabsTrigger>
@@ -1154,7 +1153,6 @@ export function LeaveManagementClient({
               </TabsTrigger>
               </>
             )}
-          </>
         </TabsList>
 
         <>
