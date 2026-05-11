@@ -1154,12 +1154,8 @@ export function LeaveManagementClient({
                   <CardContent className="py-14 text-center">
                     <Info className="mx-auto mb-4 h-12 w-12 text-cyan-500/70" />
                     <p className="mb-1 font-medium text-slate-800">No leave requests yet</p>
-                    <p className="mb-6 text-sm text-slate-500">Use "Leave Planning" tab to submit your first leave request.</p>
-                    <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                      // Scroll to top and dispatch a custom event that the parent can listen to
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                      window.dispatchEvent(new CustomEvent('navigate-leave-planning', { detail: { tab: 'leave-planning' } }));
-                    }}>
+                    <p className="mb-6 text-sm text-slate-500">Use the "Leave Planning" tab to submit your first leave request.</p>
+                    <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
                       <Calendar className="mr-2 h-4 w-4" />
                       Add Leave Application
                     </Button>
