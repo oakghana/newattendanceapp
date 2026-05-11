@@ -712,7 +712,7 @@ export function LeaveManagementClient({
                       </p>
                     </div>
                   </div>
-                  {canUseStaffLeaveHub && (
+                  {(
                     <Button
                       onClick={() => window.dispatchEvent(new CustomEvent('navigate-leave-planning', { detail: { tab: 'leave-planning' } }))}
                       className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
