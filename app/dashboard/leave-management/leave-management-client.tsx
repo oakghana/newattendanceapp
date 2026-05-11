@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { placeholderDescriptions } from "@/lib/leave-templates"
+import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
 
 interface LeaveRequest {
   id: string
@@ -1116,6 +1117,10 @@ export function LeaveManagementClient({
             <TabsTrigger value="my-requests" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
               My Requests ({staffRequests.length})
             </TabsTrigger>
+            <TabsTrigger value="apply-leave" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
+              <Calendar className="mr-1.5 h-4 w-4" />
+              Apply for Leave
+            </TabsTrigger>
             <TabsTrigger value="approved" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
               Approved ({approvedRequests.length})
             </TabsTrigger>
@@ -1171,6 +1176,16 @@ export function LeaveManagementClient({
                   ))}
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="apply-leave" className="space-y-4">
+              <LeavePlanningClient
+                profile={{
+                  role: userRole,
+                  departmentName: userDepartment,
+                  departmentCode: userDepartment,
+                }}
+              />
             </TabsContent>
 
             <TabsContent value="approved" className="space-y-4">
