@@ -1155,7 +1155,6 @@ export function LeaveManagementClient({
             )}
         </TabsList>
 
-        <>
             <TabsContent value="my-requests" className="space-y-4">
               {staffRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
@@ -1208,7 +1207,6 @@ export function LeaveManagementClient({
                 </div>
               )}
             </TabsContent>
-          </>
 
         {isManagerView && (
           <>
@@ -1243,7 +1241,7 @@ export function LeaveManagementClient({
                 <AlertDescription>Historical leave request data will be surfaced here when the archive view is enabled.</AlertDescription>
               </Alert>
             </TabsContent>
-          </>
+            </>
         )}
       </Tabs>
 
