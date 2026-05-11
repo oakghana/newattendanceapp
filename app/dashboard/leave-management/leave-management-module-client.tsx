@@ -23,6 +23,8 @@ function isHrAnalyticsRole(role: string | null | undefined) {
 interface LeaveManagementModuleClientProps {
   userRole: string | null
   userDepartment: string | null
+  userFirstName: string | null
+  userLastName: string | null
   inactivityDays: number
   userDepartmentName: string | null
   userDepartmentCode: string | null
@@ -34,6 +36,8 @@ interface LeaveManagementModuleClientProps {
 export function LeaveManagementModuleClient({
   userRole,
   userDepartment,
+  userFirstName,
+  userLastName,
   inactivityDays,
   userDepartmentName,
   userDepartmentCode,
@@ -69,6 +73,8 @@ export function LeaveManagementModuleClient({
           <LeaveManagementClient
             userRole={userRole}
             userDepartment={userDepartment}
+            userFirstName={userFirstName}
+            userLastName={userLastName}
             hasHodLinkage={hasHodLinkage}
             inactivityDays={inactivityDays}
             initialStaffRequests={initialStaffRequests}

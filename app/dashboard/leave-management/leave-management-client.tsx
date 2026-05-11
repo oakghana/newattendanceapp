@@ -58,6 +58,8 @@ interface LeaveNotification {
 interface LeaveManagementClientProps {
   userRole: string
   userDepartment: string | null
+  userFirstName: string | null
+  userLastName: string | null
   hasHodLinkage: boolean
   inactivityDays: number
   initialStaffRequests: LeaveRequest[]
@@ -80,6 +82,8 @@ interface HrMemoTemplate {
 export function LeaveManagementClient({
   userRole,
   userDepartment,
+  userFirstName,
+  userLastName,
   hasHodLinkage,
   inactivityDays,
   initialStaffRequests,
@@ -1182,6 +1186,8 @@ export function LeaveManagementClient({
               <LeavePlanningClient
                 profile={{
                   role: userRole,
+                  firstName: userFirstName || undefined,
+                  lastName: userLastName || undefined,
                   departmentName: userDepartment,
                   departmentCode: userDepartment,
                 }}
