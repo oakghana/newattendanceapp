@@ -188,7 +188,7 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const memoCopyRecipient =
     extractMemoCopyRecipient(loan.hr_note) ||
     extractMemoCopyRecipient(loan.loan_office_note) ||
-    "Deputy Director Finance"
+    "Deputy Director, Finance"
   return {
     subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()}`,
     paragraphs: [
