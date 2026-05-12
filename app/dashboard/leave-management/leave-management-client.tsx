@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import {
@@ -717,15 +716,13 @@ export function LeaveManagementClient({
                       </p>
                     </div>
                   </div>
-                  {(
-                    <Button
-                      onClick={() => window.dispatchEvent(new CustomEvent('navigate-leave-planning', { detail: { tab: 'leave-planning' } }))}
-                      className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      Add Leave Application
-                    </Button>
-                  )}
+                  <Button
+                    onClick={() => setSelectedTab("apply-leave")}
+                    className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Add Leave Application
+                  </Button>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Badge className="border border-white/10 bg-white/10 px-3 py-1 text-cyan-100 hover:bg-white/10">
@@ -1159,13 +1156,14 @@ export function LeaveManagementClient({
                   <CardContent className="py-14 text-center">
                     <Info className="mx-auto mb-4 h-12 w-12 text-cyan-500/70" />
                     <p className="mb-1 font-medium text-slate-800">No leave requests yet</p>
-                    <p className="mb-6 text-sm text-slate-500">Use the "Leave Planning" tab to submit your first leave request.</p>
-                    <Link href="/dashboard/leave-planning">
-                      <Button className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Add Leave Application
-                      </Button>
-                    </Link>
+                    <p className="mb-6 text-sm text-slate-500">Click below to submit your first leave request.</p>
+                    <Button
+                      onClick={() => setSelectedTab("apply-leave")}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Apply for Leave
+                    </Button>
                   </CardContent>
                 </Card>
               ) : (
