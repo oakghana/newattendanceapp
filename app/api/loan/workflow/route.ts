@@ -620,10 +620,10 @@ export async function GET() {
       role,
       permissions,
       loanTypes: resolvedTypesRes.data || [],
-      myRequests: attachName(myRes.data || []),
+      myRequests: attachAccountsReviewerName(attachName(myRes.data || [])),
       myTimelines,
       directorApprovers,
-      myTasks: attachName(myTasksRes.data || []),
+      myTasks: attachAccountsReviewerName(attachName(myTasksRes.data || [])),
       inbox: {
         hod: attachAccountsReviewerName(attachName(hodRes.data || [])),
         loanOffice: attachAccountsReviewerName(attachName(loanOfficeRes.data || [])),
