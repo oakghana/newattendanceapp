@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
+function normalizeRole(role: string | null | undefined): string {
+  return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
+function canManageHolidays(role: string | null | undefined): boolean {
+  const normalized = normalizeRole(role)
+  const HOLIDAY_MANAGEMENT_ROLES = [
+    "admin",
+    "leave_admin",
+    "hr_leave_office",
+    "hr_office",
+    "director_hr",
+    "manager_hr",
+  ]
+  return HOLIDAY_MANAGEMENT_ROLES.includes(normalized)
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -27,10 +44,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String((profile as any).role || "").toLowerCase().trim()
-    if (role !== "admin") {
+    const role = (profile as any).role || null
+    if (!canManageHolidays(role)) {
       return NextResponse.json(
-        { error: "Only admins can delete holidays" },
+        { error: "You do not have permission to manage holidays" },
         { status: 403 }
       )
     }

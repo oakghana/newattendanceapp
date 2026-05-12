@@ -8,6 +8,23 @@ export interface GhanaHoliday {
   is_custom: boolean
 }
 
+function normalizeRole(role: string | null | undefined): string {
+  return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
+function canManageHolidays(role: string | null | undefined): boolean {
+  const normalized = normalizeRole(role)
+  const HOLIDAY_MANAGEMENT_ROLES = [
+    "admin",
+    "leave_admin",
+    "hr_leave_office",
+    "hr_office",
+    "director_hr",
+    "manager_hr",
+  ]
+  return HOLIDAY_MANAGEMENT_ROLES.includes(normalized)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -63,10 +80,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String((profile as any).role || "").toLowerCase().trim()
-    if (role !== "admin") {
+    const role = (profile as any).role || null
+    if (!canManageHolidays(role)) {
       return NextResponse.json(
-        { error: "Only admins can add holidays" },
+        { error: "You do not have permission to manage holidays" },
         { status: 403 }
       )
     }
@@ -81,19 +98,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate date format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+    // Validate date format (accepts both YYYY-MM-DD and DD/MM/YYYY)
+    const dateRegex = /^(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})$/
     if (!dateRegex.test(holiday_date)) {
       return NextResponse.json(
-        { error: "Date must be in YYYY-MM-DD format" },
+        { error: "Date must be in YYYY-MM-DD or DD/MM/YYYY format" },
         { status: 400 }
       )
+    }
+
+    // Convert DD/MM/YYYY to YYYY-MM-DD if needed
+    let formattedDate = holiday_date
+    if (holiday_date.includes("/")) {
+      const parts = holiday_date.split("/")
+      formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`
     }
 
     const { data: newHoliday, error: insertError } = await admin
       .from("ghana_public_holidays")
       .insert({
-        holiday_date,
+        holiday_date: formattedDate,
         holiday_name: String(holiday_name).trim(),
         is_custom: true,
       })

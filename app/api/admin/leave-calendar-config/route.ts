@@ -16,6 +16,23 @@ const DEFAULT_CONFIG: LeaveCalendarConfig = {
   exclude_holidays_in_calculation: true,
 }
 
+function normalizeRole(role: string | null | undefined): string {
+  return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
+function canManageHolidays(role: string | null | undefined): boolean {
+  const normalized = normalizeRole(role)
+  const HOLIDAY_MANAGEMENT_ROLES = [
+    "admin",
+    "leave_admin",
+    "hr_leave_office",
+    "hr_office",
+    "director_hr",
+    "manager_hr",
+  ]
+  return HOLIDAY_MANAGEMENT_ROLES.includes(normalized)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -39,10 +56,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String((profile as any).role || "").toLowerCase().trim()
-    if (role !== "admin") {
+    const role = (profile as any).role || null
+    if (!canManageHolidays(role)) {
       return NextResponse.json(
-        { error: "Only admins can view calendar configuration" },
+        { error: "You do not have permission to view calendar configuration" },
         { status: 403 }
       )
     }
@@ -89,10 +106,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String((profile as any).role || "").toLowerCase().trim()
-    if (role !== "admin") {
+    const role = (profile as any).role || null
+    if (!canManageHolidays(role)) {
       return NextResponse.json(
-        { error: "Only admins can update calendar configuration" },
+        { error: "You do not have permission to update calendar configuration" },
         { status: 403 }
       )
     }
