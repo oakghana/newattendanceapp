@@ -1605,6 +1605,12 @@ export default function LoanAppPage() {
     }
   }
 
+  const convertMonthToDate = (monthStr: string): string | null => {
+    if (!monthStr) return null
+    // Convert "YYYY-MM" to "YYYY-MM-01" (first day of month)
+    return monthStr.includes("-") ? `${monthStr}-01` : null
+  }
+
   const runAction = async (payload: any) => {
     const res = await fetch("/api/loan/action", {
       method: "POST",
@@ -4527,8 +4533,8 @@ export default function LoanAppPage() {
                   runAction({
                     action: "hr_set_terms",
                     id: actionModal.row!.id,
-                    disbursement_date: modalDisbursement,
-                    recovery_start_date: modalRecovery,
+                    disbursement_date: convertMonthToDate(modalDisbursement),
+                    recovery_start_date: convertMonthToDate(modalRecovery),
                     recovery_months: Number(modalMonths || 0),
                     reference_number: modalMemoRef || null,
                     hod_name: modalHodName || null,
