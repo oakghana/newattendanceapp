@@ -28,12 +28,11 @@ export default function ImplementationGuidePage() {
           .eq("id", user.id)
           .single()
 
-        // Grant access to admin, IT admin, and system administrators
-        const adminRoles = ["admin", "it-admin", "IT", "it", "audit_staff", "system_admin"]
-        const hasAccess = adminRoles.includes(profile?.role || "")
+        // Check if user has admin role
+        const isUserAdmin = profile?.role === "admin"
         
-        console.log("[v0] Admin access check - User role:", profile?.role, "Has access:", hasAccess)
-        setIsAdmin(hasAccess)
+        console.log("[v0] Admin access check - User role:", profile?.role, "Is admin:", isUserAdmin)
+        setIsAdmin(isUserAdmin)
       } catch (err) {
         console.error("[v0] Error checking admin access:", err)
         setIsAdmin(false)
