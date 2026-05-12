@@ -95,14 +95,20 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [signatureText, setSignatureText] = useState("")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
+  const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
 
   // if redirected with forceChange flag, open password form automatically
+  // or if requesting signature tab, open it
   useEffect(() => {
     try {
       const force = searchParams?.get?.("forceChange")
       const reason = searchParams?.get?.("reason")
-      if (force) {
+      const tab = searchParams?.get?.("tab")
+      
+      if (tab === "signature") {
+        setActiveTab("signature")
+      } else if (force) {
         setShowPasswordChange(true)
         if (reason === "monthly") {
           setError(getPasswordEnforcementMessage())
@@ -439,7 +445,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
         </Alert>
       )}
 
-      <Tabs defaultValue="profile" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
           <TabsTrigger value="signature">Signature</TabsTrigger>
@@ -724,18 +730,18 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
           </Card>
         </TabsContent>
 
-        {/* Signature Tab */}
+        {/* Signature Tab - For all users who need to sign documents */}
         <TabsContent value="signature" className="space-y-6">
-          <Card className="border-green-200 bg-green-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-green-900">
-                <Pen className="h-5 w-5" />
-                Your Digital Signature
-              </CardTitle>
-              <CardDescription className="text-green-800">
-                Save your signature here to sign documents and approvals across the system. Your signature will be used for all official documents.
-              </CardDescription>
-            </CardHeader>
+            <Card className="border-green-200 bg-green-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-900">
+                  <Pen className="h-5 w-5" />
+                  Your Digital Signature
+                </CardTitle>
+                <CardDescription className="text-green-800">
+                  Save your signature here to sign documents and approvals across the system. Your signature will be used for all official documents.
+                </CardDescription>
+              </CardHeader>
             <CardContent className="space-y-6">
               {/* Signature Mode Selection */}
               <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
@@ -823,28 +829,42 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     setIsSavingSignature(true)
                     try {
                       const supabase = createClient()
-                      const { data, error } = await supabase.from("signature_registry").upsert(
-                        {
-                          user_id: initialUser.id,
-                          workflow_domain: "loan",
-                          approval_stage: "director_hr",
-                          signature_mode: signatureMode,
-                          signature_text: signatureMode === "typed" ? signatureText : null,
-                          signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
-                          signed_at: new Date().toISOString(),
-                        },
-                        { onConflict: "user_id,workflow_domain,approval_stage" },
-                      )
+                      
+                      // Determine approval stage based on user role
+                      let approvalStage = "director_hr"
+                      if (["department_head", "regional_manager"].includes(initialUser.role)) {
+                        approvalStage = "hod"
+                      }
+                      
+                      const signatureData = {
+                        user_id: initialUser.id,
+                        workflow_domain: "loan",
+                        approval_stage: approvalStage,
+                        signature_mode: signatureMode,
+                        signature_text: signatureMode === "typed" ? signatureText : null,
+                        signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
+                        signed_at: new Date().toISOString(),
+                      }
+                      
+                      console.log("[v0] Saving signature with data:", signatureData)
+                      
+                      const { data, error } = await supabase
+                        .from("approval_signature_registry")
+                        .upsert(signatureData, { onConflict: "user_id,workflow_domain,approval_stage" })
+
+                      console.log("[v0] Upsert response - Data:", data, "Error:", error)
 
                       if (error) {
-                        throw error
+                        console.error("[v0] Supabase error details:", error.message, error.details, error.hint)
+                        throw new Error(`Failed to save signature: ${error.message}`)
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
                       setSignatureText("")
                       setSignatureDataUrl(null)
                     } catch (err) {
-                      console.error("Error saving signature:", err)
+                      const errorMsg = err instanceof Error ? err.message : String(err)
+                      console.error("[v0] Error saving signature:", errorMsg)
                       toast.error("Failed to save signature. Please try again.")
                     } finally {
                       setIsSavingSignature(false)
