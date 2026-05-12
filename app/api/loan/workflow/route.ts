@@ -579,13 +579,16 @@ export async function GET() {
         .select("id, first_name, last_name")
         .in("id", uniqueAccountsReviewerIds)
       for (const ap of accountsProfiles || []) {
-        accountsReviewerMap.set(ap.id, `${ap.first_name || ""} ${ap.last_name || ""}`.trim() || "—")
+        const fullName = `${ap.first_name || ""} ${ap.last_name || ""}`.trim()
+        accountsReviewerMap.set(ap.id, fullName || "")
       }
     }
     const attachAccountsReviewerName = (rows: any[]) =>
       rows.map((r: any) => ({
         ...r,
-        accounts_reviewer_name: r.accounts_reviewer_id ? accountsReviewerMap.get(r.accounts_reviewer_id) || null : null,
+        accounts_reviewer_name: r.accounts_reviewer_id 
+          ? (accountsReviewerMap.get(r.accounts_reviewer_id) || null)
+          : null,
       }))
 
     // Group timelines by loan_request_id
@@ -620,10 +623,10 @@ export async function GET() {
       role,
       permissions,
       loanTypes: resolvedTypesRes.data || [],
-      myRequests: attachName(myRes.data || []),
+      myRequests: attachAccountsReviewerName(attachName(myRes.data || [])),
       myTimelines,
       directorApprovers,
-      myTasks: attachName(myTasksRes.data || []),
+      myTasks: attachAccountsReviewerName(attachName(myTasksRes.data || [])),
       inbox: {
         hod: attachAccountsReviewerName(attachName(hodRes.data || [])),
         loanOffice: attachAccountsReviewerName(attachName(loanOfficeRes.data || [])),

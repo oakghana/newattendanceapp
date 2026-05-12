@@ -17,7 +17,7 @@ export default async function LeaveManagementPage() {
   // Get user profile
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, department_id, assigned_location_id, departments(name, code)")
+    .select("role, department_id, assigned_location_id, first_name, last_name, departments(name, code)")
     .eq("id", user.id)
     .single()
 
@@ -180,6 +180,8 @@ export default async function LeaveManagementPage() {
       <LeaveManagementModuleClient
         userRole={profile.role}
         userDepartment={profile.department_id}
+        userFirstName={(profile as any)?.first_name || null}
+        userLastName={(profile as any)?.last_name || null}
         inactivityDays={Math.max(1, inactivityDays)}
         userDepartmentName={(profile as any)?.departments?.name || null}
         userDepartmentCode={(profile as any)?.departments?.code || null}

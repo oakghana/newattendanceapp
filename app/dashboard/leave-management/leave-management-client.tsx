@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import {
@@ -22,7 +23,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { placeholderDescriptions } from "@/lib/leave-templates"
@@ -56,6 +56,8 @@ interface LeaveNotification {
 interface LeaveManagementClientProps {
   userRole: string
   userDepartment: string | null
+  userFirstName: string | null
+  userLastName: string | null
   hasHodLinkage: boolean
   inactivityDays: number
   initialStaffRequests: LeaveRequest[]
@@ -78,6 +80,8 @@ interface HrMemoTemplate {
 export function LeaveManagementClient({
   userRole,
   userDepartment,
+  userFirstName,
+  userLastName,
   hasHodLinkage,
   inactivityDays,
   initialStaffRequests,
@@ -122,6 +126,7 @@ export function LeaveManagementClient({
   const [editEndDate, setEditEndDate] = useState("")
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
+  const [selectedTab, setSelectedTab] = useState("my-requests")
   const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -699,16 +704,25 @@ export function LeaveManagementClient({
                 <Sparkles className="h-3.5 w-3.5" /> Leave Workspace
               </div>
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur">
-                    <Calendar className="h-7 w-7 text-cyan-200" />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur">
+                      <Calendar className="h-7 w-7 text-cyan-200" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Leave Management</h1>
+                      <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">
+                        Review leave activity, track submissions, and move quickly between personal requests and approvals.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Leave Management</h1>
-                    <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">
-                      Review leave activity, track submissions, and move quickly between personal requests and approvals.
-                    </p>
-                  </div>
+                  <Button
+                    onClick={() => setSelectedTab("apply-leave")}
+                    className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Add Leave Application
+                  </Button>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Badge className="border border-white/10 bg-white/10 px-3 py-1 text-cyan-100 hover:bg-white/10">
@@ -1097,52 +1111,56 @@ export function LeaveManagementClient({
         </Card>
       )}
 
-      <Tabs defaultValue="my-requests" className="space-y-6">
-        <TabsList className="flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
-          <>
-            <TabsTrigger value="my-requests" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
-              My Requests ({staffRequests.length})
-            </TabsTrigger>
-            <TabsTrigger value="approved" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
-              Approved ({approvedRequests.length})
-            </TabsTrigger>
-            {isManagerView && (
-              <>
-              <TabsTrigger value="pending-approvals" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-blue-700">
-                Pending ({pendingNotifications.length})
-              </TabsTrigger>
-              {isAdminView && (
-                <>
-                  <TabsTrigger value="role-staff" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-sky-600 data-[state=active]:text-white data-[state=inactive]:text-sky-700">
-                    Staff ({adminStaffQueue.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="role-hod" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=inactive]:text-violet-700">
-                    HOD ({adminHodQueue.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="role-regional" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-indigo-700">
-                    Regional ({adminRegionalQueue.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="delayed" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-rose-600 data-[state=active]:text-white data-[state=inactive]:text-rose-700">
-                    Delayed {`>=${inactivityDays}d`} ({adminDelayedQueue.length})
-                  </TabsTrigger>
-                </>
-              )}
-              <TabsTrigger value="history" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
-                History
-              </TabsTrigger>
-              </>
-            )}
-          </>
-        </TabsList>
+      {/* STAFF TABS SECTION - Always visible for leave application */}
+      <div className="space-y-4 mt-6 p-4 bg-white rounded-xl shadow-lg border-2 border-emerald-500">
+        <h3 className="text-lg font-bold text-emerald-700 mb-4">Leave Application Actions</h3>
+        {/* Simple Tab Navigation - Always visible for staff users */}
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => setSelectedTab("my-requests")}
+            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
+              selectedTab === "my-requests"
+                ? "bg-blue-600 text-white"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            My Requests ({staffRequests.length})
+          </button>
+          <Link href="/dashboard/leave-planning">
+            <button className="px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700">
+              <Calendar className="h-5 w-5" />
+              Apply for Leave
+            </button>
+          </Link>
+          <button
+            onClick={() => setSelectedTab("approved")}
+            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
+              selectedTab === "approved"
+                ? "bg-green-600 text-white"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            Approved ({approvedRequests.length})
+          </button>
+        </div>
 
-        <>
-            <TabsContent value="my-requests" className="space-y-4">
+        {/* Tab Content */}
+        <div>
+          {selectedTab === "my-requests" && (
+            <>
               {staffRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
                   <CardContent className="py-14 text-center">
                     <Info className="mx-auto mb-4 h-12 w-12 text-cyan-500/70" />
                     <p className="mb-1 font-medium text-slate-800">No leave requests yet</p>
-                    <p className="text-sm text-slate-500">Use Leave Planning 2026/2027 to submit your next leave request.</p>
+                    <p className="mb-6 text-sm text-slate-500">Click below to submit your first leave request.</p>
+                    <Button
+                      onClick={() => setSelectedTab("apply-leave")}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Apply for Leave
+                    </Button>
                   </CardContent>
                 </Card>
               ) : (
@@ -1152,9 +1170,11 @@ export function LeaveManagementClient({
                   ))}
                 </div>
               )}
-            </TabsContent>
-
-            <TabsContent value="approved" className="space-y-4">
+            </>
+          )}
+          
+          {selectedTab === "approved" && (
+            <>
               {approvedRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
                   <CardContent className="py-14 text-center">
@@ -1169,45 +1189,53 @@ export function LeaveManagementClient({
                   ))}
                 </div>
               )}
-            </TabsContent>
-          </>
+            </>
+          )}
 
-        {isManagerView && (
+        {isManagerView && selectedTab === "pending-approvals" && (
           <>
-            <TabsContent value="pending-approvals" className="space-y-4">
-              <Alert className="border-blue-200 bg-blue-50">
-                <AlertDescription>
-                  Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
-                </AlertDescription>
-              </Alert>
-              {renderManagerNotifications(adminAllPending, "No pending leave requests to approve")}
-            </TabsContent>
-
-            {isAdminView && (
-              <>
-                <TabsContent value="role-staff" className="space-y-4">
-                  {renderManagerNotifications(adminStaffQueue, "No staff queue requests pending")}
-                </TabsContent>
-                <TabsContent value="role-hod" className="space-y-4">
-                  {renderManagerNotifications(adminHodQueue, "No HOD queue requests pending")}
-                </TabsContent>
-                <TabsContent value="role-regional" className="space-y-4">
-                  {renderManagerNotifications(adminRegionalQueue, "No regional queue requests pending")}
-                </TabsContent>
-                <TabsContent value="delayed" className="space-y-4">
-                  {renderManagerNotifications(adminDelayedQueue, `No delayed requests at or above ${inactivityDays} days`)}
-                </TabsContent>
-              </>
-            )}
-
-            <TabsContent value="history" className="space-y-4">
-              <Alert className="border-slate-200 bg-white shadow-sm">
-                <AlertDescription>Historical leave request data will be surfaced here when the archive view is enabled.</AlertDescription>
-              </Alert>
-            </TabsContent>
+            <Alert className="border-blue-200 bg-blue-50">
+              <AlertDescription>
+                Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
+              </AlertDescription>
+            </Alert>
+            {renderManagerNotifications(adminAllPending, "No pending leave requests to approve")}
           </>
         )}
-      </Tabs>
+
+        {isAdminView && selectedTab === "role-staff" && (
+          <>
+            {renderManagerNotifications(adminStaffQueue, "No staff queue requests pending")}
+          </>
+        )}
+        
+        {isAdminView && selectedTab === "role-hod" && (
+          <>
+            {renderManagerNotifications(adminHodQueue, "No HOD queue requests pending")}
+          </>
+        )}
+        
+        {isAdminView && selectedTab === "role-regional" && (
+          <>
+            {renderManagerNotifications(adminRegionalQueue, "No regional queue requests pending")}
+          </>
+        )}
+        
+        {isAdminView && selectedTab === "delayed" && (
+          <>
+            {renderManagerNotifications(adminDelayedQueue, `No delayed requests at or above ${inactivityDays} days`)}
+          </>
+        )}
+
+        {isManagerView && selectedTab === "history" && (
+          <>
+            <Alert className="border-slate-200 bg-white shadow-sm">
+              <AlertDescription>Historical leave request data will be surfaced here when the archive view is enabled.</AlertDescription>
+            </Alert>
+          </>
+        )}
+        </div>
+      </div>
 
       <Dialog open={Boolean(editingRequest)} onOpenChange={(open) => { if (!open) closeEditDialog() }}>
         <DialogContent>

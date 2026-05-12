@@ -774,10 +774,10 @@ function LoanAnalyticsBarChart({
                 </div>
               )
             })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
   )
 }
 
@@ -808,6 +808,7 @@ export default function LoanAppPage() {
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
+  const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
   const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
   const [modalFdScore, setModalFdScore] = useState("")
@@ -1617,6 +1618,34 @@ export default function LoanAppPage() {
     }
     toast({ title: result.alreadyForwarded ? "Already forwarded" : "Action completed", description: result.message || "Workflow updated successfully." })
     await loadData()
+  }
+
+  const saveMemoChanges = async () => {
+    if (!memoReviewModal.row) return
+    setIsSavingMemo(true)
+    try {
+      const res = await fetch("/api/loan/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_memo_draft",
+          id: memoReviewModal.row.id,
+          director_letter: modalMemoText,
+          note: "HR saved memo changes for review",
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        toast({ title: "Failed to save", description: result.error || "Could not save memo changes", variant: "destructive" })
+        return
+      }
+      toast({ title: "Saved successfully", description: "Memo changes have been saved. Staff will see the updated version." })
+      await loadData()
+    } catch (error) {
+      toast({ title: "Save error", description: error instanceof Error ? error.message : "Failed to save changes", variant: "destructive" })
+    } finally {
+      setIsSavingMemo(false)
+    }
   }
 
   const loadSignatureFromFile = async (file: File) => {
@@ -4315,7 +4344,7 @@ export default function LoanAppPage() {
                     <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. HEAD OFFICE" />
                   </div>
                 </div>
-                <Label>Assigned Director HR Approver</Label>
+                <Label>Assigned Director /Manager HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
                   <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
                   <SelectContent>
@@ -4358,11 +4387,11 @@ export default function LoanAppPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Disbursement Date</Label>
-                    <Input value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} placeholder="YYYY-MM-DD" />
+                    <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} />
                   </div>
                   <div>
                     <Label>Recovery Start Date</Label>
-                    <Input value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} placeholder="YYYY-MM-DD" />
+                    <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} />
                   </div>
                   <div>
                     <Label>Recovery Months</Label>
@@ -4377,7 +4406,7 @@ export default function LoanAppPage() {
                 <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Regional Manager / Department Head" />
                 <Label>HOD Location (Station)</Label>
                 <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Breman Asikuma" />
-                <Label>Assigned Director HR Approver</Label>
+                <Label>Assigned Director /Manager HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
                   <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
                   <SelectContent>
@@ -4386,12 +4415,12 @@ export default function LoanAppPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Label>Memo Copy Recipient</Label>
+                <Label>Payment Officer</Label>
                 <Select value={modalMemoRecipient} onValueChange={setModalMemoRecipient}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Deputy Director Finance">Deputy Director Finance</SelectItem>
-                    <SelectItem value="Deputy Director Human Resource">Deputy Director Human Resource</SelectItem>
+                    <SelectItem value="Deputy Director, Finance">Deputy Director, Finance</SelectItem>
+                    <SelectItem value="Accounts Manager">Accounts Manager</SelectItem>
                   </SelectContent>
                 </Select>
                 <Label>HR Note (optional)</Label>
@@ -4604,6 +4633,17 @@ export default function LoanAppPage() {
 
           <DialogFooter className="gap-2 flex-wrap">
             <Button variant="outline" onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}>Close</Button>
+            {memoReviewModal.row && (
+              <Button 
+                variant="secondary"
+                onClick={() => saveMemoChanges()}
+                disabled={isSavingMemo}
+                className="gap-2"
+              >
+                {isSavingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {isSavingMemo ? "Saving..." : "Save Memo Changes"}
+              </Button>
+            )}
             {memoReviewModal.row && (
               <Button variant="outline" onClick={() => {
                 if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText)
