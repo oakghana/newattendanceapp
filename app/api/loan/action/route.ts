@@ -610,6 +610,7 @@ export async function POST(request: NextRequest) {
       update.disbursement_date = disbursementDate
       update.recovery_start_date = recoveryStartDate
       update.hr_forwarded_at = new Date().toISOString()
+      if (body.memo_cc) update.memo_cc = body.memo_cc
 
       // Track who is expected to sign/finalize the memo.
       if (selectedDirectorApproverId) {
