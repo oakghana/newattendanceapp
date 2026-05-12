@@ -346,6 +346,9 @@ export default function UserManagementClient({
                     <SelectItem value="department_head">Department Head</SelectItem>
                     <SelectItem value="regional_manager">Regional Manager</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
+                    {currentUserRole === "admin" && (
+                      <SelectItem value="hr_loan_office_admin">HR Loan Office Admin</SelectItem>
+                    )}
                     <SelectItem value="nsp">NSP</SelectItem>
                     <SelectItem value="intern">Intern</SelectItem>
                     <SelectItem value="contract">Contract</SelectItem>
@@ -451,6 +454,7 @@ export default function UserManagementClient({
                     <SelectContent>
                       <SelectItem value="all">All Roles</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="hr_loan_office_admin">HR Loan Office Admin</SelectItem>
                       <SelectItem value="regional_manager">Regional Manager</SelectItem>
                       <SelectItem value="department_head">Dept Head</SelectItem>
                       <SelectItem value="staff">Staff</SelectItem>

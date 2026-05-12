@@ -1138,7 +1138,15 @@ export function LeaveManagementClient({
         </div>
 
         {/* Tab Content */}
-        <div>
+        <div className={`transition-colors duration-300 rounded-lg p-4 ${
+          selectedTab === "my-requests" ? "bg-green-50 border border-green-200" : 
+          selectedTab === "approved" ? "bg-emerald-50 border border-emerald-200" :
+          selectedTab === "pending-approvals" ? "bg-blue-50 border border-blue-200" :
+          selectedTab === "role-staff" ? "bg-purple-50 border border-purple-200" :
+          selectedTab === "role-manager" ? "bg-indigo-50 border border-indigo-200" :
+          selectedTab === "role-hr" ? "bg-amber-50 border border-amber-200" :
+          "bg-slate-50 border border-slate-200"
+        }`}>
           {selectedTab === "my-requests" && (
             <>
               {staffRequests.length === 0 ? (

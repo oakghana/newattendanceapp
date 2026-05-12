@@ -1927,6 +1927,17 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
             ))}
           </TabsList>
 
+          {/* Dynamic background wrapper for active tab */}
+          <div className={`transition-all duration-300 rounded-lg p-4 ${
+            activeTab === "my-leaves" ? "bg-slate-50 border border-slate-200" :
+            activeTab === "apply" ? "bg-green-50 border border-green-200" :
+            activeTab === "hod-review" ? "bg-blue-50 border border-blue-200" :
+            activeTab === "hr-office" ? "bg-amber-50 border border-amber-200" :
+            activeTab === "hr-approve" ? "bg-purple-50 border border-purple-200" :
+            activeTab === "all-requests" ? "bg-indigo-50 border border-indigo-200" :
+            "bg-white"
+          }`}>
+
           {/* ── My Leaves ─────────────────────────────────────────────── */}
           <TabsContent value="my-leaves">
             {myRequests.length === 0 ? (
@@ -3287,6 +3298,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
             </div>
           </TabsContent>
           )}
+          </div>
         </Tabs>
       )}
     </div>

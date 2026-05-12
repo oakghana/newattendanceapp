@@ -2781,19 +2781,19 @@ export default function LoanAppPage() {
                   <TabsTrigger value="archivable" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Archivable
                   </TabsTrigger>
-                  <TabsTrigger value="good-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="good-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Good FD ({loanOfficeStageBuckets["good-fd"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="poor-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="poor-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Poor FD ({loanOfficeStageBuckets["poor-fd"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="good-fd-not-pushed" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="good-fd-not-pushed" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Good FD Not Pushed ({loanOfficeStageBuckets["good-fd-not-pushed"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="sent-for-approval" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="sent-for-approval" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Sent for Approval ({loanOfficeStageBuckets["sent-for-approval"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="archivable" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="archivable" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Archivable ({loanOfficeStageBuckets.archivable.length})
                   </TabsTrigger>
                   <TabsTrigger value="archived" className="data-[state=active]:bg-slate-700 data-[state=active]:text-white">
