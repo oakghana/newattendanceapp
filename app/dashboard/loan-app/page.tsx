@@ -4344,7 +4344,7 @@ export default function LoanAppPage() {
                     <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. HEAD OFFICE" />
                   </div>
                 </div>
-                <Label>Assigned Director HR Approver</Label>
+                <Label>Assigned Director /Manager HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
                   <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
                   <SelectContent>
@@ -4406,7 +4406,7 @@ export default function LoanAppPage() {
                 <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Regional Manager / Department Head" />
                 <Label>HOD Location (Station)</Label>
                 <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Breman Asikuma" />
-                <Label>Assigned Director HR Approver</Label>
+                <Label>Assigned Director /Manager HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
                   <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
                   <SelectContent>
@@ -4415,13 +4415,12 @@ export default function LoanAppPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Label>Account Addressed to</Label>
+                <Label>Payment Officer</Label>
                 <Select value={modalMemoRecipient} onValueChange={setModalMemoRecipient}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Deputy Director, Finance">Deputy Director, Finance</SelectItem>
                     <SelectItem value="Accounts Manager">Accounts Manager</SelectItem>
-                    <SelectItem value="Deputy Accounts Manager">Deputy Accounts Manager</SelectItem>
                   </SelectContent>
                 </Select>
                 <Label>HR Note (optional)</Label>
