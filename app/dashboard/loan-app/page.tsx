@@ -4593,7 +4593,10 @@ export default function LoanAppPage() {
                 <div>
                   <h4 className="font-semibold text-amber-900">Signature Setup Required</h4>
                   <p className="text-sm text-amber-800 mt-1">You haven&apos;t saved your signature yet. You&apos;ll need to save your signature before you can approve loan requests.</p>
-                  <Button size="sm" variant="outline" className="mt-3 text-amber-700 border-amber-300 hover:bg-amber-100" onClick={() => setActiveTab("setup")}>
+                  <Button size="sm" variant="outline" className="mt-3 text-amber-700 border-amber-300 hover:bg-amber-100" onClick={() => {
+                    setMemoReviewModal((s) => ({ ...s, open: false }))
+                    setActiveTab("setup")
+                  }}>
                     Go to Setup & Linkage
                   </Button>
                 </div>
