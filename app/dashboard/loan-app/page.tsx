@@ -4415,12 +4415,14 @@ export default function LoanAppPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Label>Memo Copy Recipient</Label>
+                <Label>Account Addressed to</Label>
                 <Select value={modalMemoRecipient} onValueChange={setModalMemoRecipient}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Deputy Director Finance">Deputy Director Finance</SelectItem>
-                    <SelectItem value="Deputy Director Human Resource">Deputy Director Human Resource</SelectItem>
+                    <SelectItem value="Deputy Director">Deputy Director</SelectItem>
+                    <SelectItem value="Finance">Finance</SelectItem>
+                    <SelectItem value="Accounts Manager">Accounts Manager</SelectItem>
+                    <SelectItem value="Deputy Accounts Manager">Deputy Accounts Manager</SelectItem>
                   </SelectContent>
                 </Select>
                 <Label>HR Note (optional)</Label>
