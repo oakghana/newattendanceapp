@@ -2638,7 +2638,20 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        {canSeeFdReviewerName && <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>}
+                        {canSeeFdReviewerName && (
+                          <TableCell className="text-xs whitespace-nowrap">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+                        )}
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.hod && (
@@ -2841,7 +2854,18 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Badge className={`text-[10px] whitespace-nowrap ${row.status === "hod_approved" ? "bg-green-700" : "bg-purple-700"} text-white`}>
@@ -2989,7 +3013,18 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           {p?.hrOffice && (
                             <TableCell>
@@ -3248,8 +3283,18 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "—"}</TableCell>
-                          <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
                             <TableCell>
@@ -3430,9 +3475,18 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
-                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
                         {p?.committee && (
                           <TableCell>
                             <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "committee")}>Further Information</Button>
@@ -3473,7 +3527,7 @@ export default function LoanAppPage() {
                 <div key={`good-fd-${row.id}`} className="rounded border p-2 text-sm">
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
                   {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
-                  <div>FD: {row.fd_score ?? "N/A"} | FD Reviewer: {row.accounts_reviewer_name || "—"} | Status: {statusText(row.status)}</div>
+                  <div>FD: {row.fd_score ?? "N/A"} | FD Reviewer: <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span></TooltipTrigger><TooltipContent><p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p></TooltipContent></Tooltip></TooltipProvider> | Status: {statusText(row.status)}</div>
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                 </div>
               ))}
@@ -3563,9 +3617,18 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
-                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
                         {p?.directorHr && (
                           <TableCell>
                             <div className="flex flex-col gap-1">
@@ -3822,7 +3885,7 @@ export default function LoanAppPage() {
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div className="text-muted-foreground">Address: {row.staff_location_address || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Status: {statusText(row.status)}</div>
-                  <div className="text-xs text-muted-foreground">FD Score: {row.fd_score ?? "—"} | FD Reviewer: {row.accounts_reviewer_name || "—"}</div>
+                  <div className="text-xs text-muted-foreground">FD Score: {row.fd_score ?? "—"} | FD Reviewer: <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span></TooltipTrigger><TooltipContent><p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p></TooltipContent></Tooltip></TooltipProvider></div>
                   {["approved_director", "director_rejected", "rejected_fd"].includes(row.status) && (
                     <div className="mt-2 flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Secure Memo PDF</Button>
