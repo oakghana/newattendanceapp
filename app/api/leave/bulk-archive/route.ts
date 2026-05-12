@@ -31,7 +31,7 @@ export async function POST(_request: NextRequest) {
       .maybeSingle()
 
     const role = ((profile as any)?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    const allowed = ["admin", "it_admin", "super_admin", "god", "hr_leave_office_admin"].includes(role)
+    const allowed = ["admin", "it_admin", "super_admin", "god", "leave_admin"].includes(role)
     if (!allowed) {
       return NextResponse.json(
         { success: false, error: "Only HR-Leave-Office-Admin staff or admins can bulk-archive leave requests" },

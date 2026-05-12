@@ -4,7 +4,7 @@
 The **HR-Leave-Office-Admin** role is a dedicated administrative role for managing the annual leave workflow, holiday calculations, leave approvals, and leave analytics for the organization.
 
 ## Role Identifier
-- **Database Value**: `hr_leave_office_admin`
+- **Database Value**: `leave_admin`
 - **Display Name**: HR-Leave-Office-Admin
 - **System ID**: Used internally for API permissions and role checks
 
@@ -110,7 +110,7 @@ The role is included in the `user_profiles` table role constraint:
 
 ```sql
 ALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check 
-CHECK (role IN (..., 'hr_leave_office_admin', ...))
+CHECK (role IN (..., 'leave_admin', ...))
 ```
 
 ## Troubleshooting
@@ -123,17 +123,17 @@ CHECK (role IN (..., 'hr_leave_office_admin', ...))
 ### Staff assigned HR-Leave-Office-Admin can't access leave-management page
 1. **Login refresh**: Have them log out and log back in
 2. **Check assigned location**: Ensure they have an assigned location set
-3. **Verify role in database**: Run query to confirm role is saved as `hr_leave_office_admin`
+3. **Verify role in database**: Run query to confirm role is saved as `leave_admin`
 
 ```sql
 SELECT id, first_name, last_name, role, assigned_location_id 
 FROM user_profiles 
-WHERE role = 'hr_leave_office_admin';
+WHERE role = 'leave_admin';
 ```
 
 ### Leave approval API returns "unauthorized"
-1. **Verify role value**: Ensure the database has `hr_leave_office_admin` (with underscores, not hyphens)
-2. **Check API permission**: The endpoint should include `hr_leave_office_admin` in allowed roles list
+1. **Verify role value**: Ensure the database has `leave_admin` (with underscores, not hyphens)
+2. **Check API permission**: The endpoint should include `leave_admin` in allowed roles list
 
 ## Differences from Other HR Roles
 
@@ -153,5 +153,5 @@ WHERE role = 'hr_leave_office_admin';
 ## Support
 For issues with HR-Leave-Office-Admin role assignment or functionality, please:
 1. Check the troubleshooting section above
-2. Verify database role is set to `hr_leave_office_admin`
+2. Verify database role is set to `leave_admin`
 3. Contact system administrator

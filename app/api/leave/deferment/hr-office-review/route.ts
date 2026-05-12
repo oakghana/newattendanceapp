@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || !["admin", "hr_leave_office_admin", "hr_office"].includes(profile.role)) {
+    if (!profile || !["admin", "leave_admin", "hr_office"].includes(profile.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 

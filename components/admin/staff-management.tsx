@@ -82,7 +82,7 @@ interface Location {
 export function StaffManagement() {
   const canonicalRole = (role: string | null | undefined) => {
     const normalized = String(role || "").toLowerCase().trim()
-    return normalized === "hr_office" ? "hr_leave_office_admin" : normalized
+    return normalized === "hr_office" ? "leave_admin" : normalized
   }
 
   const [staff, setStaff] = useState<StaffMember[]>([])
@@ -647,7 +647,7 @@ export function StaffManagement() {
                   <SelectItem value="audit_staff">Audit Staff</SelectItem>
                   <SelectItem value="accounts">Accounts</SelectItem>
                   <SelectItem value="loan_office">Loan Office</SelectItem>
-                  <SelectItem value="hr_leave_office_admin">HR-Leave-Office-Admin</SelectItem>
+                  <SelectItem value="leave_admin">HR-Leave-Office-Admin</SelectItem>
                   <SelectItem value="manager_hr">Manager HR</SelectItem>
                   <SelectItem value="director_hr">Director HR</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
@@ -807,7 +807,7 @@ export function StaffManagement() {
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_leave_office_admin">HR-Leave-Office-Admin</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="leave_admin">HR-Leave-Office-Admin</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="regional_hr_leave">Regional HR Leave</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
@@ -986,7 +986,7 @@ export function StaffManagement() {
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_leave_office_admin">HR-Leave-Office-Admin</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="leave_admin">HR-Leave-Office-Admin</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="regional_hr_leave">Regional HR Leave</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}

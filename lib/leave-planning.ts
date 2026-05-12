@@ -6,7 +6,7 @@ export type LeavePlanningRole =
   | "it-admin"
   | "nsp"
   | "intern"
-  | "hr_leave_office_admin"
+  | "leave_admin"
   | "hr_officer"
   | "hr"
   | "hr_director"
@@ -74,7 +74,7 @@ export function isManagerRole(role: string | null | undefined): boolean {
 /** HR-Leave-Office-Admin role — receives HOD-approved leaves, can adjust days/dates, forwards to HR Approver */
 export function isHrLeaveOfficeRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return ["hr_leave_office_admin", "hr_office", "loan_office"].includes(normalized)
+  return ["leave_admin", "hr_office", "loan_office"].includes(normalized)
 }
 
 /** HR Approver role — issues final approval and PDF memo */

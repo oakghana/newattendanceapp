@@ -410,7 +410,7 @@ export async function notifyLeaveHodApproved(
   },
 ): Promise<void> {
   try {
-    const hrOfficeRoles = ["hr_leave_office_admin", "hr_officer", "hr_office", "manager_hr", "admin"]
+    const hrOfficeRoles = ["leave_admin", "hr_officer", "hr_office", "manager_hr", "admin"]
     const hrEmails = await emailsForRoles(admin, hrOfficeRoles)
     if (!hrEmails.length) return
 

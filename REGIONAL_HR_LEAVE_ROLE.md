@@ -195,7 +195,7 @@ Can download:
 The role is validated in `user_profiles` table:
 ```sql
 CONSTRAINT role_values CHECK (role IN (
-  'admin', 'staff', 'hr_leave_office_admin', 
+  'admin', 'staff', 'leave_admin', 
   'hr_leave_office', 'regional_hr_leave', ...
 ))
 ```

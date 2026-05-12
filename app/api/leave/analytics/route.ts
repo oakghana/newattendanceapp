@@ -4,7 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 const ALLOWED_ROLES = new Set([
   "admin",
   "hr",
-  "hr_leave_office_admin",
+  "leave_admin",
   "hr_office",
   "loan_office",
   "hr_officer",

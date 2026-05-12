@@ -22,7 +22,7 @@ The system implements strict role-based access control to separate general HR fu
 
 **Assignment**: Only **Admin** users can assign this role
 
-**Database Value**: `hr_leave_office_admin`
+**Database Value**: `leave_admin`
 
 ---
 
@@ -98,17 +98,17 @@ The system validates role permissions at the API level:
 - Manager HR: ❌ NOT allowed
 
 ### Leave Analytics
-**Allowed Roles**: `["loan_office", "hr_leave_office_admin", "admin", "hr_office", "hr"]`
+**Allowed Roles**: `["loan_office", "leave_admin", "admin", "hr_office", "hr"]`
 - Director HR: ❌ NOT allowed
 - Manager HR: ❌ NOT allowed
 
 ### Template Viewing
-**Allowed Roles**: `["admin", "hr_officer", "hr_director", "hr_leave_office_admin"]`
+**Allowed Roles**: `["admin", "hr_officer", "hr_director", "leave_admin"]`
 - Director HR: ❌ NOT allowed
 - Manager HR: ❌ NOT allowed
 
 ### Template Editing
-**Allowed Roles**: `["admin", "hr_director", "hr_leave_office_admin"]`
+**Allowed Roles**: `["admin", "hr_director", "leave_admin"]`
 - Director HR: ❌ NOT allowed
 - Manager HR: ❌ NOT allowed
 
@@ -121,7 +121,7 @@ The system validates role permissions at the API level:
    - Line 987: Only admin can assign HR-Leave-Office-Admin role (edit staff)
 
 2. **`/app/dashboard/leave-management/leave-management-module-client.tsx`**
-   - Line 12: HR_ANALYTICS_ROLES restricted to `["loan_office", "hr_leave_office_admin", "admin", "hr_office", "hr"]`
+   - Line 12: HR_ANALYTICS_ROLES restricted to `["loan_office", "leave_admin", "admin", "hr_office", "hr"]`
 
 3. **`/app/dashboard/leave-management/page.tsx`**
    - Lines 73-74: Removed director_hr and manager_hr from canReviewLeave

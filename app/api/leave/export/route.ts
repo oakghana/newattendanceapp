@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const role = String((profile as any).role || "").toLowerCase().trim()
-    const isAuthorized = ["admin", "hr", "hr_leave_office_admin", "hr_officer"].includes(role)
+    const isAuthorized = ["admin", "hr", "leave_admin", "hr_officer"].includes(role)
 
     if (!isAuthorized) {
       return NextResponse.json(

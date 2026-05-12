@@ -9,7 +9,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/admin": ["admin"],
   "/dashboard/admin": ["admin"],
   "/dashboard/settings": ["admin"],
-  "/dashboard/loan-app": ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office_admin", "audit_staff", "nsp", "intern", "contract"],
+  "/dashboard/loan-app": ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "leave_admin", "audit_staff", "nsp", "intern", "contract"],
   
   // HR/Leave Management
   "/dashboard/leave-management": [
@@ -25,7 +25,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "director_hr",
     "manager_hr",
     "hr_officer",
-    "hr_leave_office_admin",
+    "leave_admin",
     "hr_office",
     "audit_staff",
     "contract",
@@ -43,14 +43,14 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "director_hr",
     "manager_hr",
     "hr_officer",
-    "hr_leave_office_admin",
+    "leave_admin",
     "hr_office",
     "audit_staff",
     "contract",
   ],
   
   // Staff Dashboard
-  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office_admin", "audit_staff", "contract", "loan_committee", "committee"],
+  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "leave_admin", "audit_staff", "contract", "loan_committee", "committee"],
   
   // Regional Manager pages
   "/dashboard/regional": ["admin", "regional_manager"],

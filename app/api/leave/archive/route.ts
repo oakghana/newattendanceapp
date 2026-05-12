@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["hr_leave_office_admin", "admin"].includes(normalizedRole)) {
+    if (!["leave_admin", "admin"].includes(normalizedRole)) {
       return NextResponse.json(
         { success: false, error: "Only HR-Leave-Office-Admin staff can archive requests" },
         { status: 403 }

@@ -22,7 +22,7 @@ The staff API endpoints now properly detect constraint violations and provide a 
 **Changes Made:**
 - Added detection for Postgres error code `22001` (string length violation)
 - Added detection for "value too long" error message
-- Updated the suggested SQL migration to include all roles: `hr_leave_office`, `regional_hr_leave`, `hr_leave_office_admin`, `director_hr`, `manager_hr`, `loan_committee`, `committee`
+- Updated the suggested SQL migration to include all roles: `hr_leave_office`, `regional_hr_leave`, `leave_admin`, `director_hr`, `manager_hr`, `loan_committee`, `committee`
 
 ### How to Fix in Your Database
 
@@ -45,7 +45,7 @@ ALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (
     'accounts',
     'loan_office',
     'hr_office',
-    'hr_leave_office_admin',
+    'leave_admin',
     'hr_leave_office',
     'regional_hr_leave',
     'director_hr',
@@ -74,7 +74,7 @@ WHERE conrelid = 'user_profiles'::regclass
    psql $DATABASE_URL << EOF
    ALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;
    ALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (
-     role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','hr_office','hr_leave_office_admin','hr_leave_office','regional_hr_leave','director_hr','manager_hr','loan_committee','committee')
+     role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','hr_office','leave_admin','hr_leave_office','regional_hr_leave','director_hr','manager_hr','loan_committee','committee')
    );
    EOF
    ```

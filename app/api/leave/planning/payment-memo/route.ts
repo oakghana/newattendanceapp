@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    if (!["admin", "hr_leave_office_admin"].includes(userRole)) {
+    if (!["admin", "leave_admin"].includes(userRole)) {
       return NextResponse.json(
         { error: "Only HR-Leave-Office-Admin staff can create payment memos" },
         { status: 403 }
@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
       .from("leave_payment_memos")
       .insert({
         leave_plan_request_id,
-        hr_leave_office_admin_id: user.data.user.id,
-        hr_leave_office_admin_name: hrOfficerName,
+        leave_admin_id: user.data.user.id,
+        leave_admin_name: hrOfficerName,
         memo_subject: memo_subject.trim(),
         memo_body: memo_body.trim(),
         payment_amount: payment_amount ? Number(payment_amount) : null,
@@ -145,8 +145,8 @@ export async function POST(request: NextRequest) {
     await admin
       .from("leave_office_work_log")
       .insert({
-        hr_leave_office_admin_id: user.data.user.id,
-        hr_leave_office_admin_name: hrOfficerName,
+        leave_admin_id: user.data.user.id,
+        leave_admin_name: hrOfficerName,
         leave_plan_request_id,
         activity_type: "payment_memo_drafted",
         description: `Payment memo drafted for ${staffName} (${staffNumber}) - Amount: GHc ${payment_amount}`,
@@ -194,7 +194,7 @@ export async function PUT(request: NextRequest) {
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    if (!["admin", "hr_leave_office_admin"].includes(userRole)) {
+    if (!["admin", "leave_admin"].includes(userRole)) {
       return NextResponse.json(
         { error: "Only HR-Leave-Office-Admin staff can update payment memos" },
         { status: 403 }
@@ -245,8 +245,8 @@ export async function PUT(request: NextRequest) {
       await admin
         .from("leave_office_work_log")
         .insert({
-          hr_leave_office_admin_id: user.data.user.id,
-          hr_leave_office_admin_name: String((profile as any)?.first_name || "") + " " + String((profile as any)?.last_name || ""),
+          leave_admin_id: user.data.user.id,
+          leave_admin_name: String((profile as any)?.first_name || "") + " " + String((profile as any)?.last_name || ""),
           leave_plan_request_id: updatedMemo.leave_plan_request_id,
           activity_type: "payment_memo_forwarded",
           description: `Payment memo forwarded to Accounts for ${updatedMemo.staff_name} (${updatedMemo.staff_number})`,
@@ -291,7 +291,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     const userRole = String(profile?.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-    if (!["admin", "hr_leave_office_admin"].includes(userRole)) {
+    if (!["admin", "leave_admin"].includes(userRole)) {
       return NextResponse.json(
         { error: "Only HR-Leave-Office-Admin staff can view payment memos" },
         { status: 403 }
