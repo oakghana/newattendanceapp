@@ -920,7 +920,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ���── Main Component ───────────────────────────────────────────────────────────
 export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -1030,7 +1030,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────────────────────────────────────────────�����──
+  // ── Computed ──────────────────���──────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1073,6 +1073,67 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       calendarDays: Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
     }
   }, [startDate, endDate])
+
+  // Load holidays and calculate holidays within selected date range
+  const [holidays, setHolidays] = useState<Array<{ date: string; name: string }>>([])
+  const [holidaysLoading, setHolidaysLoading] = useState(false)
+
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        setHolidaysLoading(true)
+        const res = await fetch("/api/admin/holidays", { cache: "no-store" })
+        if (res.ok) {
+          const json = await res.json()
+          const holidayList = Array.isArray(json.holidays) ? json.holidays : []
+          setHolidays(
+            holidayList.map((h: any) => ({
+              date: String(h.holiday_date || ""),
+              name: String(h.holiday_name || "Holiday")
+            }))
+          )
+        }
+      } catch (e) {
+        console.log("[v0] Error loading holidays:", e)
+      } finally {
+        setHolidaysLoading(false)
+      }
+    }
+    loadHolidays()
+  }, [])
+
+  const holidayInfo = useMemo(() => {
+    if (!startDate || !endDate || holidays.length === 0) return null
+    
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    if (end < start) return null
+    
+    const holidaysInRange = []
+    let current = new Date(start)
+    let holidayCount = 0
+    
+    while (current <= end) {
+      const currentDateStr = current.toISOString().split('T')[0]
+      const holiday = holidays.find((h) => h.date === currentDateStr)
+      
+      if (holiday) {
+        holidaysInRange.push({
+          date: currentDateStr,
+          name: holiday.name,
+          dayName: current.toLocaleDateString('en-US', { weekday: 'short' })
+        })
+        holidayCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return {
+      holidayCount,
+      holidays: holidaysInRange
+    }
+  }, [startDate, endDate, holidays])
 
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((t) => t.leaveTypeKey === leaveType),
@@ -2131,6 +2192,30 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     </div>
                     <p className="text-xs text-blue-600 mt-3 pt-3 border-t border-blue-200">
                       Your <strong>{computedDays} working day(s)</strong> requested are calculated from <strong>{weekendInfo.calendarDays} calendar day(s)</strong> minus these <strong>{weekendInfo.weekendCount} weekend day(s)</strong>.
+                    </p>
+                  </div>
+                )}
+
+                {/* Public Holidays Display */}
+                {startDate && endDate && leaveType === "annual" && holidayInfo && holidayInfo.holidayCount > 0 && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <p className="text-xs font-semibold text-orange-700 mb-3 uppercase tracking-wide">
+                      Public Holidays Within Selected Period ({holidayInfo.holidayCount} day{holidayInfo.holidayCount !== 1 ? 's' : ''})
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {holidayInfo.holidays.map((holiday) => (
+                        <span
+                          key={holiday.date}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-medium"
+                        >
+                          <span className="font-semibold">{holiday.dayName}</span>
+                          <span>{holiday.date}</span>
+                          <span className="text-xs text-orange-600">({holiday.name})</span>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-orange-600 mt-3 pt-3 border-t border-orange-200">
+                      These <strong>{holidayInfo.holidayCount} holiday(s)</strong> fall within your selected leave period. They may be deducted from your leave days depending on organizational policy.
                     </p>
                   </div>
                 )}
