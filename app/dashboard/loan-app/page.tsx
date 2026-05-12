@@ -221,10 +221,10 @@ const STATUS_LABELS: Record<string, string> = {
   awaiting_committee: "Awaiting Committee",
   committee_rejected: "Committee Rejected",
   awaiting_hr_terms: "Awaiting HR Terms",
-  awaiting_director_hr: "Awaiting Director HR",
+  awaiting_director_hr: "Awaiting HR Executives",
   archived: "Archived",
-  approved_director: "Approved by Director HR",
-  director_rejected: "Director HR Rejected",
+  approved_director: "Approved by HR Executives",
+  director_rejected: "HR Executives Rejected",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -306,12 +306,12 @@ function stageOwner(status: string) {
     sent_to_accounts: "Accounts",
     awaiting_committee: "Committee",
     awaiting_hr_terms: "HR Office",
-    awaiting_director_hr: "Director HR",
+    awaiting_director_hr: "Executive HR",
     approved_director: "Completed",
     hod_rejected: "Closed at HOD",
     rejected_fd: "Closed at Accounts",
     committee_rejected: "Closed at Committee",
-    director_rejected: "Closed at Director HR",
+    director_rejected: "Closed at HR Executives",
   }
   return map[status] || "In progress"
 }
