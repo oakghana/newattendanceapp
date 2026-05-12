@@ -4302,7 +4302,7 @@ export default function LoanAppPage() {
                 <Select value={modalDecision} onValueChange={(v: "approve" | "reject") => setModalDecision(v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="approve">Approve</SelectItem>
+                    <SelectItem value="approve">Endorse</SelectItem>
                     <SelectItem value="reject">Reject</SelectItem>
                   </SelectContent>
                 </Select>
@@ -4447,7 +4447,7 @@ export default function LoanAppPage() {
                   runAction({ action: "hod_decision", id: actionModal.row!.id, decision: modalDecision, note: modalNote || null })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>
-                  {modalDecision === "approve" ? "Approve" : "Reject"}
+                  {modalDecision === "approve" ? "Endorse" : "Reject"}
                 </Button>
               </>
             )}
