@@ -9,12 +9,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar, Eye, EyeOff, Settings2, Shield, Bell } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar, Eye, EyeOff, Settings2, Shield, Bell, Pen } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { clearAppCache } from "@/lib/cache-manager"
 import { RequestLeaveButton } from "@/components/leave/request-leave-button"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { SecureInput } from "@/components/ui/secure-input"
+import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
 import { toast } from "sonner"
@@ -88,6 +91,10 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
     confirmPassword: "",
   })
   const [showPasswordChange, setShowPasswordChange] = useState(false)
+  const [signatureMode, setSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
+  const [signatureText, setSignatureText] = useState("")
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [isSavingSignature, setIsSavingSignature] = useState(false)
   const searchParams = useSearchParams()
 
   // if redirected with forceChange flag, open password form automatically
@@ -433,8 +440,9 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       )}
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
+          <TabsTrigger value="signature">Signature</TabsTrigger>
           <TabsTrigger value="security">Security & Preferences</TabsTrigger>
           <TabsTrigger value="attendance">Attendance History</TabsTrigger>
           <TabsTrigger value="summary">Quick Summary</TabsTrigger>
@@ -711,6 +719,142 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     </div>
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Signature Tab */}
+        <TabsContent value="signature" className="space-y-6">
+          <Card className="border-green-200 bg-green-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-green-900">
+                <Pen className="h-5 w-5" />
+                Your Digital Signature
+              </CardTitle>
+              <CardDescription className="text-green-800">
+                Save your signature here to sign documents and approvals across the system. Your signature will be used for all official documents.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Signature Mode Selection */}
+              <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
+                <button
+                  onClick={() => {
+                    setSignatureMode("typed")
+                    setSignatureText("")
+                  }}
+                  className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "typed" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  Type
+                </button>
+                <button
+                  onClick={() => setSignatureMode("draw")}
+                  className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  Draw
+                </button>
+                <button
+                  onClick={() => setSignatureMode("upload")}
+                  className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "upload" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  Upload
+                </button>
+              </div>
+
+              {/* Typed Signature */}
+              {signatureMode === "typed" && (
+                <div className="space-y-2">
+                  <Label>Enter your full name as signature</Label>
+                  <Input
+                    value={signatureText}
+                    onChange={(e) => setSignatureText(e.target.value)}
+                    placeholder="e.g. Frank Fredua"
+                    className="text-lg"
+                  />
+                  {signatureText && <div className="text-2xl font-script italic p-3 bg-white border rounded">{signatureText}</div>}
+                </div>
+              )}
+
+              {/* Draw Signature */}
+              {signatureMode === "draw" && (
+                <div className="space-y-2">
+                  <Label>Draw your signature below</Label>
+                  <SignaturePad value={signatureDataUrl} onChange={setSignatureDataUrl} />
+                </div>
+              )}
+
+              {/* Upload Signature */}
+              {signatureMode === "upload" && (
+                <div className="space-y-2">
+                  <Label>Upload signature image</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        const reader = new FileReader()
+                        reader.onload = (event) => {
+                          setSignatureDataUrl(event.target?.result as string)
+                        }
+                        reader.readAsDataURL(file)
+                      }
+                    }}
+                    className="cursor-pointer"
+                  />
+                  {signatureDataUrl && (
+                    <div className="mt-3 p-3 bg-white border rounded">
+                      <img src={signatureDataUrl} alt="Uploaded signature" className="max-h-24 max-w-full" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Preview and Save */}
+              <div className="space-y-3 pt-4 border-t border-green-200">
+                <Button
+                  onClick={async () => {
+                    if (!signatureText && !signatureDataUrl) {
+                      toast.error("Please create or upload a signature first")
+                      return
+                    }
+
+                    setIsSavingSignature(true)
+                    try {
+                      const supabase = createClient()
+                      const { data, error } = await supabase.from("signature_registry").upsert(
+                        {
+                          user_id: initialUser.id,
+                          workflow_domain: "loan",
+                          approval_stage: "director_hr",
+                          signature_mode: signatureMode,
+                          signature_text: signatureMode === "typed" ? signatureText : null,
+                          signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
+                          signed_at: new Date().toISOString(),
+                        },
+                        { onConflict: "user_id,workflow_domain,approval_stage" },
+                      )
+
+                      if (error) {
+                        throw error
+                      }
+
+                      toast.success("Signature saved successfully! You can now use it to sign documents.")
+                      setSignatureText("")
+                      setSignatureDataUrl(null)
+                    } catch (err) {
+                      console.error("Error saving signature:", err)
+                      toast.error("Failed to save signature. Please try again.")
+                    } finally {
+                      setIsSavingSignature(false)
+                    }
+                  }}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  disabled={(!signatureText.trim() && !signatureDataUrl) || isSavingSignature}
+                >
+                  {isSavingSignature ? "Saving..." : "Save Signature"}
+                </Button>
               </div>
             </CardContent>
           </Card>
