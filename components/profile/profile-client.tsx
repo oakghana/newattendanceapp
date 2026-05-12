@@ -95,14 +95,20 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [signatureText, setSignatureText] = useState("")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
+  const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
 
   // if redirected with forceChange flag, open password form automatically
+  // or if requesting signature tab, open it
   useEffect(() => {
     try {
       const force = searchParams?.get?.("forceChange")
       const reason = searchParams?.get?.("reason")
-      if (force) {
+      const tab = searchParams?.get?.("tab")
+      
+      if (tab === "signature") {
+        setActiveTab("signature")
+      } else if (force) {
         setShowPasswordChange(true)
         if (reason === "monthly") {
           setError(getPasswordEnforcementMessage())
@@ -439,7 +445,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
         </Alert>
       )}
 
-      <Tabs defaultValue="profile" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
           <TabsTrigger value="signature">Signature</TabsTrigger>
@@ -724,11 +730,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
           </Card>
         </TabsContent>
 
-        {/* Signature Tab - For Executive HR and HOD users */}
-        {(initialUser?.role === "director_hr" || 
-          initialUser?.role === "manager_hr" || 
-          ["department_head", "regional_manager"].includes(initialUser?.role)) && (
-          <TabsContent value="signature" className="space-y-6">
+        {/* Signature Tab - For all users who need to sign documents */}
+        <TabsContent value="signature" className="space-y-6">
             <Card className="border-green-200 bg-green-50">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-900">
@@ -876,7 +879,6 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
             </CardContent>
           </Card>
         </TabsContent>
-        )}
 
         <TabsContent value="security" className="space-y-6">
           {/* Password Change Section */}
