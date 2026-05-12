@@ -957,6 +957,7 @@ export async function POST(request: NextRequest) {
         "hr_leave_office",
         "hr_office",
         "loan_office",
+        "accounts",
       ].includes(role)
     if (!canSelfApply) {
       return NextResponse.json({ error: "Only staff, managers, and admins can submit leave plans." }, { status: 403 })
@@ -1196,6 +1197,7 @@ export async function PUT(request: NextRequest) {
         "hr_leave_office",
         "hr_office",
         "loan_office",
+        "accounts",
       ].includes(role)
 
     if (!canSelfApply) {
