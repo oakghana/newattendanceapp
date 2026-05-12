@@ -2055,6 +2055,7 @@ export default function LoanAppPage() {
           setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
           setModalMemoRecipient(entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Finance")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
+          setModalMemoCC(row.memo_cc || "Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
           setModalDirectorApproverId(row.director_hr_id || "")
         }
         if (actionType === "director") {
@@ -4413,6 +4414,8 @@ export default function LoanAppPage() {
                     <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HR/001/2024" />
                   </div>
                 </div>
+                <Label>Memo CC Recipients (List who should get a copy - one per line)</Label>
+                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Example:\nManaging Director\nDeputy Director Finance" rows={3} />
                 <Label>Your Boss's Rank / Title</Label>
                 <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Regional Manager" />
                 <Label>Where Your Boss Works (Location)</Label>
@@ -4548,6 +4551,7 @@ export default function LoanAppPage() {
                     hod_location: modalHodLocation || null,
                     director_approver_id: modalDirectorApproverId || null,
                     note: noteForSave || null,
+                    memo_cc: modalMemoCC || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Set Terms &amp; Forward to Director HR</Button>
