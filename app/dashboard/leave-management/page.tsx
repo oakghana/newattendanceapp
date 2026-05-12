@@ -70,8 +70,6 @@ export default async function LeaveManagementPage() {
     "hr_leave_office_admin",
     "hr_office",
     "hr",
-    "manager_hr",
-    "director_hr",
     "hr_director",
     "loan_office",
     "it_admin",

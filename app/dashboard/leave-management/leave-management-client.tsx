@@ -349,7 +349,7 @@ export function LeaveManagementClient({
 
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "hr_director", "loan_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -394,7 +394,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "hr_director", "loan_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -461,11 +461,11 @@ export function LeaveManagementClient({
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office_admin", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
-  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_office", "hr_leave_office_admin", "hr"].includes(normalizedRole)
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "hr_office", "hr_leave_office_admin", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
+  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "hr_director", "loan_office", "hr_office", "hr_leave_office_admin", "hr"].includes(normalizedRole)
   const isAdminView = normalizedRole === "admin"
-  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
-  const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
+  const canViewHrTemplates = ["admin", "hr_officer", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
+  const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
 
   useEffect(() => {
     const loadTemplates = async () => {

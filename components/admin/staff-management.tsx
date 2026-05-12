@@ -807,7 +807,7 @@ export function StaffManagement() {
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
-                                {(currentUserRole === "admin" || currentUserRole === "director_hr" || currentUserRole === "manager_hr") && <SelectItem value="hr_leave_office_admin">HR-Leave-Office-Admin</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="hr_leave_office_admin">HR-Leave-Office-Admin</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                                 {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
@@ -984,7 +984,7 @@ export function StaffManagement() {
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
-                            {(currentUserRole === "admin" || currentUserRole === "director_hr" || currentUserRole === "manager_hr") && <SelectItem value="hr_leave_office_admin">HR-Leave-Office-Admin</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="hr_leave_office_admin">HR-Leave-Office-Admin</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
