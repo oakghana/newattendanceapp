@@ -1113,11 +1113,11 @@ export function LeaveManagementClient({
             onClick={() => setSelectedTab("my-requests")}
             className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
               selectedTab === "my-requests"
-                ? "bg-blue-600 text-white"
+                ? "bg-green-500 text-white"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200"
             }`}
           >
-            My Requests ({staffRequests.length})
+            Requests ({staffRequests.length})
           </button>
           <Link href="/dashboard/leave-planning">
             <button className="px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700">
@@ -1129,7 +1129,7 @@ export function LeaveManagementClient({
             onClick={() => setSelectedTab("approved")}
             className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
               selectedTab === "approved"
-                ? "bg-green-600 text-white"
+                ? "bg-green-500 text-white"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200"
             }`}
           >

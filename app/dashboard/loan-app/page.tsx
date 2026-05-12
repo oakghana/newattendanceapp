@@ -2717,8 +2717,23 @@ export default function LoanAppPage() {
 
               <Tabs value={loanOfficeStageTab} onValueChange={setLoanOfficeStageTab} className="space-y-2">
                 <TabsList className="flex w-full flex-wrap gap-2 h-auto bg-transparent p-0">
-                  <TabsTrigger value="pending" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Pending FD ({loanOfficeStageBuckets["pending"].length})
+                  <TabsTrigger value="pending" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Pending
+                  </TabsTrigger>
+                  <TabsTrigger value="good-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Good FD
+                  </TabsTrigger>
+                  <TabsTrigger value="poor-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Poor FD
+                  </TabsTrigger>
+                  <TabsTrigger value="good-fd-not-pushed" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Good FD Not Pushed
+                  </TabsTrigger>
+                  <TabsTrigger value="sent-for-approval" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Sent for Approval
+                  </TabsTrigger>
+                  <TabsTrigger value="archivable" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Archivable
                   </TabsTrigger>
                   <TabsTrigger value="good-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
                     Good FD ({loanOfficeStageBuckets["good-fd"].length})
