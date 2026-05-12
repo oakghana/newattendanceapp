@@ -3748,6 +3748,89 @@ export default function LoanAppPage() {
         </TabsContent>
 
         <TabsContent value="setup" className="space-y-4">
+          {/* Executive HR Signature Setup Section */}
+          {p?.directorHr && (
+            <Card className="border-amber-200 bg-amber-50 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-amber-900">Your Signature for Loan Approvals</CardTitle>
+                <CardDescription className="text-amber-800">
+                  Save your signature here to approve and send loan memos. You can use typed signature, draw, or upload an image.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-3 rounded-lg bg-white p-3">
+                  <button
+                    onClick={() => setSignatureMode("typed")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "typed" ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Type
+                  </button>
+                  <button
+                    onClick={() => setSignatureMode("draw")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Draw
+                  </button>
+                  <button
+                    onClick={() => setSignatureMode("upload")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "upload" ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Upload
+                  </button>
+                </div>
+
+                {signatureMode === "typed" && (
+                  <div className="space-y-2">
+                    <Label>Enter your full name as signature</Label>
+                    <Input
+                      value={signatureText}
+                      onChange={(e) => setSignatureText(e.target.value)}
+                      placeholder="e.g. Frank Fredua"
+                      className="text-lg"
+                    />
+                  </div>
+                )}
+
+                {signatureMode === "draw" && (
+                  <div className="space-y-2">
+                    <Label>Draw your signature below</Label>
+                    <SignaturePad value={signatureDataUrl} onChange={setSignatureDataUrl} />
+                  </div>
+                )}
+
+                {signatureMode === "upload" && (
+                  <div className="space-y-2">
+                    <Label>Upload signature image</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onload = (event) => {
+                            setSignatureDataUrl(event.target?.result as string)
+                          }
+                          reader.readAsDataURL(file)
+                        }
+                      }}
+                      className="cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                <Button
+                  onClick={saveSignatureRegistry}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={(!signatureText.trim() && !signatureDataUrl) || isSignatureMissing === false}
+                >
+                  Save Signature
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Setup & Linkage Studio */}
           <Card className="border-0 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl">Setup & Linkage Studio</CardTitle>
