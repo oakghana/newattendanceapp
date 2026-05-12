@@ -579,13 +579,16 @@ export async function GET() {
         .select("id, first_name, last_name")
         .in("id", uniqueAccountsReviewerIds)
       for (const ap of accountsProfiles || []) {
-        accountsReviewerMap.set(ap.id, `${ap.first_name || ""} ${ap.last_name || ""}`.trim() || "—")
+        const fullName = `${ap.first_name || ""} ${ap.last_name || ""}`.trim()
+        accountsReviewerMap.set(ap.id, fullName || "")
       }
     }
     const attachAccountsReviewerName = (rows: any[]) =>
       rows.map((r: any) => ({
         ...r,
-        accounts_reviewer_name: r.accounts_reviewer_id ? accountsReviewerMap.get(r.accounts_reviewer_id) || null : null,
+        accounts_reviewer_name: r.accounts_reviewer_id 
+          ? (accountsReviewerMap.get(r.accounts_reviewer_id) || null)
+          : null,
       }))
 
     // Group timelines by loan_request_id
