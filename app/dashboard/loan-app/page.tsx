@@ -994,6 +994,17 @@ export default function LoanAppPage() {
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
     
+    // HR Leave Office: Only show staff tabs (My Loans and Apply for Loans)
+    if (normalizedRole === "hr_leave_office") {
+      const c = {
+        mine: data?.myTasks?.length || 0,
+      }
+      return [
+        { key: "staff", label: "My Loans" },
+        { key: "apply", label: "Apply for Loans" },
+      ]
+    }
+    
     // HR Loan Office Admin: Only show Setup & Linkage and Committee tabs
     if (isHrLoanOfficeAdmin && !["loan_office"].includes(normalizedRole) && !p?.viewAllTabs) {
       const c = {
