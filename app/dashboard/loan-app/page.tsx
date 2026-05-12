@@ -1004,7 +1004,7 @@ export default function LoanAppPage() {
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
-    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Director HR (${c.director})` })
+    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
     if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
@@ -1794,7 +1794,7 @@ export default function LoanAppPage() {
       return
     }
 
-    toast({ title: "Signature saved", description: "Director HR signature registry updated." })
+    toast({ title: "Signature saved", description: "Executive HR signature registry updated." })
     await loadRegistry()
   }
 
@@ -2836,7 +2836,7 @@ export default function LoanAppPage() {
           <Card>
             <CardHeader>
               <CardTitle>HR Terms Queue</CardTitle>
-              <CardDescription>Set disbursement and recovery terms here before forwarding each memo to Director HR.</CardDescription>
+              <CardDescription>Set disbursement and recovery terms here before forwarding each memo to Executive HR.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-1 pb-1">
@@ -3357,7 +3357,7 @@ export default function LoanAppPage() {
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
-          <ReadOnlyHint canAct={Boolean(p?.directorHr)} roleLabel="Director HR" />
+                    <ReadOnlyHint canAct={Boolean(p?.directorHr)} roleLabel="Executive HR" />
           <Card>
             <CardHeader>
               <CardTitle>FD-Cleared Requests from Loan Office</CardTitle>
@@ -3381,7 +3381,7 @@ export default function LoanAppPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Director HR Approval Queue</CardTitle>
+              <CardTitle>Executive HR Approval Queue</CardTitle>
               <CardDescription>Use the action button on each request to review, sign, and finalize the memo.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -3430,7 +3430,7 @@ export default function LoanAppPage() {
             </CardContent>
           </Card>
 
-          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">No requests currently awaiting Director HR decision.</p>}
+          {filteredDirector.length === 0 && <p className="text-sm text-muted-foreground">No requests currently awaiting Executive HR decision.</p>}
 
           {directorViewMode === "table" && filteredDirector.length > 0 && (
             <Card>
@@ -4285,7 +4285,7 @@ export default function LoanAppPage() {
               {actionModal.actionType === "loan_office" && "Loan Office Review & Forward"}
               {actionModal.actionType === "accounts" && "Set FD Score"}
               {actionModal.actionType === "committee" && "Committee Decision"}
-              {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Director HR"}
+              {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Executive HR"}
             </DialogTitle>
             {actionModal.row && (
               <DialogDescription>
@@ -4554,7 +4554,7 @@ export default function LoanAppPage() {
                     memo_cc: modalMemoCC || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
-                }}>Set Terms &amp; Forward to Director HR</Button>
+                }}>Set Terms &amp; Forward to Executive HR</Button>
               </>
             )}
           </DialogFooter>
@@ -4565,7 +4565,7 @@ export default function LoanAppPage() {
       <Dialog open={memoReviewModal.open} onOpenChange={(o) => setMemoReviewModal((s) => ({ ...s, open: o }))}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Memo Review — Director HR Final Approval</DialogTitle>
+            <DialogTitle>Memo Review — Executive HR Final Approval</DialogTitle>
             <DialogDescription>
               Review and edit the memo below before signing and approving. This letter will be sent to the staff member, Accounts, and Loan Office upon approval.
             </DialogDescription>
