@@ -536,7 +536,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.setFont("times", "normal")
     doc.setFontSize(8.5)
     doc.setTextColor(60, 60, 60)
-    const ccList = [
+    const defaultCcList = [
       "Managing Director",
       "Deputy Managing Director",
       "Deputy Director Finance",
@@ -545,8 +545,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       "Registry Unit",
       "Records Unit",
     ]
+    const ccList = loan.memo_cc 
+      ? loan.memo_cc.split('\n').filter((line: string) => line.trim()) 
+      : defaultCcList
     doc.text("cc:", marginLeft, y)
-    ccList.forEach((entry, i) => {
+    ccList.forEach((entry: string, i: number) => {
       doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
     })
     y += (ccList.length + 1) * 4.5 + 4

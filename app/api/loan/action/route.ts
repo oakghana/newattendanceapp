@@ -372,6 +372,7 @@ export async function POST(request: NextRequest) {
 
       update.loan_office_reviewer_id = user.id
       update.loan_office_note = note
+      if (body.memo_cc !== undefined) update.memo_cc = String(body.memo_cc || "").trim() || null
 
       if (action === "loan_office_update_request") {
         toStatus = req.status

@@ -810,6 +810,7 @@ export default function LoanAppPage() {
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
+  const [modalMemoCC, setModalMemoCC] = useState("Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
   const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
   const [modalFdScore, setModalFdScore] = useState("")
   const [modalFdNote, setModalFdNote] = useState("")
@@ -2030,6 +2031,7 @@ export default function LoanAppPage() {
           setModalHodReviewerId(row.hod_reviewer_id || "")
           setModalDirectorApproverId(row.director_hr_id || "")
           setModalNote(parsedLoanOfficeNote.cleanedNote)
+          setModalMemoCC(row.memo_cc || "Managing Director\nDeputy Managing Director\nDeputy Director Finance\nDeputy Director Human Resource\nAudit Manager\nRegistry Unit\nRecords Unit")
         }
         if (actionType === "accounts") {
           const fd = fdInputs[row.id]
@@ -4361,6 +4363,8 @@ export default function LoanAppPage() {
                 </Select>
                 <Label>Note (optional)</Label>
                 <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Loan office note before forwarding" rows={3} />
+                <Label>Memo CC Recipients (one per line)</Label>
+                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="List each CC recipient on a separate line" rows={4} />
               </>
             )}
             {/* Accounts FD */}
@@ -4484,6 +4488,7 @@ export default function LoanAppPage() {
                     hod_location: modalHodLocation || null,
                     hod_reviewer_id: modalHodReviewerId || null,
                     director_approver_id: modalDirectorApproverId || null,
+                    memo_cc: modalMemoCC || null,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save &amp; Forward to Accounts</Button>
