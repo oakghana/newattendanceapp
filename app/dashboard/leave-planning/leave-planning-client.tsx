@@ -2120,13 +2120,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
           {/* ── HOD Review ──────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
-            {/* HOD Review Window Banner */}
-            <Alert className="border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/20 mb-4">
-              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-500" />
-              <AlertDescription className="text-blue-900 dark:text-blue-200 ml-2 font-semibold">
-                <strong>HOD/Regional Manager Review Window:</strong> You have up to 2 weeks to review, adjust dates, and endorse leave requests. You can adjust recommended start and end dates but cannot reject requests. Final approval rests with HR Leave Office.
-              </AlertDescription>
-            </Alert>
+            {/* HOD Review Window Banner - Only for Annual Leave */}
+            {hodAssignedReviews.some((r) => r.leave_plan_request?.leave_type_key === "annual") && (
+              <Alert className="border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/20 mb-4">
+                <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-500" />
+                <AlertDescription className="text-blue-900 dark:text-blue-200 ml-2 font-semibold">
+                  <strong>HOD/Regional Manager Review Window (Annual Leave):</strong> You have up to 2 weeks to review, adjust dates, and endorse annual leave requests. You can adjust recommended start and end dates but cannot reject requests. Final approval rests with HR Leave Office.
+                </AlertDescription>
+              </Alert>
+            )}
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <UserCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
