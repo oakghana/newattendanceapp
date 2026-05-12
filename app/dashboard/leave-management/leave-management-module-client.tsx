@@ -11,7 +11,7 @@ import { LeaveCalendarSettingsClient } from "@/components/leave/leave-calendar-s
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
 const HR_ANALYTICS_ROLES = ["loan_office", "leave_admin", "admin", "hr_office", "hr"]
-const HOLIDAY_MANAGEMENT_ROLES = ["admin", "leave_admin", "hr_leave_office", "hr_office", "director_hr", "manager_hr"]
+const HOLIDAY_MANAGEMENT_ROLES = ["admin", "leave_admin", "hr_office", "director_hr", "manager_hr"]
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")

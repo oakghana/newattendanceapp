@@ -17,7 +17,6 @@ function canManageHolidays(role: string | null | undefined): boolean {
   const HOLIDAY_MANAGEMENT_ROLES = [
     "admin",
     "leave_admin",
-    "hr_leave_office",
     "hr_office",
     "director_hr",
     "manager_hr",
