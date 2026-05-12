@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
-import { Activity, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
+import { Activity, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -777,7 +777,6 @@ function LoanAnalyticsBarChart({
                 </div>
               )}
             </CardContent>
-            )}
           </Card>
   )
 }
@@ -787,8 +786,6 @@ export default function LoanAppPage() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
-  const [summaryExpanded, setSummaryExpanded] = useState(false)
-  const [queueTab, setQueueTab] = useState<"loan-office" | "hr-terms">("loan-office")
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loanTypeKey, setLoanTypeKey] = useState("")
@@ -2577,32 +2574,6 @@ export default function LoanAppPage() {
 
         <TabsContent value="loan-office" className="space-y-3">
           <ReadOnlyHint canAct={Boolean(p?.loanOffice || p?.hrOffice)} roleLabel="Loan Office / HR Office" />
-          
-          {/* Queue Tab Selector */}
-          <div className="flex gap-2 border-b border-slate-200 pb-3">
-            <button
-              onClick={() => setQueueTab("loan-office")}
-              className={`px-4 py-2 font-semibold rounded-t-lg transition-colors ${
-                queueTab === "loan-office"
-                  ? "bg-blue-100 text-blue-700 border-b-2 border-blue-600"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Loan Office Processing Queue
-            </button>
-            <button
-              onClick={() => setQueueTab("hr-terms")}
-              className={`px-4 py-2 font-semibold rounded-t-lg transition-colors ${
-                queueTab === "hr-terms"
-                  ? "bg-purple-100 text-purple-700 border-b-2 border-purple-600"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              HR Terms Queue
-            </button>
-          </div>
-          
-          {queueTab === "loan-office" && (
           <Card>
             <CardHeader>
               <CardTitle>Loan Office Processing Queue</CardTitle>
@@ -2822,10 +2793,7 @@ export default function LoanAppPage() {
             <span className="text-xs text-muted-foreground">Page {loanOfficePage} of {totalLoanOfficeStagePages}</span>
             <Button variant="outline" size="sm" onClick={() => setLoanOfficePage((n) => Math.min(totalLoanOfficeStagePages, n + 1))} disabled={loanOfficePage >= totalLoanOfficeStagePages}>Next</Button>
           </div>
-          </>
-          )}
-          
-          {queueTab === "hr-terms" && (
+
           <Card>
             <CardHeader>
               <CardTitle>HR Terms Queue</CardTitle>
@@ -2943,25 +2911,14 @@ export default function LoanAppPage() {
           <Card className="border-fuchsia-200/80 bg-[linear-gradient(135deg,_#fff7ff_0%,_#ffffff_55%,_#eef2ff_100%)] shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setSummaryExpanded(!summaryExpanded)}
-                    className="inline-flex items-center justify-center rounded hover:bg-fuchsia-100 transition-colors p-1"
-                  >
-                    <ChevronDown
-                      className={`h-5 w-5 text-fuchsia-700 transition-transform ${summaryExpanded ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  <CardTitle className="text-base text-fuchsia-900">Loan Type Stage Summary</CardTitle>
-                </div>
+                <CardTitle className="text-base text-fuchsia-900">Loan Type Stage Summary</CardTitle>
                 <Badge className="bg-fuchsia-700 text-white">Across 5 stage tabs</Badge>
               </div>
               <CardDescription className="text-xs text-slate-600">
                 Use this to quickly compare each loan type by stage: Good FD, Poor FD, Good FD Not Pushed, Sent for Approval, and Archivable.
               </CardDescription>
             </CardHeader>
-            {summaryExpanded && (
-              <CardContent className="space-y-3">
+            <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5">Good FD</span>
                 <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5">Poor FD</span>
@@ -3012,7 +2969,6 @@ export default function LoanAppPage() {
               )}
             </CardContent>
           </Card>
-          )}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <LoanAnalyticsMetricCard
@@ -3096,7 +3052,6 @@ export default function LoanAppPage() {
               formatter={(row) => String(row?.name || "Unassigned")}
             />
           </div>
-          )}
         </TabsContent>
 
         <TabsContent value="accounts" className="space-y-3">
