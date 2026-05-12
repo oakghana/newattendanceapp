@@ -828,35 +828,36 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
 
                     setIsSavingSignature(true)
                     try {
-                      const supabase = createClient()
-                      
                       // Determine approval stage based on user role
                       let approvalStage = "director_hr"
                       if (["department_head", "regional_manager"].includes(initialUser.role)) {
                         approvalStage = "hod"
                       }
                       
-                      const signatureData = {
-                        user_id: initialUser.id,
+                      const signaturePayload = {
+                        action: "upsert_signature",
                         workflow_domain: "loan",
                         approval_stage: approvalStage,
                         signature_mode: signatureMode,
                         signature_text: signatureMode === "typed" ? signatureText : null,
                         signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
-                        signed_at: new Date().toISOString(),
                       }
                       
-                      console.log("[v0] Saving signature with data:", signatureData)
+                      console.log("[v0] Saving signature via API with payload:", signaturePayload)
                       
-                      const { data, error } = await supabase
-                        .from("approval_signature_registry")
-                        .upsert(signatureData, { onConflict: "user_id,workflow_domain,approval_stage" })
+                      const response = await fetch("/api/workflow/registry", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(signaturePayload),
+                      })
 
-                      console.log("[v0] Upsert response - Data:", data, "Error:", error)
+                      const result = await response.json()
+                      console.log("[v0] API response status:", response.status, "data:", result)
 
-                      if (error) {
-                        console.error("[v0] Supabase error details:", error.message, error.details, error.hint)
-                        throw new Error(`Failed to save signature: ${error.message}`)
+                      if (!response.ok) {
+                        throw new Error(result.error || `Failed to save signature: ${response.statusText}`)
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
