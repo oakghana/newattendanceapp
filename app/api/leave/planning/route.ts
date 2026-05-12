@@ -1117,7 +1117,7 @@ export async function POST(request: NextRequest) {
       const annualLeaveInYear = await findAnnualLeaveInSameYear(
         admin,
         user.id,
-        leaveYearPeriod,
+        selectedLeaveYearPeriod,
       )
       if (annualLeaveInYear) {
         return NextResponse.json(
