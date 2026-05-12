@@ -3172,7 +3172,7 @@ export default function LoanAppPage() {
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
                           <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "���"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
@@ -4307,7 +4307,7 @@ export default function LoanAppPage() {
                   </SelectContent>
                 </Select>
                 <Label>Note (optional)</Label>
-                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="HOD review note" rows={3} />
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Share your thoughts (what you think about this request)" rows={3} />
               </>
             )}
             {/* Loan Office */}
@@ -4316,26 +4316,26 @@ export default function LoanAppPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Staff Name</Label>
-                    <Input value={modalStaffFullName} onChange={(e) => setModalStaffFullName(e.target.value)} placeholder="Requesting staff full name" />
+                    <Input value={modalStaffFullName} onChange={(e) => setModalStaffFullName(e.target.value)} placeholder="Enter staff's full name" />
                   </div>
                   <div>
                     <Label>Staff Number</Label>
-                    <Input value={modalStaffNumber} onChange={(e) => setModalStaffNumber(e.target.value)} placeholder="Staff number" />
+                    <Input value={modalStaffNumber} onChange={(e) => setModalStaffNumber(e.target.value)} placeholder="e.g. QCC/HR/001" />
                   </div>
                   <div>
                     <Label>Staff Rank</Label>
-                    <Input value={modalStaffRank} onChange={(e) => setModalStaffRank(e.target.value)} placeholder="Rank" />
+                    <Input value={modalStaffRank} onChange={(e) => setModalStaffRank(e.target.value)} placeholder="e.g. Manager or Officer" />
                   </div>
                   <div>
                     <Label>Corporate Email</Label>
-                    <Input value={modalCorporateEmail} onChange={(e) => setModalCorporateEmail(e.target.value)} placeholder="staff@qcc.com" />
+                    <Input value={modalCorporateEmail} onChange={(e) => setModalCorporateEmail(e.target.value)} placeholder="staff@company.com" />
                   </div>
                 </div>
                 <Label>Reference Number</Label>
-                <Input value={modalReferenceNumber} onChange={(e) => setModalReferenceNumber(e.target.value)} placeholder="QCC/HRD/SWL/V.2/0001" />
-                <Label>THRO (HOD / Regional Manager / Department Head)</Label>
+                <Input value={modalReferenceNumber} onChange={(e) => setModalReferenceNumber(e.target.value)} placeholder="e.g. QCC/HR/SWL/V2/001" />
+                <Label>THRO (Your Boss / Manager)</Label>
                 <Select value={modalHodReviewerId} onValueChange={setModalHodReviewerId}>
-                  <SelectTrigger><SelectValue placeholder="Select reviewer" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Choose your boss" /></SelectTrigger>
                   <SelectContent>
                     {(lookupData?.hods || []).map((h) => (
                       <SelectItem key={h.id} value={h.id}>{[h.first_name, h.last_name].filter(Boolean).join(" ") || h.email} {h.position ? `(${h.position})` : ""}</SelectItem>
@@ -4345,11 +4345,11 @@ export default function LoanAppPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label>THRO Rank</Label>
-                    <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. IT MANAGER" />
-                  </div>
-                  <div>
-                    <Label>THRO Location</Label>
-                    <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. HEAD OFFICE" />
+                    <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Director" />
+                    </div>
+                    <div>
+                    <Label>THRO Location (Where they work)</Label>
+                    <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Accra or Head Office" />
                   </div>
                 </div>
                 <Label>Assigned Director /Manager HR Approver</Label>
@@ -4362,18 +4362,18 @@ export default function LoanAppPage() {
                   </SelectContent>
                 </Select>
                 <Label>Note (optional)</Label>
-                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Loan office note before forwarding" rows={3} />
-                <Label>Memo CC Recipients (one per line)</Label>
-                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="List each CC recipient on a separate line" rows={4} />
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Any comments you have (keep it short and simple)" rows={3} />
+                <Label>Memo CC Recipients (List who should get a copy - one per line)</Label>
+                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Example:\nManaging Director\nDeputy Director Finance" rows={4} />
               </>
             )}
             {/* Accounts FD */}
             {actionModal.actionType === "accounts" && (
               <>
-                <Label>FD Score</Label>
+                <Label>FD Score (Mark out of 100)</Label>
                 <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" />
-                <Label>Accounts Note (optional)</Label>
-                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Accounts note" rows={2} />
+                <Label>Your Comments (optional)</Label>
+                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} />
               </>
             )}
             {/* Committee */}
@@ -4387,8 +4387,8 @@ export default function LoanAppPage() {
                     <SelectItem value="reject">Reject</SelectItem>
                   </SelectContent>
                 </Select>
-                <Label>Note (optional)</Label>
-                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Committee decision note" rows={3} />
+                <Label>Your Comments (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="What do you think about this? (Keep it short)" rows={3} />
               </>
             )}
             {/* HR Terms */}
@@ -4396,45 +4396,45 @@ export default function LoanAppPage() {
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>Disbursement Date</Label>
+                    <Label>When will the money be given? (Disbursement Date)</Label>
                     <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} />
                   </div>
                   <div>
-                    <Label>Recovery Start Date</Label>
+                    <Label>When does repayment start? (Recovery Start Date)</Label>
                     <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} />
                   </div>
                   <div>
-                    <Label>Recovery Months</Label>
+                    <Label>How many months to repay? (Recovery Months)</Label>
                     <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" />
                   </div>
                   <div>
-                    <Label>Memo Ref No.</Label>
-                    <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="QCC/HRD/SWL/V.2/..." />
+                    <Label>Memo Reference (Letter number)</Label>
+                    <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HR/001/2024" />
                   </div>
                 </div>
-                <Label>HOD / Regional Manager Rank</Label>
-                <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Regional Manager / Department Head" />
-                <Label>HOD Location (Station)</Label>
-                <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Breman Asikuma" />
+                <Label>Your Boss's Rank / Title</Label>
+                <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Regional Manager" />
+                <Label>Where Your Boss Works (Location)</Label>
+                <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Accra Head Office or Tema Branch" />
                 <Label>Assigned Director /Manager HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
-                  <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Choose who will approve this" /></SelectTrigger>
                   <SelectContent>
                     {(data?.directorApprovers || []).map((approver) => (
                       <SelectItem key={approver.id} value={approver.id}>{approver.full_name} {approver.position ? `(${approver.position})` : ""}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Label>Payment Officer</Label>
+                <Label>Payment Officer (Who will give the money)</Label>
                 <Select value={modalMemoRecipient} onValueChange={setModalMemoRecipient}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Deputy Director, Finance">Deputy Director, Finance</SelectItem>
-                    <SelectItem value="Accounts Manager">Accounts Manager</SelectItem>
+                    <SelectItem value="Deputy Director, Finance">Deputy Director, Finance (Head of Finance)</SelectItem>
+                    <SelectItem value="Accounts Manager">Accounts Manager (Finance Team)</SelectItem>
                   </SelectContent>
                 </Select>
-                <Label>HR Note (optional)</Label>
-                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="HR note" rows={2} />
+                <Label>Any Comments from HR? (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Add any notes here (be brief)" rows={2} />
               </>
             )}
           </div>
