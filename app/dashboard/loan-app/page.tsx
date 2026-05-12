@@ -4426,147 +4426,147 @@ export default function LoanAppPage() {
             )}
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
+          <div className="space-y-2 py-1 max-h-[70vh] overflow-y-auto">
             {/* HOD */}
             {actionModal.actionType === "hod" && (
               <>
-                <Label>Decision</Label>
+                <Label className="text-sm">Decision</Label>
                 <Select value={modalDecision} onValueChange={(v: "approve" | "reject") => setModalDecision(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="approve">Endorse</SelectItem>
                     <SelectItem value="reject">Reject</SelectItem>
                   </SelectContent>
                 </Select>
-                <Label>Note (optional)</Label>
-                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Share your thoughts (what you think about this request)" rows={3} />
+                <Label className="text-sm">Note (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Share your thoughts (what you think about this request)" rows={2} className="text-xs" />
               </>
             )}
             {/* Loan Office */}
             {actionModal.actionType === "loan_office" && (
               <>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>Staff Name</Label>
-                    <Input value={modalStaffFullName} onChange={(e) => setModalStaffFullName(e.target.value)} placeholder="Enter staff's full name" />
+                    <Label className="text-xs">Staff Name</Label>
+                    <Input value={modalStaffFullName} onChange={(e) => setModalStaffFullName(e.target.value)} placeholder="Enter staff's full name" className="h-7 text-xs" />
                   </div>
                   <div>
-                    <Label>Staff Number</Label>
-                    <Input value={modalStaffNumber} onChange={(e) => setModalStaffNumber(e.target.value)} placeholder="e.g. QCC/HR/001" />
+                    <Label className="text-xs">Staff Number</Label>
+                    <Input value={modalStaffNumber} onChange={(e) => setModalStaffNumber(e.target.value)} placeholder="e.g. QCC/HR/001" className="h-7 text-xs" />
                   </div>
                   <div>
-                    <Label>Staff Rank</Label>
-                    <Input value={modalStaffRank} onChange={(e) => setModalStaffRank(e.target.value)} placeholder="e.g. Manager or Officer" />
+                    <Label className="text-xs">Staff Rank</Label>
+                    <Input value={modalStaffRank} onChange={(e) => setModalStaffRank(e.target.value)} placeholder="e.g. Manager or Officer" className="h-7 text-xs" />
                   </div>
                   <div>
-                    <Label>Corporate Email</Label>
-                    <Input value={modalCorporateEmail} onChange={(e) => setModalCorporateEmail(e.target.value)} placeholder="staff@company.com" />
+                    <Label className="text-xs">Corporate Email</Label>
+                    <Input value={modalCorporateEmail} onChange={(e) => setModalCorporateEmail(e.target.value)} placeholder="staff@company.com" className="h-7 text-xs" />
                   </div>
                 </div>
-                <Label>Reference Number</Label>
-                <Input value={modalReferenceNumber} onChange={(e) => setModalReferenceNumber(e.target.value)} placeholder="e.g. QCC/HR/SWL/V2/001" />
-                <Label>THRO (Your Boss / Manager)</Label>
+                <Label className="text-xs">Reference Number</Label>
+                <Input value={modalReferenceNumber} onChange={(e) => setModalReferenceNumber(e.target.value)} placeholder="e.g. QCC/HR/SWL/V2/001" className="h-7 text-xs" />
+                <Label className="text-xs">THRO (Your Boss / Manager)</Label>
                 <Select value={modalHodReviewerId} onValueChange={setModalHodReviewerId}>
-                  <SelectTrigger><SelectValue placeholder="Choose your boss" /></SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Choose your boss" /></SelectTrigger>
                   <SelectContent>
                     {(lookupData?.hods || []).map((h) => (
                       <SelectItem key={h.id} value={h.id}>{[h.first_name, h.last_name].filter(Boolean).join(" ") || h.email} {h.position ? `(${h.position})` : ""}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>THRO Rank</Label>
-                    <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Director" />
-                    </div>
-                    <div>
-                    <Label>THRO Location (Where they work)</Label>
-                    <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Accra or Head Office" />
+                    <Label className="text-xs">THRO Rank</Label>
+                    <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Director" className="h-7 text-xs" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">THRO Location</Label>
+                    <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Accra or Head Office" className="h-7 text-xs" />
                   </div>
                 </div>
-                <Label>Assigned Director /Manager HR Approver</Label>
+                <Label className="text-xs">Assigned Director /Manager HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
-                  <SelectTrigger><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select assigned approver" /></SelectTrigger>
                   <SelectContent>
                     {(data?.directorApprovers || []).map((approver) => (
                       <SelectItem key={approver.id} value={approver.id}>{approver.full_name} {approver.position ? `(${approver.position})` : ""}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Label>Note (optional)</Label>
-                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Any comments you have (keep it short and simple)" rows={3} />
-                <Label>Memo CC Recipients (List who should get a copy - one per line)</Label>
-                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Example:\nManaging Director\nDeputy Director Finance" rows={4} />
+                <Label className="text-xs">Note (optional)</Label>
+                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="Any comments you have (keep it short and simple)" rows={2} className="text-xs" />
+                <Label className="text-xs">Memo CC Recipients (one per line)</Label>
+                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Managing Director&#10;Deputy Director Finance" rows={2} className="text-xs" />
               </>
             )}
             {/* Accounts FD */}
             {actionModal.actionType === "accounts" && (
               <>
-                <Label>FD Score (Mark out of 100)</Label>
-                <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" />
-                <Label>Your Comments (optional)</Label>
-                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} />
+                <Label className="text-xs">FD Score (Mark out of 100)</Label>
+                <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
+                <Label className="text-xs">Your Comments (optional)</Label>
+                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} className="text-xs" />
               </>
             )}
             {/* Committee - Further Information */}
             {actionModal.actionType === "committee" && (
               <>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>Employee Name</Label>
-                    <div className="flex items-center gap-2 p-2 bg-muted rounded text-sm">{actionModal.row?.staff_full_name || "—"}</div>
+                    <Label className="text-xs">Employee Name</Label>
+                    <div className="flex items-center gap-2 p-1 bg-muted rounded text-xs">{actionModal.row?.staff_full_name || "—"}</div>
                   </div>
                   <div>
-                    <Label>Staff Number</Label>
-                    <div className="flex items-center gap-2 p-2 bg-muted rounded text-sm">{actionModal.row?.staff_number || "—"}</div>
+                    <Label className="text-xs">Staff Number</Label>
+                    <div className="flex items-center gap-2 p-1 bg-muted rounded text-xs">{actionModal.row?.staff_number || "—"}</div>
                   </div>
                   <div>
-                    <Label>Length of Service (Years)</Label>
-                    <Input type="number" placeholder="e.g. 5" min="0" step="0.5" />
+                    <Label className="text-xs">Length of Service (Years)</Label>
+                    <Input type="number" placeholder="e.g. 5" min="0" step="0.5" className="h-7 text-xs" />
                   </div>
                   <div>
-                    <Label>Last Car Loan Date</Label>
-                    <Input type="date" />
+                    <Label className="text-xs">Last Car Loan Date</Label>
+                    <Input type="date" className="h-7 text-xs" />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Checkbox id="never_car_loan" />
-                  <Label htmlFor="never_car_loan" className="font-normal cursor-pointer">Never had a car loan</Label>
+                  <Label htmlFor="never_car_loan" className="font-normal cursor-pointer text-xs">Never had a car loan</Label>
                 </div>
-                <Label>Additional Employee Information</Label>
-                <Textarea placeholder="Add any relevant employment history, loan history, or service information..." rows={4} />
+                <Label className="text-xs">Additional Employee Information</Label>
+                <Textarea placeholder="Add any relevant employment history, loan history, or service information..." rows={2} className="text-xs" />
               </>
             )}
             {/* HR Terms */}
             {actionModal.actionType === "hr_terms" && (
               <>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>When will the money be given? (Disbursement Date)</Label>
-                    <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} />
+                    <Label className="text-xs">Disbursement Date</Label>
+                    <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} className="h-7 text-xs" />
                   </div>
                   <div>
-                    <Label>When does repayment start? (Recovery Start Date)</Label>
-                    <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} />
+                    <Label className="text-xs">Recovery Start Date</Label>
+                    <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} className="h-7 text-xs" />
                   </div>
                   <div>
-                    <Label>How many months to repay? (Recovery Months)</Label>
-                    <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" />
+                    <Label className="text-xs">Recovery Months</Label>
+                    <Input type="number" value={modalMonths} onChange={(e) => setModalMonths(e.target.value)} placeholder="e.g. 24" className="h-7 text-xs" />
                   </div>
                   <div>
-                    <Label>Memo Reference (Letter number)</Label>
-                    <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HR/001/2024" />
+                    <Label className="text-xs">Memo Reference</Label>
+                    <Input value={modalMemoRef} onChange={(e) => setModalMemoRef(e.target.value)} placeholder="e.g. QCC/HR/001/2024" className="h-7 text-xs" />
                   </div>
                 </div>
-                <Label>Memo CC Recipients (List who should get a copy - one per line)</Label>
-                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Example:\nManaging Director\nDeputy Director Finance" rows={3} />
-                <Label>Your Boss's Rank / Title</Label>
-                <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Regional Manager" />
-                <Label>Where Your Boss Works (Location)</Label>
-                <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Accra Head Office or Tema Branch" />
-                <Label>Assigned Director /Manager HR Approver</Label>
+                <Label className="text-xs">Memo CC Recipients (one per line)</Label>
+                <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Managing Director&#10;Deputy Director Finance" rows={2} className="text-xs" />
+                <Label className="text-xs">Your Boss's Rank / Title</Label>
+                <Input value={modalHodRank} onChange={(e) => setModalHodRank(e.target.value)} placeholder="e.g. Manager or Regional Manager" className="h-7 text-xs" />
+                <Label className="text-xs">Where Your Boss Works</Label>
+                <Input value={modalHodLocation} onChange={(e) => setModalHodLocation(e.target.value)} placeholder="e.g. Accra Head Office or Tema Branch" className="h-7 text-xs" />
+                <Label className="text-xs">Assigned Director /Manager HR Approver</Label>
                 <Select value={modalDirectorApproverId} onValueChange={setModalDirectorApproverId}>
-                  <SelectTrigger><SelectValue placeholder="Choose who will approve this" /></SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Choose who will approve this" /></SelectTrigger>
                   <SelectContent>
                     {(data?.directorApprovers || []).map((approver) => (
                       <SelectItem key={approver.id} value={approver.id}>{approver.full_name} {approver.position ? `(${approver.position})` : ""}</SelectItem>
