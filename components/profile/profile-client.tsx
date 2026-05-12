@@ -833,28 +833,35 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                         approvalStage = "hod"
                       }
                       
-                      const { data, error } = await supabase.from("signature_registry").upsert(
-                        {
-                          user_id: initialUser.id,
-                          workflow_domain: "loan",
-                          approval_stage: approvalStage,
-                          signature_mode: signatureMode,
-                          signature_text: signatureMode === "typed" ? signatureText : null,
-                          signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
-                          signed_at: new Date().toISOString(),
-                        },
-                        { onConflict: "user_id,workflow_domain,approval_stage" },
-                      )
+                      const signatureData = {
+                        user_id: initialUser.id,
+                        workflow_domain: "loan",
+                        approval_stage: approvalStage,
+                        signature_mode: signatureMode,
+                        signature_text: signatureMode === "typed" ? signatureText : null,
+                        signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
+                        signed_at: new Date().toISOString(),
+                      }
+                      
+                      console.log("[v0] Saving signature with data:", signatureData)
+                      
+                      const { data, error } = await supabase
+                        .from("approval_signature_registry")
+                        .upsert(signatureData, { onConflict: "user_id,workflow_domain,approval_stage" })
+
+                      console.log("[v0] Upsert response - Data:", data, "Error:", error)
 
                       if (error) {
-                        throw error
+                        console.error("[v0] Supabase error details:", error.message, error.details, error.hint)
+                        throw new Error(`Failed to save signature: ${error.message}`)
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
                       setSignatureText("")
                       setSignatureDataUrl(null)
                     } catch (err) {
-                      console.error("Error saving signature:", err)
+                      const errorMsg = err instanceof Error ? err.message : String(err)
+                      console.error("[v0] Error saving signature:", errorMsg)
                       toast.error("Failed to save signature. Please try again.")
                     } finally {
                       setIsSavingSignature(false)
