@@ -69,6 +69,7 @@ export default async function LeaveManagementPage() {
     "hr_officer",
     "hr_leave_office_admin",
     "hr_leave_office",
+    "regional_hr_leave",
     "hr_office",
     "hr",
     "hr_director",
@@ -78,7 +79,7 @@ export default async function LeaveManagementPage() {
 
   // Fetch leave planning review assignments for HOD/HR/admin metrics and queue summaries.
   if (canReviewLeave) {
-    const reviewerFilter = ["admin", "hr_leave_office_admin", "hr_leave_office", "hr_office", "hr"].includes(roleNorm)
+    const reviewerFilter = ["admin", "hr_leave_office_admin", "hr_leave_office", "regional_hr_leave", "hr_office", "hr"].includes(roleNorm)
       ? undefined
       : user.id
     const { data: planningReviews } = reviewerFilter

@@ -464,8 +464,8 @@ export function LeaveManagementClient({
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "hr_office", "hr_leave_office_admin", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
-  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "hr_director", "loan_office", "hr_office", "hr_leave_office_admin", "hr_leave_office", "hr"].includes(normalizedRole)
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "hr_office", "hr_leave_office_admin", "hr_leave_office", "regional_hr_leave", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
+  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "hr_director", "loan_office", "hr_office", "hr_leave_office_admin", "hr_leave_office", "regional_hr_leave", "hr"].includes(normalizedRole)
   const isAdminView = normalizedRole === "admin"
   const canViewHrTemplates = ["admin", "hr_officer", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
