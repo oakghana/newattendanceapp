@@ -3,18 +3,11 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 const TEMPLATE_VIEW_ROLES = [
   "admin",
-  "hr_officer",
-  "hr_director",
-  "director_hr",
-  "manager_hr",
   "leave_admin",
 ]
 
 const TEMPLATE_EDIT_ROLES = [
   "admin",
-  "director_hr",
-  "manager_hr",
-  "hr_director",
   "leave_admin",
 ]
 

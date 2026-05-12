@@ -467,8 +467,8 @@ export function LeaveManagementClient({
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "hr_office", "leave_admin", "hr_leave_office", "regional_hr_leave", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
   const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "hr_director", "loan_office", "hr_office", "leave_admin", "hr_leave_office", "regional_hr_leave", "hr"].includes(normalizedRole)
   const isAdminView = ["admin", "leave_admin"].includes(normalizedRole)
-  const canViewHrTemplates = ["admin", "hr_officer", "hr_director", "leave_admin"].includes(normalizedRole)
-  const canEditHrTemplates = ["admin", "hr_director", "leave_admin"].includes(normalizedRole)
+  const canViewHrTemplates = ["admin", "leave_admin"].includes(normalizedRole)
+  const canEditHrTemplates = ["admin", "leave_admin"].includes(normalizedRole)
 
   useEffect(() => {
     const loadTemplates = async () => {
