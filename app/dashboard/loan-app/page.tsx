@@ -977,6 +977,7 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
+  const isHrLeaveOfficeAdmin = isAdmin || ["director_hr", "manager_hr"].includes(normalizedRole)
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
   const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
@@ -992,6 +993,17 @@ export default function LoanAppPage() {
 
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
+    
+    // HR Leave Office Admin: Only show Setup & Linkage and Committee tabs
+    if (isHrLeaveOfficeAdmin && !["loan_office"].includes(normalizedRole) && !p?.viewAllTabs) {
+      const c = {
+        committee: data?.inbox?.committee?.length || 0,
+      }
+      const tabs = [{ key: "setup", label: "Setup & Linkage" }]
+      if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+      return tabs
+    }
+    
     const c = {
       hod: data?.inbox?.hod?.length || 0,
       loanOffice: data?.inbox?.loanOffice?.length || 0,
@@ -1016,7 +1028,7 @@ export default function LoanAppPage() {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs
-  }, [data, canAccessLoanOfficeWorkspace])
+  }, [data, canAccessLoanOfficeWorkspace, isHrLeaveOfficeAdmin, normalizedRole])
 
   const defaultTab = visibleTabs[0]?.key || "staff"
 
