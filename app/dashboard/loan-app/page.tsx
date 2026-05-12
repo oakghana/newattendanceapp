@@ -808,6 +808,7 @@ export default function LoanAppPage() {
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
+  const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
   const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
   const [modalFdScore, setModalFdScore] = useState("")
@@ -1617,6 +1618,34 @@ export default function LoanAppPage() {
     }
     toast({ title: result.alreadyForwarded ? "Already forwarded" : "Action completed", description: result.message || "Workflow updated successfully." })
     await loadData()
+  }
+
+  const saveMemoChanges = async () => {
+    if (!memoReviewModal.row) return
+    setIsSavingMemo(true)
+    try {
+      const res = await fetch("/api/loan/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_memo_draft",
+          id: memoReviewModal.row.id,
+          director_letter: modalMemoText,
+          note: "HR saved memo changes for review",
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        toast({ title: "Failed to save", description: result.error || "Could not save memo changes", variant: "destructive" })
+        return
+      }
+      toast({ title: "Saved successfully", description: "Memo changes have been saved. Staff will see the updated version." })
+      await loadData()
+    } catch (error) {
+      toast({ title: "Save error", description: error instanceof Error ? error.message : "Failed to save changes", variant: "destructive" })
+    } finally {
+      setIsSavingMemo(false)
+    }
   }
 
   const loadSignatureFromFile = async (file: File) => {
@@ -4604,6 +4633,17 @@ export default function LoanAppPage() {
 
           <DialogFooter className="gap-2 flex-wrap">
             <Button variant="outline" onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}>Close</Button>
+            {memoReviewModal.row && (
+              <Button 
+                variant="secondary"
+                onClick={() => saveMemoChanges()}
+                disabled={isSavingMemo}
+                className="gap-2"
+              >
+                {isSavingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {isSavingMemo ? "Saving..." : "Save Memo Changes"}
+              </Button>
+            )}
             {memoReviewModal.row && (
               <Button variant="outline" onClick={() => {
                 if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText)

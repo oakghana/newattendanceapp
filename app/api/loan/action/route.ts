@@ -27,6 +27,7 @@ type ActionKey =
   | "committee_decision"
   | "hr_set_terms"
   | "director_finalize"
+  | "save_memo_draft"
 
 function normalizeReferenceNumber(value: string | null | undefined): string | null {
   const raw = String(value || "").trim()
@@ -791,6 +792,23 @@ export async function POST(request: NextRequest) {
           )
         }
       }
+    }
+
+    if (action === "save_memo_draft") {
+      actionHandled = true
+      // Allow HR staff (HR Office, HR Leave Office, Director HR) to save memo drafts
+      if (!canDoHrOffice(role, deptName, deptCode) && !canDoDirectorHr(role, deptName, deptCode)) {
+        return NextResponse.json({ error: "Only HR personnel can save memo changes" }, { status: 403 })
+      }
+
+      const directorLetter = String(body.director_letter || "").trim() || null
+      if (!directorLetter) {
+        return NextResponse.json({ error: "Memo content is required" }, { status: 400 })
+      }
+
+      // Update only the memo content, don't change status
+      update.director_letter = directorLetter
+      update.director_note = note || "Memo saved by HR personnel for review"
     }
 
     if (!actionHandled) {
