@@ -3748,8 +3748,8 @@ export default function LoanAppPage() {
         </TabsContent>
 
         <TabsContent value="setup" className="space-y-4">
-          {/* Executive HR Signature Setup Section */}
-          {p?.directorHr && (
+          {/* Executive HR Signature Setup Section - Only show if no signature is saved */}
+          {p?.directorHr && isSignatureMissing && (
             <Card className="border-amber-200 bg-amber-50 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-amber-900">Your Signature for Loan Approvals</CardTitle>

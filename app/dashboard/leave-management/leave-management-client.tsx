@@ -716,13 +716,6 @@ export function LeaveManagementClient({
                       </p>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => setSelectedTab("apply-leave")}
-                    className="shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Add Leave Application
-                  </Button>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Badge className="border border-white/10 bg-white/10 px-3 py-1 text-cyan-100 hover:bg-white/10">
