@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
@@ -3333,7 +3334,7 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.committee && (
                           <TableCell>
-                            <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "committee")}>Review &amp; Vote</Button>
+                            <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "committee")}>Further Information</Button>
                           </TableCell>
                         )}
                       </TableRow>
@@ -3346,7 +3347,7 @@ export default function LoanAppPage() {
 
           {committeeViewMode === "card" && pagedCommittee.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.committee && <Button size="sm" onClick={() => openActionModal(row, "committee")}>Review &amp; Vote</Button>}
+              {p?.committee && <Button size="sm" onClick={() => openActionModal(row, "committee")}>Further Information</Button>}
             </StageCard>
           ))}
           <div className="flex items-center justify-end gap-2">
@@ -4284,7 +4285,7 @@ export default function LoanAppPage() {
               {actionModal.actionType === "hod" && "HOD Review & Decision"}
               {actionModal.actionType === "loan_office" && "Loan Office Review & Forward"}
               {actionModal.actionType === "accounts" && "Set FD Score"}
-              {actionModal.actionType === "committee" && "Committee Decision"}
+              {actionModal.actionType === "committee" && "Employee Further Information"}
               {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Executive HR"}
             </DialogTitle>
             {actionModal.row && (
@@ -4378,19 +4379,33 @@ export default function LoanAppPage() {
                 <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} />
               </>
             )}
-            {/* Committee */}
+            {/* Committee - Further Information */}
             {actionModal.actionType === "committee" && (
               <>
-                <Label>Decision</Label>
-                <Select value={modalDecision} onValueChange={(v: "approve" | "reject") => setModalDecision(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="approve">Approve</SelectItem>
-                    <SelectItem value="reject">Reject</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Label>Your Comments (optional)</Label>
-                <Textarea value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="What do you think about this? (Keep it short)" rows={3} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Employee Name</Label>
+                    <div className="flex items-center gap-2 p-2 bg-muted rounded text-sm">{actionModal.row?.staff_full_name || "—"}</div>
+                  </div>
+                  <div>
+                    <Label>Staff Number</Label>
+                    <div className="flex items-center gap-2 p-2 bg-muted rounded text-sm">{actionModal.row?.staff_number || "—"}</div>
+                  </div>
+                  <div>
+                    <Label>Length of Service (Years)</Label>
+                    <Input type="number" placeholder="e.g. 5" min="0" step="0.5" />
+                  </div>
+                  <div>
+                    <Label>Last Car Loan Date</Label>
+                    <Input type="date" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox id="never_car_loan" />
+                  <Label htmlFor="never_car_loan" className="font-normal cursor-pointer">Never had a car loan</Label>
+                </div>
+                <Label>Additional Employee Information</Label>
+                <Textarea placeholder="Add any relevant employment history, loan history, or service information..." rows={4} />
               </>
             )}
             {/* HR Terms */}
@@ -4505,12 +4520,7 @@ export default function LoanAppPage() {
               }}>Save FD Score</Button>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
-              <Button variant={modalDecision === "reject" ? "destructive" : "default"} onClick={() => {
-                runAction({ action: "committee_decision", id: actionModal.row!.id, decision: modalDecision, note: modalNote || null })
-                setActionModal((s) => ({ ...s, open: false }))
-              }}>
-                {modalDecision === "approve" ? "Approve" : "Reject"}
-              </Button>
+              <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
             )}
             {actionModal.actionType === "hr_terms" && actionModal.row && (
               <>
