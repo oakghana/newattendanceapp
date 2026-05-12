@@ -974,6 +974,7 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
+  const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
   const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
@@ -2565,7 +2566,7 @@ export default function LoanAppPage() {
                       <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                       <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
-                      <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
+                      {canSeeFdReviewerName && <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>}
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Submitted</TableHead>
                       {p?.hod && <TableHead className="whitespace-nowrap">Action</TableHead>}
@@ -2581,7 +2582,7 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
+                        {canSeeFdReviewerName && <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>}
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.hod && (
@@ -2752,7 +2753,7 @@ export default function LoanAppPage() {
                       <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                       <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
-                      <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
+                      {canSeeFdReviewerName && <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>}
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Submitted</TableHead>
                       <TableHead className="whitespace-nowrap">Reason</TableHead>
@@ -3172,7 +3173,7 @@ export default function LoanAppPage() {
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
                           <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "���"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "�����"}</TableCell>
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
