@@ -170,13 +170,11 @@ function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
 }
 
 function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw] = active.split("/")
-  const startYear = Number(startYearRaw)
+  const currentYear = referenceDate.getFullYear()
   const options: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
-    const y = startYear + i
-    options.push(`${y}/${y + 1}`)
+    const y = currentYear + i
+    options.push(String(y))
   }
   return options
 }
@@ -187,11 +185,7 @@ function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
 }
 
 function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  if (!isOctoberPlanningWindow(referenceDate)) return active
-  const [startYearRaw] = active.split("/")
-  const nextStartYear = Number(startYearRaw) + 1
-  return `${nextStartYear}/${nextStartYear + 1}`
+  return String(referenceDate.getFullYear())
 }
 
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
@@ -1036,7 +1030,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────────────────────────────────────────────���──
+  // ── Computed ─────────────────────────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1122,7 +1116,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const json = await res.json()
       if (!res.ok) return
       setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
-      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes) ? json.leaveTypes : []
+      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes) 
+        ? json.leaveTypes.filter((t: LeaveTypeOption) => t.leaveTypeKey !== "sick")
+        : []
       const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
       setLeaveTypes(hasPartLeave ? types : [
         ...types,
