@@ -23,7 +23,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { placeholderDescriptions } from "@/lib/leave-templates"
@@ -1115,47 +1114,46 @@ export function LeaveManagementClient({
         </Card>
       )}
 
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-        <TabsList className="flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/90 p-1.5 shadow-sm">
-            <TabsTrigger value="my-requests" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
-              My Requests ({staffRequests.length})
-            </TabsTrigger>
-            <TabsTrigger value="apply-leave" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
-              <Calendar className="mr-1.5 h-4 w-4" />
-              Apply for Leave
-            </TabsTrigger>
-            <TabsTrigger value="approved" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-emerald-700">
-              Approved ({approvedRequests.length})
-            </TabsTrigger>
-            {isManagerView && (
-              <>
-              <TabsTrigger value="pending-approvals" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=inactive]:text-blue-700">
-                Pending ({pendingNotifications.length})
-              </TabsTrigger>
-              {isAdminView && (
-                <>
-                  <TabsTrigger value="role-staff" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-sky-600 data-[state=active]:text-white data-[state=inactive]:text-sky-700">
-                    Staff ({adminStaffQueue.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="role-hod" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=inactive]:text-violet-700">
-                    HOD ({adminHodQueue.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="role-regional" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-indigo-700">
-                    Regional ({adminRegionalQueue.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="delayed" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-rose-600 data-[state=active]:text-white data-[state=inactive]:text-rose-700">
-                    Delayed {`>=${inactivityDays}d`} ({adminDelayedQueue.length})
-                  </TabsTrigger>
-                </>
-              )}
-              <TabsTrigger value="history" className="flex-1 shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=inactive]:text-slate-600">
-                History
-              </TabsTrigger>
-              </>
-            )}
-        </TabsList>
+      <div className="space-y-4">
+        {/* Simple Tab Navigation - Always visible for staff users */}
+        <div className="flex gap-2 border-b border-slate-200">
+          <button
+            onClick={() => setSelectedTab("my-requests")}
+            className={`px-4 py-2 font-semibold transition-all ${
+              selectedTab === "my-requests"
+                ? "border-b-2 border-blue-600 text-blue-600"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            My Requests ({staffRequests.length})
+          </button>
+          <button
+            onClick={() => setSelectedTab("apply-leave")}
+            className={`px-4 py-2 font-semibold transition-all flex items-center gap-2 ${
+              selectedTab === "apply-leave"
+                ? "border-b-2 border-emerald-600 text-emerald-600"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Calendar className="h-4 w-4" />
+            Apply for Leave
+          </button>
+          <button
+            onClick={() => setSelectedTab("approved")}
+            className={`px-4 py-2 font-semibold transition-all ${
+              selectedTab === "approved"
+                ? "border-b-2 border-emerald-600 text-emerald-600"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            Approved ({approvedRequests.length})
+          </button>
+        </div>
 
-            <TabsContent value="my-requests" className="space-y-4">
+        {/* Tab Content */}
+        <div>
+          {selectedTab === "my-requests" && (
+            <>
               {staffRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
                   <CardContent className="py-14 text-center">
@@ -1177,21 +1175,23 @@ export function LeaveManagementClient({
                   ))}
                 </div>
               )}
-            </TabsContent>
-
-            <TabsContent value="apply-leave" className="space-y-4">
-              <LeavePlanningClient
-                profile={{
-                  role: userRole,
-                  firstName: userFirstName || undefined,
-                  lastName: userLastName || undefined,
-                  departmentName: userDepartment,
-                  departmentCode: userDepartment,
-                }}
-              />
-            </TabsContent>
-
-            <TabsContent value="approved" className="space-y-4">
+            </>
+          )}
+          
+          {selectedTab === "apply-leave" && (
+            <LeavePlanningClient
+              profile={{
+                role: userRole,
+                firstName: userFirstName || undefined,
+                lastName: userLastName || undefined,
+                departmentName: userDepartment,
+                departmentCode: userDepartment,
+              }}
+            />
+          )}
+          
+          {selectedTab === "approved" && (
+            <>
               {approvedRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
                   <CardContent className="py-14 text-center">
@@ -1206,44 +1206,53 @@ export function LeaveManagementClient({
                   ))}
                 </div>
               )}
-            </TabsContent>
-
-        {isManagerView && (
-          <>
-            <TabsContent value="pending-approvals" className="space-y-4">
-              <Alert className="border-blue-200 bg-blue-50">
-                <AlertDescription>
-                  Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
-                </AlertDescription>
-              </Alert>
-              {renderManagerNotifications(adminAllPending, "No pending leave requests to approve")}
-            </TabsContent>
-
-            {isAdminView && (
-              <>
-                <TabsContent value="role-staff" className="space-y-4">
-                  {renderManagerNotifications(adminStaffQueue, "No staff queue requests pending")}
-                </TabsContent>
-                <TabsContent value="role-hod" className="space-y-4">
-                  {renderManagerNotifications(adminHodQueue, "No HOD queue requests pending")}
-                </TabsContent>
-                <TabsContent value="role-regional" className="space-y-4">
-                  {renderManagerNotifications(adminRegionalQueue, "No regional queue requests pending")}
-                </TabsContent>
-                <TabsContent value="delayed" className="space-y-4">
-                  {renderManagerNotifications(adminDelayedQueue, `No delayed requests at or above ${inactivityDays} days`)}
-                </TabsContent>
-              </>
-            )}
-
-            <TabsContent value="history" className="space-y-4">
-              <Alert className="border-slate-200 bg-white shadow-sm">
-                <AlertDescription>Historical leave request data will be surfaced here when the archive view is enabled.</AlertDescription>
-              </Alert>
-            </TabsContent>
             </>
+          )}
+
+        {isManagerView && selectedTab === "pending-approvals" && (
+          <>
+            <Alert className="border-blue-200 bg-blue-50">
+              <AlertDescription>
+                Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
+              </AlertDescription>
+            </Alert>
+            {renderManagerNotifications(adminAllPending, "No pending leave requests to approve")}
+          </>
         )}
-      </Tabs>
+
+        {isAdminView && selectedTab === "role-staff" && (
+          <>
+            {renderManagerNotifications(adminStaffQueue, "No staff queue requests pending")}
+          </>
+        )}
+        
+        {isAdminView && selectedTab === "role-hod" && (
+          <>
+            {renderManagerNotifications(adminHodQueue, "No HOD queue requests pending")}
+          </>
+        )}
+        
+        {isAdminView && selectedTab === "role-regional" && (
+          <>
+            {renderManagerNotifications(adminRegionalQueue, "No regional queue requests pending")}
+          </>
+        )}
+        
+        {isAdminView && selectedTab === "delayed" && (
+          <>
+            {renderManagerNotifications(adminDelayedQueue, `No delayed requests at or above ${inactivityDays} days`)}
+          </>
+        )}
+
+        {isManagerView && selectedTab === "history" && (
+          <>
+            <Alert className="border-slate-200 bg-white shadow-sm">
+              <AlertDescription>Historical leave request data will be surfaced here when the archive view is enabled.</AlertDescription>
+            </Alert>
+          </>
+        )}
+        </div>
+      </div>
 
       <Dialog open={Boolean(editingRequest)} onOpenChange={(open) => { if (!open) closeEditDialog() }}>
         <DialogContent>
