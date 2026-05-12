@@ -724,18 +724,21 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
           </Card>
         </TabsContent>
 
-        {/* Signature Tab */}
-        <TabsContent value="signature" className="space-y-6">
-          <Card className="border-green-200 bg-green-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-green-900">
-                <Pen className="h-5 w-5" />
-                Your Digital Signature
-              </CardTitle>
-              <CardDescription className="text-green-800">
-                Save your signature here to sign documents and approvals across the system. Your signature will be used for all official documents.
-              </CardDescription>
-            </CardHeader>
+        {/* Signature Tab - For Executive HR and HOD users */}
+        {(initialUser?.role === "director_hr" || 
+          initialUser?.role === "manager_hr" || 
+          ["department_head", "regional_manager"].includes(initialUser?.role)) && (
+          <TabsContent value="signature" className="space-y-6">
+            <Card className="border-green-200 bg-green-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-900">
+                  <Pen className="h-5 w-5" />
+                  Your Digital Signature
+                </CardTitle>
+                <CardDescription className="text-green-800">
+                  Save your signature here to sign documents and approvals across the system. Your signature will be used for all official documents.
+                </CardDescription>
+              </CardHeader>
             <CardContent className="space-y-6">
               {/* Signature Mode Selection */}
               <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
@@ -823,11 +826,18 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     setIsSavingSignature(true)
                     try {
                       const supabase = createClient()
+                      
+                      // Determine approval stage based on user role
+                      let approvalStage = "director_hr"
+                      if (["department_head", "regional_manager"].includes(initialUser.role)) {
+                        approvalStage = "hod"
+                      }
+                      
                       const { data, error } = await supabase.from("signature_registry").upsert(
                         {
                           user_id: initialUser.id,
                           workflow_domain: "loan",
-                          approval_stage: "director_hr",
+                          approval_stage: approvalStage,
                           signature_mode: signatureMode,
                           signature_text: signatureMode === "typed" ? signatureText : null,
                           signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
@@ -859,6 +869,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
         <TabsContent value="security" className="space-y-6">
           {/* Password Change Section */}
