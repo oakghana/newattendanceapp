@@ -4387,11 +4387,11 @@ export default function LoanAppPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Disbursement Date</Label>
-                    <Input value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} placeholder="YYYY-MM-DD" />
+                    <Input type="month" value={modalDisbursement} onChange={(e) => setModalDisbursement(e.target.value)} />
                   </div>
                   <div>
                     <Label>Recovery Start Date</Label>
-                    <Input value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} placeholder="YYYY-MM-DD" />
+                    <Input type="month" value={modalRecovery} onChange={(e) => setModalRecovery(e.target.value)} />
                   </div>
                   <div>
                     <Label>Recovery Months</Label>
