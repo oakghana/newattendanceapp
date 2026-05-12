@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Download,
   FileClock,
   Info,
   Loader2,
@@ -146,6 +147,8 @@ export function LeaveManagementClient({
     cc_recipients: "",
     category: "approval",
   })
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState("")
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -461,8 +464,8 @@ export function LeaveManagementClient({
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "hr_office", "hr_leave_office_admin", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
-  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "hr_director", "loan_office", "hr_office", "hr_leave_office_admin", "hr"].includes(normalizedRole)
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "hr_office", "hr_leave_office_admin", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
+  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "hr_director", "loan_office", "hr_office", "hr_leave_office_admin", "hr_leave_office", "hr"].includes(normalizedRole)
   const isAdminView = normalizedRole === "admin"
   const canViewHrTemplates = ["admin", "hr_officer", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
@@ -606,6 +609,52 @@ export function LeaveManagementClient({
     }
   }
 
+  const handleExportLeaveRequests = async () => {
+    setIsExporting(true)
+    setExportMessage("")
+    try {
+      // Get current leave year
+      const now = new Date()
+      const currentYear = now.getFullYear()
+      const leaveYear = now.getMonth() >= 11 ? `${currentYear}/${currentYear + 1}` : `${currentYear - 1}/${currentYear}`
+
+      const response = await fetch("/api/leave/export/hod-annual-leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leaveYear }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Export failed")
+      }
+
+      // Download file
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Annual_Leave_Requests_${leaveYear}_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      setExportMessage("✓ Leave requests exported successfully")
+      setTimeout(() => setExportMessage(""), 5000)
+    } catch (error) {
+      console.error("[v0] Export error:", error)
+      setExportMessage(`✗ Export failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Could not export leave requests",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string) => {
     if (rows.length === 0) {
       return (
@@ -745,12 +794,41 @@ export function LeaveManagementClient({
         </CardContent>
       </Card>
 
-      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "hr_leave_office_admin" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
+      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "hr_leave_office_admin" && normalizedRole !== "hr_leave_office" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
         <Alert className="border-blue-200 bg-blue-50">
           <AlertDescription className="text-blue-800">
             Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* HOD/Regional Manager Export Section */}
+      {(normalizedRole === "department_head" || normalizedRole === "regional_manager") && (
+        <Card className="overflow-hidden border-purple-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-purple-200 bg-purple-50 pb-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Export Annual Leave Requests</h3>
+                <p className="mt-1 text-sm text-slate-600">Download all staff annual leave requests for your department/region as an Excel file</p>
+              </div>
+              <Button 
+                onClick={handleExportLeaveRequests}
+                disabled={isExporting}
+                className="gap-2 bg-purple-600 hover:bg-purple-700"
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? "Exporting..." : "Export to Excel"}
+              </Button>
+            </div>
+          </CardHeader>
+          {exportMessage && (
+            <CardContent className="p-4">
+              <div className={`rounded px-4 py-2 text-sm ${exportMessage.includes("successfully") ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+                {exportMessage}
+              </div>
+            </CardContent>
+          )}
+        </Card>
       )}
 
       {canViewHrTemplates && (
