@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
@@ -4391,14 +4392,6 @@ export default function LoanAppPage() {
                     <div className="flex items-center gap-2 p-2 bg-muted rounded text-sm">{actionModal.row?.staff_number || "—"}</div>
                   </div>
                   <div>
-                    <Label>Rank / Position</Label>
-                    <div className="flex items-center gap-2 p-2 bg-muted rounded text-sm">{actionModal.row?.rank || "—"}</div>
-                  </div>
-                  <div>
-                    <Label>Department</Label>
-                    <div className="flex items-center gap-2 p-2 bg-muted rounded text-sm">{actionModal.row?.department || "—"}</div>
-                  </div>
-                  <div>
                     <Label>Length of Service (Years)</Label>
                     <Input type="number" placeholder="e.g. 5" min="0" step="0.5" />
                   </div>
@@ -4406,6 +4399,10 @@ export default function LoanAppPage() {
                     <Label>Last Car Loan Date</Label>
                     <Input type="date" />
                   </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox id="never_car_loan" />
+                  <Label htmlFor="never_car_loan" className="font-normal cursor-pointer">Never had a car loan</Label>
                 </div>
                 <Label>Additional Employee Information</Label>
                 <Textarea placeholder="Add any relevant employment history, loan history, or service information..." rows={4} />
