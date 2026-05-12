@@ -427,6 +427,44 @@ async function findSameMonthSameTypeRequest(
   return null
 }
 
+async function findAnnualLeaveInSameYear(
+  admin: any,
+  userId: string,
+  leaveYearPeriod: string,
+  excludeRequestId?: string,
+) {
+  // Check if staff already has an approved/pending annual leave in the same leave year
+  let query = admin
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, preferred_start_date, preferred_end_date, status, leave_year_period, submitted_at")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .eq("leave_type_key", "annual")
+    .eq("leave_year_period", leaveYearPeriod)
+    .in("status", [...DUPLICATE_BLOCKING_STATUSES])
+    .order("submitted_at", { ascending: false })
+
+  if (excludeRequestId) {
+    query = query.neq("id", excludeRequestId)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const existing = Array.isArray(data) ? data[0] : null
+  if (!existing) return null
+
+  return {
+    id: String(existing.id),
+    status: String(existing.status || ""),
+    leave_type_key: String(existing.leave_type_key || "annual"),
+    leave_year_period: String(existing.leave_year_period || leaveYearPeriod),
+    start_date: String(existing.preferred_start_date),
+    end_date: String(existing.preferred_end_date),
+    submitted_at: existing.submitted_at || null,
+  }
+}
+
 async function fetchStaffLeaveHistory(admin: any, userIds: string[]) {
   const uniqueUserIds = [...new Set(userIds.filter(Boolean))]
   if (uniqueUserIds.length === 0) return {}
@@ -1074,6 +1112,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // For annual leave, check if staff already has an approved annual leave in the same leave year
+    if (leaveTypeKey === "annual") {
+      const annualLeaveInYear = await findAnnualLeaveInSameYear(
+        admin,
+        user.id,
+        leaveYearPeriod,
+      )
+      if (annualLeaveInYear) {
+        return NextResponse.json(
+          {
+            error: `You already have an annual leave request for ${annualLeaveInYear.leave_year_period} (${annualLeaveInYear.start_date} to ${annualLeaveInYear.end_date}) with status: ${annualLeaveInYear.status}. Only one annual leave request is allowed per leave year.`,
+            code: "ANNUAL_LEAVE_ALREADY_SUBMITTED_IN_YEAR",
+            existing: annualLeaveInYear,
+          },
+          { status: 409 },
+        )
+      }
+    }
+
     const overlapSuggestion = await findOverlapSuggestion(
       admin,
       user.id,
@@ -1353,6 +1410,26 @@ export async function PUT(request: NextRequest) {
         },
         { status: 409 },
       )
+    }
+
+    // For annual leave, check if staff already has an approved annual leave in the same leave year
+    if (leaveTypeKey === "annual") {
+      const annualLeaveInYear = await findAnnualLeaveInSameYear(
+        admin,
+        user.id,
+        selectedLeaveYearPeriod,
+        id,
+      )
+      if (annualLeaveInYear) {
+        return NextResponse.json(
+          {
+            error: `You already have an annual leave request for ${annualLeaveInYear.leave_year_period} (${annualLeaveInYear.start_date} to ${annualLeaveInYear.end_date}) with status: ${annualLeaveInYear.status}. Only one annual leave request is allowed per leave year.`,
+            code: "ANNUAL_LEAVE_ALREADY_SUBMITTED_IN_YEAR",
+            existing: annualLeaveInYear,
+          },
+          { status: 409 },
+        )
+      }
     }
 
     const updatePayload: Record<string, any> = {
