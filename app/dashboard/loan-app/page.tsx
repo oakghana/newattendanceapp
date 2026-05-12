@@ -839,6 +839,7 @@ export default function LoanAppPage() {
   const [signatureText, setSignatureText] = useState("")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [isSignatureMissing, setIsSignatureMissing] = useState(false)
+  const [isEditingSignature, setIsEditingSignature] = useState(false)
 
   const [lookupData, setLookupData] = useState<LookupPayload | null>(null)
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -1800,6 +1801,9 @@ export default function LoanAppPage() {
     }
 
     toast({ title: "Signature saved", description: "Executive HR signature registry updated." })
+    setSignatureText("")
+    setSignatureDataUrl(null)
+    setIsEditingSignature(false)
     await loadRegistry()
   }
 
@@ -3748,8 +3752,8 @@ export default function LoanAppPage() {
         </TabsContent>
 
         <TabsContent value="setup" className="space-y-4">
-          {/* Executive HR Signature Setup Section - Only show if no signature is saved */}
-          {p?.directorHr && isSignatureMissing && (
+          {/* Executive HR Signature Setup Section - Show if no signature OR user is editing */}
+          {p?.directorHr && (isSignatureMissing || isEditingSignature) && (
             <Card className="border-amber-200 bg-amber-50 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-amber-900">Your Signature for Loan Approvals</CardTitle>
@@ -3819,12 +3823,50 @@ export default function LoanAppPage() {
                   </div>
                 )}
 
+                <div className="flex gap-2">
+                  <Button
+                    onClick={saveSignatureRegistry}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                    disabled={(!signatureText.trim() && !signatureDataUrl) || isSignatureMissing === false}
+                  >
+                    Save Signature
+                  </Button>
+                  {isEditingSignature && (
+                    <Button
+                      onClick={() => {
+                        setIsEditingSignature(false)
+                        setSignatureText("")
+                        setSignatureDataUrl(null)
+                      }}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Saved Signature Display - Show when signature exists and not editing */}
+          {p?.directorHr && !isSignatureMissing && !isEditingSignature && (
+            <Card className="border-green-200 bg-green-50 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-green-900 flex items-center justify-between">
+                  <span>✓ Your Signature is Saved</span>
+                </CardTitle>
+                <CardDescription className="text-green-800">
+                  Your signature is ready to use for loan approvals and document signing.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
                 <Button
-                  onClick={saveSignatureRegistry}
-                  className="w-full bg-amber-600 hover:bg-amber-700 text-white"
-                  disabled={(!signatureText.trim() && !signatureDataUrl) || isSignatureMissing === false}
+                  onClick={() => setIsEditingSignature(true)}
+                  variant="outline"
+                  className="border-green-600 text-green-700 hover:bg-green-100"
                 >
-                  Save Signature
+                  Change Signature
                 </Button>
               </CardContent>
             </Card>
