@@ -98,7 +98,7 @@ const navigationItems = [
     category: "main",
   },
   {
-    title: "Leave Hub & Planning",
+    title: "Leave Administration",
     href: "/dashboard/leave-management",
     icon: Calendar,
     roles: ["admin", "regional_manager", "department_head", "staff", "it-admin", "nsp", "intern", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "contract"],

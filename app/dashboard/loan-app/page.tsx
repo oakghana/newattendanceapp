@@ -1625,6 +1625,40 @@ export default function LoanAppPage() {
     }
   }
 
+  const handleFdDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>, loanId: string) => {
+    try {
+      const file = e.target.files?.[0]
+      if (!file) return
+      
+      setUploadingDocument(true)
+      const fd = new FormData()
+      fd.append("file", file)
+      fd.append("folder", "fd-support-documents")
+      fd.append("loanId", loanId)
+      
+      const res = await fetch("/api/upload", { method: "POST", body: fd })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || "Upload failed")
+      
+      toast({ title: "FD Document Uploaded", description: `Document "${file.name}" uploaded successfully for loan ${loanId}.` })
+      // Reset the input
+      e.target.value = ""
+    } catch (err: any) {
+      const message = String(err?.message || "Try again")
+      if (message.includes("BLOB_NOT_CONFIGURED") || message.toLowerCase().includes("storage is not configured")) {
+        toast({
+          title: "Uploads not configured",
+          description: "Set BLOB_READ_WRITE_TOKEN in environment variables to enable FD document uploads.",
+          variant: "destructive",
+        })
+      } else {
+        toast({ title: "Upload failed", description: message, variant: "destructive" })
+      }
+    } finally {
+      setUploadingDocument(false)
+    }
+  }
+
   const convertMonthToDate = (monthStr: string): string | null => {
     if (!monthStr) return null
     // Convert "YYYY-MM" to "YYYY-MM-01" (first day of month)
@@ -3219,7 +3253,22 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
                             <TableCell>
-                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
+                              <div className="flex gap-1 flex-col">
+                                <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
+                                <label htmlFor={`fd-upload-${row.id}`}>
+                                  <Button size="sm" className="text-xs whitespace-nowrap bg-blue-600 hover:bg-blue-700 w-full cursor-pointer" asChild>
+                                    <span>Upload Document</span>
+                                  </Button>
+                                  <input
+                                    id={`fd-upload-${row.id}`}
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    className="hidden"
+                                    onChange={(e) => handleFdDocumentUpload(e, row.id)}
+                                    disabled={uploadingDocument}
+                                  />
+                                </label>
+                              </div>
                             </TableCell>
                           )}
                         </TableRow>
@@ -3233,7 +3282,24 @@ export default function LoanAppPage() {
 
           {accountsViewMode === "card" && pagedAccounts.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.accounts && <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>}
+              {p?.accounts && (
+                <div className="flex gap-2 flex-col">
+                  <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
+                  <label htmlFor={`fd-upload-card-${row.id}`}>
+                    <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 cursor-pointer" asChild>
+                      <span>Upload Document</span>
+                    </Button>
+                    <input
+                      id={`fd-upload-card-${row.id}`}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => handleFdDocumentUpload(e, row.id)}
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+                </div>
+              )}
             </StageCard>
           ))}
 

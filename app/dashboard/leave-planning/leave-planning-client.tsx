@@ -1036,7 +1036,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────────────────────────────────────────────────────────
+  // ── Computed ─────────────────────────────────────────────────────���──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1971,6 +1971,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <p className="text-xs text-slate-500">Leave Year Period: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
+                {/* October Planning Guidance Banner */}
+                <Alert className="border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/20">
+                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500" />
+                  <AlertDescription className="text-amber-900 dark:text-amber-200 ml-2 font-semibold">
+                    <strong>Annual Leave Planning Reminder:</strong> In September, all staff must submit their annual leave requests for the October cocoa season cycle. This allows HOD/Regional Managers time to review and approve all leave days by the start of October. Plan ahead to avoid operational disruptions.
+                  </AlertDescription>
+                </Alert>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
@@ -2015,21 +2023,25 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 </div>
 
-                <div className={editingId ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
+                <div className={editingId || leaveType === "annual" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
                     <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
                   </div>
-                  {editingId && (
+                  {(editingId || leaveType === "annual") && (
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date {leaveType === "annual" && <span className="text-red-600">*</span>}</Label>
                       <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
                     </div>
                   )}
                 </div>
 
-                {!editingId && (
+                {!editingId && leaveType !== "annual" && (
                   <p className="text-xs text-slate-500">End date is hidden for new requests. HR Leave Office will review and finalize the leave range.</p>
+                )}
+
+                {leaveType === "annual" && !editingId && (
+                  <p className="text-xs text-amber-700 font-medium">Annual leave requires both start and end dates for HOD/Regional Manager review and approval.</p>
                 )}
 
                 {sameMonthConflict && (
@@ -2041,7 +2053,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 )}
 
-                {startDate && endDate && (
+                {startDate && (leaveType === "annual" ? endDate : true) && leaveType !== "annual" && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-center">
+                    <p className="text-xs text-slate-600 font-medium">Estimated Days</p>
+                    <p className="text-base font-semibold text-slate-800">(To be determined by HR Leave Office)</p>
+                  </div>
+                )}
+
+                {startDate && endDate && leaveType === "annual" && (
                   <div className="flex flex-wrap gap-3">
                     <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
                       <p className="text-xs text-green-700 font-medium">Days Requested</p>
@@ -2094,6 +2113,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
           {/* ── HOD Review ──────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
+            {/* HOD Review Window Banner */}
+            <Alert className="border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/20 mb-4">
+              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-500" />
+              <AlertDescription className="text-blue-900 dark:text-blue-200 ml-2 font-semibold">
+                <strong>HOD/Regional Manager Review Window:</strong> You have up to 2 weeks to review, adjust dates, and endorse leave requests. You can adjust recommended start and end dates but cannot reject requests. Final approval rests with HR Leave Office.
+              </AlertDescription>
+            </Alert>
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <UserCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
@@ -2158,23 +2184,22 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                         />
                         <div className="space-y-3">
                           <div className="flex gap-2 flex-wrap">
-                            {(["approve", "recommend_change", "reject"] as const).map((act) => (
+                            {(["approve", "recommend_change"] as const).map((act) => (
                               <Button key={act} size="sm"
                                 variant={action === act ? "default" : "outline"}
                                 onClick={() => setHodAction((p) => ({ ...p, [rId]: act }))}
                                 className={action === act
                                   ? act === "approve" ? "bg-emerald-600 hover:bg-emerald-700"
-                                  : act === "reject" ? "bg-red-600 hover:bg-red-700"
                                   : "bg-blue-600 hover:bg-blue-700"
                                   : ""
                                 }>
-                                {act === "approve" ? "✓ Approve" : act === "reject" ? "✗ Reject" : "⟳ Changes"}
+                                {act === "approve" ? "✓ Endorse" : "⟳ Adjust Dates"}
                               </Button>
                             ))}
                           </div>
                           {action && action !== "approve" && (
                             <Textarea
-                              placeholder={action === "reject" ? "Reason for rejection (required)" : "Recommendation / changes needed"}
+                              placeholder="Recommended changes or adjustments needed"
                               value={hodNote[rId] || ""}
                               onChange={(e) => setHodNote((p) => ({ ...p, [rId]: e.target.value }))}
                               rows={2} className="resize-none text-sm"
