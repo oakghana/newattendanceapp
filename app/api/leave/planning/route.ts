@@ -700,6 +700,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         mode: "staff",
         requests: data || [],
+        myRequests: data || [],
         staggerRequests: stagger || [],
       })
     }
