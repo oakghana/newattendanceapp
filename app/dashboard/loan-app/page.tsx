@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
-import { Activity, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -838,6 +838,7 @@ export default function LoanAppPage() {
   const [signatureMode, setSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
   const [signatureText, setSignatureText] = useState("")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [isSignatureMissing, setIsSignatureMissing] = useState(false)
 
   const [lookupData, setLookupData] = useState<LookupPayload | null>(null)
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -1490,6 +1491,9 @@ export default function LoanAppPage() {
         setSignatureMode(directorSignature.signature_mode)
         setSignatureText(directorSignature.signature_text || "")
         setSignatureDataUrl(directorSignature.signature_data_url || null)
+        setIsSignatureMissing(false)
+      } else {
+        setIsSignatureMissing(true)
       }
     } catch (e: any) {
       toast({ title: "Registry error", description: e?.message || "Failed to load workflow registry", variant: "destructive" })
@@ -4581,6 +4585,22 @@ export default function LoanAppPage() {
             </DialogDescription>
           </DialogHeader>
 
+          {/* Warning banner for missing signature */}
+          {isSignatureMissing && p?.directorHr && (
+            <div className="mb-4 rounded-lg border-l-4 border-amber-500 bg-amber-50 p-4">
+              <div className="flex gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-semibold text-amber-900">Signature Setup Required</h4>
+                  <p className="text-sm text-amber-800 mt-1">You haven&apos;t saved your signature yet. You&apos;ll need to save your signature before you can approve loan requests.</p>
+                  <Button size="sm" variant="outline" className="mt-3 text-amber-700 border-amber-300 hover:bg-amber-100" onClick={() => setActiveTab("setup")}>
+                    Go to Setup & Linkage
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Styled letterhead preview */}
           <div className="mx-auto w-full max-w-[794px] border border-slate-200 bg-white px-10 py-8 shadow-sm print:border-0 print:shadow-none" id="memo-preview-content">
             <div className="relative min-h-[88px] border-b border-slate-300 pb-4">
@@ -4681,6 +4701,8 @@ export default function LoanAppPage() {
               <Button
                 variant={modalDecision === "reject" ? "destructive" : "default"}
                 className="bg-green-700 hover:bg-green-800 text-white"
+                disabled={isSignatureMissing && modalDecision === "approve"}
+                title={isSignatureMissing && modalDecision === "approve" ? "Please save your signature in Setup & Linkage before approving" : ""}
                 onClick={() => {
                   const sigText = modalSignatureMode === "typed" ? modalSignatureText : null
                   const sigUrl = modalSignatureMode !== "typed" ? modalSignatureDataUrl : null
