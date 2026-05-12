@@ -1111,26 +1111,26 @@ export function LeaveManagementClient({
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setSelectedTab("my-requests")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
+            className={`px-6 py-3 font-bold rounded-lg transition-all duration-300 shadow-md transform ${
               selectedTab === "my-requests"
-                ? "bg-green-500 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white scale-105 shadow-lg ring-2 ring-green-300"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:scale-102"
             }`}
           >
             Requests ({staffRequests.length})
           </button>
           <Link href="/dashboard/leave-planning">
-            <button className="px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700">
+            <button className="px-6 py-3 font-bold rounded-lg transition-all duration-300 flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg hover:scale-102 transform">
               <Calendar className="h-5 w-5" />
               Apply for Leave
             </button>
           </Link>
           <button
             onClick={() => setSelectedTab("approved")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
+            className={`px-6 py-3 font-bold rounded-lg transition-all duration-300 shadow-md transform ${
               selectedTab === "approved"
-                ? "bg-green-500 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white scale-105 shadow-lg ring-2 ring-green-300"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:scale-102"
             }`}
           >
             Approved ({approvedRequests.length})
