@@ -4569,7 +4569,6 @@ export default function LoanAppPage() {
                   <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="approve">Endorse</SelectItem>
-                    <SelectItem value="reject">Reject</SelectItem>
                   </SelectContent>
                 </Select>
                 <Label className="text-sm">Note (optional)</Label>
@@ -4725,11 +4724,11 @@ export default function LoanAppPage() {
             <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Cancel</Button>
             {actionModal.actionType === "hod" && actionModal.row && (
               <>
-                <Button variant={modalDecision === "reject" ? "destructive" : "default"} onClick={() => {
-                  runAction({ action: "hod_decision", id: actionModal.row!.id, decision: modalDecision, note: modalNote || null })
+                <Button onClick={() => {
+                  runAction({ action: "hod_decision", id: actionModal.row!.id, decision: "approve", note: modalNote || null })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>
-                  {modalDecision === "approve" ? "Endorse" : "Reject"}
+                  Endorse
                 </Button>
               </>
             )}
