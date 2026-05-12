@@ -1042,6 +1042,38 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return computeLeaveDays(startDate, endDate)
   }, [startDate, endDate])
 
+  // Calculate weekends within selected date range
+  const weekendInfo = useMemo(() => {
+    if (!startDate || !endDate) return null
+    
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    if (end < start) return null
+    
+    const weekends = []
+    let current = new Date(start)
+    let weekendCount = 0
+    
+    while (current <= end) {
+      const day = current.getDay()
+      if (day === 0 || day === 6) { // Sunday or Saturday
+        weekends.push({
+          date: current.toISOString().split('T')[0],
+          dayName: current.toLocaleDateString('en-US', { weekday: 'short' })
+        })
+        weekendCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return {
+      weekendCount,
+      weekends,
+      calendarDays: Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    }
+  }, [startDate, endDate])
+
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((t) => t.leaveTypeKey === leaveType),
     [leaveTypes, leaveType],
@@ -2077,6 +2109,29 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       <p className="text-xs text-slate-600 font-medium">Return to Work</p>
                       <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
                     </div>
+                  </div>
+                )}
+
+                {/* Weekends Display */}
+                {startDate && endDate && leaveType === "annual" && weekendInfo && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-xs font-semibold text-blue-700 mb-3 uppercase tracking-wide">
+                      Weekends Within Selected Period ({weekendInfo.weekendCount} days)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {weekendInfo.weekends.map((weekend) => (
+                        <span
+                          key={weekend.date}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium"
+                        >
+                          <span className="font-semibold">{weekend.dayName}</span>
+                          <span>{weekend.date}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-blue-600 mt-3 pt-3 border-t border-blue-200">
+                      Your <strong>{computedDays} working day(s)</strong> requested are calculated from <strong>{weekendInfo.calendarDays} calendar day(s)</strong> minus these <strong>{weekendInfo.weekendCount} weekend day(s)</strong>.
+                    </p>
                   </div>
                 )}
 
