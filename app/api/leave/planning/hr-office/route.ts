@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
+import { calculateLeaveDaysExcludingHolidaysWeekends, calculateCalendarDays } from "@/lib/ghana-holidays"
 
 export async function POST(request: NextRequest) {
   try {
@@ -107,10 +108,24 @@ export async function POST(request: NextRequest) {
     if (isNaN(startDt.getTime()) || isNaN(endDt.getTime()) || endDt < startDt) {
       return NextResponse.json({ error: "Adjusted date range is invalid." }, { status: 400 })
     }
-    const computedAdjustedDays =
-      adjusted_days != null
-        ? Number(adjusted_days)
-        : Math.floor((endDt.getTime() - startDt.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    
+    // Calculate adjusted days excluding weekends and holidays
+    let computedAdjustedDays = adjusted_days != null ? Number(adjusted_days) : 0
+    
+    if (computedAdjustedDays <= 0) {
+      try {
+        // Use holiday-aware calculation
+        computedAdjustedDays = await calculateLeaveDaysExcludingHolidaysWeekends(startDt, endDt)
+        
+        // Fallback to calendar days if calculation fails
+        if (computedAdjustedDays <= 0) {
+          computedAdjustedDays = calculateCalendarDays(startDt, endDt)
+        }
+      } catch (err) {
+        console.error("[v0] Error in holiday-aware calculation, using calendar days:", err)
+        computedAdjustedDays = calculateCalendarDays(startDt, endDt)
+      }
+    }
 
     if (computedAdjustedDays <= 0) {
       return NextResponse.json({ error: "Adjusted days must be greater than zero." }, { status: 400 })
