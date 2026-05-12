@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import {
@@ -25,7 +26,6 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { placeholderDescriptions } from "@/lib/leave-templates"
-import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
 
 interface LeaveRequest {
   id: string
@@ -1126,17 +1126,12 @@ export function LeaveManagementClient({
           >
             My Requests ({staffRequests.length})
           </button>
-          <button
-            onClick={() => setSelectedTab("apply-leave")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md ${
-              selectedTab === "apply-leave"
-                ? "bg-emerald-600 text-white"
-                : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-            }`}
-          >
-            <Calendar className="h-5 w-5" />
-            Apply for Leave
-          </button>
+          <Link href="/dashboard/leave-planning">
+            <button className="px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700">
+              <Calendar className="h-5 w-5" />
+              Apply for Leave
+            </button>
+          </Link>
           <button
             onClick={() => setSelectedTab("approved")}
             className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
@@ -1176,18 +1171,6 @@ export function LeaveManagementClient({
                 </div>
               )}
             </>
-          )}
-          
-          {selectedTab === "apply-leave" && (
-            <LeavePlanningClient
-              profile={{
-                role: userRole,
-                firstName: userFirstName || undefined,
-                lastName: userLastName || undefined,
-                departmentName: userDepartment,
-                departmentCode: userDepartment,
-              }}
-            />
           )}
           
           {selectedTab === "approved" && (
