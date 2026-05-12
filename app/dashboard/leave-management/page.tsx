@@ -62,7 +62,6 @@ export default async function LeaveManagementPage() {
   }
 
   const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  console.log("[v0] Leave Management - User role:", profile.role, "Normalized:", roleNorm)
   const canReviewLeave = [
     "admin",
     "regional_manager",
@@ -128,8 +127,6 @@ export default async function LeaveManagementPage() {
 
     const notifications = (planningReviews || []).filter((review: any) => Boolean(review?.leave_plan_request))
 
-    console.log("[v0] Leave Management - canReviewLeave:", canReviewLeave, "Notifications count:", notifications.length)
-
     const requesterIds = Array.from(new Set(notifications.map((review: any) => String(review.leave_plan_request?.user_id || "")).filter(Boolean)))
 
     let requesterProfiles: any[] = []
@@ -166,35 +163,7 @@ export default async function LeaveManagementPage() {
           waiting_days: waitingDays,
         }
       })
-
     console.log("[v0] Leave Management - After filtering managerNotifications:", managerNotifications.length, "items")
-      .map((review: any) => {
-        const leave = review.leave_plan_request
-        const requester = requesterMap.get(String(leave?.user_id || ""))
-        const sourceDate = leave?.created_at || review.reviewed_at
-        const waitingDays = sourceDate
-          ? Math.max(0, Math.floor((Date.now() - new Date(sourceDate).getTime()) / (1000 * 60 * 60 * 24)))
-          : 0
-        return {
-          id: String(review.id),
-          leave_plan_request_id: String(leave?.id || ""),
-          status: String(leave?.status || review.decision || "pending_hod_review"),
-          review_decision: String(review.decision || "pending"),
-          requester_role: String(requester?.role || "staff"),
-          requester_name: requester ? `${requester.first_name || ""} ${requester.last_name || ""}`.trim() : "Staff",
-          waiting_days: waitingDays,
-          leave_requests: {
-            id: String(leave?.id || ""),
-            user_id: String(leave?.user_id || ""),
-            start_date: leave?.preferred_start_date,
-            end_date: leave?.preferred_end_date,
-            reason: leave?.reason || "",
-            leave_type: leave?.leave_type_key || "annual",
-            status: String(leave?.status || "pending_hod_review"),
-            created_at: leave?.created_at,
-          },
-        }
-      })
 
   }
 
