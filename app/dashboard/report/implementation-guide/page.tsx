@@ -3,8 +3,69 @@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
+import { useEffect, useState } from "react"
+import { createClient } from "@/utils/supabase/client"
 
 export default function ImplementationGuidePage() {
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const checkAdminAccess = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (!user) {
+          setIsAdmin(false)
+          setIsLoading(false)
+          return
+        }
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single()
+
+        setIsAdmin(profile?.role === "admin")
+      } catch (err) {
+        console.error("[v0] Error checking admin access:", err)
+        setIsAdmin(false)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    checkAdminAccess()
+  }, [])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
+        <Card className="p-8 max-w-md border-red-200 bg-red-50">
+          <h1 className="text-2xl font-bold text-red-900 mb-3">Access Denied</h1>
+          <p className="text-red-800 mb-6">
+            This report is only available to administrators. If you believe you should have access, please contact your system administrator.
+          </p>
+          <Link href="/dashboard">
+            <Button className="w-full">Back to Dashboard</Button>
+          </Link>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
