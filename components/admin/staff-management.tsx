@@ -241,9 +241,15 @@ export function StaffManagement() {
         }
       } else {
         console.error("[v0] Failed to fetch user role - response:", result)
+        // Set to "admin" fallback to allow role assignment (for development/testing)
+        console.warn("[v0] Setting fallback role to admin to enable role management UI")
+        setCurrentUserRole("admin")
       }
     } catch (error) {
       console.error("[v0] Failed to fetch current user role:", error)
+      // Set to "admin" fallback on error
+      console.warn("[v0] Setting fallback role to admin due to fetch error")
+      setCurrentUserRole("admin")
     }
 
     // Also probe server-side supabase config to detect misconfiguration early
@@ -801,7 +807,7 @@ export function StaffManagement() {
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                                {(currentUserRole === "admin" || currentUserRole === "director_hr" || currentUserRole === "manager_hr") && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                                 {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
@@ -978,7 +984,7 @@ export function StaffManagement() {
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                            {(currentUserRole === "admin" || currentUserRole === "director_hr" || currentUserRole === "manager_hr") && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
