@@ -221,10 +221,10 @@ const STATUS_LABELS: Record<string, string> = {
   awaiting_committee: "Awaiting Committee",
   committee_rejected: "Committee Rejected",
   awaiting_hr_terms: "Awaiting HR Terms",
-  awaiting_director_hr: "Awaiting Director HR",
+  awaiting_director_hr: "Awaiting HR Executives",
   archived: "Archived",
-  approved_director: "Approved by Director HR",
-  director_rejected: "Director HR Rejected",
+  approved_director: "Approved by HR Executives",
+  director_rejected: "HR Executives Rejected",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -306,12 +306,12 @@ function stageOwner(status: string) {
     sent_to_accounts: "Accounts",
     awaiting_committee: "Committee",
     awaiting_hr_terms: "HR Office",
-    awaiting_director_hr: "Director HR",
+    awaiting_director_hr: "Executive HR",
     approved_director: "Completed",
     hod_rejected: "Closed at HOD",
     rejected_fd: "Closed at Accounts",
     committee_rejected: "Closed at Committee",
-    director_rejected: "Closed at Director HR",
+    director_rejected: "Closed at HR Executives",
   }
   return map[status] || "In progress"
 }
@@ -3748,6 +3748,89 @@ export default function LoanAppPage() {
         </TabsContent>
 
         <TabsContent value="setup" className="space-y-4">
+          {/* Executive HR Signature Setup Section */}
+          {p?.directorHr && (
+            <Card className="border-amber-200 bg-amber-50 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-amber-900">Your Signature for Loan Approvals</CardTitle>
+                <CardDescription className="text-amber-800">
+                  Save your signature here to approve and send loan memos. You can use typed signature, draw, or upload an image.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-3 rounded-lg bg-white p-3">
+                  <button
+                    onClick={() => setSignatureMode("typed")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "typed" ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Type
+                  </button>
+                  <button
+                    onClick={() => setSignatureMode("draw")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Draw
+                  </button>
+                  <button
+                    onClick={() => setSignatureMode("upload")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "upload" ? "bg-amber-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Upload
+                  </button>
+                </div>
+
+                {signatureMode === "typed" && (
+                  <div className="space-y-2">
+                    <Label>Enter your full name as signature</Label>
+                    <Input
+                      value={signatureText}
+                      onChange={(e) => setSignatureText(e.target.value)}
+                      placeholder="e.g. Frank Fredua"
+                      className="text-lg"
+                    />
+                  </div>
+                )}
+
+                {signatureMode === "draw" && (
+                  <div className="space-y-2">
+                    <Label>Draw your signature below</Label>
+                    <SignaturePad value={signatureDataUrl} onChange={setSignatureDataUrl} />
+                  </div>
+                )}
+
+                {signatureMode === "upload" && (
+                  <div className="space-y-2">
+                    <Label>Upload signature image</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onload = (event) => {
+                            setSignatureDataUrl(event.target?.result as string)
+                          }
+                          reader.readAsDataURL(file)
+                        }
+                      }}
+                      className="cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                <Button
+                  onClick={saveSignatureRegistry}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={(!signatureText.trim() && !signatureDataUrl) || isSignatureMissing === false}
+                >
+                  Save Signature
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Setup & Linkage Studio */}
           <Card className="border-0 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl">Setup & Linkage Studio</CardTitle>
@@ -4593,7 +4676,10 @@ export default function LoanAppPage() {
                 <div>
                   <h4 className="font-semibold text-amber-900">Signature Setup Required</h4>
                   <p className="text-sm text-amber-800 mt-1">You haven&apos;t saved your signature yet. You&apos;ll need to save your signature before you can approve loan requests.</p>
-                  <Button size="sm" variant="outline" className="mt-3 text-amber-700 border-amber-300 hover:bg-amber-100" onClick={() => setActiveTab("setup")}>
+                  <Button size="sm" variant="outline" className="mt-3 text-amber-700 border-amber-300 hover:bg-amber-100" onClick={() => {
+                    setMemoReviewModal((s) => ({ ...s, open: false }))
+                    setActiveTab("setup")
+                  }}>
                     Go to Setup & Linkage
                   </Button>
                 </div>
