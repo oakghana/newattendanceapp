@@ -62,6 +62,7 @@ export default async function LeaveManagementPage() {
   }
 
   const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+  console.log("[v0] Leave Management - User role:", profile.role, "Normalized:", roleNorm)
   const canReviewLeave = [
     "admin",
     "regional_manager",
@@ -127,6 +128,8 @@ export default async function LeaveManagementPage() {
 
     const notifications = (planningReviews || []).filter((review: any) => Boolean(review?.leave_plan_request))
 
+    console.log("[v0] Leave Management - canReviewLeave:", canReviewLeave, "Notifications count:", notifications.length)
+
     const requesterIds = Array.from(new Set(notifications.map((review: any) => String(review.leave_plan_request?.user_id || "")).filter(Boolean)))
 
     let requesterProfiles: any[] = []
@@ -145,6 +148,26 @@ export default async function LeaveManagementPage() {
         if (roleNorm === "admin") return true
         return Boolean(review?.leave_plan_request?.user_id)
       })
+      .map((review: any) => {
+        const leave = review.leave_plan_request
+        const requester = requesterMap.get(String(leave?.user_id || ""))
+        const sourceDate = leave?.created_at || review.reviewed_at
+        const waitingDays = sourceDate
+          ? Math.max(0, Math.floor((Date.now() - new Date(sourceDate).getTime()) / (1000 * 60 * 60 * 24)))
+          : 0
+        return {
+          id: String(review.id),
+          leave_plan_request_id: String(leave?.id || ""),
+          status: String(leave?.status || review.decision || "pending_hod_review"),
+          review_decision: String(review.decision || "pending"),
+          leave_requests: leave,
+          requester_role: String(requester?.role || "staff"),
+          requester_name: requester ? `${requester.first_name} ${requester.last_name}` : "Unknown",
+          waiting_days: waitingDays,
+        }
+      })
+
+    console.log("[v0] Leave Management - After filtering managerNotifications:", managerNotifications.length, "items")
       .map((review: any) => {
         const leave = review.leave_plan_request
         const requester = requesterMap.get(String(leave?.user_id || ""))
