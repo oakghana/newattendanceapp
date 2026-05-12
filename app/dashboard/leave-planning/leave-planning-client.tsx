@@ -1852,12 +1852,12 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Tab config ────────────────────────────────────────────────────────
   const tabs = useMemo(() => {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
-    if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
+    if (canSelfApply) t.push({ value: "my-leaves", label: "My Requests", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
-    if (canSeeAllRequests) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
+    if (canSeeAllRequests || isAdmin) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 

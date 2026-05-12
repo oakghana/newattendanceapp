@@ -625,9 +625,10 @@ export async function GET(request: NextRequest) {
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
+    const isAdmin = role === "admin"
     const isHrOffice = isHrLeaveOfficeRole(role)
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
-    const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
+    const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode) || isAdmin
 
     // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ──
     if (isHrOffice && !isHrApprover) {
@@ -892,6 +893,28 @@ export async function GET(request: NextRequest) {
       const requestUserIds = (data || []).map((row: any) => String(row?.user?.id || row?.user_id || "")).filter(Boolean)
       const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
 
+      // Admin users should also see all HOD reviews
+      let reviews: any[] = []
+      if (isAdmin) {
+        const { data: hodReviews, error: reviewError } = await admin
+          .from("leave_plan_request_hod_review")
+          .select(`
+            *,
+            leave_plan_request:leave_plan_request_id (
+              *,
+              user:user_profiles!leave_plan_requests_user_id_fkey (
+                id, first_name, last_name, employee_id,
+                departments(name, code)
+              )
+            )
+          `)
+          .order("created_at", { ascending: false })
+        
+        if (!reviewError) {
+          reviews = hodReviews || []
+        }
+      }
+
       const analytics = await fetchHrOfficeAnalytics(admin)
 
       return NextResponse.json({
@@ -902,6 +925,7 @@ export async function GET(request: NextRequest) {
         myStaggerRequests: myStaggerRequests || [],
         staffHistoryByUser,
         analytics,
+        reviews: isAdmin ? reviews : [],
       })
     }
 
