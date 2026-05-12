@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user is HR Leave Office
+    // Check if user is HR-Leave-Office-Admin
     const { data: profile } = await admin
       .from("user_profiles")
       .select("role")
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["hr_leave_office", "admin"].includes(normalizedRole)) {
+    if (!["hr_leave_office_admin", "admin"].includes(normalizedRole)) {
       return NextResponse.json(
-        { success: false, error: "Only HR Leave Office staff can archive requests" },
+        { success: false, error: "Only HR-Leave-Office-Admin staff can archive requests" },
         { status: 403 }
       )
     }

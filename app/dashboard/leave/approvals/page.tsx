@@ -60,7 +60,7 @@ export default function ApprovalDashboard() {
   const loadPendingRequests = async (role: string) => {
     try {
       let endpoint = "/api/leave/deferment/pending"
-      if (role === "hr_leave_office" || role === "hr_office") {
+      if (role === "hr_leave_office_admin" || role === "hr_office") {
         endpoint = "/api/leave/deferment/pending/hr-office"
       } else if (role === "executive_hr") {
         endpoint = "/api/leave/deferment/pending/executive-hr"
@@ -81,7 +81,7 @@ export default function ApprovalDashboard() {
     try {
       const endpoint = userRole === "executive_hr"
         ? `/api/leave/deferment/executive-hr-approve`
-        : userRole === "hr_leave_office" || userRole === "hr_office"
+        : userRole === "hr_leave_office_admin" || userRole === "hr_office"
         ? `/api/leave/deferment/hr-office-review`
         : `/api/leave/deferment/hod-review`
 
@@ -117,7 +117,7 @@ export default function ApprovalDashboard() {
     try {
       const endpoint = userRole === "executive_hr"
         ? `/api/leave/deferment/executive-hr-approve`
-        : userRole === "hr_leave_office" || userRole === "hr_office"
+        : userRole === "hr_leave_office_admin" || userRole === "hr_office"
         ? `/api/leave/deferment/hr-office-review`
         : `/api/leave/deferment/hod-review`
 
@@ -156,7 +156,7 @@ export default function ApprovalDashboard() {
     )
   }
 
-  if (!userRole || !["admin", "hod", "director", "hr_leave_office", "hr_office", "executive_hr"].includes(userRole)) {
+  if (!userRole || !["admin", "hod", "director", "hr_leave_office_admin", "hr_office", "executive_hr"].includes(userRole)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6">
         <div className="max-w-2xl mx-auto">

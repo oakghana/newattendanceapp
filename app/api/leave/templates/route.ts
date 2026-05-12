@@ -7,7 +7,7 @@ const TEMPLATE_VIEW_ROLES = [
   "hr_director",
   "director_hr",
   "manager_hr",
-  "hr_leave_office",
+  "hr_leave_office_admin",
 ]
 
 const TEMPLATE_EDIT_ROLES = [
@@ -15,7 +15,7 @@ const TEMPLATE_EDIT_ROLES = [
   "director_hr",
   "manager_hr",
   "hr_director",
-  "hr_leave_office",
+  "hr_leave_office_admin",
 ]
 
 const TEMPLATE_SELECT_COLUMNS = "id, template_key, template_name, description, subject_template, body_template, cc_recipients, is_active, updated_at"
@@ -110,7 +110,7 @@ export async function PUT(request: NextRequest) {
 
     if (!TEMPLATE_EDIT_ROLES.includes(auth.role)) {
       return NextResponse.json(
-        { error: "Only Director HR, Manager HR, and HR Leave Office can edit templates." },
+        { error: "Only Director HR, Manager HR, and HR-Leave-Office-Admin can edit templates." },
         { status: 403 },
       )
     }
@@ -182,8 +182,8 @@ export async function PUT(request: NextRequest) {
     await auth.admin
       .from("leave_office_work_log")
       .insert({
-        hr_leave_office_id: auth.user.id,
-        hr_leave_office_name: auth.role,
+        hr_leave_office_admin_id: auth.user.id,
+        hr_leave_office_admin_name: auth.role,
         activity_type: "memo_drafted",
         description: `Template updated: ${templateKey}`,
         adjustment_details: {
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
 
     if (!TEMPLATE_EDIT_ROLES.includes(auth.role)) {
       return NextResponse.json(
-        { error: "Only Director HR, Manager HR, and HR Leave Office can create templates." },
+        { error: "Only Director HR, Manager HR, and HR-Leave-Office-Admin can create templates." },
         { status: 403 },
       )
     }
@@ -270,8 +270,8 @@ export async function POST(request: NextRequest) {
     await auth.admin
       .from("leave_office_work_log")
       .insert({
-        hr_leave_office_id: auth.user.id,
-        hr_leave_office_name: auth.role,
+        hr_leave_office_admin_id: auth.user.id,
+        hr_leave_office_admin_name: auth.role,
         activity_type: "memo_drafted",
         description: `Template created: ${payload.template_key}`,
         adjustment_details: {

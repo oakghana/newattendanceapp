@@ -395,7 +395,7 @@ export async function notifyLeaveSubmitted(
 }
 
 /**
- * HOD has approved the leave request → notify HR Leave Office.
+ * HOD has approved the leave request → notify HR-Leave-Office-Admin.
  */
 export async function notifyLeaveHodApproved(
   admin: AdminClient,
@@ -410,7 +410,7 @@ export async function notifyLeaveHodApproved(
   },
 ): Promise<void> {
   try {
-    const hrOfficeRoles = ["hr_leave_office", "hr_officer", "hr_office", "manager_hr", "admin"]
+    const hrOfficeRoles = ["hr_leave_office_admin", "hr_officer", "hr_office", "manager_hr", "admin"]
     const hrEmails = await emailsForRoles(admin, hrOfficeRoles)
     if (!hrEmails.length) return
 
@@ -418,7 +418,7 @@ export async function notifyLeaveHodApproved(
     const subject = `[Action Required] Leave Request Approved by HOD — ${opts.staffName}`
     const html = baseLayout(
       "Leave Request Ready for HR Office Review",
-      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A leave request has been approved by the HOD and is now awaiting HR Leave Office review.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A leave request has been approved by the HOD and is now awaiting HR-Leave-Office-Admin review.</p>
       <p style="margin:0 0 22px;">${statusBadge("HOD Approved — Awaiting HR Office", "info")}</p>
       ${sectionHeading("Request Details")}
       ${table(
@@ -428,7 +428,7 @@ export async function notifyLeaveHodApproved(
         row("Days Requested", String(opts.requestedDays)) +
         row("HOD Approver", opts.hodName)
       )}
-      ${btn(link, "Process in HR Leave Office")}`,
+      ${btn(link, "Process in HR-Leave-Office-Admin")}`,
     )
     await send(admin, hrEmails, subject, html, "leave HOD approved notification")
   } catch (e) {
@@ -483,7 +483,7 @@ export async function notifyLeaveHodDecision(
 }
 
 /**
- * HR Leave Office has forwarded the request → notify HR Approvers.
+ * HR-Leave-Office-Admin has forwarded the request → notify HR Approvers.
  */
 export async function notifyLeaveHrOfficeForwarded(
   admin: AdminClient,
@@ -509,7 +509,7 @@ export async function notifyLeaveHrOfficeForwarded(
     const subject = `[Action Required] Leave Request Ready for Final Approval — ${opts.staffName}`
     const html = baseLayout(
       "Leave Request Awaiting Final HR Approval",
-      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">HR Leave Office has reviewed and forwarded this request for your final approval.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">HR-Leave-Office-Admin has reviewed and forwarded this request for your final approval.</p>
       <p style="margin:0 0 22px;">${statusBadge("Awaiting Final HR Approval", "info")}</p>
       ${sectionHeading("Approved Leave Details")}
       ${table(
@@ -517,7 +517,7 @@ export async function notifyLeaveHrOfficeForwarded(
         row("Leave Type", opts.leaveType) +
         row("Approved Period", `${opts.adjustedStartDate} — ${opts.adjustedEndDate}`) +
         row("Approved Days", String(opts.adjustedDays)) +
-        row("HR Leave Office", opts.reviewerName)
+        row("HR-Leave-Office-Admin", opts.reviewerName)
       )}
       ${btn(link, "Review & Approve")}`,
     )

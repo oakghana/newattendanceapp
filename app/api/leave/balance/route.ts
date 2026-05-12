@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
 
-const LEADERSHIP_ROLES = new Set(["manager_hr", "director_hr", "hr_leave_office", "admin", "hr_director"])
+const LEADERSHIP_ROLES = new Set(["manager_hr", "director_hr", "hr_leave_office_admin", "admin", "hr_director"])
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "")

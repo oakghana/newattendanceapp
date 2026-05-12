@@ -2,7 +2,7 @@
 
 // ============================================================
 // Leave Planning Client — V2 Redesign (4-stage workflow)
-// Staff → HOD Review → HR Leave Office → HR Approval + Memo
+// Staff → HOD Review → HR-Leave-Office-Admin → HR Approval + Memo
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
@@ -308,7 +308,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
 }
 
 function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
-  const commonCc = "Managing Director\nDeputy Managing Director\nHR Leave Office\nFile"
+  const commonCc = "Managing Director\nDeputy Managing Director\nHR-Leave-Office-Admin\nFile"
   return [
     {
       id: "builtin-annual-leave-approval",
@@ -618,7 +618,7 @@ function WorkflowStages({ status }: { status: string }) {
   const stages = [
     { label: "Submitted", Icon: Send },
     { label: "HOD Review", Icon: UserCheck },
-    { label: "HR Leave Office", Icon: ClipboardList },
+    { label: "HR-Leave-Office-Admin", Icon: ClipboardList },
     { label: "HR Approval", Icon: ShieldCheck },
   ]
   const rejected = status === "hod_rejected" || status === "manager_rejected"
@@ -936,7 +936,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const canSelfApply = isStaff || isHod || isAdmin ||
-    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "loan_office", "accounts"].includes(normalizedRole)
+    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office_admin", "hr_office", "loan_office", "accounts"].includes(normalizedRole)
 
   // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)
@@ -1002,7 +1002,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────────────────────────────
+  // ── HR-Leave-Office-Admin ─────────────────────────────────────────────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -1361,7 +1361,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [canSelfApply, defaultStaffSignature, typedSignature])
 
   useEffect(() => {
-    // New requests use a single selected date and HR Leave Office finalizes adjusted range later.
+    // New requests use a single selected date and HR-Leave-Office-Admin finalizes adjusted range later.
     if (!editingId) {
       setEndDate(startDate || "")
     }
@@ -1887,7 +1887,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     if (canSelfApply) t.push({ value: "my-leaves", label: "My Requests", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
-    if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
+    if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR-Leave-Office-Admin", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
     if (canSeeAllRequests || isAdmin) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
@@ -1916,7 +1916,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           {[
             { label: "Staff Applies", step: 1 },
             { label: "HOD Reviews", step: 2 },
-            { label: "HR Leave Office Adjusts", step: 3 },
+            { label: "HR-Leave-Office-Admin Adjusts", step: 3 },
             { label: "HR Issues Memo", step: 4 },
           ].map((s) => (
             <div key={s.step} className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1 text-xs font-medium">
@@ -2076,7 +2076,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 </div>
 
                 {!editingId && leaveType !== "annual" && (
-                  <p className="text-xs text-slate-500">End date is hidden for new requests. HR Leave Office will review and finalize the leave range.</p>
+                  <p className="text-xs text-slate-500">End date is hidden for new requests. HR-Leave-Office-Admin will review and finalize the leave range.</p>
                 )}
 
                 {leaveType === "annual" && !editingId && (
@@ -2095,7 +2095,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 {startDate && (leaveType === "annual" ? endDate : true) && leaveType !== "annual" && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-center">
                     <p className="text-xs text-slate-600 font-medium">Estimated Days</p>
-                    <p className="text-base font-semibold text-slate-800">(To be determined by HR Leave Office)</p>
+                    <p className="text-base font-semibold text-slate-800">(To be determined by HR-Leave-Office-Admin)</p>
                   </div>
                 )}
 
@@ -2180,7 +2180,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
               <Alert className="border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/20 mb-4">
                 <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-500" />
                 <AlertDescription className="text-blue-900 dark:text-blue-200 ml-2 font-semibold">
-                  <strong>HOD/Regional Manager Review Window (Annual Leave):</strong> You have up to 2 weeks to review, adjust dates, and endorse annual leave requests. You can adjust recommended start and end dates but cannot reject requests. Final approval rests with HR Leave Office.
+                  <strong>HOD/Regional Manager Review Window (Annual Leave):</strong> You have up to 2 weeks to review, adjust dates, and endorse annual leave requests. You can adjust recommended start and end dates but cannot reject requests. Final approval rests with HR-Leave-Office-Admin.
                 </AlertDescription>
               </Alert>
             )}
@@ -2328,7 +2328,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
             )}
           </TabsContent>
 
-          {/* ── HR Leave Office ───────────────────────────────────────── */}
+          {/* ── HR-Leave-Office-Admin ───────────────────────────────────────── */}
           <TabsContent value="hr-office">
             <div className="mb-4 space-y-3">
               <Alert className="border-blue-200 bg-blue-50">
@@ -2505,7 +2505,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Analytics Range</p>
-                      <p className="mt-1 text-sm text-slate-600">Filter the HR Leave Office graphics board and export only the visible date window.</p>
+                      <p className="mt-1 text-sm text-slate-600">Filter the HR-Leave-Office-Admin graphics board and export only the visible date window.</p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[170px_170px_auto_auto_auto]">
                       <div className="space-y-1">
@@ -2543,7 +2543,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       </Button>
                       <Button
                         className="bg-emerald-700 hover:bg-emerald-800 xl:self-end"
-                        onClick={() => void downloadLeaveAnalyticsPdf((hrOfficeAnalytics.records ?? []) as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.pdf`, `HR Leave Office Analytics ${analyticsRange.start} to ${analyticsRange.end}`)}
+                        onClick={() => void downloadLeaveAnalyticsPdf((hrOfficeAnalytics.records ?? []) as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.pdf`, `HR-Leave-Office-Admin Analytics ${analyticsRange.start} to ${analyticsRange.end}`)}
                         disabled={analyticsLoading || (hrOfficeAnalytics.records?.length ?? 0) === 0}
                       >
                         <Download className="mr-2 h-4 w-4" /> Export PDF
@@ -2562,7 +2562,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <ScientificMetricCard
                     label="Outstanding Requests"
                     value={hrOfficeAnalytics.totals.outstanding_requests}
-                    hint="Waiting for HR Leave Office action"
+                    hint="Waiting for HR-Leave-Office-Admin action"
                     accent="border-cyan-200"
                     icon={<ClipboardList className="h-5 w-5" />}
                   />
@@ -2594,7 +2594,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">HR Leave Office Intelligence</p>
+                          <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">HR-Leave-Office-Admin Intelligence</p>
                           <h3 className="mt-2 text-2xl font-semibold tracking-tight">Operational Analytics Board</h3>
                           <p className="mt-2 max-w-2xl text-sm text-slate-200">
                             Monitor outstanding leave actions, approved leave utilization, geographic distribution, and staff leave consumption patterns in one scientific dashboard.

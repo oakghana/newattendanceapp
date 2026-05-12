@@ -232,7 +232,7 @@ function buildInitialLeaveMemoDraft(payload: {
     "",
     "Current Stage: Pending HOD/Manager Review",
     "",
-    "This memo is generated automatically for your reference and for HR Leave Office records.",
+    "This memo is generated automatically for your reference and for HR-Leave-Office-Admin records.",
   ].join("\n")
 
   return { subject, body }
@@ -668,7 +668,7 @@ export async function GET(request: NextRequest) {
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode) || isAdmin
 
-    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ──
+    // ── HR-Leave-Office-Admin mode: sees HOD-approved requests, can adjust & forward ──
     if (isHrOffice && !isHrApprover) {
       let officeQuery = admin
         .from("leave_plan_requests")
@@ -1017,7 +1017,7 @@ export async function POST(request: NextRequest) {
         "hr_director",
         "director_hr",
         "manager_hr",
-        "hr_leave_office",
+        "hr_leave_office_admin",
         "hr_office",
         "loan_office",
         "accounts",
@@ -1063,7 +1063,7 @@ export async function POST(request: NextRequest) {
     if (entitlementDays !== null && requestedDays > entitlementDays) {
       return NextResponse.json(
         {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
+          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR-Leave-Office-Admin may adjust the final leave days with a reason after review.`,
           code: "LEAVE_ENTITLEMENT_EXCEEDED",
           entitlement_days: entitlementDays,
           requested_days: requestedDays,
@@ -1276,7 +1276,7 @@ export async function PUT(request: NextRequest) {
         "hr_director",
         "director_hr",
         "manager_hr",
-        "hr_leave_office",
+        "hr_leave_office_admin",
         "hr_office",
         "loan_office",
         "accounts",
@@ -1365,7 +1365,7 @@ export async function PUT(request: NextRequest) {
     if (entitlementDays !== null && requestedDays > entitlementDays) {
       return NextResponse.json(
         {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
+          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR-Leave-Office-Admin may adjust the final leave days with a reason after review.`,
           code: "LEAVE_ENTITLEMENT_EXCEEDED",
           entitlement_days: entitlementDays,
           requested_days: requestedDays,

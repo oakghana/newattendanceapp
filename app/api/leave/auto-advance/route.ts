@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
     if (hodError) throw hodError
 
-    // Auto-advance to HR Leave Office
+    // Auto-advance to HR-Leave-Office-Admin
     for (const request of hodPendingRequests || []) {
       const { error: updateError } = await supabase
         .from("leave_plan_request_hod_review")
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       if (updateError) {
         console.error(`[v0] Failed to auto-advance request ${request.id}:`, updateError)
       } else {
-        console.log(`[v0] Auto-advanced leave request ${request.id} to HR Leave Office`)
+        console.log(`[v0] Auto-advanced leave request ${request.id} to HR-Leave-Office-Admin`)
       }
 
       // Log to audit trail
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       advancedCount: hodPendingRequests?.length || 0,
-      message: `Auto-advanced ${hodPendingRequests?.length || 0} non-annual leave requests to HR Leave Office`,
+      message: `Auto-advanced ${hodPendingRequests?.length || 0} non-annual leave requests to HR-Leave-Office-Admin`,
     })
   } catch (error: any) {
     console.error("[v0] Auto-advance error:", error)

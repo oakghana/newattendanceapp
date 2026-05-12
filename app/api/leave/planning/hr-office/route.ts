@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
 
-    // Allow HR Leave Office role or any HR approver / admin
+    // Allow HR-Leave-Office-Admin role or any HR approver / admin
     const canAct =
       isHrLeaveOfficeRole(role) ||
       isHrApproverRole(role, deptName, deptCode) ||
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     if (!canAct) {
       return NextResponse.json(
-        { error: "Only HR Leave Office staff can perform this action." },
+        { error: "Only HR-Leave-Office-Admin staff can perform this action." },
         { status: 403 },
       )
     }
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
         {
           error:
             `Adjusted leave days (${computedAdjustedDays}) exceed recommended entitlement (${entitlementDays}). ` +
-            "Provide a clear reason (minimum 10 characters) for this HR Leave Office extension.",
+            "Provide a clear reason (minimum 10 characters) for this HR-Leave-Office-Admin extension.",
           code: "HR_EXTENSION_REASON_REQUIRED",
           entitlement_days: entitlementDays,
           adjusted_days: computedAdjustedDays,
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     ]
       .filter(Boolean)
       .join(" ")
-      .trim() || "HR Leave Office"
+      .trim() || "HR-Leave-Office-Admin"
 
     const { error: updateError } = await admin
       .from("leave_plan_requests")
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
         memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
         memo_draft_cc: memo_draft_cc ? String(memo_draft_cc).trim() : null,
         memo_draft_last_edited_by: user.id,
-        memo_draft_last_edited_role: "hr_leave_office",
+        memo_draft_last_edited_role: "hr_leave_office_admin",
         memo_draft_last_edited_at: new Date().toISOString(),
         // Apply the adjusted dates as the effective dates for HR to finalize
         preferred_start_date: adjusted_start_date,
@@ -193,8 +193,8 @@ export async function POST(request: NextRequest) {
     await admin.from("staff_notifications").insert({
       recipient_id: (leaveRequest as any).user_id,
       type: "leave_plan_hr_office_review",
-      title: "Leave Request Reviewed by HR Leave Office",
-      message: `Your leave request has been reviewed by HR Leave Office. Adjusted days: ${computedAdjustedDays} (${adjusted_start_date} to ${adjusted_end_date}). Reason: ${trimmedReason}. Your request is now awaiting final HR approval.`,
+      title: "Leave Request Reviewed by HR-Leave-Office-Admin",
+      message: `Your leave request has been reviewed by HR-Leave-Office-Admin. Adjusted days: ${computedAdjustedDays} (${adjusted_start_date} to ${adjusted_end_date}). Reason: ${trimmedReason}. Your request is now awaiting final HR approval.`,
       data: {
         leave_plan_request_id,
         adjusted_days: computedAdjustedDays,

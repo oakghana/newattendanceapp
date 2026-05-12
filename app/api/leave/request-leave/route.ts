@@ -249,8 +249,8 @@ export async function POST(request: NextRequest) {
     // ── HOD notification via loan_hod_linkages ──────────────────────────────
     // Resolve the staff's HOD using the same linkage table as the loan system,
     // then notify them so they can approve in the leave management queue.
-    // SKIP for HR Leave Office staff — they have full permissions and don't need HOD approval
-    const isHrLeaveOffice = normalizedRole === "hr_leave_office"
+    // SKIP for HR-Leave-Office-Admin staff — they have full permissions and don't need HOD approval
+    const isHrLeaveOffice = normalizedRole === "hr_leave_office_admin"
 
     if (!shouldAutoApprove && !isHrLeaveOffice) {
       try {

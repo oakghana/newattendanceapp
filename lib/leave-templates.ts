@@ -1,5 +1,5 @@
 /**
- * Leave Templates for HR Leave Office
+ * Leave Templates for HR-Leave-Office-Admin
  * These templates are used for generating leave approval memos and payment drafts to accounts
  */
 
@@ -28,7 +28,7 @@ Approved Days: {{approved_days}} day(s)
       approved_days: "Number of days approved",
       travelling_days_info: "Only include if applicable: 'Travelling Days: {{travelling_days}} day(s)\n'",
       return_to_work_date: "Format: DD/MM/YYYY",
-      adjustment_details: "Only include if HR Leave Office made adjustments with reason",
+      adjustment_details: "Only include if HR-Leave-Office-Admin made adjustments with reason",
     },
   },
 
@@ -113,7 +113,7 @@ Please proceed with the above payment and debit the appropriate cost center. Sup
 
 Submitted by:
 {{hr_officer_name}}
-HR Leave Office`,
+HR-Leave-Office-Admin`,
     cc: "Finance Director, Deputy Finance Director, Audit Manager",
     placeholder_help: {
       staff_name: "Full name of staff member",
@@ -153,7 +153,7 @@ Please arrange payment to the above staff member. Supporting documentation is at
 
 Submitted by:
 {{hr_officer_name}}
-HR Leave Office`,
+HR-Leave-Office-Admin`,
     cc: "Finance Director, Personnel Department, Audit Manager",
   },
 
@@ -211,9 +211,9 @@ export const placeholderDescriptions: Record<string, string> = {
   "{{return_to_work_date}}": "Date staff should return to work",
   "{{submitted_date}}": "Date of staff request submission",
   "{{memo_date}}": "Date memo is prepared (current date)",
-  "{{adjustment_details}}": "Details of any adjustments made by HR Leave Office",
+  "{{adjustment_details}}": "Details of any adjustments made by HR-Leave-Office-Admin",
   "{{rejection_reason}}": "Reason for rejecting the leave request",
-  "{{adjustment_reason}}": "Reason why HR Leave Office adjusted the leave dates/days",
+  "{{adjustment_reason}}": "Reason why HR-Leave-Office-Admin adjusted the leave dates/days",
   "{{holiday_days_deducted}}": "Number of public holidays deducted",
   "{{travelling_days_added}}": "Number of travelling days added",
   "{{basic_salary}}": "Staff basic monthly salary",

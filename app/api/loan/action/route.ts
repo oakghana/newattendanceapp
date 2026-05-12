@@ -798,7 +798,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "save_memo_draft") {
       actionHandled = true
-      // Allow HR staff (HR Office, HR Leave Office, Director HR) to save memo drafts
+      // Allow HR staff (HR Office, HR-Leave-Office-Admin, Director HR) to save memo drafts
       if (!canDoHrOffice(role, deptName, deptCode) && !canDoDirectorHr(role, deptName, deptCode)) {
         return NextResponse.json({ error: "Only HR personnel can save memo changes" }, { status: 403 })
       }

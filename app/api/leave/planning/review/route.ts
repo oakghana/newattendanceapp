@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       }).catch(() => {})
     }
 
-    // If fully approved by all HODs → notify HR Leave Office
+    // If fully approved by all HODs → notify HR-Leave-Office-Admin
     if (nextStatus === "hod_approved" || nextStatus === "manager_confirmed") {
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
       notifyLeaveHodApproved(admin, {

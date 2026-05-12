@@ -461,11 +461,11 @@ export function LeaveManagementClient({
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
-  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office_admin", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
+  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_office", "hr_leave_office_admin", "hr"].includes(normalizedRole)
   const isAdminView = normalizedRole === "admin"
-  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
-  const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
+  const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office_admin"].includes(normalizedRole)
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -554,7 +554,7 @@ export function LeaveManagementClient({
     if (!canEditHrTemplates) {
       toast({
         title: "Forbidden",
-        description: "Only Director HR, Manager HR, and HR Leave Office can edit templates.",
+        description: "Only Director HR, Manager HR, and HR-Leave-Office-Admin can edit templates.",
         variant: "destructive",
       })
       return
@@ -745,7 +745,7 @@ export function LeaveManagementClient({
         </CardContent>
       </Card>
 
-      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "hr_leave_office" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
+      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "hr_leave_office_admin" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
         <Alert className="border-blue-200 bg-blue-50">
           <AlertDescription className="text-blue-800">
             Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.

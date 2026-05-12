@@ -6,7 +6,7 @@ export type LeavePlanningRole =
   | "it-admin"
   | "nsp"
   | "intern"
-  | "hr_leave_office"
+  | "hr_leave_office_admin"
   | "hr_officer"
   | "hr"
   | "hr_director"
@@ -38,7 +38,7 @@ export const HOD_PENDING_STATUSES: LeavePlanStatus[] = [
   "pending_manager_review",
 ]
 
-/** Statuses that require HR Leave Office action */
+/** Statuses that require HR-Leave-Office-Admin action */
 export const HR_OFFICE_PENDING_STATUSES: LeavePlanStatus[] = [
   "hod_approved",
   "hod_changes_requested", // HOD recommended date changes — HR Office can still forward with updated dates
@@ -71,10 +71,10 @@ export function isManagerRole(role: string | null | undefined): boolean {
   return ["regional_manager", "department_head"].includes(normalized)
 }
 
-/** HR Leave Office role — receives HOD-approved leaves, can adjust days/dates, forwards to HR Approver */
+/** HR-Leave-Office-Admin role — receives HOD-approved leaves, can adjust days/dates, forwards to HR Approver */
 export function isHrLeaveOfficeRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return ["hr_leave_office", "hr_office", "loan_office"].includes(normalized)
+  return ["hr_leave_office_admin", "hr_office", "loan_office"].includes(normalized)
 }
 
 /** HR Approver role — issues final approval and PDF memo */
