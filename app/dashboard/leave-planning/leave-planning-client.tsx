@@ -2036,7 +2036,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-slate-500">
-                      Current year: <strong>{activeLeaveYearPeriod.split("/")[1]}</strong>
+                      Current year: <strong>{activeLeaveYearPeriod}</strong>
                     </p>
                     {inOctoberPlanningWindow && (
                       <p className="text-xs text-amber-700 font-medium">
