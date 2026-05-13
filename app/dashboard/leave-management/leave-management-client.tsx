@@ -1500,11 +1500,15 @@ export function LeaveManagementClient({
                           className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
                         >
                           <option value="">-- Choose a leave request --</option>
-                          {approvedRequests.map((req) => (
-                            <option key={req.id} value={req.id}>
-                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
-                            </option>
-                          ))}
+                          {approvedRequests.map((req) => {
+                            const startDate = req.start_date ? new Date(req.start_date).toLocaleDateString() : "N/A"
+                            const endDate = req.end_date ? new Date(req.end_date).toLocaleDateString() : startDate
+                            return (
+                              <option key={req.id} value={req.id}>
+                                {req.leave_type} - {startDate} to {endDate}
+                              </option>
+                            )
+                          })}
                         </select>
                       </div>
 
@@ -1586,11 +1590,15 @@ export function LeaveManagementClient({
                           className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
                         >
                           <option value="">-- Choose a leave request --</option>
-                          {approvedRequests.map((req) => (
-                            <option key={req.id} value={req.id}>
-                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
-                            </option>
-                          ))}
+                          {approvedRequests.map((req) => {
+                            const startDate = req.start_date ? new Date(req.start_date).toLocaleDateString() : "N/A"
+                            const endDate = req.end_date ? new Date(req.end_date).toLocaleDateString() : startDate
+                            return (
+                              <option key={req.id} value={req.id}>
+                                {req.leave_type} - {startDate} to {endDate}
+                              </option>
+                            )
+                          })}
                         </select>
                       </div>
 
