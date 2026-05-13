@@ -9,10 +9,11 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ClipboardList,
   Copy,
   FileClock,
-  Info,
   Loader2,
+  Plus,
   Sparkles,
   XCircle,
 } from "lucide-react"
@@ -1104,55 +1105,75 @@ export function LeaveManagementClient({
         </Card>
       )}
 
-      {/* STAFF TABS SECTION - Always visible for leave application */}
-      <div className="space-y-4 mt-6 p-4 bg-white rounded-xl shadow-lg border-2 border-emerald-500">
-        <h3 className="text-lg font-bold text-emerald-700 mb-4">Leave Application Actions</h3>
-        {/* Simple Tab Navigation - Always visible for staff users */}
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => setSelectedTab("my-requests")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
-              selectedTab === "my-requests"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            My Requests ({staffRequests.length})
-          </button>
-          <Link href="/dashboard/leave-planning">
-            <button className="px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700">
-              <Calendar className="h-5 w-5" />
-              Apply for Leave
-            </button>
-          </Link>
-          <button
-            onClick={() => setSelectedTab("approved")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
-              selectedTab === "approved"
-                ? "bg-green-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            Approved ({approvedRequests.length})
-          </button>
-        </div>
+      {/* STAFF TABS SECTION - Leave Application Actions */}
+      <div className="space-y-6">
+        <Card className="border border-slate-200 bg-gradient-to-br from-white to-slate-50/50 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-3">
+              <ClipboardList className="h-5 w-5 text-blue-600" />
+              Leave Application Actions
+            </CardTitle>
+            <CardDescription className="text-slate-600">Manage your leave requests and submissions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => setSelectedTab("my-requests")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "my-requests"
+                    ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "my-requests" ? "default" : "outline"}
+              >
+                <Calendar className="h-4 w-4" />
+                My Requests ({staffRequests.length})
+              </Button>
+              <Button
+                asChild
+                className="gap-2 rounded-xl px-6 py-2 font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700 transition-all"
+              >
+                <Link href="/dashboard/leave-planning">
+                  <Plus className="h-4 w-4" />
+                  Apply for Leave
+                </Link>
+              </Button>
+              <Button
+                onClick={() => setSelectedTab("approved")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "approved"
+                    ? "bg-emerald-600 text-white shadow-md hover:bg-emerald-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "approved" ? "default" : "outline"}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Approved ({approvedRequests.length})
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Tab Content */}
-        <div>
+        <div className="space-y-4">
           {selectedTab === "my-requests" && (
             <>
               {staffRequests.length === 0 ? (
-                <Card className="border border-dashed border-slate-300 bg-slate-50/80">
-                  <CardContent className="py-14 text-center">
-                    <Info className="mx-auto mb-4 h-12 w-12 text-cyan-500/70" />
-                    <p className="mb-1 font-medium text-slate-800">No leave requests yet</p>
-                    <p className="mb-6 text-sm text-slate-500">Click below to submit your first leave request.</p>
+                <Card className="border border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50/50">
+                  <CardContent className="py-12 text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100/80 mb-4">
+                      <Calendar className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <p className="mb-1 font-semibold text-slate-800 text-lg">No leave requests yet</p>
+                    <p className="mb-6 text-sm text-slate-600">You haven&apos;t submitted any leave requests. Click the button below to apply for leave.</p>
                     <Button
-                      onClick={() => setSelectedTab("apply-leave")}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+                      asChild
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold"
                     >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      Apply for Leave
+                      <Link href="/dashboard/leave-planning">
+                        <Plus className="h-4 w-4" />
+                        Apply for Leave
+                      </Link>
                     </Button>
                   </CardContent>
                 </Card>
