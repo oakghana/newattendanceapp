@@ -30,16 +30,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the leave request to verify it's approved and belongs to the user
+    // Get the leave request to verify it's approved
     const { data: leaveRequest, error: leaveError } = await admin
       .from("leave_plan_requests")
       .select("*")
       .eq("id", leave_plan_request_id)
-      .eq("user_id", user.id)
       .single()
 
     if (leaveError || !leaveRequest) {
+      console.error("[v0] Leave request not found:", leave_plan_request_id, leaveError)
       return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
+    }
+
+    // Verify the user is either the staff member or their HOD
+    const isStaff = leaveRequest.user_id === user.id
+    
+    // If not the staff member, check if they're the HOD
+    if (!isStaff) {
+      const { data: userProfile } = await admin
+        .from("user_profiles")
+        .select("role, department_id")
+        .eq("id", user.id)
+        .single()
+
+      const roleNorm = (userProfile?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+      const isHod = ["hod", "head_of_department", "head_department", "manager", "department_head"].includes(roleNorm)
+
+      if (!isHod) {
+        return NextResponse.json({ error: "Unauthorized to defer this leave" }, { status: 403 })
+      }
+
+      // Verify the staff member is in the HOD's department
+      const { data: staffProfile } = await admin
+        .from("user_profiles")
+        .select("department_id")
+        .eq("id", leaveRequest.user_id)
+        .single()
+
+      if (staffProfile?.department_id !== userProfile?.department_id) {
+        return NextResponse.json({ error: "Staff member is not in your department" }, { status: 403 })
+      }
     }
 
     // Verify the leave is approved
@@ -65,16 +95,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get HOD or Regional Manager for this staff
+    // Get HOD for this staff member
+    const { data: leaveStaffProfile } = await admin
+      .from("user_profiles")
+      .select("id, department_id")
+      .eq("id", leaveRequest.user_id)
+      .single()
+
+    if (!leaveStaffProfile?.department_id) {
+      return NextResponse.json(
+        { error: "Staff member's department not found" },
+        { status: 404 }
+      )
+    }
+
+    // Get the HOD of the staff member's department
     const { data: hod, error: hodError } = await admin
       .from("user_profiles")
       .select("id, full_name, email, role")
-      .eq("id", leaveRequest.hod_user_id || leaveRequest.regional_manager_id)
+      .eq("department_id", leaveStaffProfile.department_id)
+      .in("role", ["HOD", "Head of Department", "Head_of_Department", "Manager", "Head_Department"])
       .single()
 
-    if (!hod) {
+    if (!hod || hodError) {
+      console.error("[v0] HOD not found for department:", leaveStaffProfile.department_id, hodError)
       return NextResponse.json(
-        { error: "HOD or Regional Manager not found" },
+        { error: "HOD or Manager not found for this department" },
         { status: 404 }
       )
     }
@@ -113,7 +159,7 @@ export async function POST(request: NextRequest) {
       ])
 
     // Send notification to HOD/Regional Manager
-    const { data: staffProfile } = await admin
+    const { data: requestingStaffProfile } = await admin
       .from("user_profiles")
       .select("full_name")
       .eq("id", user.id)
@@ -121,7 +167,7 @@ export async function POST(request: NextRequest) {
 
     notifyLeaveHodDefermentRequest(admin, {
       hodUserId: hod.id,
-      staffName: staffProfile?.full_name || "Staff Member",
+      staffName: requestingStaffProfile?.full_name || "Staff Member",
       hodName: hod.full_name || "Manager",
       leaveType: leaveRequest.leave_type_key || "Leave",
       originalLeaveStart: leaveRequest.preferred_start_date,
