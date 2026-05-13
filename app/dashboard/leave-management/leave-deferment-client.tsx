@@ -224,11 +224,6 @@ export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-semibold text-slate-900">{leave.leave_type_key}</span>
-                            {isHod && leave.user_profiles && (
-                              <span className="text-sm text-slate-600">
-                                - {leave.user_profiles.first_name} {leave.user_profiles.last_name}
-                              </span>
-                            )}
                             <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">Approved</Badge>
                           </div>
                           <div className="text-sm text-slate-600 space-y-1">
@@ -270,9 +265,7 @@ export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
                                   <DialogHeader>
                                     <DialogTitle>Defer Leave Request</DialogTitle>
                                     <DialogDescription>
-                                      {isHod 
-                                        ? `Propose a new leave year and period for ${leave.user_profiles?.first_name} ${leave.user_profiles?.last_name}'s leave`
-                                        : "Propose a new leave year and period for your leave"}
+                                      Propose a new leave year and period for your leave
                                     </DialogDescription>
                                   </DialogHeader>
                                   <div className="space-y-4 py-4">

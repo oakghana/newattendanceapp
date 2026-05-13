@@ -167,13 +167,6 @@ export async function GET(request: NextRequest) {
 
     // Get approved leaves that can be deferred
     if (action === "approved_leaves") {
-      // First, get the current user's department (if they're a HOD)
-      const { data: currentUserData } = await admin
-        .from("user_profiles")
-        .select("id, role, department_id")
-        .eq("id", user.id)
-        .single()
-
       let query = admin
         .from("leave_plan_requests")
         .select(
@@ -183,9 +176,7 @@ export async function GET(request: NextRequest) {
            preferred_start_date, 
            preferred_end_date, 
            requested_days,
-           status,
-           user_profiles!inner(id, first_name, last_name, department_id),
-           departments(id, name)`
+           status`
         )
         .eq("status", "hr_approved")
 
@@ -195,14 +186,32 @@ export async function GET(request: NextRequest) {
         query = query.order("preferred_start_date", { ascending: false })
       } else if (["hod", "head_of_department", "head_department", "manager", "department_head"].includes(roleNorm)) {
         // HOD can see approved leaves for their department staff
-        if (currentUserData?.department_id) {
-          query = query
-            .eq("user_profiles.department_id", currentUserData.department_id)
-            .order("preferred_start_date", { ascending: false })
-        } else {
-          // HOD without department assignment can't see anything
+        // First get HOD's department
+        const { data: hodData } = await admin
+          .from("user_profiles")
+          .select("department_id")
+          .eq("id", user.id)
+          .single()
+
+        if (!hodData?.department_id) {
           return NextResponse.json({ requests: [] })
         }
+
+        // Get all users in the department
+        const { data: deptUsers } = await admin
+          .from("user_profiles")
+          .select("id")
+          .eq("department_id", hodData.department_id)
+
+        const deptUserIds = (deptUsers || []).map((u: any) => u.id)
+        
+        if (deptUserIds.length === 0) {
+          return NextResponse.json({ requests: [] })
+        }
+
+        query = query
+          .in("user_id", deptUserIds)
+          .order("preferred_start_date", { ascending: false })
       } else {
         // Staff can see their own approved leaves
         query = query
@@ -217,7 +226,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch approved leaves" }, { status: 500 })
       }
 
-      console.log("[v0] Approved leaves fetched for user", user.id, ":", approvedLeaves?.length || 0, "records")
+      console.log("[v0] Approved leaves for user", user.id, ":", approvedLeaves?.length || 0)
 
       return NextResponse.json({ requests: approvedLeaves || [] })
     }
