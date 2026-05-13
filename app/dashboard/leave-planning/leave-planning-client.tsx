@@ -1806,6 +1806,31 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Review failed")
+      
+      // If dates were adjusted, send notification to staff
+      if (action === "recommend_change" && hodAdjStart[reviewId] && hodAdjEnd[reviewId]) {
+        try {
+          const currentRequest = paginatedPlanning.find((r: any) => String(r.id) === String(requestId))
+          const hodProfile = userProfile
+          await fetch("/api/leave/notifications/hod-date-change", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              leaveRequestId: requestId,
+              originalStartDate: currentRequest?.preferred_start_date,
+              originalEndDate: currentRequest?.preferred_end_date,
+              newStartDate: hodAdjStart[reviewId],
+              newEndDate: hodAdjEnd[reviewId],
+              hodRecommendation: hodNote[reviewId] || "Dates have been adjusted. Please review and respond.",
+              hodName: hodProfile ? `${hodProfile.first_name} ${hodProfile.last_name}` : "HOD",
+            }),
+          })
+        } catch (notifyError) {
+          console.error("[v0] Error sending notification:", notifyError)
+          // Continue even if notification fails
+        }
+      }
+      
       toast({ title: "Review submitted" })
       await loadData()
     } catch (e) {

@@ -79,51 +79,90 @@ export default async function LeaveManagementPage() {
 
   // Fetch leave planning review assignments for HOD/HR/admin metrics and queue summaries.
   if (canReviewLeave) {
-    const reviewerFilter = ["admin", "leave_admin", "hr_leave_office", "regional_hr_leave", "hr_office", "hr"].includes(roleNorm)
-      ? undefined
-      : user.id
-    const { data: planningReviews } = reviewerFilter
-      ? await admin
-          .from("leave_plan_reviews")
-          .select(`
+    const isAdmin = ["admin", "leave_admin", "hr_leave_office", "regional_hr_leave", "hr_office", "hr"].includes(roleNorm)
+    
+    let planningReviews: any[] = []
+    
+    if (isAdmin) {
+      // For admins: Show ALL pending leave requests (including those without reviews yet)
+      const { data: allPendingRequests } = await admin
+        .from("leave_plan_requests")
+        .select(`
+          id,
+          user_id,
+          preferred_start_date,
+          preferred_end_date,
+          leave_type_key,
+          reason,
+          status,
+          created_at
+        `)
+        .eq("status", "pending_hod_review")
+        .order("created_at", { ascending: false })
+      
+      // Also fetch reviews that exist
+      const { data: existingReviews } = await admin
+        .from("leave_plan_reviews")
+        .select(`
+          id,
+          reviewer_id,
+          reviewer_role,
+          decision,
+          reviewed_at,
+          leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
             id,
-            reviewer_id,
-            reviewer_role,
-            decision,
-            reviewed_at,
-            leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
-              id,
-              user_id,
-              preferred_start_date,
-              preferred_end_date,
-              leave_type_key,
-              reason,
-              status,
-              created_at
-            )
-          `)
-          .eq("reviewer_id", reviewerFilter)
-          .order("created_at", { ascending: false })
-      : await admin
-          .from("leave_plan_reviews")
-          .select(`
+            user_id,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            reason,
+            status,
+            created_at
+          )
+        `)
+        .order("created_at", { ascending: false })
+      
+      // Combine: use reviews where available, otherwise use pending requests
+      const reviewedRequestIds = new Set((existingReviews || []).map((r: any) => r.leave_plan_request?.id))
+      const pendingRequests = (allPendingRequests || []).filter((r: any) => !reviewedRequestIds.has(r.id))
+      
+      planningReviews = [
+        ...(existingReviews || []),
+        ...pendingRequests.map((req: any) => ({
+          id: `review-${req.id}`,
+          reviewer_id: null,
+          reviewer_role: null,
+          decision: null,
+          reviewed_at: null,
+          leave_plan_request: req
+        }))
+      ]
+    } else {
+      // For HOD/RM: Show only assigned reviews
+      const { data: assignedReviews } = await admin
+        .from("leave_plan_reviews")
+        .select(`
+          id,
+          reviewer_id,
+          reviewer_role,
+          decision,
+          reviewed_at,
+          leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
             id,
-            reviewer_id,
-            reviewer_role,
-            decision,
-            reviewed_at,
-            leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
-              id,
-              user_id,
-              preferred_start_date,
-              preferred_end_date,
-              leave_type_key,
-              reason,
-              status,
-              created_at
-            )
-          `)
-          .order("created_at", { ascending: false })
+            user_id,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            reason,
+            status,
+            created_at
+          )
+        `)
+        .eq("reviewer_id", user.id)
+        .order("created_at", { ascending: false })
+      
+      planningReviews = assignedReviews || []
+    }
 
     const notifications = (planningReviews || []).filter((review: any) => Boolean(review?.leave_plan_request))
 
@@ -164,7 +203,6 @@ export default async function LeaveManagementPage() {
         }
       })
     console.log("[v0] Leave Management - After filtering managerNotifications:", managerNotifications.length, "items")
-
   }
 
   return (
