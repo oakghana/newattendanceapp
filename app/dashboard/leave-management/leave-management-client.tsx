@@ -11,13 +11,9 @@ import {
   ChevronUp,
   ClipboardList,
   Copy,
-  Download,
-  FileText,
   FileClock,
-  History,
   Loader2,
   Plus,
-  RotateCcw,
   Sparkles,
   XCircle,
 } from "lucide-react"
@@ -453,105 +449,7 @@ export function LeaveManagementClient({
     }
   }
 
-  const downloadLeaveMemo = async (requestId: string, requestName: string) => {
-    const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAuthorized = ["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin"].includes(normalized)
-    
-    if (!isAuthorized) {
-      toast({
-        title: "Access Denied",
-        description: "Only HOD/RM and HR users can download leave memos.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setProcessingId(requestId)
-    try {
-      const response = await fetch(`/api/leave/memo/download?leave_plan_request_id=${requestId}`)
-      
-      if (!response.ok) {
-        throw new Error("Failed to download memo")
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `Leave_Memo_${requestName}_${new Date().getTime()}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(link)
-
-      toast({
-        title: "Memo Downloaded",
-        description: `Leave memo for ${requestName} downloaded successfully.`,
-      })
-    } catch (error) {
-      console.error("Error downloading memo:", error)
-      toast({
-        title: "Download Failed",
-        description: error instanceof Error ? error.message : "Could not download leave memo.",
-        variant: "destructive",
-      })
-    } finally {
-      setProcessingId(null)
-    }
-  }
-
-  const submitLeaveRecall = async (leavePlanRequestId: string, recallDate: string, reason: string) => {
-    const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAuthorized = ["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin"].includes(normalized)
-    
-    if (!isAuthorized) {
-      toast({
-        title: "Access Denied",
-        description: "Only HOD/RM and HR users can submit leave recall requests.",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    setProcessingId(leavePlanRequestId)
-    try {
-      const response = await fetch("/api/leave/recall", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          leave_plan_request_id: leavePlanRequestId,
-          recall_date: recallDate,
-          reason: reason,
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to create recall request")
-      }
-
-      const data = await response.json()
-
-      toast({
-        title: "Recall Submitted",
-        description: "Leave recall request has been submitted successfully.",
-      })
-
-      return true
-    } catch (error) {
-      console.error("[v0] Leave recall error:", error)
-      toast({
-        title: "Recall Failed",
-        description: error instanceof Error ? error.message : "Could not submit leave recall request.",
-        variant: "destructive",
-      })
-      return false
-    } finally {
-      setProcessingId(null)
-    }
-  }
+  const pendingRequests = staffRequests.filter((r) => pendingStatuses.has(String(r.status || "")))
   const approvedRequests = staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
   const pendingNotifications = managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending")
   const adminAllPending = pendingNotifications
@@ -1223,7 +1121,7 @@ export function LeaveManagementClient({
                 onClick={() => setSelectedTab("my-requests")}
                 className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
                   selectedTab === "my-requests"
-                    ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md hover:shadow-lg"
+                    ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
                 }`}
                 variant={selectedTab === "my-requests" ? "default" : "outline"}
@@ -1244,37 +1142,13 @@ export function LeaveManagementClient({
                 onClick={() => setSelectedTab("approved")}
                 className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
                   selectedTab === "approved"
-                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md hover:shadow-lg"
+                    ? "bg-emerald-600 text-white shadow-md hover:bg-emerald-700"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
                 }`}
                 variant={selectedTab === "approved" ? "default" : "outline"}
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Approved ({approvedRequests.length})
-              </Button>
-              <Button
-                onClick={() => setSelectedTab("deferment")}
-                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                  selectedTab === "deferment"
-                    ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md hover:shadow-lg"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                }`}
-                variant={selectedTab === "deferment" ? "default" : "outline"}
-              >
-                <History className="h-4 w-4" />
-                Deferments
-              </Button>
-              <Button
-                onClick={() => setSelectedTab("recall")}
-                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                  selectedTab === "recall"
-                    ? "bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-md hover:shadow-lg"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                }`}
-                variant={selectedTab === "recall" ? "default" : "outline"}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Recalls
               </Button>
             </div>
           </CardContent>
@@ -1306,14 +1180,7 @@ export function LeaveManagementClient({
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {staffRequests.map((request) => (
-                    <LeaveRequestCard 
-                      key={request.id} 
-                      request={request} 
-                      canEdit={editableStatuses.has(String(request.status || ""))} 
-                      onEdit={() => openEditRequest(request)}
-                      onDownloadMemo={() => downloadLeaveMemo(request.id, `${request.user_name || "Staff"}`)}
-                      isDownloading={processingId === request.id}
-                    />
+                    <LeaveRequestCard key={request.id} request={request} canEdit={editableStatuses.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} />
                   ))}
                 </div>
               )}
@@ -1332,62 +1199,10 @@ export function LeaveManagementClient({
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {approvedRequests.map((request) => (
-                    <LeaveRequestCard 
-                      key={request.id} 
-                      request={request} 
-                      emphasizeApproved 
-                      onDownloadMemo={() => downloadLeaveMemo(request.id, `${request.user_name || "Staff"}`)}
-                      isDownloading={processingId === request.id}
-                    />
+                    <LeaveRequestCard key={request.id} request={request} emphasizeApproved />
                   ))}
                 </div>
               )}
-            </>
-          )}
-
-          {selectedTab === "deferment" && (
-            <>
-              <Card className="border border-slate-200 bg-gradient-to-br from-white to-amber-50/30">
-                <CardHeader className="pb-4 border-b border-slate-200">
-                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                    <History className="h-5 w-5 text-amber-600" />
-                    Leave Deferment Requests
-                  </CardTitle>
-                  <CardDescription>Manage and track your approved leave deferrals to future periods</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <History className="h-8 w-8 text-amber-600" />
-                    </div>
-                    <p className="font-semibold text-slate-800 mb-2">No deferment requests</p>
-                    <p className="text-sm text-slate-600">You haven&apos;t submitted any leave deferment requests. To defer an approved leave, please contact HR.</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {selectedTab === "recall" && (
-            <>
-              <Card className="border border-slate-200 bg-gradient-to-br from-white to-red-50/30">
-                <CardHeader className="pb-4 border-b border-slate-200">
-                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                    <RotateCcw className="h-5 w-5 text-red-600" />
-                    Leave Recall Requests
-                  </CardTitle>
-                  <CardDescription>View and respond to any leave recall requests from management</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <RotateCcw className="h-8 w-8 text-red-600" />
-                    </div>
-                    <p className="font-semibold text-slate-800 mb-2">No recall requests</p>
-                    <p className="text-sm text-slate-600">You haven&apos;t received any leave recall requests. Management will notify you if your leave needs to be recalled.</p>
-                  </div>
-                </CardContent>
-              </Card>
             </>
           )}
 
@@ -1515,15 +1330,11 @@ function LeaveRequestCard({
   emphasizeApproved = false,
   canEdit = false,
   onEdit,
-  onDownloadMemo,
-  isDownloading = false,
 }: {
   request: LeaveRequest
   emphasizeApproved?: boolean
   canEdit?: boolean
   onEdit?: () => void
-  onDownloadMemo?: () => void
-  isDownloading?: boolean
 }) {
   const normalizedStatus = String(request.status || "").toLowerCase()
   const isApproved = ["approved", "hr_approved"].includes(normalizedStatus)
@@ -1569,33 +1380,11 @@ function LeaveRequestCard({
             <p className="mt-1 font-semibold text-slate-900">{format(new Date(request.end_date), "MMM dd, yyyy")}</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          {canEdit && onEdit && (
-            <Button variant="outline" size="sm" onClick={onEdit} className="flex-1">
-              Edit Before Review
-            </Button>
-          )}
-          {isApproved && onDownloadMemo && (
-            <Button
-              size="sm"
-              onClick={onDownloadMemo}
-              disabled={isDownloading}
-              className="flex-1 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white"
-            >
-              {isDownloading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Downloading...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4" />
-                  Download Memo
-                </>
-              )}
-            </Button>
-          )}
-        </div>
+        {canEdit && onEdit && (
+          <Button variant="outline" size="sm" onClick={onEdit} className="w-full">
+            Edit Before Review
+          </Button>
+        )}
       </CardContent>
     </Card>
   )
