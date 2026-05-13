@@ -978,10 +978,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  const [leaveType, setLeaveType] = useState("annual")
+  const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
-  const [partLeaveDays, setPartLeaveDays] = useState("") // Required for part_leave
-  const [resumptionDate, setResumptionDate] = useState("") // Mandatory for all leaves
+  const [partLeaveDays, setPartLeaveDays] = useState("")
+  const [resumptionDate, setResumptionDate] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
@@ -1627,6 +1627,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Actions ──────────────────────────────────────────────────────────
 
   const submitPlan = async () => {
+    if (!leaveType) {
+      toast({ title: "Missing leave type", description: "Please select a leave type.", variant: "destructive" })
+      return
+    }
     if (!startDate) {
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return

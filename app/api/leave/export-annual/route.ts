@@ -62,18 +62,14 @@ export async function GET(request: NextRequest) {
         submitted_at,
         hod_reviewed_at,
         hr_approved_at,
-        user_profiles!inner(
+        user_profiles(
           first_name,
           last_name,
           employee_id,
           email,
           phone,
           position,
-          assigned_location_id,
-          user_profiles_assigned_location_id_fkey:geofence_locations(
-            name,
-            address
-          )
+          assigned_location_id
         )
       `
       )
@@ -82,17 +78,18 @@ export async function GET(request: NextRequest) {
       .order("submitted_at", { ascending: false })
 
     if (leaveError) {
-      console.error("[v0] Export error:", leaveError)
+      console.error("[v0] Export error - Query failed:", leaveError)
       return NextResponse.json(
-        { error: "Failed to fetch leave requests" },
+        { error: `Failed to fetch leave requests: ${leaveError.message}` },
         { status: 500 }
       )
     }
 
     if (!leaveRequests || leaveRequests.length === 0) {
+      console.log("[v0] No annual leave requests found")
       return NextResponse.json(
-        { error: "No annual leave requests found" },
-        { status: 404 }
+        { data: [], message: "No annual leave requests found" },
+        { status: 200 }
       )
     }
 
