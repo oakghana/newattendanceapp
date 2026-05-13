@@ -235,6 +235,28 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
             </div>
           )}
 
+          {/* Annual Leave Conditions for Non-Annual Leave Types */}
+          {formData.leaveType !== "annual" && (
+            <div className="flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-700 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Annual Leave Required</p>
+                <p className="text-xs mt-1">To request this leave type, you must have an approved Annual Leave request for the same period. Please submit your Annual Leave request first.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Annual Leave Policy Notice */}
+          {formData.leaveType === "annual" && (
+            <div className="flex items-start gap-2.5 rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-700 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Annual Leave Policy</p>
+                <p className="text-xs mt-1">Entitled: 30 days per leave year (2026/2027). Submission deadline: First week of October. Minimum notice period: 2 weeks in advance.</p>
+              </div>
+            </div>
+          )}
+
           {/* Step: Type */}
           {step === "type" && (
             <div className="space-y-2">

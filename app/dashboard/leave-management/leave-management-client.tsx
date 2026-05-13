@@ -500,7 +500,58 @@ export function LeaveManagementClient({
     }
   }
 
-  const pendingRequests = staffRequests.filter((r) => pendingStatuses.has(String(r.status || "")))
+  const submitLeaveRecall = async (leavePlanRequestId: string, recallDate: string, reason: string) => {
+    const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const isAuthorized = ["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin"].includes(normalized)
+    
+    if (!isAuthorized) {
+      toast({
+        title: "Access Denied",
+        description: "Only HOD/RM and HR users can submit leave recall requests.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    setProcessingId(leavePlanRequestId)
+    try {
+      const response = await fetch("/api/leave/recall", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          leave_plan_request_id: leavePlanRequestId,
+          recall_date: recallDate,
+          reason: reason,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to create recall request")
+      }
+
+      const data = await response.json()
+
+      toast({
+        title: "Recall Submitted",
+        description: "Leave recall request has been submitted successfully.",
+      })
+
+      return true
+    } catch (error) {
+      console.error("[v0] Leave recall error:", error)
+      toast({
+        title: "Recall Failed",
+        description: error instanceof Error ? error.message : "Could not submit leave recall request.",
+        variant: "destructive",
+      })
+      return false
+    } finally {
+      setProcessingId(null)
+    }
+  }
   const approvedRequests = staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
   const pendingNotifications = managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending")
   const adminAllPending = pendingNotifications
