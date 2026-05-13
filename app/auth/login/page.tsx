@@ -582,7 +582,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2 slide-up">
-              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">QCC HR APPS👋</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">QCC LEAVE/ATTENDANCE/LOAN APP 👋</CardTitle>
               <CardDescription className="text-xs sm:text-sm text-muted-foreground">
                 Akwaaba! Sign in with your Staff Number, Email or use OTP to get started.
               </CardDescription>
