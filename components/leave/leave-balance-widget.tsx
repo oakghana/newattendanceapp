@@ -88,7 +88,7 @@ export function LeaveBalanceWidget() {
     const timeout = setTimeout(() => controller.abort(), 5000) // 5 second timeout
 
     fetch("/api/leave/balance", { 
-      cache: "force-cache",
+      cache: "no-store",
       signal: controller.signal 
     })
       .then((r) => {
@@ -97,11 +97,16 @@ export function LeaveBalanceWidget() {
       })
       .then((d) => {
         if (d.error) throw new Error(d.error)
-        setData(d)
+        if (!d.balances || d.balances.length === 0) {
+          console.log("[v0] LeaveBalanceWidget: No balance data returned")
+          setError("No leave balance data available")
+        } else {
+          setData(d)
+        }
         setLoading(false)
       })
       .catch((e) => {
-        console.log("[v0] LeaveBalanceWidget error:", e.message)
+        console.error("[v0] LeaveBalanceWidget error:", e)
         setError(e.message || "Failed to load leave balance")
         setLoading(false)
       })

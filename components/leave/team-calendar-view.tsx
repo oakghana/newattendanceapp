@@ -84,7 +84,7 @@ export function TeamCalendarView({ isHrOffice = false }: TeamCalendarViewProps) 
     
     const m = `${year}-${String(month + 1).padStart(2, "0")}`
     fetch(`/api/leave/team-calendar?month=${m}`, { 
-      cache: "force-cache",
+      cache: "no-store",
       signal: controller.signal 
     })
       .then((r) => {
@@ -93,11 +93,16 @@ export function TeamCalendarView({ isHrOffice = false }: TeamCalendarViewProps) 
       })
       .then((d) => {
         if (d.error) throw new Error(d.error)
-        setData(d)
+        if (!d.entries || d.entries.length === 0) {
+          console.log("[v0] TeamCalendarView: No entries returned for month", m)
+          setData({ entries: [], rangeStart: d.rangeStart || "", rangeEnd: d.rangeEnd || "" })
+        } else {
+          setData(d)
+        }
         setLoading(false)
       })
       .catch((e) => {
-        console.log("[v0] TeamCalendarView error:", e.message)
+        console.error("[v0] TeamCalendarView error:", e)
         setError(e.message || "Failed to load team calendar")
         setLoading(false)
       })
