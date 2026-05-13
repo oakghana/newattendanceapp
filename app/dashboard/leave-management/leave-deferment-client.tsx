@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertCircle, Calendar, Clock, CheckCircle2, XCircle, Send } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 function fmtDate(val?: string | null) {
   if (!val) return "—"
@@ -83,6 +83,7 @@ function getStatusLabel(status: string) {
 }
 
 export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
+  const { toast } = useToast()
   const roleNorm = normalizeRole(userRole)
   const isStaff = !["admin", "leave_admin", "hr_office", "hr_leave_office", "director_hr", "manager_hr"].includes(roleNorm)
   const isHrOffice = ["admin", "leave_admin", "hr_office", "hr_leave_office", "director_hr", "manager_hr"].includes(roleNorm)
