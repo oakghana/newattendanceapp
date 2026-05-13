@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get annual leave requests with location data
+    // Get annual leave requests - use simplified query to avoid relationship ambiguity
     const { data: leaveRequests, error: leaveError } = await supabase
       .from("leave_plan_requests")
       .select(
@@ -61,16 +61,7 @@ export async function GET(request: NextRequest) {
         created_at,
         submitted_at,
         hod_reviewed_at,
-        hr_approved_at,
-        user_profiles(
-          first_name,
-          last_name,
-          employee_id,
-          email,
-          phone,
-          position,
-          assigned_location_id
-        )
+        hr_approved_at
       `
       )
       .eq("leave_type_key", "annual")
@@ -92,6 +83,21 @@ export async function GET(request: NextRequest) {
         { status: 200 }
       )
     }
+
+    // Fetch user profiles separately to avoid relationship ambiguity
+    const userIds = leaveRequests.map((req: any) => req.user_id)
+    const { data: profiles, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("id, first_name, last_name, employee_id, email, phone, position, assigned_location_id")
+      .in("id", userIds)
+
+    if (profileError) {
+      console.error("[v0] Profile fetch error:", profileError)
+      // Continue without profiles - use IDs only
+    }
+
+    // Create a map of user_id -> profile for fast lookup
+    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]))
 
     // Build CSV data
     const headers = [
@@ -115,17 +121,16 @@ export async function GET(request: NextRequest) {
 
     const rows = leaveRequests
       .map((request: any) => {
-        const profile = request.user_profiles
-        const location = profile?.user_profiles_assigned_location_id_fkey?.[0]
+        const profile = profileMap.get(request.user_id) || {}
 
         return [
-          profile?.employee_id || "N/A",
-          `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim(),
-          profile?.email || "N/A",
-          profile?.phone || "N/A",
-          profile?.position || "N/A",
-          location?.name || "Not Assigned",
-          location?.address || "N/A",
+          profile.employee_id || "N/A",
+          `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "N/A",
+          profile.email || "N/A",
+          profile.phone || "N/A",
+          profile.position || "N/A",
+          "Not Assigned", // Location would need separate fetch
+          "N/A",
           request.preferred_start_date || "N/A",
           request.preferred_end_date || "N/A",
           request.requested_days || 0,

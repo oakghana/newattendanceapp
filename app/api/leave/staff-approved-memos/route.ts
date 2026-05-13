@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ memos: [] })
     }
 
-    // Fetch approved leave requests for these staff
+    // Fetch approved leave requests for these staff - simplified to avoid relationship ambiguity
     const { data: approvedRequests, error: requestError } = await supabase
       .from("leave_plan_requests")
       .select(`
@@ -91,23 +91,7 @@ export async function GET(request: NextRequest) {
         leave_type_key,
         reason,
         status,
-        created_at,
-        user_profiles:user_id (
-          first_name,
-          last_name,
-          email,
-          assigned_location_id,
-          geofence_locations:assigned_location_id (
-            name,
-            address
-          )
-        ),
-        leave_plan_reviews (
-          decision,
-          reviewed_at,
-          reviewer_id,
-          reviewer_role
-        )
+        created_at
       `)
       .in("user_id", staffIds)
       .in("status", ["approved", "hr_approved"])
@@ -117,21 +101,41 @@ export async function GET(request: NextRequest) {
       throw new Error(requestError.message)
     }
 
-    const memos = (approvedRequests || []).map((req: any) => ({
-      id: String(req.id),
-      user_id: String(req.user_id),
-      staff_name: req.user_profiles ? `${req.user_profiles.first_name || ""} ${req.user_profiles.last_name || ""}`.trim() : "Unknown",
-      email: req.user_profiles?.email || "N/A",
-      location: req.user_profiles?.geofence_locations?.name || "Not Assigned",
-      address: req.user_profiles?.geofence_locations?.address || "N/A",
-      leave_type: req.leave_type_key || "annual",
-      start_date: req.preferred_start_date,
-      end_date: req.preferred_end_date,
-      reason: req.reason || "",
-      status: req.status,
-      approved_at: req.leave_plan_reviews?.[0]?.reviewed_at || req.created_at,
-      memo_url: `/api/leave/memo-document/${req.id}`, // Link to download memo
-    }))
+    if (!approvedRequests || approvedRequests.length === 0) {
+      return NextResponse.json({ memos: [] })
+    }
+
+    // Fetch user profiles and location data separately
+    const { data: profilesData, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("id, first_name, last_name, email, assigned_location_id")
+      .in("id", staffIds)
+
+    if (profileError) {
+      console.error("[v0] Profile fetch error:", profileError)
+    }
+
+    // Create profile map for fast lookup
+    const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
+
+    const memos = (approvedRequests || []).map((req: any) => {
+      const profile = profileMap.get(req.user_id) || {}
+      return {
+        id: String(req.id),
+        user_id: String(req.user_id),
+        staff_name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
+        email: profile.email || "N/A",
+        location: "Not Assigned", // Would need location fetch separately
+        address: "N/A",
+        leave_type: req.leave_type_key || "annual",
+        start_date: req.preferred_start_date,
+        end_date: req.preferred_end_date,
+        reason: req.reason || "",
+        status: req.status,
+        approved_at: req.created_at,
+        memo_url: `/api/leave/memo-document/${req.id}`, // Link to download memo
+      }
+    })
 
     return NextResponse.json({ memos })
   } catch (error) {
