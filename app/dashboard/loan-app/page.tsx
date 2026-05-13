@@ -979,7 +979,7 @@ export default function LoanAppPage() {
   const isAdmin = isAdminRoleValue(normalizedRole)
   const isHrLoanOfficeAdmin = isAdmin || ["director_hr", "manager_hr"].includes(normalizedRole)
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
-  const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
+  const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "loan_office_admin", "director_hr", "manager_hr"].includes(normalizedRole)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
@@ -1005,8 +1005,45 @@ export default function LoanAppPage() {
       ]
     }
     
+    // Loan Office: Show My Loans, Tracking, Loan Office, My Tasks, All Loans (no admin tabs)
+    if (normalizedRole === "loan_office") {
+      const c = {
+        loanOffice: data?.inbox?.loanOffice?.length || 0,
+        hr: data?.inbox?.hrOffice?.length || 0,
+        all: data?.inbox?.allLoans?.length || 0,
+        mine: data?.myTasks?.length || 0,
+      }
+      const tabs = [
+        { key: "staff", label: "My Loans" },
+        { key: "tracking", label: "Tracking" },
+        { key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` },
+        { key: "my-tasks", label: `My Tasks (${c.mine})` },
+        { key: "overview", label: `All Loans (${c.all})` },
+      ]
+      return tabs
+    }
+    
+    // Loan Office Admin: Same as Loan Office but with Setup & Linkage tab
+    if (normalizedRole === "loan_office_admin") {
+      const c = {
+        loanOffice: data?.inbox?.loanOffice?.length || 0,
+        hr: data?.inbox?.hrOffice?.length || 0,
+        all: data?.inbox?.allLoans?.length || 0,
+        mine: data?.myTasks?.length || 0,
+      }
+      const tabs = [
+        { key: "staff", label: "My Loans" },
+        { key: "tracking", label: "Tracking" },
+        { key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` },
+        { key: "my-tasks", label: `My Tasks (${c.mine})` },
+        { key: "setup", label: "Setup & Linkage" },
+        { key: "overview", label: `All Loans (${c.all})` },
+      ]
+      return tabs
+    }
+    
     // HR Loan Office Admin: Only show Setup & Linkage and Committee tabs
-    if (isHrLoanOfficeAdmin && !["loan_office"].includes(normalizedRole) && !p?.viewAllTabs) {
+    if (isHrLoanOfficeAdmin && !["loan_office", "loan_office_admin"].includes(normalizedRole) && !p?.viewAllTabs) {
       const c = {
         committee: data?.inbox?.committee?.length || 0,
       }
@@ -1027,12 +1064,13 @@ export default function LoanAppPage() {
     }
     const tabs = [{ key: "staff", label: "My Loans" }, { key: "tracking", label: "Tracking" }]
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
-    if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
+    if (canAccessLoanOfficeWorkspace && !["loan_office", "loan_office_admin"].includes(normalizedRole)) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-    if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
+    if (canAccessLoanOfficeWorkspace && !["loan_office", "loan_office_admin"].includes(normalizedRole)) tabs.push({ key: "setup", label: "Setup & Linkage" })
+    const isHrAdminRole = normalizedRole === "hr_leave_office" || normalizedRole === "leave_admin"
+    if (!isHrAdminRole && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
     if (p?.allLoans || p?.viewAllTabs) {

@@ -938,7 +938,7 @@ export function LeaveManagementClient({
         </CardContent>
       </Card>
 
-      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "leave_admin" && normalizedRole !== "hr_leave_office" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
+      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "leave_admin" && normalizedRole !== "hr_leave_office" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && normalizedRole !== "loan_office" && normalizedRole !== "loan_office_admin" && (
         <Alert className="border-blue-200 bg-blue-50">
           <AlertDescription className="text-blue-800">
             Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.
