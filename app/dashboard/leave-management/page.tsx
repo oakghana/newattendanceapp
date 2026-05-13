@@ -178,6 +178,7 @@ export default async function LeaveManagementPage() {
   return (
     <div className="leave-theme">
       <LeaveManagementModuleClient
+        userId={user.id}
         userRole={profile.role}
         userDepartment={profile.department_id}
         userFirstName={(profile as any)?.first_name || null}

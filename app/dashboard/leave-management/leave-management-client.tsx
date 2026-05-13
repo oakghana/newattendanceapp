@@ -56,6 +56,7 @@ interface LeaveNotification {
 }
 
 interface LeaveManagementClientProps {
+  userId: string
   userRole: string
   userDepartment: string | null
   userFirstName: string | null
@@ -80,6 +81,7 @@ interface HrMemoTemplate {
 }
 
 export function LeaveManagementClient({
+  userId,
   userRole,
   userDepartment,
   userFirstName,
@@ -159,6 +161,8 @@ export function LeaveManagementClient({
     category: "approval",
   })
   const [isExportingAnnualLeave, setIsExportingAnnualLeave] = useState(false)
+  const [staffApprovedMemos, setStaffApprovedMemos] = useState<any[]>([])
+  const [isLoadingApprovedMemos, setIsLoadingApprovedMemos] = useState(false)
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -205,6 +209,32 @@ export function LeaveManagementClient({
       toast({ title: "Export Failed", description: error instanceof Error ? error.message : "Could not export annual leave.", variant: "destructive" })
     } finally {
       setIsExportingAnnualLeave(false)
+    }
+  }
+
+  // ─── Fetch Approved Memos for HOD/RM Staff ───
+  const fetchStaffApprovedMemos = async () => {
+    try {
+      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+      const isAuthorized = ["department_head", "regional_manager"].includes(normalizedRole)
+
+      if (!isAuthorized) return
+
+      setIsLoadingApprovedMemos(true)
+
+      const response = await fetch(`/api/leave/staff-approved-memos?user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(userRole)}&user_department=${encodeURIComponent(userDepartment || "")}`)
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch approved memos")
+      }
+
+      const data = await response.json()
+      setStaffApprovedMemos(data.memos || [])
+    } catch (error) {
+      console.error("[v0] Fetch approved memos error:", error)
+      setStaffApprovedMemos([])
+    } finally {
+      setIsLoadingApprovedMemos(false)
     }
   }
 
@@ -639,6 +669,14 @@ export function LeaveManagementClient({
 
     void loadTemplates()
   }, [canViewHrTemplates, toast])
+
+  // Fetch approved memos for HOD/RM
+  useEffect(() => {
+    const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+    if (["department_head", "regional_manager"].includes(normalizedRole)) {
+      fetchStaffApprovedMemos()
+    }
+  }, [userId, userRole, userDepartment])
 
   const runTemplateAction = async (templateKey: string, action: "duplicate" | "deactivate" | "activate") => {
     setTemplateActionKey(`${action}:${templateKey}`)
@@ -1346,6 +1384,20 @@ export function LeaveManagementClient({
                 <ArrowUpRight className="h-4 w-4" />
                 Recalls
               </Button>
+              {isManagerView && (
+                <Button
+                  onClick={() => setSelectedTab("approved-memos")}
+                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                    selectedTab === "approved-memos"
+                      ? "bg-teal-600 text-white shadow-md hover:bg-teal-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                  variant={selectedTab === "approved-memos" ? "default" : "outline"}
+                >
+                  <Download className="h-4 w-4" />
+                  Approved Memos
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1562,6 +1614,60 @@ export function LeaveManagementClient({
                         )}
                       </Button>
                     </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedTab === "approved-memos" && isManagerView && (
+            <Card className="border border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50/50">
+              <CardHeader className="border-b border-teal-200 bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5" />
+                  Approved Leave Memos
+                </CardTitle>
+                <CardDescription className="text-teal-100">Download signed approval memos for your staff's approved leave requests</CardDescription>
+              </CardHeader>
+              <CardContent className="py-6">
+                {isLoadingApprovedMemos ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+                  </div>
+                ) : staffApprovedMemos.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Download className="mx-auto mb-4 h-12 w-12 text-teal-400" />
+                    <p className="font-medium text-slate-700">No approved memos available</p>
+                    <p className="text-sm text-slate-500 mt-2">Your staff have no approved leave requests yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {staffApprovedMemos.map((memo: any) => (
+                      <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-900">{memo.staff_name}</p>
+                            <p className="text-xs text-slate-500 mt-1">{memo.email}</p>
+                            <p className="text-sm text-slate-700 mt-2">{memo.leave_type} Leave</p>
+                            <p className="text-xs text-slate-600 mt-1">{new Date(memo.start_date).toLocaleDateString()} to {new Date(memo.end_date).toLocaleDateString()}</p>
+                            <p className="text-xs text-slate-500 mt-1">Location: {memo.location}</p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <Button
+                              size="sm"
+                              className="bg-teal-600 hover:bg-teal-700 text-white"
+                              onClick={() => {
+                                // Download memo
+                                window.open(memo.memo_url, "_blank")
+                              }}
+                            >
+                              <Download className="h-3.5 w-3.5 mr-1" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>

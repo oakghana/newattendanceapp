@@ -21,6 +21,7 @@ function isHrAnalyticsRole(role: string | null | undefined) {
 }
 
 interface LeaveManagementModuleClientProps {
+  userId: string
   userRole: string | null
   userDepartment: string | null
   userFirstName: string | null
@@ -34,6 +35,7 @@ interface LeaveManagementModuleClientProps {
 }
 
 export function LeaveManagementModuleClient({
+  userId,
   userRole,
   userDepartment,
   userFirstName,
@@ -71,6 +73,7 @@ export function LeaveManagementModuleClient({
 
         <TabsContent value="leave-management" className="space-y-6">
           <LeaveManagementClient
+            userId={userId}
             userRole={userRole}
             userDepartment={userDepartment}
             userFirstName={userFirstName}
