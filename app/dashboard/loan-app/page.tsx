@@ -794,6 +794,7 @@ export default function LoanAppPage() {
   const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | null>(null)
   const [supportingDocumentName, setSupportingDocumentName] = useState<string>("")
   const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [fdDocumentUploaded, setFdDocumentUploaded] = useState(false)
 
   const [hodNotes, setHodNotes] = useState<Record<string, string>>({})
   const [loanOfficeNotes, setLoanOfficeNotes] = useState<Record<string, string>>({})
@@ -1674,6 +1675,7 @@ export default function LoanAppPage() {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Upload failed")
       
+      setFdDocumentUploaded(true)
       toast({ title: "FD Document Uploaded", description: `Document "${file.name}" uploaded successfully for loan ${loanId}.` })
       // Reset the input
       e.target.value = ""
@@ -2087,6 +2089,7 @@ export default function LoanAppPage() {
         setModalDecision("approve")
         setModalFdScore("")
         setModalFdNote("")
+        setFdDocumentUploaded(false)
         setModalDisbursement("")
         setModalRecovery("")
         setModalMonths("")
@@ -4659,7 +4662,7 @@ export default function LoanAppPage() {
                 <Label className="text-xs">Your Comments (optional)</Label>
                 <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} className="text-xs" />
                 <div>
-                  <Label className="text-xs">Support Document (optional)</Label>
+                  <Label className="text-xs">Support Document <span className="text-red-500">*</span> <span className="text-xs font-normal text-muted-foreground">(required)</span></Label>
                   <label htmlFor="fd-upload-modal">
                     <Button size="sm" className="text-xs whitespace-nowrap bg-blue-600 hover:bg-blue-700 w-full cursor-pointer" asChild>
                       <span>{uploadingDocument ? "Uploading..." : "Upload Document"}</span>
@@ -4673,6 +4676,7 @@ export default function LoanAppPage() {
                       disabled={uploadingDocument}
                     />
                   </label>
+                  {fdDocumentUploaded && <p className="text-xs text-green-600 mt-1">✓ Document uploaded</p>}
                 </div>
               </>
             )}
@@ -4812,8 +4816,13 @@ export default function LoanAppPage() {
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
               <Button onClick={() => {
+                if (!fdDocumentUploaded) {
+                  toast({ title: "Document Required", description: "Please upload a support document before saving the FD score.", variant: "destructive" })
+                  return
+                }
                 runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null })
                 setActionModal((s) => ({ ...s, open: false }))
+                setFdDocumentUploaded(false)
               }}>Save FD Score</Button>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
