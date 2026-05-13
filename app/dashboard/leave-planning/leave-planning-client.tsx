@@ -937,12 +937,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     !isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) &&
     !isHrLeaveOfficeRole(normalizedRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
+  const isHrLeaveOffice = normalizedRole === "hr_leave_office"
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
-  const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin || ["loan_office"].includes(normalizedRole)
-  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
+  const canViewLeaveAnalytics = isHrApprover || isHrOffice || isHrLeaveOffice || isAdmin || ["loan_office"].includes(normalizedRole)
+  const canSeeAllRequests = isHrApprover || isHrOffice || isHrLeaveOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
-  const canSelfApply = isStaff || isHod || isAdmin ||
+  const canSelfApply = isStaff || isHod || isAdmin || isHrLeaveOffice ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "leave_admin", "hr_office", "loan_office", "accounts"].includes(normalizedRole)
 
   // ── Data ────────────────────────────────────────────────────────────
@@ -1037,7 +1038,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────���───����─���──���──────────────────────────────────�����──
+  // ── Computed ─────────���───����─���──���──────────────────────────────────�������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }

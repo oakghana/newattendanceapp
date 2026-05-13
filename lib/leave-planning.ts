@@ -74,6 +74,8 @@ export function isManagerRole(role: string | null | undefined): boolean {
 /** HR-Leave-Office-Admin role — receives HOD-approved leaves, can adjust days/dates, forwards to HR Approver */
 export function isHrLeaveOfficeRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  // Only leave_admin and hr_office have access to HR-Leave-Office-Admin functions
+  // hr_leave_office is a separate role that does NOT have this access
   return ["leave_admin", "hr_office"].includes(normalized)
 }
 
