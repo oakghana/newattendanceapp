@@ -1836,8 +1836,9 @@ function LeaveRequestCard({
     "hr_office_forwarded",
   ].includes(normalizedStatus)
 
-  // Check if HOD has requested changes
-  const hasHodChanges = (request as any)?.hod_decision === "pending_staff_response"
+  // Check if HOD has requested changes - check both hod_decision field and if dates are adjusted
+  const hasHodChanges = (request as any)?.hod_decision === "pending_staff_response" || 
+                        Boolean((request as any)?.adjusted_start_date && (request as any)?.adjusted_end_date)
   const hodSuggestedStart = (request as any)?.adjusted_start_date
   const hodSuggestedEnd = (request as any)?.adjusted_end_date
 
