@@ -46,7 +46,7 @@ export default async function LeaveManagementPage() {
   {
     const { data: requests } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at")
+      .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, adjusted_start_date, adjusted_end_date, hod_decision")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
@@ -59,6 +59,9 @@ export default async function LeaveManagementPage() {
       leave_type: request.leave_type_key || "annual",
       status: request.status,
       created_at: request.created_at,
+      adjusted_start_date: request.adjusted_start_date,
+      adjusted_end_date: request.adjusted_end_date,
+      hod_decision: request.hod_decision,
     }))
   }
 

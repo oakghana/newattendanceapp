@@ -42,6 +42,9 @@ interface LeaveRequest {
   department?: string
   location?: string
   rank?: string
+  adjusted_start_date?: string
+  adjusted_end_date?: string
+  hod_decision?: string
 }
 
 interface LeaveNotification {
