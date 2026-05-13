@@ -1857,9 +1857,32 @@ function LeaveRequestCard({
             <Button 
               size="sm" 
               className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => {
-                // Accept HOD changes - would trigger API call
-                console.log("[v0] Accepting HOD changes for request:", request.id)
+              onClick={async () => {
+                try {
+                  console.log("[v0] Accepting HOD changes for request:", request.id)
+                  const response = await fetch("/api/leave/change-proposal", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "accept",
+                      leaveRequestId: request.id,
+                      staffId: request.staff_id,
+                    }),
+                  })
+                  
+                  const data = await response.json()
+                  if (!response.ok) throw new Error(data.error || "Failed to accept changes")
+                  
+                  console.log("[v0] HOD changes accepted successfully")
+                  toast.success("Changes accepted successfully! Request forwarded to HR.")
+                  
+                  // Refresh the page after a short delay
+                  setTimeout(() => window.location.reload(), 1000)
+                } catch (err) {
+                  const msg = err instanceof Error ? err.message : "Unknown error"
+                  console.error("[v0] Error accepting changes:", msg)
+                  toast.error(msg)
+                }
               }}
             >
               <CheckCircle2 className="h-4 w-4 mr-1" />

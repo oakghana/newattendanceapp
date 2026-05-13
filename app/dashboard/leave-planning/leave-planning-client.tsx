@@ -175,9 +175,8 @@ function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCoun
   const startYear = Number(startYearRaw)
   const options: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
-    const y1 = startYear + i
-    const y2 = y1 + 1
-    options.push(`${y1}/${y2}`)
+    const y = startYear + i
+    options.push(`${y}`)
   }
   return options
 }
@@ -1877,7 +1876,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Render ──────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─�� Header Banner ──────�����───────────────────────────────────── */}
+      {/* ─��� Header Banner ──────�����───────────────────────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
