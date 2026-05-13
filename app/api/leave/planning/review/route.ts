@@ -115,12 +115,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "leave_plan_request_id is required to create review" }, { status: 400 })
       }
       
+      // For admin/leave_admin/hr_leave_office, store actual role in database (not converted to "admin")
       const { data: newReview, error: createError } = await admin
         .from("leave_plan_reviews")
         .insert([{
           leave_plan_request_id,
           reviewer_id: user.id,
-          reviewer_role: role === "leave_admin" || role === "hr_leave_office" ? "admin" : role,
+          reviewer_role: role, // Keep the actual role (admin, leave_admin, or hr_leave_office)
           decision,
           recommendation: recommendation || null,
           reviewed_at: new Date().toISOString(),
