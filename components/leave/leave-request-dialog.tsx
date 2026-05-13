@@ -183,7 +183,10 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
 
   const canProceed =
     step === "type" ? !!formData.leaveType :
-    step === "dates" ? formData.endDate >= formData.startDate :
+    step === "dates" ? 
+      (formData.endDate >= formData.startDate && (
+        formData.leaveType !== "annual" || (formData.leaveType === "annual" && formData.startDate && formData.endDate)
+      )) :
     step === "reason" ? formData.reason.trim().length >= 3 :
     step === "document" ? !!uploadedFile :
     true
@@ -293,6 +296,15 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
           {/* Step: Dates */}
           {step === "dates" && (
             <div className="space-y-4">
+              {/* Annual Leave Requirements Notice */}
+              {formData.leaveType === "annual" && (
+                <Alert className="border-amber-300 bg-amber-50">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 font-medium">
+                    Annual leave requires both start and end dates for HOD/Regional Manager review and approval.
+                  </AlertDescription>
+                </Alert>
+              )}
               {/* Half-day toggle */}
               <div className="flex items-center justify-between rounded-xl border bg-muted/40 px-4 py-3">
                 <div>
@@ -459,31 +471,41 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
 
         {/* Footer */}
         {step !== "type" && (
-          <div className="border-t px-6 py-4 flex gap-2 bg-background">
-            <Button variant="outline" onClick={goBack} className="flex-1" disabled={loading}>
-              Back
-            </Button>
-            {step !== "confirm" ? (
-              <Button
-                onClick={goNext}
-                className="flex-1"
-                disabled={!canProceed}
-              >
-                Continue <ChevronRight className="ml-1 h-4 w-4" />
+          <div className="border-t px-6 py-4 space-y-3 bg-background">
+            {step === "dates" && formData.leaveType === "annual" && !formData.endDate && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800 text-sm">
+                  Please enter both start and end dates to proceed with annual leave.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={goBack} className="flex-1" disabled={loading}>
+                Back
               </Button>
-            ) : (
-              <Button
-                onClick={handleSubmit}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                disabled={loading || (hasApprovedLeave && !uploadedFile)}
-              >
-                {loading ? (
-                  <><span className="animate-spin mr-2">⟳</span>Submitting…</>
-                ) : (
+              {step !== "confirm" ? (
+                <Button
+                  onClick={goNext}
+                  className="flex-1"
+                  disabled={!canProceed}
+                >
+                  Continue <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSubmit}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={loading || (hasApprovedLeave && !uploadedFile)}
+                >
+                  {loading ? (
+                    <><span className="animate-spin mr-2">⟳</span>Submitting…</>
+                  ) : (
                   <><CheckCircle2 className="mr-2 h-4 w-4" />Submit Request</>
                 )}
               </Button>
             )}
+            </div>
           </div>
         )}
       </DialogContent>
