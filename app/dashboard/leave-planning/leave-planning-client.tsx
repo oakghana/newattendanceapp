@@ -1030,7 +1030,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ──────────────────���──────────────────────────────────�����──
+  // ── Computed ─────────────��────���──────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -2215,7 +2215,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       ))}
                     </div>
                     <p className="text-xs text-orange-600 mt-3 pt-3 border-t border-orange-200">
-                      These <strong>{holidayInfo.holidayCount} holiday(s)</strong> fall within your selected leave period. They may be deducted from your leave days depending on organizational policy.
+                      These <strong>{holidayInfo.holidayCount} holiday(s)</strong> fall within your selected leave period and will be considered in your leave calculation by the HR Leave Office.
                     </p>
                   </div>
                 )}
