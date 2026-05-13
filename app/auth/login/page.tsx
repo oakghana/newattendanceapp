@@ -87,7 +87,7 @@ export default function LoginPage() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("is_active, first_name, last_name, password_changed_at")
+        .select("is_active, first_name, last_name, password_changed_at, role")
         .eq("id", userId)
         .single()
 
@@ -104,6 +104,7 @@ export default function LoginPage() {
         approved: data.is_active,
         name: `${data.first_name} ${data.last_name}`,
         passwordChangedAt: data.password_changed_at || null,
+        role: data.role,
         error: data.is_active ? null : "Your account is pending admin approval. Please wait for activation.",
       }
       } catch (error) {
