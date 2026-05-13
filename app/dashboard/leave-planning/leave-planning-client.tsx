@@ -171,18 +171,21 @@ function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
 
 function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
   const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw] = active.split("/")
+  const [startYearRaw, endYearRaw] = active.split("/")
   let startYear = Number(startYearRaw)
+  let endYear = Number(endYearRaw)
   
   // Ensure we never show 2025 or earlier - minimum is 2026
-  if (startYear < 2026) {
-    startYear = 2026
+  if (endYear < 2026) {
+    startYear = 2025
+    endYear = 2026
   }
   
   const options: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
-    const y = startYear + i
-    options.push(`${y}`)
+    const nextEnd = endYear + i
+    const nextStart = nextEnd - 1
+    options.push(`${nextStart}/${nextEnd}`)
   }
   return options
 }
