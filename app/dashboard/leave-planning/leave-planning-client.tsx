@@ -1036,7 +1036,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────────────────────────────────────────────────────────
+  // ── Computed ─────────────────────────────────────────────────────���──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1338,6 +1338,13 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       setEndDate(startDate || "")
     }
   }, [editingId, startDate])
+
+  // Clear error when both dates are properly filled
+  useEffect(() => {
+    if (startDate && endDate && error) {
+      setError(null)
+    }
+  }, [startDate, endDate, error])
 
   useEffect(() => {
     void loadData()
