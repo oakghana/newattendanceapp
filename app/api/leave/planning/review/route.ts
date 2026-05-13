@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head"].includes(role)) {
-      return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
+    if (!["regional_manager", "department_head", "admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)) {
+      return NextResponse.json({ error: "Only admins, regional managers, and department heads can review this request." }, { status: 403 })
     }
 
     const body = await request.json()
