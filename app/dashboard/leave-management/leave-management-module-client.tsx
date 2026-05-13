@@ -1,9 +1,10 @@
 "use client"
 
-import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp, Settings } from "lucide-react"
+import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp, Settings, Send } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
+import { LeaveDefermentClient } from "./leave-deferment-client"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
@@ -74,6 +75,9 @@ export function LeaveManagementModuleClient({
           <TabsTrigger value="leave-planning" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white shrink-0">
             <CalendarRange className="h-4 w-4" /> Leave & HR Leave
           </TabsTrigger>
+          <TabsTrigger value="leave-deferment" className="gap-2 rounded-2xl border border-indigo-200 bg-white px-5 py-3 text-indigo-800 hover:bg-indigo-50 data-[state=active]:border-indigo-600 data-[state=active]:bg-indigo-600 data-[state=active]:text-white shrink-0">
+            <Send className="h-4 w-4" /> Leave Deferment
+          </TabsTrigger>
           {showAnalytics && (
             <TabsTrigger value="hr-analytics" className="gap-2 rounded-2xl border border-purple-200 bg-white px-5 py-3 text-purple-800 hover:bg-purple-50 data-[state=active]:border-purple-600 data-[state=active]:bg-purple-600 data-[state=active]:text-white shrink-0">
               <TrendingUp className="h-4 w-4" /> Leave Analytics
@@ -110,6 +114,10 @@ export function LeaveManagementModuleClient({
               departmentCode: userDepartmentCode,
             }}
           />
+        </TabsContent>
+
+        <TabsContent value="leave-deferment" className="space-y-6">
+          <LeaveDefermentClient userRole={userRole} />
         </TabsContent>
 
         {showAnalytics && (

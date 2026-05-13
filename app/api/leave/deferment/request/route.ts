@@ -126,6 +126,8 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const admin = await createAdminClient()
+    const { searchParams } = new URL(request.url)
+    const action = searchParams.get("action") // "approved_leaves" or "deferments"
 
     const {
       data: { user },
@@ -144,6 +146,33 @@ export async function GET(request: NextRequest) {
 
     const roleNorm = (userProfile?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
 
+    // Get approved leaves that can be deferred
+    if (action === "approved_leaves") {
+      const { data: approvedLeaves, error } = await admin
+        .from("leave_plan_requests")
+        .select(
+          `id, 
+           leave_type_key, 
+           preferred_start_date, 
+           preferred_end_date, 
+           requested_days,
+           status,
+           is_deferred`
+        )
+        .eq("user_id", user.id)
+        .eq("status", "hr_approved")
+        .eq("is_deferred", false)
+        .order("preferred_start_date", { ascending: false })
+
+      if (error) {
+        console.error("[v0] Failed to fetch approved leaves:", error)
+        return NextResponse.json({ error: "Failed to fetch approved leaves" }, { status: 500 })
+      }
+
+      return NextResponse.json({ requests: approvedLeaves })
+    }
+
+    // Default: Get deferment requests
     let query = admin.from("leave_deferment_requests").select(
       `*,
        leave_plan_requests(id, user_id, leave_type_key, preferred_start_date, preferred_end_date, requested_days, hod_user_id, regional_manager_id),
