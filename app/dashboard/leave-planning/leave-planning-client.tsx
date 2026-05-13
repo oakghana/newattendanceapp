@@ -172,7 +172,13 @@ function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
 function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
   const active = getActiveLeaveYearPeriod(referenceDate)
   const [startYearRaw] = active.split("/")
-  const startYear = Number(startYearRaw)
+  let startYear = Number(startYearRaw)
+  
+  // Ensure we never show 2025 or earlier - minimum is 2026
+  if (startYear < 2026) {
+    startYear = 2026
+  }
+  
   const options: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
     const y = startYear + i
@@ -1038,7 +1044,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────────────────────────────────────────────�������������──
+  // ── Computed ────���────────────────────────────────────────────────�������������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
