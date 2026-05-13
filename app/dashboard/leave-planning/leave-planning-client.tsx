@@ -1030,7 +1030,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────����─���──���──────────────────────────────────�����──
+  // ── Computed ─────────��───����─���──���──────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1139,8 +1139,27 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const calculateWeekendHolidayCount = (startStr: string, endStr: string): number => {
     if (!startStr || !endStr || !holidays.length) return 0
     
-    const start = new Date(startStr)
-    const end = new Date(endStr)
+    // Parse dates - handle both DD/MM/YYYY and ISO formats
+    let start: Date
+    let end: Date
+    
+    if (startStr.includes('/')) {
+      // DD/MM/YYYY format (from date picker)
+      const [day, month, year] = startStr.split('/').map(Number)
+      start = new Date(year, month - 1, day)
+    } else {
+      // ISO format (YYYY-MM-DD)
+      start = new Date(startStr)
+    }
+    
+    if (endStr.includes('/')) {
+      // DD/MM/YYYY format
+      const [day, month, year] = endStr.split('/').map(Number)
+      end = new Date(year, month - 1, day)
+    } else {
+      // ISO format
+      end = new Date(endStr)
+    }
     
     if (end < start || isNaN(start.getTime()) || isNaN(end.getTime())) return 0
     
@@ -1153,11 +1172,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
       const isHoliday = holidays.find((h) => h.date === currentDateStr)
       
+      console.log("[v0] Checking date:", currentDateStr, "isWeekend:", isWeekend, "isHoliday:", !!isHoliday)
+      
       if (isWeekend || isHoliday) {
         count++
       }
       current.setDate(current.getDate() + 1)
     }
+    console.log("[v0] Weekend/Holiday count from", startStr, "to", endStr, "=", count)
     return count
   }
 
