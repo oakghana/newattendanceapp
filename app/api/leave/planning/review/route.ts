@@ -234,9 +234,41 @@ export async function POST(request: NextRequest) {
     }
 
     if (decision === "recommend_change") {
-      requestUpdatePayload.preferred_start_date = nextStartDate
-      requestUpdatePayload.preferred_end_date = nextEndDate
-      requestUpdatePayload.requested_days = nextRequestedDays
+      requestUpdatePayload.hod_decision = "changes_requested"
+      requestUpdatePayload.status = "hod_changes_pending_acceptance" // NEW: Wait for staff acknowledgment
+      requestUpdatePayload.hod_proposed_start_date = nextStartDate // Store HOD proposals
+      requestUpdatePayload.hod_proposed_end_date = nextEndDate
+      requestUpdatePayload.hod_change_notes = recommendation || null
+      
+      // Create notification record for staff to acknowledge
+      const { data: staffProfile, error: staffError } = await admin
+        .from("user_profiles")
+        .select("id, full_name")
+        .eq("id", leavePlan.user_id)
+        .single()
+      
+      if (!staffError && staffProfile) {
+        const { error: notifError } = await admin
+          .from("hod_change_notifications")
+          .upsert({
+            leave_plan_request_id,
+            hod_user_id: user.id,
+            staff_user_id: leavePlan.user_id,
+            original_requested_start: leavePlan.preferred_start_date,
+            original_requested_end: leavePlan.preferred_end_date,
+            hod_proposed_start: nextStartDate,
+            hod_proposed_end: nextEndDate,
+            hod_notes: recommendation || null,
+            staff_response_status: "pending",
+          }, {
+            onConflict: "leave_plan_request_id",
+          })
+        
+        if (notifError) {
+          console.error("[v0] Failed to create change notification:", notifError)
+          // Don't fail the entire request if notification creation fails
+        }
+      }
     }
 
     const { error: requestUpdateError } = await admin

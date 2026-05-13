@@ -947,3 +947,57 @@ export async function notifyLoanRejected(
     console.warn("[workflow-emails] notifyLoanRejected failed:", e)
   }
 }
+
+/**
+ * HOD has proposed date changes → staff must acknowledge before forwarding to HR Leave Office
+ */
+export async function notifyLeaveHodChangesProposed(
+  admin: AdminClient,
+  opts: {
+    staffUserId: string
+    staffName: string
+    hodName: string
+    originalStartDate: string
+    originalEndDate: string
+    proposedStartDate: string
+    proposedEndDate: string
+    hodNotes: string
+  },
+): Promise<void> {
+  try {
+    const email = await emailForUser(admin, opts.staffUserId)
+    if (!email) return
+
+    const link = `${APP_URL}/dashboard/leave-planning`
+    const subject = `HOD Has Proposed Changes to Your Leave Request`
+    const html = baseLayout(
+      "Leave Dates Adjusted by HOD",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">
+        Your HOD has reviewed your leave request and proposed new dates.
+      </p>
+      <p style="margin:0 0 22px;">${statusBadge("Awaiting Your Acknowledgment", "warning")}</p>
+      ${sectionHeading("Original Request")}
+      ${table(
+        row("Start Date", opts.originalStartDate) +
+        row("End Date", opts.originalEndDate)
+      )}
+      ${sectionHeading("Proposed Dates")}
+      ${table(
+        row("Start Date", opts.proposedStartDate) +
+        row("End Date", opts.proposedEndDate)
+      )}
+      ${sectionHeading("HOD Notes")}
+      ${table(
+        row("Message", opts.hodNotes || "No additional notes")
+      )}
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">
+        Please log in and review the proposed dates. You can either <strong>accept the changes</strong> (which will forward your request to the HR Leave Office) 
+        or <strong>propose alternative dates</strong> to discuss further with your HOD.
+      </p>
+      ${btn(link, "Review & Respond")}`,
+    )
+    await send(admin, email, subject, html, "leave HOD changes proposed notification")
+  } catch (e) {
+    console.warn("[workflow-emails] notifyLeaveHodChangesProposed failed:", e)
+  }
+}

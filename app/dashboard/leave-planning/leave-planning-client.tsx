@@ -849,12 +849,31 @@ const EMPTY_HR_ANALYTICS = {
   records: [],
 }
 // ─── Leave Request Card ───────────────────────────────────────────────────────
-function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
-  req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
+function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit, onAcknowledgeHodChanges }: {
+  req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean; onAcknowledgeHodChanges?: (action: 'accept'|'counter', counterStart?: string, counterEnd?: string) => Promise<void>
 }) {
   const effectiveStart = req.adjusted_start_date || req.preferred_start_date
   const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
   const effectiveDays = req.adjusted_days || req.requested_days
+  const [acknowledging, setAcknowledging] = useState(false)
+  const [counterStartDate, setCounterStartDate] = useState("")
+  const [counterEndDate, setCounterEndDate] = useState("")
+  const [showCounterDates, setShowCounterDates] = useState(false)
+  
+  const handleAcknowledge = async (action: 'accept' | 'counter') => {
+    if (!onAcknowledgeHodChanges) return
+    setAcknowledging(true)
+    try {
+      if (action === 'counter' && (!counterStartDate || !counterEndDate)) {
+        alert("Please enter counter dates")
+        return
+      }
+      await onAcknowledgeHodChanges(action, counterStartDate, counterEndDate)
+    } finally {
+      setAcknowledging(false)
+    }
+  }
+  
   return (
     <Card className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
       <CardContent className="p-4">
@@ -884,7 +903,16 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             </AlertDescription>
           </Alert>
         )}
-        {req.manager_recommendation && (
+        {req.hod_change_notes && req.status === "hod_changes_pending_acceptance" && (
+          <Alert className="mt-3 py-2 border-amber-300 bg-amber-50">
+            <AlertCircle className="h-3 w-3 text-amber-700" />
+            <AlertDescription className="text-xs text-amber-900 ml-1">
+              <strong>HOD proposed changes:</strong> Original: {fmtDate(req.preferred_start_date)} → {fmtDate(req.preferred_end_date)} | Proposed: {fmtDate(req.hod_proposed_start_date)} → {fmtDate(req.hod_proposed_end_date)}<br/>
+              <strong>Reason:</strong> {req.hod_change_notes}
+            </AlertDescription>
+          </Alert>
+        )}
+        {req.manager_recommendation && req.status !== "hod_changes_pending_acceptance" && (
           <p className="text-xs text-slate-600 mt-2 bg-slate-50 p-2 rounded border border-slate-200">
             <strong>HOD note:</strong> {req.manager_recommendation}
           </p>
@@ -901,6 +929,79 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             <strong>HR note:</strong> {req.hr_approval_note}
           </p>
         )}
+        
+        {/* HOD Changes Acknowledgment UI */}
+        {req.status === "hod_changes_pending_acceptance" && (
+          <div className="mt-3 space-y-3 border-t pt-3">
+            <p className="text-xs font-semibold text-amber-900">HOD has proposed date changes. Please review and acknowledge:</p>
+            <div className="flex gap-2 flex-wrap">
+              <Button 
+                size="sm" 
+                className="h-8 text-xs bg-green-600 hover:bg-green-700"
+                onClick={() => handleAcknowledge('accept')}
+                disabled={acknowledging}
+              >
+                ✓ Accept Changes
+              </Button>
+              {!showCounterDates ? (
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="h-8 text-xs border-blue-300 text-blue-700"
+                  onClick={() => setShowCounterDates(true)}
+                  disabled={acknowledging}
+                >
+                  ↻ Counter Propose
+                </Button>
+              ) : null}
+            </div>
+            {showCounterDates && (
+              <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
+                <p className="text-xs font-medium text-blue-900">Propose Alternative Dates:</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs">Start Date</Label>
+                    <Input 
+                      type="date" 
+                      value={counterStartDate}
+                      onChange={(e) => setCounterStartDate(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">End Date</Label>
+                    <Input 
+                      type="date" 
+                      value={counterEndDate}
+                      onChange={(e) => setCounterEndDate(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                    onClick={() => handleAcknowledge('counter')}
+                    disabled={acknowledging}
+                  >
+                    Send Counter Proposal
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => setShowCounterDates(false)}
+                    disabled={acknowledging}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
         <div className="flex gap-2 mt-3 justify-end flex-wrap">
           {req.status === "hr_approved" && req.memo_token && onViewMemo && (
             <Button size="sm" variant="outline"
@@ -909,7 +1010,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
               <Download className="w-3 h-3 mr-1" /> Download Memo
             </Button>
           )}
-          {canEdit && onEdit && (
+          {canEdit && onEdit && req.status !== "hod_changes_pending_acceptance" && (
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onEdit}>
               <Pencil className="w-3 h-3 mr-1" /> Edit
             </Button>
@@ -1038,7 +1139,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────���───����─���──���──────────────────────────────────�������──
+  // ── Computed ─────────���───����─���──�����──────────────────────────────────�������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1883,30 +1984,6 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Review failed")
       
-      // If dates were adjusted, send notification to staff
-      if (action === "recommend_change" && hodAdjStart[reviewId] && hodAdjEnd[reviewId]) {
-        try {
-          const currentRequest = paginatedPlanning.find((r: any) => String(r.id) === String(requestId))
-          const hodProfile = userProfile
-          await fetch("/api/leave/notifications/hod-date-change", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              leaveRequestId: requestId,
-              originalStartDate: currentRequest?.preferred_start_date,
-              originalEndDate: currentRequest?.preferred_end_date,
-              newStartDate: hodAdjStart[reviewId],
-              newEndDate: hodAdjEnd[reviewId],
-              hodRecommendation: hodNote[reviewId] || "Dates have been adjusted. Please review and respond.",
-              hodName: hodProfile ? `${hodProfile.first_name} ${hodProfile.last_name}` : "HOD",
-            }),
-          })
-        } catch (notifyError) {
-          console.error("[v0] Error sending notification:", notifyError)
-          // Continue even if notification fails
-        }
-      }
-      
       toast({ title: "Review submitted" })
       await loadData()
     } catch (e) {
@@ -2156,6 +2233,26 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     }}
                     onDelete={() => deletePlan(req.id)}
                     onViewMemo={() => openMemo(req.id, req.memo_token || "")}
+                    onAcknowledgeHodChanges={async (action, counterStart, counterEnd) => {
+                      try {
+                        const res = await fetch("/api/leave/planning/hod-acknowledge", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            leave_plan_request_id: req.id,
+                            action,
+                            counter_start_date: counterStart || null,
+                            counter_end_date: counterEnd || null,
+                          }),
+                        })
+                        const json = await res.json()
+                        if (!res.ok) throw new Error(json.error || "Acknowledgment failed")
+                        toast({ title: action === 'accept' ? "Changes accepted" : "Counter-proposal sent to HOD" })
+                        await loadData()
+                      } catch (e) {
+                        toast({ title: "Error", description: e instanceof Error ? e.message : "Failed", variant: "destructive" })
+                      }
+                    }}
                   />
                 ))}
               </div>
