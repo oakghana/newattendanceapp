@@ -931,166 +931,36 @@ export async function GET(request: NextRequest) {
       const requestUserIds = (data || []).map((row: any) => String(row?.user?.id || row?.user_id || "")).filter(Boolean)
       const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
 
-      // Admin users should see all HOD/RM reviews and pending requests
+      // Admin users should see all HOD/RM reviews - just fetch pending requests with simple join (same as All Requests tab)
       let reviews: any[] = []
       if (isAdmin) {
-        // Step 1: Fetch all leave plan reviews (metadata only)
-        const { data: existingReviews } = await admin
-          .from("leave_plan_reviews")
-          .select(`id, decision, recommendation, reviewed_at, reviewer_id, reviewer_role, leave_plan_request_id`)
+        // Use the exact same query pattern as "All Requests" tab (line 853-865) but for pending_hod_review status
+        const { data: pendingHodRequests, error: hodError } = await admin
+          .from("leave_plan_requests")
+          .select(`
+            *,
+            user:user_profiles!leave_plan_requests_user_id_fkey (
+              id,
+              first_name,
+              last_name,
+              employee_id,
+              departments(name, code)
+            )
+          `)
+          .eq("status", "pending_hod_review")
           .order("created_at", { ascending: false })
         
-        // Step 2: Get unique request IDs from reviews
-        const reviewedRequestIds = new Set((existingReviews || []).map((r: any) => r.leave_plan_request_id).filter(Boolean))
-        
-        // Step 3: Fetch all leave requests (simple select, no joins yet)
-        const allRequestIds = [...Array.from(reviewedRequestIds)]
-        const pendingRequestsFiltered: any[] = []
-        
-        if (allRequestIds.length > 0) {
-          // Fetch reviewed requests
-          const { data: reviewedRequests } = await admin
-            .from("leave_plan_requests")
-            .select(`id, leave_year_period, preferred_start_date, preferred_end_date, leave_type_key, entitlement_days, requested_days, reason, status, is_archived, submitted_at, user_id`)
-            .in("id", allRequestIds)
-          
-          // Fetch pending requests NOT in reviewed list
-          const { data: pendingAll } = await admin
-            .from("leave_plan_requests")
-            .select(`id, leave_year_period, preferred_start_date, preferred_end_date, leave_type_key, entitlement_days, requested_days, reason, status, is_archived, submitted_at, user_id`)
-            .eq("status", "pending_hod_review")
-          
-          // Combine and deduplicate
-          const allRequests = [...(reviewedRequests || []), ...(pendingAll || [])]
-          const uniqueRequests = new Map()
-          for (const req of allRequests) {
-            if (!uniqueRequests.has(req.id)) {
-              uniqueRequests.set(req.id, req)
-            }
-          }
-          
-          // Now fetch user profiles for these requests
-          const userIds = Array.from(uniqueRequests.values()).map((r: any) => r.user_id).filter(Boolean)
-          const uniqueUserIds = [...new Set(userIds)]
-          
-          let userProfiles: any[] = []
-          if (uniqueUserIds.length > 0) {
-            const { data: profiles } = await admin
-              .from("user_profiles")
-              .select(`id, first_name, last_name, employee_id, department_id`)
-              .in("id", uniqueUserIds)
-            
-            userProfiles = profiles || []
-          }
-          
-          // Fetch departments
-          const deptIds = (userProfiles || []).map((u: any) => u.department_id).filter(Boolean)
-          const uniqueDeptIds = [...new Set(deptIds)]
-          
-          let departments: any[] = []
-          if (uniqueDeptIds.length > 0) {
-            const { data: depts } = await admin
-              .from("departments")
-              .select(`id, name, code`)
-              .in("id", uniqueDeptIds)
-            
-            departments = depts || []
-          }
-          
-          // Build request objects with user data
-          const requestsWithUsers = Array.from(uniqueRequests.values()).map((req: any) => {
-            const user = userProfiles.find((u: any) => u.id === req.user_id)
-            const dept = user ? departments.find((d: any) => d.id === user.department_id) : null
-            return {
-              ...req,
-              user: user ? {
-                ...user,
-                departments: dept
-              } : null
-            }
-          })
-          
-          // Map reviews to requests
-          reviews = (existingReviews || []).map((review: any) => {
-            const request = requestsWithUsers.find((r: any) => r.id === review.leave_plan_request_id)
-            return {
-              id: review.id,
-              decision: review.decision,
-              recommendation: review.recommendation,
-              reviewed_at: review.reviewed_at,
-              reviewer_id: review.reviewer_id,
-              reviewer_role: review.reviewer_role,
-              leave_plan_request: request
-            }
-          })
-          
-          // Add pending requests as reviews
-          const pendingAsReviews = (pendingAll || []).map((req: any) => {
-            const enriched = requestsWithUsers.find((r: any) => r.id === req.id)
-            return {
-              id: `pending-${req.id}`,
-              decision: "pending",
-              recommendation: null,
-              reviewed_at: null,
-              reviewer_id: null,
-              reviewer_role: null,
-              leave_plan_request: enriched || req
-            }
-          })
-          
-          reviews = [...reviews, ...pendingAsReviews]
-        } else {
-          // No reviewed requests, just fetch pending ones
-          const { data: pendingAll } = await admin
-            .from("leave_plan_requests")
-            .select(`id, leave_year_period, preferred_start_date, preferred_end_date, leave_type_key, entitlement_days, requested_days, reason, status, is_archived, submitted_at, user_id`)
-            .eq("status", "pending_hod_review")
-          
-          const userIds = (pendingAll || []).map((r: any) => r.user_id).filter(Boolean)
-          const uniqueUserIds = [...new Set(userIds)]
-          
-          let userProfiles: any[] = []
-          if (uniqueUserIds.length > 0) {
-            const { data: profiles } = await admin
-              .from("user_profiles")
-              .select(`id, first_name, last_name, employee_id, department_id`)
-              .in("id", uniqueUserIds)
-            
-            userProfiles = profiles || []
-          }
-          
-          const deptIds = (userProfiles || []).map((u: any) => u.department_id).filter(Boolean)
-          const uniqueDeptIds = [...new Set(deptIds)]
-          
-          let departments: any[] = []
-          if (uniqueDeptIds.length > 0) {
-            const { data: depts } = await admin
-              .from("departments")
-              .select(`id, name, code`)
-              .in("id", uniqueDeptIds)
-            
-            departments = depts || []
-          }
-          
-          reviews = (pendingAll || []).map((req: any) => {
-            const user = userProfiles.find((u: any) => u.id === req.user_id)
-            const dept = user ? departments.find((d: any) => d.id === user.department_id) : null
-            return {
-              id: `pending-${req.id}`,
-              decision: "pending",
-              recommendation: null,
-              reviewed_at: null,
-              reviewer_id: null,
-              reviewer_role: null,
-              leave_plan_request: {
-                ...req,
-                user: user ? {
-                  ...user,
-                  departments: dept
-                } : null
-              }
-            }
-          })
+        if (!hodError) {
+          // Transform pending requests to review format for consistency
+          reviews = (pendingHodRequests || []).map((req: any) => ({
+            id: req.id,
+            decision: "pending",
+            recommendation: null,
+            reviewed_at: null,
+            reviewer_id: null,
+            reviewer_role: null,
+            leave_plan_request: req
+          }))
         }
       }
 
