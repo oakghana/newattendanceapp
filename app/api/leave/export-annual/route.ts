@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get annual leave requests - use simplified query to avoid relationship ambiguity
+    // Get annual leave requests - fetch all annual leaves regardless of status
     const { data: leaveRequests, error: leaveError } = await supabase
       .from("leave_plan_requests")
       .select(
@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
       `
       )
       .eq("leave_type_key", "annual")
-      .in("status", ["approved", "pending", "submitted"])
       .order("submitted_at", { ascending: false })
 
     if (leaveError) {
