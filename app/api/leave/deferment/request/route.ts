@@ -167,21 +167,52 @@ export async function GET(request: NextRequest) {
 
     // Get approved leaves that can be deferred
     if (action === "approved_leaves") {
-      const { data: approvedLeaves, error } = await admin
+      // First, get the current user's department (if they're a HOD)
+      const { data: currentUserData } = await admin
+        .from("user_profiles")
+        .select("id, role, department_id")
+        .eq("id", user.id)
+        .single()
+
+      let query = admin
         .from("leave_plan_requests")
         .select(
           `id, 
+           user_id,
            leave_type_key, 
            preferred_start_date, 
            preferred_end_date, 
            requested_days,
            status,
-           is_deferred`
+           is_deferred,
+           user_profiles!inner(id, first_name, last_name, department_id),
+           departments(id, name)`
         )
-        .eq("user_id", user.id)
         .eq("status", "hr_approved")
         .eq("is_deferred", false)
-        .order("preferred_start_date", { ascending: false })
+
+      // Filter based on role
+      if (["admin", "leave_admin", "hr_office", "hr_leave_office", "director_hr", "manager_hr"].includes(roleNorm)) {
+        // HR can see all approved leaves
+        query = query.order("preferred_start_date", { ascending: false })
+      } else if (["hod", "head_of_department", "head_department", "manager", "department_head"].includes(roleNorm)) {
+        // HOD can see approved leaves for their department staff
+        if (currentUserData?.department_id) {
+          query = query
+            .eq("user_profiles.department_id", currentUserData.department_id)
+            .order("preferred_start_date", { ascending: false })
+        } else {
+          // HOD without department assignment can't see anything
+          return NextResponse.json({ requests: [] })
+        }
+      } else {
+        // Staff can see their own approved leaves
+        query = query
+          .eq("user_id", user.id)
+          .order("preferred_start_date", { ascending: false })
+      }
+
+      const { data: approvedLeaves, error } = await query
 
       if (error) {
         console.error("[v0] Failed to fetch approved leaves:", error)

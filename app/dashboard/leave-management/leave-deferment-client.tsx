@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { AlertCircle, Calendar, Clock, CheckCircle2, XCircle, Send } from "lucide-react"
+import { AlertCircle, Calendar, Clock, CheckCircle2, XCircle, Send, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 function fmtDate(val?: string | null) {
@@ -85,8 +85,10 @@ function getStatusLabel(status: string) {
 export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
   const { toast } = useToast()
   const roleNorm = normalizeRole(userRole)
-  const isStaff = !["admin", "leave_admin", "hr_office", "hr_leave_office", "director_hr", "manager_hr"].includes(roleNorm)
+  const isStaff = !["admin", "leave_admin", "hr_office", "hr_leave_office", "director_hr", "manager_hr", "hod", "head_of_department", "head_department", "manager", "department_head"].includes(roleNorm)
   const isHrOffice = ["admin", "leave_admin", "hr_office", "hr_leave_office", "director_hr", "manager_hr"].includes(roleNorm)
+  const isHod = ["hod", "head_of_department", "head_department", "manager", "department_head"].includes(roleNorm)
+  const canRequestDeferment = isStaff || isHod
 
   const [approvedLeaves, setApprovedLeaves] = useState<LeaveRequest[]>([])
   const [deferments, setDeferments] = useState<DefermentRequest[]>([])
@@ -105,8 +107,8 @@ export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
     try {
       setLoading(true)
 
-      // Get approved leaves (only for staff)
-      if (isStaff) {
+      // Get approved leaves (for staff and HOD)
+      if (canRequestDeferment) {
         const res = await fetch("/api/leave/deferment/request?action=approved_leaves")
         const data = await res.json()
         setApprovedLeaves(data.requests || [])
@@ -158,19 +160,42 @@ export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
     }
   }
 
+  const handleDownloadMemo = async (leaveId: string) => {
+    try {
+      const res = await fetch(`/api/leave/deferment/download-approved?leave_request_id=${leaveId}`)
+      if (!res.ok) throw new Error("Failed to download")
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `leave-memo-${leaveId}.txt`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({ title: "Success", description: "Leave memo downloaded" })
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
+    }
+  }
+
   if (loading) {
     return <div className="text-center py-8 text-slate-600">Loading deferment information...</div>
   }
 
   return (
     <div className="space-y-6">
-      {/* Staff Section - Submit Deferment */}
-      {isStaff && (
+      {/* Staff/HOD Section - Submit Deferment */}
+      {canRequestDeferment && (
         <>
           <Alert className="border-blue-300 bg-blue-50">
             <AlertCircle className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
-              You can defer your approved leave to a future leave year. Select an approved leave request and specify when you'd like to defer it to.
+              {isHod 
+                ? "You can defer approved leave requests from your department to a future leave year. Select an approved leave and specify the deferment period."
+                : "You can defer your approved leave to a future leave year. Select an approved leave request and specify when you'd like to defer it to."}
             </AlertDescription>
           </Alert>
 
@@ -180,7 +205,9 @@ export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
                 <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-600" />
                 <p className="text-amber-800 font-medium">No Approved Leave Requests</p>
                 <p className="text-amber-700 text-sm mt-1">
-                  You can only defer leave requests that have been approved by HR. Once your leave is approved, you'll be able to defer it here.
+                  {isHod
+                    ? "There are no approved leave requests in your department to defer."
+                    : "You can only defer leave requests that have been approved by HR. Once your leave is approved, you'll be able to defer it here."}
                 </p>
               </CardContent>
             </Card>
@@ -190,13 +217,18 @@ export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
                 Approved Leave Requests ({approvedLeaves.length})
               </p>
               <div className="grid gap-4">
-                {approvedLeaves.map((leave) => (
+                {approvedLeaves.map((leave: any) => (
                   <Card key={leave.id} className="border-emerald-200">
                     <CardContent className="pt-6">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-semibold text-slate-900">{leave.leave_type_key}</span>
+                            {isHod && leave.user_profiles && (
+                              <span className="text-sm text-slate-600">
+                                - {leave.user_profiles.first_name} {leave.user_profiles.last_name}
+                              </span>
+                            )}
                             <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">Approved</Badge>
                           </div>
                           <div className="text-sm text-slate-600 space-y-1">
@@ -211,76 +243,87 @@ export function LeaveDefermentClient({ userRole }: LeaveDefermentClientProps) {
                           </div>
                         </div>
 
-                        {deferments.find((d) => d.leave_plan_request_id === leave.id) ? (
+                        {deferments.find((d: any) => d.leave_plan_request_id === leave.id) ? (
                           <div className="text-right">
                             <Badge className="bg-blue-100 text-blue-800">Deferment Pending</Badge>
                           </div>
                         ) : (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                onClick={() => setSelectedLeaveId(leave.id)}
-                                className="bg-blue-600 hover:bg-blue-700"
-                              >
-                                <Send className="w-4 h-4 mr-2" /> Defer Leave
-                              </Button>
-                            </DialogTrigger>
-                            {selectedLeaveId === leave.id && (
-                              <DialogContent className="sm:max-w-[500px]">
-                                <DialogHeader>
-                                  <DialogTitle>Defer Leave Request</DialogTitle>
-                                  <DialogDescription>
-                                    Propose a new leave year and period for your leave
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <div className="space-y-4 py-4">
-                                  <div>
-                                    <Label htmlFor="year">Deferment Year</Label>
-                                    <Input
-                                      id="year"
-                                      placeholder="e.g., 2027"
-                                      value={defermentYear}
-                                      onChange={(e) => setDefermentYear(e.target.value)}
-                                      className="mt-1.5"
-                                    />
-                                  </div>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleDownloadMemo(leave.id)}
+                              variant="outline"
+                              className="gap-2"
+                            >
+                              <Download className="w-4 h-4" /> Download
+                            </Button>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button
+                                  onClick={() => setSelectedLeaveId(leave.id)}
+                                  className="bg-blue-600 hover:bg-blue-700 gap-2"
+                                >
+                                  <Send className="w-4 h-4" /> Defer Leave
+                                </Button>
+                              </DialogTrigger>
+                              {selectedLeaveId === leave.id && (
+                                <DialogContent className="sm:max-w-[500px]">
+                                  <DialogHeader>
+                                    <DialogTitle>Defer Leave Request</DialogTitle>
+                                    <DialogDescription>
+                                      {isHod 
+                                        ? `Propose a new leave year and period for ${leave.user_profiles?.first_name} ${leave.user_profiles?.last_name}'s leave`
+                                        : "Propose a new leave year and period for your leave"}
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="space-y-4 py-4">
+                                    <div>
+                                      <Label htmlFor="year">Deferment Year</Label>
+                                      <Input
+                                        id="year"
+                                        placeholder="e.g., 2027"
+                                        value={defermentYear}
+                                        onChange={(e) => setDefermentYear(e.target.value)}
+                                        className="mt-1.5"
+                                      />
+                                    </div>
 
-                                  <div>
-                                    <Label htmlFor="period">Deferment Period</Label>
-                                    <Input
-                                      id="period"
-                                      placeholder="e.g., Q1 2027 or January 2027"
-                                      value={defermentPeriod}
-                                      onChange={(e) => setDefermentPeriod(e.target.value)}
-                                      className="mt-1.5"
-                                    />
-                                  </div>
+                                    <div>
+                                      <Label htmlFor="period">Deferment Period</Label>
+                                      <Input
+                                        id="period"
+                                        placeholder="e.g., Q1 2027 or January 2027"
+                                        value={defermentPeriod}
+                                        onChange={(e) => setDefermentPeriod(e.target.value)}
+                                        className="mt-1.5"
+                                      />
+                                    </div>
 
-                                  <div>
-                                    <Label htmlFor="reason">Reason (Optional)</Label>
-                                    <Textarea
-                                      id="reason"
-                                      placeholder="Why you're deferring this leave..."
-                                      value={reason}
-                                      onChange={(e) => setReason(e.target.value)}
-                                      className="mt-1.5 resize-none"
-                                      rows={3}
-                                    />
-                                  </div>
+                                    <div>
+                                      <Label htmlFor="reason">Reason (Optional)</Label>
+                                      <Textarea
+                                        id="reason"
+                                        placeholder="Why this leave is being deferred..."
+                                        value={reason}
+                                        onChange={(e) => setReason(e.target.value)}
+                                        className="mt-1.5 resize-none"
+                                        rows={3}
+                                      />
+                                    </div>
 
-                                  <div className="flex gap-2 pt-4">
-                                    <Button
-                                      onClick={() => handleSubmitDeferment(leave.id)}
-                                      disabled={submitting}
-                                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                                    >
-                                      {submitting ? "Submitting..." : "Submit Deferment"}
-                                    </Button>
+                                    <div className="flex gap-2 pt-4">
+                                      <Button
+                                        onClick={() => handleSubmitDeferment(leave.id)}
+                                        disabled={submitting}
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                                      >
+                                        {submitting ? "Submitting..." : "Submit Deferment"}
+                                      </Button>
+                                    </div>
                                   </div>
-                                </div>
-                              </DialogContent>
-                            )}
-                          </Dialog>
+                                </DialogContent>
+                              )}
+                            </Dialog>
+                          </div>
                         )}
                       </div>
                     </CardContent>
