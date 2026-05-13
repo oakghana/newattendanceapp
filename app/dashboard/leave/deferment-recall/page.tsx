@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { AlertCircle, CheckCircle2, Clock, FileText, RefreshCw } from "lucide-react"
+import { AlertCircle, CheckCircle2, Clock, FileText, RefreshCw, Calendar, ArrowRight, Info } from "lucide-react"
 
 interface DefermentRequest {
   id: string
@@ -19,6 +19,9 @@ interface DefermentRequest {
   reason?: string
   status: string
   created_at: string
+  original_working_days?: number
+  new_working_days?: number
+  working_days_change?: number
 }
 
 interface RecallRequest {
@@ -30,6 +33,20 @@ interface RecallRequest {
   reason?: string
   status: string
   created_at: string
+  total_leave_days?: number
+  days_already_spent?: number
+  days_to_restore?: number
+}
+
+// Helper to format date for display
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return "-"
+  return new Date(dateStr).toLocaleDateString("en-US", { 
+    weekday: "short", 
+    month: "short", 
+    day: "numeric",
+    year: "numeric"
+  })
 }
 
 export default function DefermentRecallPage() {
@@ -95,7 +112,7 @@ export default function DefermentRecallPage() {
       })
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Deferment request submitted successfully" })
+        setMessage({ type: "success", text: "Deferment request submitted successfully. Awaiting HOD approval." })
         setDefermentForm({
           originalStartDate: "",
           originalEndDate: "",
@@ -104,13 +121,14 @@ export default function DefermentRecallPage() {
           reason: "",
         })
         await loadRequests()
+        setTimeout(() => setMessage(null), 5000)
       } else {
         const error = await res.json()
         setMessage({ type: "error", text: error.error || "Failed to submit deferment" })
       }
     } catch (err) {
       console.error("[v0] Error submitting deferment:", err)
-      setMessage({ type: "error", text: "An error occurred" })
+      setMessage({ type: "error", text: "An error occurred. Please try again." })
     } finally {
       setIsLoading(false)
     }
@@ -127,7 +145,7 @@ export default function DefermentRecallPage() {
       })
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Recall request submitted successfully" })
+        setMessage({ type: "success", text: "Recall request submitted successfully. Awaiting HOD approval." })
         setRecallForm({
           leaveStartDate: "",
           leaveEndDate: "",
@@ -135,13 +153,14 @@ export default function DefermentRecallPage() {
           reason: "",
         })
         await loadRequests()
+        setTimeout(() => setMessage(null), 5000)
       } else {
         const error = await res.json()
         setMessage({ type: "error", text: error.error || "Failed to submit recall" })
       }
     } catch (err) {
       console.error("[v0] Error submitting recall:", err)
-      setMessage({ type: "error", text: "An error occurred" })
+      setMessage({ type: "error", text: "An error occurred. Please try again." })
     } finally {
       setIsLoading(false)
     }
@@ -158,132 +177,183 @@ export default function DefermentRecallPage() {
 
     const config = statusMap[status] || statusMap.pending_hod
     return (
-      <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${config.bg}`}>
+      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${config.bg} ${config.text}`}>
         {config.icon}
-        <span className={`text-sm font-medium ${config.text}`}>{status.replace(/_/g, " ")}</span>
+        <span>{status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</span>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Leave Deferment & Recall</h1>
-          <p className="text-slate-400">Request to defer or recall your approved leave</p>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Calendar className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Leave Deferment & Recall</h1>
+              <p className="text-slate-600">Manage your approved leave dates</p>
+            </div>
+          </div>
         </div>
 
         {/* Message Alert */}
         {message && (
           <div
-            className={`mb-6 p-4 rounded-lg flex items-gap-3 ${
+            className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
               message.type === "success"
-                ? "bg-green-900/20 border border-green-500/30 text-green-200"
-                : "bg-red-900/20 border border-red-500/30 text-red-200"
+                ? "bg-green-50 border border-green-200 text-green-800"
+                : "bg-red-50 border border-red-200 text-red-800"
             }`}
           >
             {message.type === "success" ? (
-              <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
             ) : (
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
             )}
-            <span>{message.text}</span>
+            <span className="font-medium">{message.text}</span>
           </div>
         )}
 
         {/* Tabs */}
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
           <TabsContent value="deferment" className="space-y-6">
+            {/* Info Card */}
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="pt-6 flex items-start gap-3">
+                <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-blue-900 mb-1">What is Leave Deferment?</p>
+                  <p className="text-sm text-blue-800">
+                    Defer your leave to a later date. Your total leave duration will remain the same. For example, if you have 10 working days approved, you&apos;ll still use 10 working days in the new period. Weekends and public holidays don&apos;t count as leave days.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Request Form */}
-            <Card className="border-0 bg-slate-800/50 backdrop-blur">
-              <CardHeader className="border-b border-slate-700/50">
-                <CardTitle className="text-white flex items-center gap-2">
-                  <RefreshCw className="w-5 h-5" />
-                  Request Leave Deferment
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="border-b border-slate-200 pb-4">
+                <CardTitle className="text-slate-900 flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-blue-600" />
+                  Defer Your Leave
                 </CardTitle>
-                <CardDescription>Postpone your approved leave to later dates</CardDescription>
+                <CardDescription>Reschedule your approved leave to new dates</CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
                 <form onSubmit={handleSubmitDeferment} className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-slate-300">Original Start Date</Label>
-                      <Input
-                        type="date"
-                        value={defermentForm.originalStartDate}
-                        onChange={(e) =>
-                          setDefermentForm({
-                            ...defermentForm,
-                            originalStartDate: e.target.value,
-                          })
-                        }
-                        className="mt-2 bg-slate-700 border-slate-600 text-white"
-                        required
-                      />
+                  {/* Original Dates Section */}
+                  <div>
+                    <h3 className="font-semibold text-slate-900 mb-4 text-sm uppercase tracking-wide text-slate-600">Original Dates</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-slate-700 font-medium">Start Date</Label>
+                        <Input
+                          type="date"
+                          value={defermentForm.originalStartDate}
+                          onChange={(e) =>
+                            setDefermentForm({
+                              ...defermentForm,
+                              originalStartDate: e.target.value,
+                            })
+                          }
+                          className="mt-2"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-700 font-medium">End Date</Label>
+                        <Input
+                          type="date"
+                          value={defermentForm.originalEndDate}
+                          onChange={(e) =>
+                            setDefermentForm({
+                              ...defermentForm,
+                              originalEndDate: e.target.value,
+                            })
+                          }
+                          className="mt-2"
+                          required
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-slate-300">Original End Date</Label>
-                      <Input
-                        type="date"
-                        value={defermentForm.originalEndDate}
-                        onChange={(e) =>
-                          setDefermentForm({
-                            ...defermentForm,
-                            originalEndDate: e.target.value,
-                          })
-                        }
-                        className="mt-2 bg-slate-700 border-slate-600 text-white"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-slate-300">New Start Date</Label>
-                      <Input
-                        type="date"
-                        value={defermentForm.newStartDate}
-                        onChange={(e) =>
-                          setDefermentForm({
-                            ...defermentForm,
-                            newStartDate: e.target.value,
-                          })
-                        }
-                        className="mt-2 bg-slate-700 border-slate-600 text-white"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-slate-300">New End Date</Label>
-                      <Input
-                        type="date"
-                        value={defermentForm.newEndDate}
-                        onChange={(e) =>
-                          setDefermentForm({
-                            ...defermentForm,
-                            newEndDate: e.target.value,
-                          })
-                        }
-                        className="mt-2 bg-slate-700 border-slate-600 text-white"
-                        required
-                      />
+                    {defermentForm.originalStartDate && defermentForm.originalEndDate && (
+                      <p className="text-sm text-slate-600 mt-2">
+                        {formatDate(defermentForm.originalStartDate)} to {formatDate(defermentForm.originalEndDate)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Arrow */}
+                  <div className="flex justify-center">
+                    <div className="text-slate-400">
+                      <ArrowRight className="w-5 h-5 rotate-90" />
                     </div>
                   </div>
+
+                  {/* New Dates Section */}
                   <div>
-                    <Label className="text-slate-300">Reason</Label>
+                    <h3 className="font-semibold text-slate-900 mb-4 text-sm uppercase tracking-wide text-slate-600">New Dates</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-slate-700 font-medium">Start Date</Label>
+                        <Input
+                          type="date"
+                          value={defermentForm.newStartDate}
+                          onChange={(e) =>
+                            setDefermentForm({
+                              ...defermentForm,
+                              newStartDate: e.target.value,
+                            })
+                          }
+                          className="mt-2"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-700 font-medium">End Date</Label>
+                        <Input
+                          type="date"
+                          value={defermentForm.newEndDate}
+                          onChange={(e) =>
+                            setDefermentForm({
+                              ...defermentForm,
+                              newEndDate: e.target.value,
+                            })
+                          }
+                          className="mt-2"
+                          required
+                        />
+                      </div>
+                    </div>
+                    {defermentForm.newStartDate && defermentForm.newEndDate && (
+                      <p className="text-sm text-slate-600 mt-2">
+                        {formatDate(defermentForm.newStartDate)} to {formatDate(defermentForm.newEndDate)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Reason */}
+                  <div>
+                    <Label className="text-slate-700 font-medium">Why are you deferring? (Optional)</Label>
                     <Textarea
                       value={defermentForm.reason}
                       onChange={(e) =>
                         setDefermentForm({ ...defermentForm, reason: e.target.value })
                       }
-                      placeholder="Explain why you are deferring your leave"
-                      className="mt-2 bg-slate-700 border-slate-600 text-white"
+                      placeholder="E.g., Business requirements, Personal circumstances..."
+                      className="mt-2"
                       rows={3}
                     />
                   </div>
+
                   <Button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium"
                   >
                     {isLoading ? "Submitting..." : "Submit Deferment Request"}
                   </Button>
@@ -292,89 +362,126 @@ export default function DefermentRecallPage() {
             </Card>
 
             {/* Previous Requests */}
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-4">Your Deferment Requests</h3>
-              <div className="space-y-3">
-                {defermentRequests.length === 0 ? (
-                  <Card className="border-0 bg-slate-800/50">
-                    <CardContent className="p-6 text-center text-slate-400">
-                      No deferment requests yet
-                    </CardContent>
-                  </Card>
-                ) : (
-                  defermentRequests.map((req) => (
-                    <Card key={req.id} className="border-0 bg-slate-800/50">
+            {defermentRequests.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Your Deferment Requests</h3>
+                <div className="space-y-3">
+                  {defermentRequests.map((req) => (
+                    <Card key={req.id} className="border-slate-200">
                       <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <p className="text-white font-semibold">
-                              {new Date(req.original_start_date).toLocaleDateString()} →{" "}
-                              {new Date(req.new_start_date).toLocaleDateString()}
-                            </p>
-                            <p className="text-sm text-slate-400">
-                              Requested on {new Date(req.created_at).toLocaleDateString()}
-                            </p>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="text-left">
+                              <p className="font-semibold text-slate-900 flex items-center gap-2">
+                                {formatDate(req.original_start_date)}
+                                <ArrowRight className="w-4 h-4 text-slate-400" />
+                                {formatDate(req.new_start_date)}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                Requested {new Date(req.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
                           </div>
                           {getStatusBadge(req.status)}
                         </div>
                         {req.reason && (
-                          <p className="text-sm text-slate-300">
-                            <strong>Reason:</strong> {req.reason}
+                          <p className="text-sm text-slate-700 border-l-2 border-slate-300 pl-3">
+                            <span className="font-medium">Reason:</span> {req.reason}
+                          </p>
+                        )}
+                        {req.working_days_change !== undefined && (
+                          <p className="text-xs text-slate-600 mt-2">
+                            Original: {req.original_working_days} working days | New: {req.new_working_days} working days
+                            {req.working_days_change > 0 ? ` (+${req.working_days_change})` : ` (${req.working_days_change})`}
                           </p>
                         )}
                       </CardContent>
                     </Card>
-                  ))
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </TabsContent>
 
           <TabsContent value="recall" className="space-y-6">
+            {/* Info Card */}
+            <Card className="border-amber-200 bg-amber-50">
+              <CardContent className="pt-6 flex items-start gap-3">
+                <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-900 mb-1">What is Leave Recall?</p>
+                  <p className="text-sm text-amber-800">
+                    End your leave early and return to work on a specific date. Any unused leave days will be restored to your balance. Only working days (excluding weekends and holidays) are counted.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Recall Form */}
-            <Card className="border-0 bg-slate-800/50 backdrop-blur">
-              <CardHeader className="border-b border-slate-700/50">
-                <CardTitle className="text-white flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Request Leave Recall
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="border-b border-slate-200 pb-4">
+                <CardTitle className="text-slate-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-amber-600" />
+                  Recall Your Leave
                 </CardTitle>
                 <CardDescription>End your leave early and return to work</CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
                 <form onSubmit={handleSubmitRecall} className="space-y-6">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-slate-300">Leave Start Date</Label>
-                      <Input
-                        type="date"
-                        value={recallForm.leaveStartDate}
-                        onChange={(e) =>
-                          setRecallForm({
-                            ...recallForm,
-                            leaveStartDate: e.target.value,
-                          })
-                        }
-                        className="mt-2 bg-slate-700 border-slate-600 text-white"
-                        required
-                      />
+                  {/* Leave Dates Section */}
+                  <div>
+                    <h3 className="font-semibold text-slate-900 mb-4 text-sm uppercase tracking-wide text-slate-600">Your Approved Leave</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-slate-700 font-medium">Start Date</Label>
+                        <Input
+                          type="date"
+                          value={recallForm.leaveStartDate}
+                          onChange={(e) =>
+                            setRecallForm({
+                              ...recallForm,
+                              leaveStartDate: e.target.value,
+                            })
+                          }
+                          className="mt-2"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-700 font-medium">End Date</Label>
+                        <Input
+                          type="date"
+                          value={recallForm.leaveEndDate}
+                          onChange={(e) =>
+                            setRecallForm({
+                              ...recallForm,
+                              leaveEndDate: e.target.value,
+                            })
+                          }
+                          className="mt-2"
+                          required
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-slate-300">Leave End Date</Label>
-                      <Input
-                        type="date"
-                        value={recallForm.leaveEndDate}
-                        onChange={(e) =>
-                          setRecallForm({
-                            ...recallForm,
-                            leaveEndDate: e.target.value,
-                          })
-                        }
-                        className="mt-2 bg-slate-700 border-slate-600 text-white"
-                        required
-                      />
+                    {recallForm.leaveStartDate && recallForm.leaveEndDate && (
+                      <p className="text-sm text-slate-600 mt-2">
+                        {formatDate(recallForm.leaveStartDate)} to {formatDate(recallForm.leaveEndDate)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Arrow */}
+                  <div className="flex justify-center">
+                    <div className="text-slate-400">
+                      <ArrowRight className="w-5 h-5 rotate-90" />
                     </div>
+                  </div>
+
+                  {/* Recall Date Section */}
+                  <div>
+                    <h3 className="font-semibold text-slate-900 mb-4 text-sm uppercase tracking-wide text-slate-600">Recall Date</h3>
                     <div>
-                      <Label className="text-slate-300">Recall Date</Label>
+                      <Label className="text-slate-700 font-medium">Return to Work On</Label>
                       <Input
                         type="date"
                         value={recallForm.recallDate}
@@ -384,27 +491,33 @@ export default function DefermentRecallPage() {
                             recallDate: e.target.value,
                           })
                         }
-                        className="mt-2 bg-slate-700 border-slate-600 text-white"
+                        className="mt-2"
                         required
                       />
+                      <p className="text-xs text-slate-500 mt-1">
+                        You will return to work on {recallForm.recallDate ? formatDate(recallForm.recallDate) : "—"}
+                      </p>
                     </div>
                   </div>
+
+                  {/* Reason */}
                   <div>
-                    <Label className="text-slate-300">Reason</Label>
+                    <Label className="text-slate-700 font-medium">Why are you recalling? (Optional)</Label>
                     <Textarea
                       value={recallForm.reason}
                       onChange={(e) =>
                         setRecallForm({ ...recallForm, reason: e.target.value })
                       }
-                      placeholder="Explain why you are recalling your leave"
-                      className="mt-2 bg-slate-700 border-slate-600 text-white"
+                      placeholder="E.g., Emergency business requirement, Personal circumstances..."
+                      className="mt-2"
                       rows={3}
                     />
                   </div>
+
                   <Button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium"
                   >
                     {isLoading ? "Submitting..." : "Submit Recall Request"}
                   </Button>
@@ -413,45 +526,43 @@ export default function DefermentRecallPage() {
             </Card>
 
             {/* Previous Requests */}
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-4">Your Recall Requests</h3>
-              <div className="space-y-3">
-                {recallRequests.length === 0 ? (
-                  <Card className="border-0 bg-slate-800/50">
-                    <CardContent className="p-6 text-center text-slate-400">
-                      No recall requests yet
-                    </CardContent>
-                  </Card>
-                ) : (
-                  recallRequests.map((req) => (
-                    <Card key={req.id} className="border-0 bg-slate-800/50">
+            {recallRequests.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Your Recall Requests</h3>
+                <div className="space-y-3">
+                  {recallRequests.map((req) => (
+                    <Card key={req.id} className="border-slate-200">
                       <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <p className="text-white font-semibold">
-                              Recall on {new Date(req.recall_date).toLocaleDateString()}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="text-left">
+                            <p className="font-semibold text-slate-900">
+                              Leave: {formatDate(req.leave_start_date)} to {formatDate(req.leave_end_date)}
                             </p>
-                            <p className="text-sm text-slate-400">
-                              Leave: {new Date(req.leave_start_date).toLocaleDateString()} -{" "}
-                              {new Date(req.leave_end_date).toLocaleDateString()}
+                            <p className="text-sm text-slate-600 mt-1">
+                              Return to work: <span className="font-medium">{formatDate(req.recall_date)}</span>
                             </p>
-                            <p className="text-sm text-slate-400">
-                              Requested on {new Date(req.created_at).toLocaleDateString()}
+                            <p className="text-xs text-slate-500 mt-1">
+                              Requested {new Date(req.created_at).toLocaleDateString()}
                             </p>
                           </div>
                           {getStatusBadge(req.status)}
                         </div>
                         {req.reason && (
-                          <p className="text-sm text-slate-300">
-                            <strong>Reason:</strong> {req.reason}
+                          <p className="text-sm text-slate-700 border-l-2 border-slate-300 pl-3">
+                            <span className="font-medium">Reason:</span> {req.reason}
+                          </p>
+                        )}
+                        {req.days_to_restore !== undefined && (
+                          <p className="text-xs text-slate-600 mt-2">
+                            Total leave: {req.total_leave_days} days | Already spent: {req.days_already_spent} days | To restore: {req.days_to_restore} days
                           </p>
                         )}
                       </CardContent>
                     </Card>
-                  ))
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>
