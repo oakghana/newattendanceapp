@@ -591,6 +591,7 @@ export function LeaveManagementClient({
           leave_plan_request_id: selectedApprovedForDeferment,
           deferral_year: deferralYear,
           reason: defermentReason || null,
+          user_id: userId,
         }),
       })
 
@@ -634,6 +635,7 @@ export function LeaveManagementClient({
           leave_plan_request_id: selectedApprovedForRecall,
           recall_date: recallDateInput,
           reason: recallReasonInput || null,
+          user_id: userId,
           user_role: userRole,
         }),
       })
