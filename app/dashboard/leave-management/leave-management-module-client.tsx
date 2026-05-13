@@ -77,11 +77,13 @@ export function LeaveManagementModuleClient({
             <CalendarRange className="h-4 w-4" /> Leave & HR Leave
           </TabsTrigger>
           <TabsTrigger value="leave-deferment" className="gap-2 rounded-2xl border border-indigo-200 bg-white px-5 py-3 text-indigo-800 hover:bg-indigo-50 data-[state=active]:border-indigo-600 data-[state=active]:bg-indigo-600 data-[state=active]:text-white shrink-0">
-            <Send className="h-4 w-4" /> Leave Deferment
+            <Send className="h-4 w-4" /> Deferments & Recalls
           </TabsTrigger>
+          {false && (
           <TabsTrigger value="leave-recall" className="gap-2 rounded-2xl border border-red-200 bg-white px-5 py-3 text-red-800 hover:bg-red-50 data-[state=active]:border-red-600 data-[state=active]:bg-red-600 data-[state=active]:text-white shrink-0">
             <Phone className="h-4 w-4" /> Leave Recall
           </TabsTrigger>
+          )}
           {showAnalytics && (
             <TabsTrigger value="hr-analytics" className="gap-2 rounded-2xl border border-purple-200 bg-white px-5 py-3 text-purple-800 hover:bg-purple-50 data-[state=active]:border-purple-600 data-[state=active]:bg-purple-600 data-[state=active]:text-white shrink-0">
               <TrendingUp className="h-4 w-4" /> Leave Analytics
@@ -122,11 +124,14 @@ export function LeaveManagementModuleClient({
 
         <TabsContent value="leave-deferment" className="space-y-6">
           <LeaveDefermentClient userRole={userRole} />
+          <LeaveRecallClient userRole={userRole} />
         </TabsContent>
 
+        {false && (
         <TabsContent value="leave-recall" className="space-y-6">
           <LeaveRecallClient userRole={userRole} />
         </TabsContent>
+        )}
 
         {showAnalytics && (
           <TabsContent value="hr-analytics" className="space-y-6">

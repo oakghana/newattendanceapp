@@ -975,8 +975,8 @@ export function LeaveManagementClient({
         </Card>
       )}
 
-      {/* HOD/Regional Manager Deferment & Recall Section */}
-      {(normalizedRole === "department_head" || normalizedRole === "regional_manager") && (
+      {/* HOD/Regional Manager Deferment & Recall Section - HIDDEN */}
+      {false && (normalizedRole === "department_head" || normalizedRole === "regional_manager") && (
         <Card className="overflow-hidden border-blue-200 bg-white shadow-sm">
           <CardHeader className="border-b border-blue-200 bg-blue-50 pb-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
