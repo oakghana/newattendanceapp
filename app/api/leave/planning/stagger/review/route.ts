@@ -85,7 +85,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: review, error: reviewError } = await admin
+    // For HOD/RM: review must already exist (assigned)
+    // For admin: can create new review if doesn't exist
+    const isAdmin = ["admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)
+    
+    let review: any
+    const { data: existingReview, error: reviewError } = await admin
       .from("leave_plan_stagger_reviews")
       .select("id")
       .eq("leave_plan_stagger_request_id", leave_plan_stagger_request_id)
@@ -96,7 +101,28 @@ export async function POST(request: NextRequest) {
       return schemaIssueResponse()
     }
 
-    if (reviewError || !review) {
+    if (existingReview) {
+      // Review already exists (HOD/RM assigned)
+      review = existingReview
+    } else if (isAdmin) {
+      // Admin creating new review
+      const { data: newReview, error: createError } = await admin
+        .from("leave_plan_stagger_reviews")
+        .insert({
+          leave_plan_stagger_request_id,
+          reviewer_id: user.id,
+          reviewer_role: role,
+          created_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single()
+
+      if (createError || !newReview) {
+        return NextResponse.json({ error: "Failed to create review assignment." }, { status: 400 })
+      }
+      review = newReview
+    } else {
+      // HOD/RM but no existing review assignment
       return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
     }
 
