@@ -11,6 +11,7 @@ import {
   ChevronUp,
   ClipboardList,
   Copy,
+  Download,
   FileClock,
   Loader2,
   Plus,
@@ -157,6 +158,7 @@ export function LeaveManagementClient({
     cc_recipients: "",
     category: "approval",
   })
+  const [isExportingAnnualLeave, setIsExportingAnnualLeave] = useState(false)
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -164,6 +166,45 @@ export function LeaveManagementClient({
       toast({ title: `${label} copied`, description: "Template copied to clipboard." })
     } catch {
       toast({ title: "Copy failed", description: "Please copy manually.", variant: "destructive" })
+    }
+  }
+
+  // ─── Export Annual Leave Handler ───
+  const exportAnnualLeaveToExcel = async () => {
+    try {
+      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+      const isAuthorized = ["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin"].includes(normalizedRole)
+
+      if (!isAuthorized) {
+        toast({ title: "Access Denied", description: "Only HOD/RM and HR can export annual leave.", variant: "destructive" })
+        return
+      }
+
+      setIsExportingAnnualLeave(true)
+
+      const response = await fetch(`/api/leave/export-annual?user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(userRole)}`)
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Export failed")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Annual_Leave_Export_${new Date().toISOString().split("T")[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(link)
+
+      toast({ title: "Export Successful", description: "Annual leave data exported to Excel." })
+    } catch (error) {
+      console.error("[v0] Export error:", error)
+      toast({ title: "Export Failed", description: error instanceof Error ? error.message : "Could not export annual leave.", variant: "destructive" })
+    } finally {
+      setIsExportingAnnualLeave(false)
     }
   }
 
@@ -1199,6 +1240,38 @@ export function LeaveManagementClient({
             <Button variant="destructive" onClick={handleDeleteAllTestingRecords} disabled={processingId === "leave-testing-cleanup"}>
               {processingId === "leave-testing-cleanup" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Delete All Leave Transactions
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Export Annual Leave Card - HOD/RM/HR Only */}
+      {["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
+        <Card className="border border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50/50">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg font-bold text-purple-900 flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              Export Annual Leave Requests
+            </CardTitle>
+            <CardDescription className="text-purple-700">Download all staff annual leave requests for your department/region as an Excel file</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={exportAnnualLeaveToExcel}
+              disabled={isExportingAnnualLeave}
+              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+            >
+              {isExportingAnnualLeave ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export to Excel
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
