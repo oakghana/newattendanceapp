@@ -1036,7 +1036,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────────────────────────────────────────────────────────
+  // ── Computed ─────────────────────────────────────────────────────���──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1413,7 +1413,30 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
 
   // ── Derived lists ────────────────────────────────────────────────────
-  const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
+  const myRequests: any[] = useMemo(() => {
+    if (!data) return []
+    const requests = data.myRequests || data.requests || []
+    
+    // Role-based visibility filtering
+    // Staff: only see their own requests
+    if (isStaff && !isHod && !isAdmin && !canSeeAllRequests) {
+      return requests.filter((r: any) => r.user_id === userId)
+    }
+    
+    // HOD/Regional Manager: see requests from their staff
+    if ((isHod || normalizedRole === "regional_manager") && !isAdmin && !canSeeAllRequests) {
+      // This would typically filter based on HOD linkages
+      // For now, return all requests that are assigned for HOD review
+      return requests
+    }
+    
+    // HR Leave Office, HR Admin, HR Executive, Admin: see all requests
+    if (canSeeAllRequests || isAdmin) {
+      return requests
+    }
+    
+    return requests
+  }, [data, isStaff, isHod, isAdmin, canSeeAllRequests, userId, normalizedRole])
 
   const hodAssignedReviews: any[] = useMemo(() => {
     if (!data) return []
@@ -1971,6 +1994,23 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <p className="text-xs text-slate-500">Leave Year Period: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
+                {/* October Planning Reminder Alert */}
+                <div className="border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg px-4 py-3.5">
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <AlertCircle className="h-5 w-5 text-amber-600 font-bold" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-bold text-amber-900 mb-1">
+                        Annual Leave Planning Reminder:
+                      </h4>
+                      <p className="text-sm text-amber-800 leading-relaxed">
+                        In September, all staff must submit their annual leave requests for the October cocoa season cycle. This allows HOD/Regional Managers time to review and approve all leave days by the start of October. Plan ahead to avoid operational disruptions.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
@@ -1988,8 +2028,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       Current cycle auto-detected: <strong>{activeLeaveYearPeriod}</strong> (October to September).
                     </p>
                     {inOctoberPlanningWindow && (
-                      <p className="text-xs text-amber-700">
-                        First week of October: staff should submit annual leave for the next leave period.
+                      <p className="text-xs text-amber-700 font-medium">
+                        ⚠️ First week of October: staff should submit annual leave for the next leave period.
                       </p>
                     )}
                   </div>
