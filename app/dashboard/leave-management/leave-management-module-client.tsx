@@ -10,7 +10,7 @@ import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { LeaveCalendarSettingsClient } from "@/components/leave/leave-calendar-settings-client"
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
-const HR_ANALYTICS_ROLES = ["loan_office", "leave_admin", "admin", "hr_office", "hr"]
+const HR_ANALYTICS_ROLES = ["leave_admin", "admin", "hr_office", "hr"]
 const HOLIDAY_MANAGEMENT_ROLES = ["admin", "leave_admin", "hr_office", "director_hr", "manager_hr"]
 
 function normalizeRole(role: string | null | undefined) {
