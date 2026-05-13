@@ -25,6 +25,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "director_hr",
     "manager_hr",
     "hr_officer",
+    "hr_leave_office",
     "leave_admin",
     "hr_office",
     "audit_staff",
@@ -43,6 +44,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "director_hr",
     "manager_hr",
     "hr_officer",
+    "hr_leave_office",
     "leave_admin",
     "hr_office",
     "audit_staff",
@@ -50,7 +52,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   ],
   
   // Staff Dashboard
-  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "leave_admin", "audit_staff", "contract", "loan_committee", "committee"],
+  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "leave_admin", "audit_staff", "contract", "loan_committee", "committee"],
   
   // Regional Manager pages
   "/dashboard/regional": ["admin", "regional_manager"],
