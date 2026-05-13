@@ -27,6 +27,8 @@ import {
   HR_OFFICE_PENDING_STATUSES,
   HR_APPROVER_PENDING_STATUSES,
   STAFF_EDITABLE_STATUSES,
+  getWeekendsAndHolidaysInRange,
+  calculateWorkingDays,
 } from "@/lib/leave-planning"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
@@ -1003,6 +1005,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [typedSignature, setTypedSignature] = useState("")
   const [uploadedSigUrl, setUploadedSigUrl] = useState<string | null>(null)
   const [drawnSigUrl, setDrawnSigUrl] = useState<string | null>(null)
+  const [holidays, setHolidays] = useState<Array<{ holiday_date: string; holiday_name: string }>>([])
+  const [holidaysLoading, setHolidaysLoading] = useState(false)
 
   const defaultStaffSignature = useMemo(() => {
     const fullName = [String(profile.firstName || "").trim(), String(profile.lastName || "").trim()]
@@ -1153,6 +1157,21 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       setTemplateOptions([...getBuiltinHrTemplateOptions(), ...remoteTemplates])
     } catch {
       setTemplateOptions(getBuiltinHrTemplateOptions())
+    }
+  }, [])
+
+  const loadHolidays = useCallback(async () => {
+    try {
+      setHolidaysLoading(true)
+      const res = await fetch("/api/leave/holidays", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) return
+      setHolidays(Array.isArray(json.holidays) ? json.holidays : [])
+    } catch (e) {
+      console.error("[v0] Failed to load holidays:", e)
+      setHolidays([])
+    } finally {
+      setHolidaysLoading(false)
     }
   }, [])
 
@@ -1354,6 +1373,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     void loadData()
     void loadPolicy()
     void loadTemplateOptions()
+    void loadHolidays()
   }, [loadData, loadPolicy, loadTemplateOptions])
 
   useEffect(() => {
@@ -2103,15 +2123,83 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 )}
 
                 {leaveType === "annual" && startDate && endDate && (
-                  <div className="flex flex-wrap gap-3">
-                    <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-green-700 font-medium">Days Requested</p>
-                      <p className="text-2xl font-bold text-green-800">{computedDays}</p>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-3">
+                      <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
+                        <p className="text-xs text-green-700 font-medium">Days Requested</p>
+                        <p className="text-2xl font-bold text-green-800">{computedDays}</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center">
+                        <p className="text-xs text-slate-600 font-medium">Return to Work</p>
+                        <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
+                      </div>
                     </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-slate-600 font-medium">Return to Work</p>
-                      <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
-                    </div>
+
+                    {/* Weekends and Holidays Breakdown */}
+                    {(() => {
+                      const holidayDates = holidays.map((h) => h.holiday_date)
+                      const holidayMap = holidays.reduce(
+                        (acc, h) => {
+                          acc[h.holiday_date] = h.holiday_name
+                          return acc
+                        },
+                        {} as Record<string, string>
+                      )
+                      const workingDaysData = calculateWorkingDays(startDate, endDate, holidayDates)
+                      const weekendHolidayList = getWeekendsAndHolidaysInRange(startDate, endDate, holidayDates, holidayMap)
+
+                      return (
+                        <div className="border border-slate-200 rounded-lg bg-slate-50 p-4 space-y-3">
+                          <h4 className="font-semibold text-sm text-slate-700">Leave Period Breakdown</h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                            <div className="bg-white rounded px-2 py-2 border border-slate-200">
+                              <p className="text-xs text-slate-600">Total Days</p>
+                              <p className="text-lg font-bold text-slate-800">{workingDaysData.totalDays}</p>
+                            </div>
+                            <div className="bg-blue-50 rounded px-2 py-2 border border-blue-200">
+                              <p className="text-xs text-blue-600">Weekends</p>
+                              <p className="text-lg font-bold text-blue-800">{workingDaysData.weekendDays}</p>
+                            </div>
+                            <div className="bg-red-50 rounded px-2 py-2 border border-red-200">
+                              <p className="text-xs text-red-600">Holidays</p>
+                              <p className="text-lg font-bold text-red-800">{workingDaysData.holidayDays}</p>
+                            </div>
+                            <div className="bg-green-50 rounded px-2 py-2 border border-green-200">
+                              <p className="text-xs text-green-600">Working Days</p>
+                              <p className="text-lg font-bold text-green-800">{workingDaysData.workingDays}</p>
+                            </div>
+                          </div>
+
+                          {weekendHolidayList.length > 0 && (
+                            <div className="text-xs space-y-1 mt-2 pt-2 border-t border-slate-200">
+                              <p className="font-medium text-slate-700">Non-working days in this period:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {weekendHolidayList.map((item, idx) => {
+                                  const dateStr = item.date.toLocaleDateString("en-US", { 
+                                    month: "short", 
+                                    day: "numeric",
+                                    weekday: "short"
+                                  })
+                                  const label = item.type === "holiday" ? `🎉 ${item.name} (${dateStr})` : `📅 ${dateStr}`
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className={`inline-block px-2 py-1 rounded text-xs ${
+                                        item.type === "holiday"
+                                          ? "bg-red-100 text-red-700"
+                                          : "bg-blue-100 text-blue-700"
+                                      }`}
+                                    >
+                                      {label}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
 
