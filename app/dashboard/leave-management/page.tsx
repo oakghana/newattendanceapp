@@ -73,7 +73,6 @@ export default async function LeaveManagementPage() {
     "hr_office",
     "hr",
     "hr_director",
-    "loan_office",
     "it_admin",
   ].includes(roleNorm)
 
