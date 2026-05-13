@@ -539,7 +539,7 @@ export default function DefermentRecallPage() {
                               Leave: {formatDate(req.leave_start_date)} to {formatDate(req.leave_end_date)}
                             </p>
                             <p className="text-sm text-slate-600 mt-1">
-                              Return to work: <span className="font-medium">{formatDate(req.recall_date)}</span>
+                              Resumption date: <span className="font-medium">{formatDate(req.recall_date)}</span>
                             </p>
                             <p className="text-xs text-slate-500 mt-1">
                               Requested {new Date(req.created_at).toLocaleDateString()}

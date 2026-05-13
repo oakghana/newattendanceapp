@@ -204,7 +204,11 @@ function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySigna
 function fmtLongDate(val?: string | null) {
   if (!val) return "—"
   try {
-    return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
+    const d = new Date(val)
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${day}/${month}/${year}`
   } catch {
     return val
   }
@@ -215,10 +219,10 @@ function fmtFormalDate(val?: string | null) {
   try {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
-    const day = d.getDate()
-    const month = d.toLocaleDateString("en-GH", { month: "long" })
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
     const year = d.getFullYear()
-    return `${day}${getOrdinalSuffix(day)} ${month}, ${year}`
+    return `${day}/${month}/${year}`
   } catch {
     return String(val)
   }
@@ -230,7 +234,10 @@ function fmtFormalDateWithWeekday(val?: string | null) {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
     const weekday = d.toLocaleDateString("en-GH", { weekday: "long" })
-    return `${weekday}, ${fmtFormalDate(val)}`
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${weekday}, ${day}/${month}/${year}`
   } catch {
     return String(val)
   }
@@ -1030,7 +1037,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────��───����─���──���──────────────────────────────────�����──
+  // ── Computed ─────────���───����─���──���──────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -2435,7 +2442,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                   : "bg-blue-600 hover:bg-blue-700"
                                   : ""
                                 }>
-                                {act === "approve" ? "✓ Endorse" : "⟳ Adjust Dates"}
+                                {act === "approve" ? "�� Endorse" : "⟳ Adjust Dates"}
                               </Button>
                             ))}
                           </div>

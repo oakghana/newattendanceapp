@@ -34,7 +34,7 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
   study: "Study Leave",
   compassionate: "Compassionate Leave",
   casual: "Casual Leave",
-  unpaid: "Unpaid Leave",
+  unpaid: "Leave Without Pay",
   special: "Special Leave",
 }
 
