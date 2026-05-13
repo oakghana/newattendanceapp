@@ -371,9 +371,24 @@ function getUserLoanTier(position?: string | null, role?: string | null): "junio
   const normalizedPosition = String(position || "").toLowerCase()
   const normalizedRole = String(role || "").toLowerCase()
 
-  if (/manager|director|head|regional/.test(normalizedPosition) || /manager|director/.test(normalizedRole)) return "manager"
-  if (/senior|\bsr\b|sr\./.test(normalizedPosition) || /senior|sr\b|sr\./.test(normalizedRole)) return "senior"
-  if (/junior|\bjr\b/.test(normalizedPosition) || /junior|\bjr\b/.test(normalizedRole)) return "junior"
+  // Manager tier: manager, director, head, regional, admin
+  if (/manager|director|head|regional|admin|executive/.test(normalizedPosition) || 
+      /manager|director|admin/.test(normalizedRole)) {
+    return "manager"
+  }
+  
+  // Senior tier: officer, senior, sr., sr, supervisor, superintendent, principal
+  if (/officer|senior|\bsr\b|sr\.|supervisor|superintendent|principal|chief/.test(normalizedPosition) || 
+      /senior|sr\b|sr\./.test(normalizedRole)) {
+    return "senior"
+  }
+  
+  // Junior tier: junior, jr., clerk, assistant, artisan, apprentice, trainee
+  if (/junior|\bjr\b|clerk|assistant|artisan|apprentice|trainee|technician/.test(normalizedPosition) || 
+      /junior|\bjr\b/.test(normalizedRole)) {
+    return "junior"
+  }
+  
   return null
 }
 
@@ -391,7 +406,12 @@ function loanTypeGroupKey(loanType: LoanType) {
 
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
-  if (!userTier || !loanTier) return true
+  
+  // If no user tier or no loan tier restriction, include it
+  if (!userTier || !loanTier) {
+    return true
+  }
+  
   return loanTier === userTier
 }
 
