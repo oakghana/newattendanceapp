@@ -568,6 +568,7 @@ export async function GET() {
     const accountsRows: any[] = [
       ...(accountsRes.data || []),
       ...(accountsSignedRes.data || []),
+      ...(loanOfficeRes.data || []),  // Include loan office rows to get all FD reviewers
     ]
     const uniqueAccountsReviewerIds = Array.from(
       new Set(accountsRows.map((r: any) => r.accounts_reviewer_id).filter(Boolean)),
