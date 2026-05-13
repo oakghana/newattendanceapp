@@ -79,15 +79,33 @@ export function TeamCalendarView({ isHrOffice = false }: TeamCalendarViewProps) 
   useEffect(() => {
     setLoading(true)
     setError(null)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000) // 8 second timeout
+    
     const m = `${year}-${String(month + 1).padStart(2, "0")}`
-    fetch(`/api/leave/team-calendar?month=${m}`, { cache: "no-store" })
-      .then((r) => r.json())
+    fetch(`/api/leave/team-calendar?month=${m}`, { 
+      cache: "force-cache",
+      signal: controller.signal 
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then((d) => {
         if (d.error) throw new Error(d.error)
         setData(d)
+        setLoading(false)
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+      .catch((e) => {
+        console.log("[v0] TeamCalendarView error:", e.message)
+        setError(e.message || "Failed to load team calendar")
+        setLoading(false)
+      })
+
+    return () => {
+      clearTimeout(timeout)
+      controller.abort()
+    }
   }, [year, month])
 
   const prevMonth = () => {

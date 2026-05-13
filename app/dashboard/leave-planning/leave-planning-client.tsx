@@ -980,6 +980,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [endDate, setEndDate] = useState("")
   const [leaveType, setLeaveType] = useState("annual")
   const [reason, setReason] = useState("")
+  const [partLeaveDays, setPartLeaveDays] = useState("") // Required for part_leave
+  const [resumptionDate, setResumptionDate] = useState("") // Mandatory for all leaves
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
@@ -1036,7 +1038,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────────────────────────────────────────────�����������──
+  // ── Computed ─────────────────────────────────────────────────────�������������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1633,6 +1635,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       toast({ title: "Missing end date", description: "Annual leave requires both start and end dates.", variant: "destructive" })
       return
     }
+    if (leaveType === "part_leave" && !partLeaveDays) {
+      toast({ title: "Missing days", description: "Please specify the number of days for part leave.", variant: "destructive" })
+      return
+    }
+    if (!resumptionDate) {
+      toast({ title: "Missing resumption date", description: "Resumption (return-to-work) date is mandatory.", variant: "destructive" })
+      return
+    }
     if (!activeSig.text && !activeSig.dataUrl) {
       toast({ title: "Signature required", description: "Please provide your signature.", variant: "destructive" })
       return
@@ -1650,6 +1660,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           preferred_end_date: leaveType === "annual" ? endDate : startDate,
           leave_type: leaveType,
           reason,
+          resumption_date: resumptionDate,
+          part_leave_days: leaveType === "part_leave" ? Number(partLeaveDays) : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
           user_signature_data_url: activeSig.dataUrl,
@@ -1877,7 +1889,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
-  // ── Render ──────────────────────────────────────────────────────────
+  // ── Render ────��─────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ─��� Header Banner ──────�����───────────────────────────────────── */}

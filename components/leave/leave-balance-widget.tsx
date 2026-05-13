@@ -84,14 +84,32 @@ export function LeaveBalanceWidget() {
   const [selectedType, setSelectedType] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/leave/balance", { cache: "no-store" })
-      .then((r) => r.json())
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+
+    fetch("/api/leave/balance", { 
+      cache: "force-cache",
+      signal: controller.signal 
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then((d) => {
         if (d.error) throw new Error(d.error)
         setData(d)
+        setLoading(false)
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+      .catch((e) => {
+        console.log("[v0] LeaveBalanceWidget error:", e.message)
+        setError(e.message || "Failed to load leave balance")
+        setLoading(false)
+      })
+
+    return () => {
+      clearTimeout(timeout)
+      controller.abort()
+    }
   }, [])
 
   if (loading) {
