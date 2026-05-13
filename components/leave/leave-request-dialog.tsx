@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   Umbrella,
   Baby,
+  Search,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
@@ -86,6 +87,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   const [step, setStep] = useState<Step>("type")
   const [loading, setLoading] = useState(false)
   const [leaveTypeOptions, setLeaveTypeOptions] = useState(DEFAULT_LEAVE_TYPES)
+  const [leaveSearchQuery, setLeaveSearchQuery] = useState("")
   const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isHalfDay, setIsHalfDay] = useState(false)
@@ -262,21 +264,44 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
 
           {/* Step: Type */}
           {step === "type" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-sm font-semibold text-foreground">Select Leave Type</p>
-              <div className="grid grid-cols-1 gap-2">
-                {leaveTypeOptions.map((type) => {
-                  const isSelected = formData.leaveType === type.value
-                  const color = LEAVE_COLORS[type.value] || LEAVE_COLORS.other
-                  const icon = LEAVE_ICONS[type.value] || LEAVE_ICONS.other
-                  return (
-                    <button
-                      key={type.value}
-                      onClick={() => {
-                        setFormData((p) => ({ ...p, leaveType: type.value }))
-                        setStep("dates")
-                      }}
-                      className={cn(
+              
+              {/* Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search leave type..."
+                  value={leaveSearchQuery}
+                  onChange={(e) => setLeaveSearchQuery(e.target.value.toLowerCase())}
+                  className="w-full pl-10 pr-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              {/* Filtered Leave Type Options */}
+              <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto">
+                {leaveTypeOptions
+                  .filter((type) => 
+                    type.label.toLowerCase().includes(leaveSearchQuery) || 
+                    type.value.toLowerCase().includes(leaveSearchQuery)
+                  )
+                  .map((type) => {
+                    const isSelected = formData.leaveType === type.value
+                    const color = LEAVE_COLORS[type.value] || LEAVE_COLORS.other
+                    const icon = LEAVE_ICONS[type.value] || LEAVE_ICONS.other
+                    return (
+                      <button
+                        key={type.value}
+                        onClick={() => {
+                          setFormData((p) => ({ ...p, leaveType: type.value }))
+                          setLeaveSearchQuery("")
+                          if (type.value === "annual") {
+                            setIsHalfDay(false)
+                          }
+                          setStep("dates")
+                        }}
+                        className={cn(
                         "flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 text-left transition-all duration-150 hover:scale-[1.01] active:scale-[0.99]",
                         isSelected ? color + " ring-2 ring-offset-1 ring-current" : "border-border bg-background hover:bg-muted"
                       )}
@@ -312,11 +337,14 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                   <p className="text-xs text-muted-foreground">Take morning or afternoon off</p>
                 </div>
                 <button
-                  onClick={() => setIsHalfDay(!isHalfDay)}
+                  onClick={() => formData.leaveType !== "annual" && setIsHalfDay(!isHalfDay)}
+                  disabled={formData.leaveType === "annual"}
                   className={cn(
                     "relative w-11 h-6 rounded-full transition-colors",
-                    isHalfDay ? "bg-blue-600" : "bg-muted-foreground/30"
+                    isHalfDay ? "bg-blue-600" : "bg-muted-foreground/30",
+                    formData.leaveType === "annual" && "opacity-50 cursor-not-allowed"
                   )}
+                  title={formData.leaveType === "annual" ? "Annual leave requires full days" : ""}
                 >
                   <span className={cn(
                     "absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all",
@@ -324,6 +352,11 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                   )} />
                 </button>
               </div>
+              {formData.leaveType === "annual" && isHalfDay && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Annual leave cannot be taken as half-day. Please select full day(s).
+                </p>
+              )}
 
               {isHalfDay && (
                 <div className="grid grid-cols-2 gap-2">
@@ -360,12 +393,15 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                 </div>
                 {!isHalfDay && (
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">End Date</label>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
+                      End Date {formData.leaveType === "annual" && <span className="text-red-500">*</span>}
+                    </label>
                     <input
                       type="date"
                       value={formData.endDate.toISOString().split("T")[0]}
                       onChange={(e) => setFormData((p) => ({ ...p, endDate: new Date(e.target.value) }))}
                       min={formData.startDate.toISOString().split("T")[0]}
+                      required={formData.leaveType === "annual"}
                       className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                   </div>
