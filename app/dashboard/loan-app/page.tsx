@@ -3325,22 +3325,7 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
                             <TableCell>
-                              <div className="flex gap-1 flex-col">
-                                <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
-                                <label htmlFor={`fd-upload-${row.id}`}>
-                                  <Button size="sm" className="text-xs whitespace-nowrap bg-blue-600 hover:bg-blue-700 w-full cursor-pointer" asChild>
-                                    <span>Upload Document</span>
-                                  </Button>
-                                  <input
-                                    id={`fd-upload-${row.id}`}
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    className="hidden"
-                                    onChange={(e) => handleFdDocumentUpload(e, row.id)}
-                                    disabled={uploadingDocument}
-                                  />
-                                </label>
-                              </div>
+                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
                             </TableCell>
                           )}
                         </TableRow>
@@ -3355,22 +3340,7 @@ export default function LoanAppPage() {
           {accountsViewMode === "card" && pagedAccounts.map((row) => (
             <StageCard key={row.id} row={row}>
               {p?.accounts && (
-                <div className="flex gap-2 flex-col">
-                  <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
-                  <label htmlFor={`fd-upload-card-${row.id}`}>
-                    <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 cursor-pointer" asChild>
-                      <span>Upload Document</span>
-                    </Button>
-                    <input
-                      id={`fd-upload-card-${row.id}`}
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="hidden"
-                      onChange={(e) => handleFdDocumentUpload(e, row.id)}
-                      disabled={uploadingDocument}
-                    />
-                  </label>
-                </div>
+                <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
               )}
             </StageCard>
           ))}
@@ -4688,6 +4658,22 @@ export default function LoanAppPage() {
                 <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
                 <Label className="text-xs">Your Comments (optional)</Label>
                 <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} className="text-xs" />
+                <div>
+                  <Label className="text-xs">Support Document (optional)</Label>
+                  <label htmlFor="fd-upload-modal">
+                    <Button size="sm" className="text-xs whitespace-nowrap bg-blue-600 hover:bg-blue-700 w-full cursor-pointer" asChild>
+                      <span>{uploadingDocument ? "Uploading..." : "Upload Document"}</span>
+                    </Button>
+                    <input
+                      id="fd-upload-modal"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => actionModal.row && handleFdDocumentUpload(e, actionModal.row.id)}
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+                </div>
               </>
             )}
             {/* Committee - Further Information */}
