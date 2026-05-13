@@ -19,7 +19,7 @@ export function QuickActions({ userRole }: QuickActionsProps) {
       tag: "Daily",
     },
     {
-      title: "Leave Hub",
+      title: "Leave Administration",
       description: "Apply for leave and track updates from your manager",
       href: "/dashboard/leave-management",
       icon: Calendar,

@@ -1,166 +1,226 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { redirect } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { validateSupabaseCRUDOperations, generateCRUDReport } from "@/lib/supabase-crud-validator"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Loader2, CheckCircle2, AlertTriangle, XCircle, RefreshCw } from "lucide-react"
+import { CheckCircle2, XCircle, AlertTriangle, LogOut } from "lucide-react"
 
-interface CRUDTestResult {
-  operation: string
-  status: "pass" | "fail" | "warning"
-  message: string
-  duration: number
-  details?: any
-}
-
-export default function DiagnosticsPage() {
-  const [results, setResults] = useState<CRUDTestResult[]>([])
-  const [isRunning, setIsRunning] = useState(false)
-  const [report, setReport] = useState<string>("")
+export default function AuthDiagnosticsPage() {
+  const [authStatus, setAuthStatus] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
-  const runCRUDTests = useCallback(async () => {
-    setIsRunning(true)
-    setError(null)
-    setResults([])
-    setReport("")
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const supabase = createClient()
+        
+        // Check session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          setError(`Session Error: ${sessionError.message}`)
+          setLoading(false)
+          return
+        }
 
-    try {
-      const testResults = await validateSupabaseCRUDOperations()
-      setResults(testResults)
-      const generatedReport = generateCRUDReport(testResults)
-      setReport(generatedReport)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error during CRUD tests")
-      console.error("[v0] CRUD test error:", err)
-    } finally {
-      setIsRunning(false)
+        if (!session) {
+          setAuthStatus({ authenticated: false, reason: "No active session" })
+          setLoading(false)
+          return
+        }
+
+        // Get user
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError) {
+          setError(`User Error: ${userError.message}`)
+          setLoading(false)
+          return
+        }
+
+        setAuthStatus({
+          authenticated: !!user,
+          user: user ? { id: user.id, email: user.email } : null,
+          sessionValid: true
+        })
+
+        // Get profile
+        if (user) {
+          const { data: profileData, error: profileError } = await supabase
+            .from("user_profiles")
+            .select("id, first_name, last_name, role, email")
+            .eq("id", user.id)
+            .single()
+
+          if (profileError) {
+            setError(`Profile Error: ${profileError.message}`)
+          } else {
+            setProfile(profileData)
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error")
+      } finally {
+        setLoading(false)
+      }
     }
+
+    checkAuth()
   }, [])
 
-  const getStatusIcon = (status: "pass" | "fail" | "warning") => {
-    switch (status) {
-      case "pass":
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />
-      case "fail":
-        return <XCircle className="h-5 w-5 text-red-500" />
-      case "warning":
-        return <AlertTriangle className="h-5 w-5 text-yellow-500" />
-    }
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push("/auth/login")
   }
 
-  const getStatusBadgeVariant = (status: "pass" | "fail" | "warning") => {
-    switch (status) {
-      case "pass":
-        return "default"
-      case "fail":
-        return "destructive"
-      case "warning":
-        return "secondary"
-    }
+  const handleRetryDashboard = () => {
+    router.push("/dashboard")
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
+        <div className="max-w-md w-full p-8">
+          <div className="flex justify-center mb-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          </div>
+          <p className="text-center text-muted-foreground">Checking authentication...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 py-12">
-      <div className="space-y-2">
-        <h1 className="text-4xl font-bold tracking-tight">System Diagnostics</h1>
-        <p className="text-muted-foreground">Test Supabase CRUD operations and system health</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-8">
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Authentication Status</h1>
+          <p className="text-muted-foreground">Diagnosing login and access issues</p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Supabase CRUD Validator</CardTitle>
-          <CardDescription>Run comprehensive tests on database operations</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button onClick={runCRUDTests} disabled={isRunning} size="lg" className="w-full">
-            {isRunning ? (
+        {error ? (
+          <Alert variant="destructive">
+            <XCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {authStatus?.authenticated ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  Authenticated
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-5 w-5 text-red-600" />
+                  Not Authenticated
+                </>
+              )}
+            </CardTitle>
+            <CardDescription>Session and user status</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {authStatus?.authenticated ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Running Tests...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Run CRUD Tests
-              </>
-            )}
-          </Button>
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {results.length > 0 && (
-            <div className="space-y-3">
-              {results.map((result, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 rounded-lg border">
-                  {getStatusIcon(result.status)}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium">{result.operation}</span>
-                      <Badge variant={getStatusBadgeVariant(result.status)}>{result.status}</Badge>
-                      <span className="text-sm text-muted-foreground">{result.duration.toFixed(2)}ms</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{result.message}</p>
-                    {result.details && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {JSON.stringify(result.details)}
-                      </p>
-                    )}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-green-900 mb-2">User Information</h3>
+                  <div className="space-y-2 text-sm text-green-800">
+                    <p><strong>Email:</strong> {authStatus.user?.email}</p>
+                    <p><strong>User ID:</strong> {authStatus.user?.id}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
 
-          {report && (
-            <div className="p-4 bg-muted rounded-lg font-mono text-sm whitespace-pre-wrap overflow-auto max-h-96">
-              {report}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                {profile ? (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-blue-900 mb-2">Profile Information</h3>
+                    <div className="space-y-2 text-sm text-blue-800">
+                      <p><strong>Name:</strong> {profile.first_name} {profile.last_name}</p>
+                      <p><strong>Role:</strong> {profile.role}</p>
+                      <p><strong>Email:</strong> {profile.email}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Profile Missing</AlertTitle>
+                    <AlertDescription>
+                      Your user profile was not found in the system. Please contact support.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
+            ) : (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>No Active Session</AlertTitle>
+                <AlertDescription>
+                  {authStatus?.reason || "You are not logged in. Your session may have expired."}
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance Metrics</CardTitle>
-          <CardDescription>System and operation performance summary</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {results.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Total Execution Time</span>
-                <span className="font-bold">{results.reduce((sum, r) => sum + r.duration, 0).toFixed(2)}ms</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Passed Tests</span>
-                <span className="font-bold text-green-600">{results.filter((r) => r.status === "pass").length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Failed Tests</span>
-                <span className="font-bold text-red-600">{results.filter((r) => r.status === "fail").length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Warnings</span>
-                <span className="font-bold text-yellow-600">{results.filter((r) => r.status === "warning").length}</span>
-              </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Actions</CardTitle>
+            <CardDescription>What would you like to do?</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {authStatus?.authenticated && profile ? (
+              <>
+                <Button onClick={handleRetryDashboard} className="w-full" size="lg">
+                  Try Accessing Dashboard Again
+                </Button>
+                <Button onClick={handleLogout} variant="outline" className="w-full" size="lg">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout & Login Again
+                </Button>
+              </>
+            ) : (
+              <Button onClick={handleLogout} className="w-full" size="lg">
+                Go to Login
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Troubleshooting Guide</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <h4 className="font-semibold mb-1">If you see "Unauthorized":</h4>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
+                <li>Your session may have expired - try logging out and logging back in</li>
+                <li>Clear your browser cookies and try again</li>
+                <li>Try accessing from a private/incognito window</li>
+              </ul>
             </div>
-          ) : (
-            <p className="text-muted-foreground">Run tests to see metrics</p>
-          )}
-        </CardContent>
-      </Card>
+            <div>
+              <h4 className="font-semibold mb-1">If you're authenticated but can't access the dashboard:</h4>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
+                <li>Your user profile may not be set up correctly</li>
+                <li>Your account role may not have dashboard access</li>
+                <li>Contact your system administrator for assistance</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
+

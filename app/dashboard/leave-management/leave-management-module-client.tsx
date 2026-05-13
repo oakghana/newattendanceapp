@@ -1,15 +1,21 @@
 "use client"
 
-import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp } from "lucide-react"
+import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp, Settings, Send, Phone } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
+import { LeaveDefermentClient } from "./leave-deferment-client"
+import { LeaveRecallClient } from "./leave-recall-client"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
+import { LeaveCalendarSettingsClient } from "@/components/leave/leave-calendar-settings-client"
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
-const HR_ANALYTICS_ROLES = ["loan_office", "hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr"]
+const HR_ANALYTICS_ROLES = ["leave_admin", "admin", "hr_office", "hr_leave_office", "hr"]
+const HOLIDAY_MANAGEMENT_ROLES = ["admin", "leave_admin", "director_hr", "manager_hr"]
+const LEAVE_POLICY_ROLES = ["admin", "leave_admin", "director_hr"]
+// HR Leave Office has all admin capabilities EXCEPT Holiday Management and Leave Policy access
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -18,6 +24,16 @@ function normalizeRole(role: string | null | undefined) {
 function isHrAnalyticsRole(role: string | null | undefined) {
   const normalized = normalizeRole(role)
   return HR_ANALYTICS_ROLES.includes(normalized)
+}
+
+function canManageHolidays(role: string | null | undefined) {
+  const normalized = normalizeRole(role)
+  return HOLIDAY_MANAGEMENT_ROLES.includes(normalized)
+}
+
+function canManageLeavePolicies(role: string | null | undefined) {
+  const normalized = normalizeRole(role)
+  return LEAVE_POLICY_ROLES.includes(normalized)
 }
 
 interface LeaveManagementModuleClientProps {
@@ -46,6 +62,7 @@ export function LeaveManagementModuleClient({
   initialManagerNotifications,
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
+  const showHolidayManagement = canManageHolidays(userRole)
   const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
 
@@ -59,6 +76,14 @@ export function LeaveManagementModuleClient({
           <TabsTrigger value="leave-planning" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white shrink-0">
             <CalendarRange className="h-4 w-4" /> Leave & HR Leave
           </TabsTrigger>
+          <TabsTrigger value="leave-deferment" className="gap-2 rounded-2xl border border-indigo-200 bg-white px-5 py-3 text-indigo-800 hover:bg-indigo-50 data-[state=active]:border-indigo-600 data-[state=active]:bg-indigo-600 data-[state=active]:text-white shrink-0">
+            <Send className="h-4 w-4" /> Deferments & Recalls
+          </TabsTrigger>
+          {false && (
+          <TabsTrigger value="leave-recall" className="gap-2 rounded-2xl border border-red-200 bg-white px-5 py-3 text-red-800 hover:bg-red-50 data-[state=active]:border-red-600 data-[state=active]:bg-red-600 data-[state=active]:text-white shrink-0">
+            <Phone className="h-4 w-4" /> Leave Recall
+          </TabsTrigger>
+          )}
           {showAnalytics && (
             <TabsTrigger value="hr-analytics" className="gap-2 rounded-2xl border border-purple-200 bg-white px-5 py-3 text-purple-800 hover:bg-purple-50 data-[state=active]:border-purple-600 data-[state=active]:bg-purple-600 data-[state=active]:text-white shrink-0">
               <TrendingUp className="h-4 w-4" /> Leave Analytics
@@ -67,6 +92,11 @@ export function LeaveManagementModuleClient({
           <TabsTrigger value="insights" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white shrink-0">
             <BarChart3 className="h-4 w-4" /> Balance & Calendar
           </TabsTrigger>
+          {showHolidayManagement && (
+            <TabsTrigger value="holiday-management" className="gap-2 rounded-2xl border border-orange-200 bg-white px-5 py-3 text-orange-800 hover:bg-orange-50 data-[state=active]:border-orange-600 data-[state=active]:bg-orange-600 data-[state=active]:text-white shrink-0">
+              <Settings className="h-4 w-4" /> Holiday Management
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="leave-management" className="space-y-6">
@@ -92,6 +122,17 @@ export function LeaveManagementModuleClient({
           />
         </TabsContent>
 
+        <TabsContent value="leave-deferment" className="space-y-6">
+          <LeaveDefermentClient userRole={userRole} />
+          <LeaveRecallClient userRole={userRole} />
+        </TabsContent>
+
+        {false && (
+        <TabsContent value="leave-recall" className="space-y-6">
+          <LeaveRecallClient userRole={userRole} />
+        </TabsContent>
+        )}
+
         {showAnalytics && (
           <TabsContent value="hr-analytics" className="space-y-6">
             <HrLeaveAnalyticsPanel />
@@ -104,6 +145,12 @@ export function LeaveManagementModuleClient({
             <TeamCalendarView isHrOffice={isHrOffice} />
           </div>
         </TabsContent>
+
+        {showHolidayManagement && (
+          <TabsContent value="holiday-management" className="space-y-6">
+            <LeaveCalendarSettingsClient />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

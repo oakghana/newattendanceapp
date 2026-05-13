@@ -56,7 +56,7 @@ async function isAuthorized(request: NextRequest, admin: any) {
     "hr",
     "hr_office",
     "hr_officer",
-    "hr_leave_office",
+    "leave_admin",
     "manager_hr",
     "director_hr",
     "hr_director",

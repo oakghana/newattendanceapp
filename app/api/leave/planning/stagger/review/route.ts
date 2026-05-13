@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head"].includes(role)) {
-      return NextResponse.json({ error: "Only managers can review stagger requests." }, { status: 403 })
+    if (!["regional_manager", "department_head", "admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)) {
+      return NextResponse.json({ error: "Only admins, managers can review stagger requests." }, { status: 403 })
     }
 
     const body = await request.json()
@@ -85,7 +85,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: review, error: reviewError } = await admin
+    // For HOD/RM: review must already exist (assigned)
+    // For admin: create review with the actual decision being submitted
+    const isAdmin = ["admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)
+    
+    if (!decision) {
+      return NextResponse.json({ error: "Decision is required to submit review" }, { status: 400 })
+    }
+
+    let review: any
+    const { data: existingReview, error: reviewError } = await admin
       .from("leave_plan_stagger_reviews")
       .select("id")
       .eq("leave_plan_stagger_request_id", leave_plan_stagger_request_id)
@@ -96,7 +105,37 @@ export async function POST(request: NextRequest) {
       return schemaIssueResponse()
     }
 
-    if (reviewError || !review) {
+    if (existingReview) {
+      // Review already exists (HOD/RM assigned)
+      review = existingReview
+    } else if (isAdmin) {
+      // Admin creating new review with actual decision
+      if (!leave_plan_stagger_request_id) {
+        return NextResponse.json({ error: "leave_plan_stagger_request_id is required to create review" }, { status: 400 })
+      }
+      
+      const { data: newReview, error: createError } = await admin
+        .from("leave_plan_stagger_reviews")
+        .insert([{
+          leave_plan_stagger_request_id,
+          reviewer_id: user.id,
+          reviewer_role: role === "leave_admin" || role === "hr_leave_office" ? "admin" : role,
+          decision,
+          recommendation: recommendation || null,
+          reviewed_at: new Date().toISOString(),
+        }])
+        .select("id")
+        .single()
+
+      if (createError) {
+        return NextResponse.json({ error: `Database error: ${createError.message}` }, { status: 400 })
+      }
+      if (!newReview) {
+        return NextResponse.json({ error: "Failed to create review - no data returned" }, { status: 400 })
+      }
+      review = newReview
+    } else {
+      // HOD/RM but no existing review assignment
       return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
     }
 

@@ -34,7 +34,86 @@ function getApprovalTemplateKey(leaveTypeKey: string) {
   if (normalized === "leave_of_absence") return "leave_of_absence_approval"
   if (normalized === "sick") return "sick_leave_approval"
   if (normalized === "no_pay") return "leave_of_absence"
+  if (normalized === "annual") return "annual_leave_memo"
   return "annual_leave_approval"
+}
+
+// Build dynamic remarks from workflow changes, public holidays, travelling days, etc.
+async function buildRemarks(admin: any, leaveRequest: any): Promise<string> {
+  const remarks: string[] = []
+  
+  // Check for HOD changes and staff responses
+  const { data: hodChanges } = await admin
+    .from("hod_change_notifications")
+    .select("*")
+    .eq("leave_plan_request_id", leaveRequest.id)
+    .order("created_at", { ascending: true })
+
+  if (hodChanges && hodChanges.length > 0) {
+    const lastChange = hodChanges[hodChanges.length - 1]
+    if (lastChange.proposed_start_date || lastChange.proposed_end_date) {
+      const originalStart = fmtDateShort(leaveRequest.preferred_start_date)
+      const originalEnd = fmtDateShort(leaveRequest.preferred_end_date)
+      const proposedStart = fmtDateShort(lastChange.proposed_start_date)
+      const proposedEnd = fmtDateShort(lastChange.proposed_end_date)
+      
+      if (leaveRequest.staff_accepted_hod_changes) {
+        remarks.push(`HOD proposed adjustment from ${originalStart} - ${originalEnd} to ${proposedStart} - ${proposedEnd}: Accepted`)
+      } else if (leaveRequest.staff_counter_proposed) {
+        remarks.push(`HOD proposed adjustment; Staff counter-proposed: Final dates approved`)
+      }
+    }
+  }
+
+  // Check for deferment
+  const { data: deferment } = await admin
+    .from("leave_deferment_requests")
+    .select("*")
+    .eq("leave_plan_request_id", leaveRequest.id)
+    .eq("status", "deferred")
+    .maybeSingle()
+
+  if (deferment) {
+    remarks.push(`Leave deferred to: ${deferment.deferred_to_period}`)
+  }
+
+  // Public holidays deducted
+  const publicHolidayCount = Number(leaveRequest.public_holidays_deducted || 0)
+  if (publicHolidayCount > 0) {
+    remarks.push(`${publicHolidayCount} public holiday(${publicHolidayCount === 1 ? "" : "s"}) deducted`)
+  }
+
+  // Travelling days added
+  const travellingDays = Number(leaveRequest.travelling_days_added || 0)
+  if (travellingDays > 0) {
+    remarks.push(`${travellingDays} travelling day(${travellingDays === 1 ? "" : "s"}) added`)
+  }
+
+  // Days already enjoyed
+  const daysAlreadyEnjoyed = Number(leaveRequest.days_already_enjoyed || 0)
+  if (daysAlreadyEnjoyed > 0) {
+    remarks.push(`${daysAlreadyEnjoyed} day(${daysAlreadyEnjoyed === 1 ? "" : "s"}) already enjoyed`)
+  }
+
+  // Any adjustment reason
+  if (leaveRequest.adjustment_reason) {
+    remarks.push(`Adjustment: ${leaveRequest.adjustment_reason}`)
+  }
+
+  return remarks.length > 0 ? remarks.join("; ") : "-"
+}
+
+// Calculate resume date (end date + 1 business day, skip weekends and holidays)
+function calculateResumeDate(endDateStr: string): Date {
+  const resumeDate = new Date(endDateStr)
+  resumeDate.setDate(resumeDate.getDate() + 1)
+  
+  // Skip weekends
+  while (resumeDate.getDay() === 0 || resumeDate.getDay() === 6) {
+    resumeDate.setDate(resumeDate.getDate() + 1)
+  }
+  
+  return resumeDate
 }
 
 function pickBestSignature(rows: any[]): any | null {
@@ -172,20 +251,26 @@ export async function POST(request: NextRequest) {
     const approverSignature = pickBestSignature(approverSignatureRows || [])
 
     const now = new Date().toISOString()
-    const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
-    const effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
+    
+    // Use HOD proposed dates if accepted by staff, otherwise use adjusted/preferred dates
+    let effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
+    let effectiveEnd = String((leaveRequest as any).adjusted_end_date || (leaveRequest as any).preferred_end_date || "")
+    
+    // If HOD proposed changes and staff accepted, use those dates
+    if ((leaveRequest as any).hod_proposed_start_date && (leaveRequest as any).staff_accepted_hod_changes) {
+      effectiveStart = String((leaveRequest as any).hod_proposed_start_date)
+      effectiveEnd = String((leaveRequest as any).hod_proposed_end_date || effectiveEnd)
+    }
+    
     const effectiveDays = Number((leaveRequest as any).adjusted_days || (leaveRequest as any).requested_days || 0)
     const approvedMonths = Number((leaveRequest as any).approved_months || Math.max(1, Math.round(effectiveDays / 30)))
-    const returnDate = new Date(effectiveEnd)
-    if (!Number.isNaN(returnDate.getTime())) {
-      returnDate.setDate(returnDate.getDate() + 1)
-      if (returnDate.getDay() === 6) returnDate.setDate(returnDate.getDate() + 2)
-      if (returnDate.getDay() === 0) returnDate.setDate(returnDate.getDate() + 1)
-    }
+    
+    // Calculate resume date using helper function
+    const returnDate = calculateResumeDate(effectiveEnd)
 
     const { data: applicantProfile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name, employee_id, staff_number")
+      .select("first_name, last_name, employee_id, staff_number, position, departments(name)")
       .eq("id", (leaveRequest as any).user_id)
       .maybeSingle()
 
@@ -197,23 +282,45 @@ export async function POST(request: NextRequest) {
       .join(" ")
       .trim() || "Staff Member"
 
+    const staffPosition = String((applicantProfile as any)?.position || "").trim()
+    const staffDepartment = String((applicantProfile as any)?.departments?.name || "").trim()
+
+    // Extract leave year from start date
+    const leaveYear = effectiveStart ? new Date(effectiveStart).getFullYear() : new Date().getFullYear()
+
+    // Build remarks with all workflow changes
+    const remarks = await buildRemarks(admin, leaveRequest)
+
+    // Calculate days granted
+    const daysGranted = effectiveDays - Number((leaveRequest as any).public_holidays_deducted || 0) + Number((leaveRequest as any).travelling_days_added || 0)
+
     const templateData = {
       staff_name: staffName,
       staff_number: String((applicantProfile as any)?.employee_id || (applicantProfile as any)?.staff_number || ""),
+      staff_position: staffPosition,
+      staff_department: staffDepartment,
+      company_name: "QUALITY CONTROL COMPANY LIMITED",
+      hod_name: "THE IT MANAGER",
       leave_type: leaveTypeLabel(String((leaveRequest as any).leave_type_key || "annual")),
-      leave_year_period: String((leaveRequest as any).leave_year_period || "2026/2027"),
+      leave_year: String(leaveYear),
+      leave_year_period: String((leaveRequest as any).leave_year_period || `${leaveYear}/${leaveYear + 1}`),
       leave_start_date: fmtDate(effectiveStart),
       leave_end_date: fmtDate(effectiveEnd),
+      from: fmtDateShort(effectiveStart),
+      to: fmtDateShort(effectiveEnd),
+      days_entitled: `${Number((leaveRequest as any).total_days_entitled || 0)} plus ${Number((leaveRequest as any).travelling_days_added || 0)} travelling days`,
+      days_granted: String(daysGranted),
       approved_days: effectiveDays,
       approved_months: approvedMonths,
       approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
       submitted_date: fmtDate((leaveRequest as any).submitted_at || (leaveRequest as any).created_at || now),
-      return_to_work_date: fmtDate(returnDate.toISOString()),
+      return_to_work_date: fmtDateShort(returnDate.toISOString()),
       travelling_days: Number((leaveRequest as any).travelling_days_added || 0),
       travelling_days_info: Number((leaveRequest as any).travelling_days_added || 0) > 0 ? `Travelling Days: ${Number((leaveRequest as any).travelling_days_added || 0)} day(s)\n` : "",
       adjustment_details: (leaveRequest as any).adjustment_reason
         ? `Adjustment Details: ${(leaveRequest as any).adjustment_reason}\n\n`
         : "",
+      remarks: remarks,
       rejection_reason: note || "Management could not approve the request at this time.",
     }
 

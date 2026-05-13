@@ -369,7 +369,7 @@ export default async function DashboardPage() {
               <CardHeader className="pb-6">
                 <CardTitle className="text-xl font-bold flex items-center gap-3">
                   <Calendar className="h-6 w-6 text-orange-600" />
-                  Leave Hub
+                  Leave Administration
                 </CardTitle>
                 <CardDescription className="text-lg">Apply for leave and follow your updates</CardDescription>
               </CardHeader>

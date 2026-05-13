@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 
+function normalizeRole(role: string | null | undefined): string {
+  return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
+function shouldHaveFullCalendarAccess(role: string | null | undefined): boolean {
+  const normalizedRole = normalizeRole(role)
+  const ADMIN_ROLES = [
+    "admin",
+    "leave_admin",
+    "hr_leave_office",
+    "hr_office",
+    "director_hr",
+    "manager_hr",
+    "hr",
+    "regional_manager",
+    "department_head",
+  ]
+  return ADMIN_ROLES.includes(normalizedRole)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -10,6 +30,16 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    // Get user's role for permission checking
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    const userRole = userProfile?.role || null
+    const hasFullAccess = shouldHaveFullCalendarAccess(userRole)
 
     // Optional: filter by month query param  ?month=2026-04
     const url = new URL(request.url)
@@ -33,12 +63,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Current workflow source: leave_plan_requests with final HR approval.
-    const { data: requests, error } = await admin
+    let query = admin
       .from("leave_plan_requests")
       .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, status, is_archived")
       .eq("status", "hr_approved")
       .eq("is_archived", false)
-      .order("preferred_start_date", { ascending: true })
+
+    // Filter: regular staff only see their own leave; admin roles see all
+    if (!hasFullAccess) {
+      query = query.eq("user_id", user.id)
+    }
+
+    const { data: requests, error } = await query.order("preferred_start_date", { ascending: true })
 
     if (error) return NextResponse.json({ entries: [], rangeStart, rangeEnd })
 

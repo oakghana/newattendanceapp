@@ -232,7 +232,7 @@ function buildInitialLeaveMemoDraft(payload: {
     "",
     "Current Stage: Pending HOD/Manager Review",
     "",
-    "This memo is generated automatically for your reference and for HR Leave Office records.",
+    "This memo is generated automatically for your reference and for HR-Leave-Office-Admin records.",
   ].join("\n")
 
   return { subject, body }
@@ -425,6 +425,44 @@ async function findSameMonthSameTypeRequest(
   }
 
   return null
+}
+
+async function findAnnualLeaveInSameYear(
+  admin: any,
+  userId: string,
+  leaveYearPeriod: string,
+  excludeRequestId?: string,
+) {
+  // Check if staff already has an approved/pending annual leave in the same leave year
+  let query = admin
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, preferred_start_date, preferred_end_date, status, leave_year_period, submitted_at")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .eq("leave_type_key", "annual")
+    .eq("leave_year_period", leaveYearPeriod)
+    .in("status", [...DUPLICATE_BLOCKING_STATUSES])
+    .order("submitted_at", { ascending: false })
+
+  if (excludeRequestId) {
+    query = query.neq("id", excludeRequestId)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const existing = Array.isArray(data) ? data[0] : null
+  if (!existing) return null
+
+  return {
+    id: String(existing.id),
+    status: String(existing.status || ""),
+    leave_type_key: String(existing.leave_type_key || "annual"),
+    leave_year_period: String(existing.leave_year_period || leaveYearPeriod),
+    start_date: String(existing.preferred_start_date),
+    end_date: String(existing.preferred_end_date),
+    submitted_at: existing.submitted_at || null,
+  }
 }
 
 async function fetchStaffLeaveHistory(admin: any, userIds: string[]) {
@@ -625,11 +663,12 @@ export async function GET(request: NextRequest) {
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
+    const isAdmin = role === "admin"
     const isHrOffice = isHrLeaveOfficeRole(role)
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
-    const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
+    const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode) || isAdmin
 
-    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ──
+    // ── HR-Leave-Office-Admin mode: sees HOD-approved requests, can adjust & forward ──
     if (isHrOffice && !isHrApprover) {
       let officeQuery = admin
         .from("leave_plan_requests")
@@ -700,6 +739,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         mode: "staff",
         requests: data || [],
+        myRequests: data || [],
         staggerRequests: stagger || [],
       })
     }
@@ -891,6 +931,39 @@ export async function GET(request: NextRequest) {
       const requestUserIds = (data || []).map((row: any) => String(row?.user?.id || row?.user_id || "")).filter(Boolean)
       const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
 
+      // Admin users should see all HOD/RM reviews - just fetch pending requests with simple join (same as All Requests tab)
+      let reviews: any[] = []
+      if (isAdmin) {
+        // Use the exact same query pattern as "All Requests" tab (line 853-865) but for pending_hod_review status
+        const { data: pendingHodRequests, error: hodError } = await admin
+          .from("leave_plan_requests")
+          .select(`
+            *,
+            user:user_profiles!leave_plan_requests_user_id_fkey (
+              id,
+              first_name,
+              last_name,
+              employee_id,
+              departments(name, code)
+            )
+          `)
+          .eq("status", "pending_hod_review")
+          .order("created_at", { ascending: false })
+        
+        if (!hodError) {
+          // Transform pending requests to review format for consistency
+          reviews = (pendingHodRequests || []).map((req: any) => ({
+            id: req.id,
+            decision: "pending",
+            recommendation: null,
+            reviewed_at: null,
+            reviewer_id: null,
+            reviewer_role: null,
+            leave_plan_request: req
+          }))
+        }
+      }
+
       const analytics = await fetchHrOfficeAnalytics(admin)
 
       return NextResponse.json({
@@ -901,6 +974,7 @@ export async function GET(request: NextRequest) {
         myStaggerRequests: myStaggerRequests || [],
         staffHistoryByUser,
         analytics,
+        reviews: isAdmin ? reviews : [],
       })
     }
 
@@ -954,7 +1028,7 @@ export async function POST(request: NextRequest) {
         "hr_director",
         "director_hr",
         "manager_hr",
-        "hr_leave_office",
+        "leave_admin",
         "hr_office",
         "loan_office",
         "accounts",
@@ -1000,7 +1074,7 @@ export async function POST(request: NextRequest) {
     if (entitlementDays !== null && requestedDays > entitlementDays) {
       return NextResponse.json(
         {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
+          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR-Leave-Office-Admin may adjust the final leave days with a reason after review.`,
           code: "LEAVE_ENTITLEMENT_EXCEEDED",
           entitlement_days: entitlementDays,
           requested_days: requestedDays,
@@ -1047,6 +1121,25 @@ export async function POST(request: NextRequest) {
         },
         { status: 409 },
       )
+    }
+
+    // For annual leave, check if staff already has an approved annual leave in the same leave year
+    if (leaveTypeKey === "annual") {
+      const annualLeaveInYear = await findAnnualLeaveInSameYear(
+        admin,
+        user.id,
+        selectedLeaveYearPeriod,
+      )
+      if (annualLeaveInYear) {
+        return NextResponse.json(
+          {
+            error: `You already have an annual leave request for ${annualLeaveInYear.leave_year_period} (${annualLeaveInYear.start_date} to ${annualLeaveInYear.end_date}) with status: ${annualLeaveInYear.status}. Only one annual leave request is allowed per leave year.`,
+            code: "ANNUAL_LEAVE_ALREADY_SUBMITTED_IN_YEAR",
+            existing: annualLeaveInYear,
+          },
+          { status: 409 },
+        )
+      }
     }
 
     const overlapSuggestion = await findOverlapSuggestion(
@@ -1194,7 +1287,7 @@ export async function PUT(request: NextRequest) {
         "hr_director",
         "director_hr",
         "manager_hr",
-        "hr_leave_office",
+        "leave_admin",
         "hr_office",
         "loan_office",
         "accounts",
@@ -1283,7 +1376,7 @@ export async function PUT(request: NextRequest) {
     if (entitlementDays !== null && requestedDays > entitlementDays) {
       return NextResponse.json(
         {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
+          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR-Leave-Office-Admin may adjust the final leave days with a reason after review.`,
           code: "LEAVE_ENTITLEMENT_EXCEEDED",
           entitlement_days: entitlementDays,
           requested_days: requestedDays,
@@ -1328,6 +1421,26 @@ export async function PUT(request: NextRequest) {
         },
         { status: 409 },
       )
+    }
+
+    // For annual leave, check if staff already has an approved annual leave in the same leave year
+    if (leaveTypeKey === "annual") {
+      const annualLeaveInYear = await findAnnualLeaveInSameYear(
+        admin,
+        user.id,
+        selectedLeaveYearPeriod,
+        id,
+      )
+      if (annualLeaveInYear) {
+        return NextResponse.json(
+          {
+            error: `You already have an annual leave request for ${annualLeaveInYear.leave_year_period} (${annualLeaveInYear.start_date} to ${annualLeaveInYear.end_date}) with status: ${annualLeaveInYear.status}. Only one annual leave request is allowed per leave year.`,
+            code: "ANNUAL_LEAVE_ALREADY_SUBMITTED_IN_YEAR",
+            existing: annualLeaveInYear,
+          },
+          { status: 409 },
+        )
+      }
     }
 
     const updatePayload: Record<string, any> = {

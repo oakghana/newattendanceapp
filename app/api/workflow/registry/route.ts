@@ -5,7 +5,7 @@ import { canDoDirectorHr, canDoHrOffice, canDoLoanOffice, normalizeRole } from "
 function canManageTemplates(role: string, deptName?: string | null, deptCode?: string | null) {
   return (
     role === "admin" ||
-    role === "hr_leave_office" ||
+    role === "leave_admin" ||
     canDoHrOffice(role, deptName, deptCode) ||
     canDoDirectorHr(role, deptName, deptCode) ||
     canDoLoanOffice(role, deptName, deptCode)

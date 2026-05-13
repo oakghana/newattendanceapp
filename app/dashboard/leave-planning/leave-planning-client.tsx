@@ -2,7 +2,7 @@
 
 // ============================================================
 // Leave Planning Client — V2 Redesign (4-stage workflow)
-// Staff → HOD Review → HR Leave Office → HR Approval + Memo
+// Staff → HOD Review → HR-Leave-Office-Admin → HR Approval + Memo
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
@@ -170,13 +170,11 @@ function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
 }
 
 function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw] = active.split("/")
-  const startYear = Number(startYearRaw)
+  const currentYear = referenceDate.getFullYear()
   const options: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
-    const y = startYear + i
-    options.push(`${y}/${y + 1}`)
+    const y = currentYear + i
+    options.push(String(y))
   }
   return options
 }
@@ -187,11 +185,7 @@ function isOctoberPlanningWindow(referenceDate: Date = new Date()) {
 }
 
 function getDefaultSelectedLeaveYearPeriod(referenceDate: Date = new Date()) {
-  const active = getActiveLeaveYearPeriod(referenceDate)
-  if (!isOctoberPlanningWindow(referenceDate)) return active
-  const [startYearRaw] = active.split("/")
-  const nextStartYear = Number(startYearRaw) + 1
-  return `${nextStartYear}/${nextStartYear + 1}`
+  return String(referenceDate.getFullYear())
 }
 
 function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySignature | null {
@@ -210,7 +204,11 @@ function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySigna
 function fmtLongDate(val?: string | null) {
   if (!val) return "—"
   try {
-    return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
+    const d = new Date(val)
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${day}/${month}/${year}`
   } catch {
     return val
   }
@@ -221,10 +219,10 @@ function fmtFormalDate(val?: string | null) {
   try {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
-    const day = d.getDate()
-    const month = d.toLocaleDateString("en-GH", { month: "long" })
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
     const year = d.getFullYear()
-    return `${day}${getOrdinalSuffix(day)} ${month}, ${year}`
+    return `${day}/${month}/${year}`
   } catch {
     return String(val)
   }
@@ -236,7 +234,10 @@ function fmtFormalDateWithWeekday(val?: string | null) {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
     const weekday = d.toLocaleDateString("en-GH", { weekday: "long" })
-    return `${weekday}, ${fmtFormalDate(val)}`
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${weekday}, ${day}/${month}/${year}`
   } catch {
     return String(val)
   }
@@ -314,7 +315,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
 }
 
 function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
-  const commonCc = "Managing Director\nDeputy Managing Director\nHR Leave Office\nFile"
+  const commonCc = "Managing Director\nDeputy Managing Director\nHR-Leave-Office-Admin\nFile"
   return [
     {
       id: "builtin-annual-leave-approval",
@@ -624,7 +625,7 @@ function WorkflowStages({ status }: { status: string }) {
   const stages = [
     { label: "Submitted", Icon: Send },
     { label: "HOD Review", Icon: UserCheck },
-    { label: "HR Leave Office", Icon: ClipboardList },
+    { label: "HR-Leave-Office-Admin", Icon: ClipboardList },
     { label: "HR Approval", Icon: ShieldCheck },
   ]
   const rejected = status === "hod_rejected" || status === "manager_rejected"
@@ -848,12 +849,31 @@ const EMPTY_HR_ANALYTICS = {
   records: [],
 }
 // ─── Leave Request Card ───────────────────────────────────────────────────────
-function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
-  req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
+function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit, onAcknowledgeHodChanges }: {
+  req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean; onAcknowledgeHodChanges?: (action: 'accept'|'counter', counterStart?: string, counterEnd?: string) => Promise<void>
 }) {
   const effectiveStart = req.adjusted_start_date || req.preferred_start_date
   const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
   const effectiveDays = req.adjusted_days || req.requested_days
+  const [acknowledging, setAcknowledging] = useState(false)
+  const [counterStartDate, setCounterStartDate] = useState("")
+  const [counterEndDate, setCounterEndDate] = useState("")
+  const [showCounterDates, setShowCounterDates] = useState(false)
+  
+  const handleAcknowledge = async (action: 'accept' | 'counter') => {
+    if (!onAcknowledgeHodChanges) return
+    setAcknowledging(true)
+    try {
+      if (action === 'counter' && (!counterStartDate || !counterEndDate)) {
+        alert("Please enter counter dates")
+        return
+      }
+      await onAcknowledgeHodChanges(action, counterStartDate, counterEndDate)
+    } finally {
+      setAcknowledging(false)
+    }
+  }
+  
   return (
     <Card className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
       <CardContent className="p-4">
@@ -883,7 +903,16 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             </AlertDescription>
           </Alert>
         )}
-        {req.manager_recommendation && (
+        {req.hod_change_notes && req.status === "hod_changes_pending_acceptance" && (
+          <Alert className="mt-3 py-2 border-amber-300 bg-amber-50">
+            <AlertCircle className="h-3 w-3 text-amber-700" />
+            <AlertDescription className="text-xs text-amber-900 ml-1">
+              <strong>HOD proposed changes:</strong> Original: {fmtDate(req.preferred_start_date)} → {fmtDate(req.preferred_end_date)} | Proposed: {fmtDate(req.hod_proposed_start_date)} → {fmtDate(req.hod_proposed_end_date)}<br/>
+              <strong>Reason:</strong> {req.hod_change_notes}
+            </AlertDescription>
+          </Alert>
+        )}
+        {req.manager_recommendation && req.status !== "hod_changes_pending_acceptance" && (
           <p className="text-xs text-slate-600 mt-2 bg-slate-50 p-2 rounded border border-slate-200">
             <strong>HOD note:</strong> {req.manager_recommendation}
           </p>
@@ -900,6 +929,79 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             <strong>HR note:</strong> {req.hr_approval_note}
           </p>
         )}
+        
+        {/* HOD Changes Acknowledgment UI */}
+        {req.status === "hod_changes_pending_acceptance" && (
+          <div className="mt-3 space-y-3 border-t pt-3">
+            <p className="text-xs font-semibold text-amber-900">HOD has proposed date changes. Please review and acknowledge:</p>
+            <div className="flex gap-2 flex-wrap">
+              <Button 
+                size="sm" 
+                className="h-8 text-xs bg-green-600 hover:bg-green-700"
+                onClick={() => handleAcknowledge('accept')}
+                disabled={acknowledging}
+              >
+                ✓ Accept Changes
+              </Button>
+              {!showCounterDates ? (
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="h-8 text-xs border-blue-300 text-blue-700"
+                  onClick={() => setShowCounterDates(true)}
+                  disabled={acknowledging}
+                >
+                  ↻ Counter Propose
+                </Button>
+              ) : null}
+            </div>
+            {showCounterDates && (
+              <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
+                <p className="text-xs font-medium text-blue-900">Propose Alternative Dates:</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs">Start Date</Label>
+                    <Input 
+                      type="date" 
+                      value={counterStartDate}
+                      onChange={(e) => setCounterStartDate(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">End Date</Label>
+                    <Input 
+                      type="date" 
+                      value={counterEndDate}
+                      onChange={(e) => setCounterEndDate(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                    onClick={() => handleAcknowledge('counter')}
+                    disabled={acknowledging}
+                  >
+                    Send Counter Proposal
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => setShowCounterDates(false)}
+                    disabled={acknowledging}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
         <div className="flex gap-2 mt-3 justify-end flex-wrap">
           {req.status === "hr_approved" && req.memo_token && onViewMemo && (
             <Button size="sm" variant="outline"
@@ -908,7 +1010,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
               <Download className="w-3 h-3 mr-1" /> Download Memo
             </Button>
           )}
-          {canEdit && onEdit && (
+          {canEdit && onEdit && req.status !== "hod_changes_pending_acceptance" && (
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onEdit}>
               <Pencil className="w-3 h-3 mr-1" /> Edit
             </Button>
@@ -926,7 +1028,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// �������── Main Component ───────────────────────────────────────────────────────────
 export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -936,13 +1038,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     !isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) &&
     !isHrLeaveOfficeRole(normalizedRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
+  const isHrLeaveOffice = normalizedRole === "hr_leave_office"
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
-  const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin || ["loan_office"].includes(normalizedRole)
-  const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
+  const canViewLeaveAnalytics = isHrApprover || isHrOffice || isHrLeaveOffice || isAdmin || ["loan_office"].includes(normalizedRole)
+  const canSeeAllRequests = isHrApprover || isHrOffice || isHrLeaveOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
-  const canSelfApply = isStaff || isHod || isAdmin ||
-    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "loan_office", "accounts"].includes(normalizedRole)
+  const canSelfApply = isStaff || isHod || isAdmin || isHrLeaveOffice ||
+    ["hr_officer", "hr_director", "director_hr", "manager_hr", "leave_admin", "hr_office", "loan_office", "accounts"].includes(normalizedRole)
 
   // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)
@@ -1008,7 +1111,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────────────────────────────
+  // ── HR-Leave-Office-Admin ─────────────────────────────────────────────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -1036,7 +1139,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────────────────────────────────────────────────────────
+  // ── Computed ─────────���───����─���──�����──────────────────────────────────�������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1047,6 +1150,167 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     if (!startDate || !endDate) return 0
     return computeLeaveDays(startDate, endDate)
   }, [startDate, endDate])
+
+  // Calculate weekends within selected date range
+  const weekendInfo = useMemo(() => {
+    if (!startDate || !endDate) return null
+    
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    if (end < start) return null
+    
+    const weekends = []
+    let current = new Date(start)
+    let weekendCount = 0
+    
+    while (current <= end) {
+      const day = current.getDay()
+      if (day === 0 || day === 6) { // Sunday or Saturday
+        weekends.push({
+          date: current.toISOString().split('T')[0],
+          dayName: current.toLocaleDateString('en-US', { weekday: 'short' })
+        })
+        weekendCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return {
+      weekendCount,
+      weekends,
+      calendarDays: Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    }
+  }, [startDate, endDate])
+
+  // Load holidays and calculate holidays within selected date range
+  const [holidays, setHolidays] = useState<Array<{ date: string; name: string }>>([])
+  const [holidaysLoading, setHolidaysLoading] = useState(false)
+
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        setHolidaysLoading(true)
+        const res = await fetch("/api/admin/holidays", { cache: "no-store" })
+        if (res.ok) {
+          const json = await res.json()
+          const holidayList = Array.isArray(json.holidays) ? json.holidays : []
+          setHolidays(
+            holidayList.map((h: any) => ({
+              date: String(h.holiday_date || ""),
+              name: String(h.holiday_name || "Holiday")
+            }))
+          )
+        }
+      } catch (e) {
+        console.log("[v0] Error loading holidays:", e)
+      } finally {
+        setHolidaysLoading(false)
+      }
+    }
+    loadHolidays()
+  }, [])
+
+  const holidayInfo = useMemo(() => {
+    if (!startDate || !endDate || holidays.length === 0) return null
+    
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    if (end < start) return null
+    
+    const holidaysInRange = []
+    let current = new Date(start)
+    let holidayCount = 0
+    
+    while (current <= end) {
+      const currentDateStr = current.toISOString().split('T')[0]
+      const holiday = holidays.find((h) => h.date === currentDateStr)
+      
+      if (holiday) {
+        holidaysInRange.push({
+          date: currentDateStr,
+          name: holiday.name,
+          dayName: current.toLocaleDateString('en-US', { weekday: 'short' })
+        })
+        holidayCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return {
+      holidayCount,
+      holidays: holidaysInRange
+    }
+  }, [startDate, endDate, holidays])
+
+  // Helper function to calculate weekends and holidays in a date range
+  const calculateWeekendHolidayCount = (startStr: string, endStr: string): number => {
+    if (!startStr || !endStr || !holidays.length) return 0
+    
+    // Parse dates - handle both DD/MM/YYYY and ISO formats
+    let start: Date
+    let end: Date
+    
+    if (startStr.includes('/')) {
+      // DD/MM/YYYY format (from date picker)
+      const [day, month, year] = startStr.split('/').map(Number)
+      start = new Date(year, month - 1, day)
+    } else {
+      // ISO format (YYYY-MM-DD)
+      start = new Date(startStr)
+    }
+    
+    if (endStr.includes('/')) {
+      // DD/MM/YYYY format
+      const [day, month, year] = endStr.split('/').map(Number)
+      end = new Date(year, month - 1, day)
+    } else {
+      // ISO format
+      end = new Date(endStr)
+    }
+    
+    if (end < start || isNaN(start.getTime()) || isNaN(end.getTime())) return 0
+    
+    let count = 0
+    let current = new Date(start)
+    
+    while (current <= end) {
+      const dayOfWeek = current.getDay()
+      const currentDateStr = current.toISOString().split('T')[0]
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+      const isHoliday = holidays.find((h) => h.date === currentDateStr)
+      
+      if (isWeekend || isHoliday) {
+        count++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    return count
+  }
+
+  // Auto-calculate holidays for adjusted dates in HR office tab
+  // When HR office changes adjusted dates, auto-populate the weekends & holidays field
+  useEffect(() => {
+    if (!holidays.length) return
+
+    // Handle HR office adjusted dates
+    const hrAdjustedRequests = Object.keys(officeAdjStart).concat(Object.keys(officeAdjEnd))
+    const hrUniqueIds = [...new Set(hrAdjustedRequests)]
+
+    hrUniqueIds.forEach((requestId) => {
+      const adjStart = officeAdjStart[requestId]
+      const adjEnd = officeAdjEnd[requestId]
+      
+      // Skip if already manually set
+      if (officeHolidayDays[requestId]) return
+
+      const count = calculateWeekendHolidayCount(adjStart, adjEnd)
+      if (count > 0) {
+        setOfficeHolidayDays((p) => ({ ...p, [requestId]: String(count) }))
+      }
+    })
+  }, [officeAdjStart, officeAdjEnd, holidays, officeHolidayDays])
 
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((t) => t.leaveTypeKey === leaveType),
@@ -1122,7 +1386,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const json = await res.json()
       if (!res.ok) return
       setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
-      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes) ? json.leaveTypes : []
+      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes) 
+        ? json.leaveTypes.filter((t: LeaveTypeOption) => t.leaveTypeKey !== "sick")
+        : []
       const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
       setLeaveTypes(hasPartLeave ? types : [
         ...types,
@@ -1333,7 +1599,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [canSelfApply, defaultStaffSignature, typedSignature])
 
   useEffect(() => {
-    // New requests use a single selected date and HR Leave Office finalizes adjusted range later.
+    // New requests use a single selected date and HR-Leave-Office-Admin finalizes adjusted range later.
     if (!editingId) {
       setEndDate(startDate || "")
     }
@@ -1717,6 +1983,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Review failed")
+      
       toast({ title: "Review submitted" })
       await loadData()
     } catch (e) {
@@ -1856,12 +2123,12 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Tab config ────────────────────────────────────────────────────────
   const tabs = useMemo(() => {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
-    if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
+    if (canSelfApply) t.push({ value: "my-leaves", label: "My Requests", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
-    if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
+    if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR-Leave-Office-Admin", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
-    if (canSeeAllRequests) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
+    if (canSeeAllRequests || isAdmin) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
@@ -1888,7 +2155,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           {[
             { label: "Staff Applies", step: 1 },
             { label: "HOD Reviews", step: 2 },
-            { label: "HR Leave Office Adjusts", step: 3 },
+            { label: "HR-Leave-Office-Admin Adjusts", step: 3 },
             { label: "HR Issues Memo", step: 4 },
           ].map((s) => (
             <div key={s.step} className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1 text-xs font-medium">
@@ -1931,6 +2198,17 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
             ))}
           </TabsList>
 
+          {/* Dynamic background wrapper for active tab */}
+          <div className={`transition-all duration-300 rounded-lg p-4 ${
+            activeTab === "my-leaves" ? "bg-slate-50 border border-slate-200" :
+            activeTab === "apply" ? "bg-green-50 border border-green-200" :
+            activeTab === "hod-review" ? "bg-blue-50 border border-blue-200" :
+            activeTab === "hr-office" ? "bg-amber-50 border border-amber-200" :
+            activeTab === "hr-approve" ? "bg-purple-50 border border-purple-200" :
+            activeTab === "all-requests" ? "bg-indigo-50 border border-indigo-200" :
+            "bg-white"
+          }`}>
+
           {/* ── My Leaves ─────────────────────────────────────────────── */}
           <TabsContent value="my-leaves">
             {myRequests.length === 0 ? (
@@ -1955,6 +2233,26 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     }}
                     onDelete={() => deletePlan(req.id)}
                     onViewMemo={() => openMemo(req.id, req.memo_token || "")}
+                    onAcknowledgeHodChanges={async (action, counterStart, counterEnd) => {
+                      try {
+                        const res = await fetch("/api/leave/planning/hod-acknowledge", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            leave_plan_request_id: req.id,
+                            action,
+                            counter_start_date: counterStart || null,
+                            counter_end_date: counterEnd || null,
+                          }),
+                        })
+                        const json = await res.json()
+                        if (!res.ok) throw new Error(json.error || "Acknowledgment failed")
+                        toast({ title: action === 'accept' ? "Changes accepted" : "Counter-proposal sent to HOD" })
+                        await loadData()
+                      } catch (e) {
+                        toast({ title: "Error", description: e instanceof Error ? e.message : "Failed", variant: "destructive" })
+                      }
+                    }}
                   />
                 ))}
               </div>
@@ -1971,6 +2269,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <p className="text-xs text-slate-500">Leave Year Period: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
+                {/* October Planning Guidance Banner */}
+                <Alert className="border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/20">
+                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500" />
+                  <AlertDescription className="text-amber-900 dark:text-amber-200 ml-2 font-semibold">
+                    <strong>Annual Leave Planning Reminder:</strong> In September, all staff must submit their annual leave requests for the October cocoa season cycle. This allows HOD/Regional Managers time to review and approve all leave days by the start of October. Plan ahead to avoid operational disruptions.
+                  </AlertDescription>
+                </Alert>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
@@ -2015,21 +2321,25 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 </div>
 
-                <div className={editingId ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
+                <div className={editingId || leaveType === "annual" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
                     <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
                   </div>
-                  {editingId && (
+                  {(editingId || leaveType === "annual") && (
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date {leaveType === "annual" && <span className="text-red-600">*</span>}</Label>
                       <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
                     </div>
                   )}
                 </div>
 
-                {!editingId && (
-                  <p className="text-xs text-slate-500">End date is hidden for new requests. HR Leave Office will review and finalize the leave range.</p>
+                {!editingId && leaveType !== "annual" && (
+                  <p className="text-xs text-slate-500">End date is hidden for new requests. HR-Leave-Office-Admin will review and finalize the leave range.</p>
+                )}
+
+                {leaveType === "annual" && !editingId && (
+                  <p className="text-xs text-amber-700 font-medium">Annual leave requires both start and end dates for HOD/Regional Manager review and approval.</p>
                 )}
 
                 {sameMonthConflict && (
@@ -2041,7 +2351,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 )}
 
-                {startDate && endDate && (
+                {startDate && (leaveType === "annual" ? endDate : true) && leaveType !== "annual" && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-center">
+                    <p className="text-xs text-slate-600 font-medium">Estimated Days</p>
+                    <p className="text-base font-semibold text-slate-800">(To be determined by HR-Leave-Office-Admin)</p>
+                  </div>
+                )}
+
+                {startDate && endDate && leaveType === "annual" && (
                   <div className="flex flex-wrap gap-3">
                     <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
                       <p className="text-xs text-green-700 font-medium">Days Requested</p>
@@ -2051,6 +2368,53 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       <p className="text-xs text-slate-600 font-medium">Return to Work</p>
                       <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
                     </div>
+                  </div>
+                )}
+
+                {/* Weekends Display */}
+                {startDate && endDate && leaveType === "annual" && weekendInfo && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-xs font-semibold text-blue-700 mb-3 uppercase tracking-wide">
+                      Weekends Within Selected Period ({weekendInfo.weekendCount} days)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {weekendInfo.weekends.map((weekend) => (
+                        <span
+                          key={weekend.date}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium"
+                        >
+                          <span className="font-semibold">{weekend.dayName}</span>
+                          <span>{weekend.date}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-blue-600 mt-3 pt-3 border-t border-blue-200">
+                      Your <strong>{computedDays} working day(s)</strong> requested are calculated from <strong>{weekendInfo.calendarDays} calendar day(s)</strong> minus these <strong>{weekendInfo.weekendCount} weekend day(s)</strong>.
+                    </p>
+                  </div>
+                )}
+
+                {/* Public Holidays Display */}
+                {startDate && endDate && leaveType === "annual" && holidayInfo && holidayInfo.holidayCount > 0 && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <p className="text-xs font-semibold text-orange-700 mb-3 uppercase tracking-wide">
+                      Public Holidays Within Selected Period ({holidayInfo.holidayCount} day{holidayInfo.holidayCount !== 1 ? 's' : ''})
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {holidayInfo.holidays.map((holiday) => (
+                        <span
+                          key={holiday.date}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-medium"
+                        >
+                          <span className="font-semibold">{holiday.dayName}</span>
+                          <span>{holiday.date}</span>
+                          <span className="text-xs text-orange-600">({holiday.name})</span>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-orange-600 mt-3 pt-3 border-t border-orange-200">
+                      These <strong>{holidayInfo.holidayCount} holiday(s)</strong> fall within your selected leave period and will be considered in your leave calculation by the HR Leave Office.
+                    </p>
                   </div>
                 )}
 
@@ -2094,6 +2458,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
 
           {/* ── HOD Review ──────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
+            {/* HOD Review Window Banner - Only for Annual Leave */}
+            {hodAssignedReviews.some((r) => r.leave_plan_request?.leave_type_key === "annual") && (
+              <Alert className="border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/20 mb-4">
+                <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-500" />
+                <AlertDescription className="text-blue-900 dark:text-blue-200 ml-2 font-semibold">
+                  <strong>HOD/Regional Manager Review Window (Annual Leave):</strong> You have up to 2 weeks to review, adjust dates, and endorse annual leave requests. You can adjust recommended start and end dates but cannot reject requests. Final approval rests with HR-Leave-Office-Admin.
+                </AlertDescription>
+              </Alert>
+            )}
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <UserCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
@@ -2158,23 +2531,22 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                         />
                         <div className="space-y-3">
                           <div className="flex gap-2 flex-wrap">
-                            {(["approve", "recommend_change", "reject"] as const).map((act) => (
+                            {(["approve", "recommend_change"] as const).map((act) => (
                               <Button key={act} size="sm"
                                 variant={action === act ? "default" : "outline"}
                                 onClick={() => setHodAction((p) => ({ ...p, [rId]: act }))}
                                 className={action === act
                                   ? act === "approve" ? "bg-emerald-600 hover:bg-emerald-700"
-                                  : act === "reject" ? "bg-red-600 hover:bg-red-700"
                                   : "bg-blue-600 hover:bg-blue-700"
                                   : ""
                                 }>
-                                {act === "approve" ? "✓ Approve" : act === "reject" ? "✗ Reject" : "⟳ Changes"}
+                                {act === "approve" ? "�� Endorse" : "⟳ Adjust Dates"}
                               </Button>
                             ))}
                           </div>
                           {action && action !== "approve" && (
                             <Textarea
-                              placeholder={action === "reject" ? "Reason for rejection (required)" : "Recommendation / changes needed"}
+                              placeholder="Recommended changes or adjustments needed"
                               value={hodNote[rId] || ""}
                               onChange={(e) => setHodNote((p) => ({ ...p, [rId]: e.target.value }))}
                               rows={2} className="resize-none text-sm"
@@ -2239,7 +2611,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
             )}
           </TabsContent>
 
-          {/* ── HR Leave Office ───────────────────────────────────────── */}
+          {/* ── HR-Leave-Office-Admin ───────────────────────────────────────── */}
           <TabsContent value="hr-office">
             <div className="mb-4 space-y-3">
               <Alert className="border-blue-200 bg-blue-50">
@@ -2416,7 +2788,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Analytics Range</p>
-                      <p className="mt-1 text-sm text-slate-600">Filter the HR Leave Office graphics board and export only the visible date window.</p>
+                      <p className="mt-1 text-sm text-slate-600">Filter the HR-Leave-Office-Admin graphics board and export only the visible date window.</p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[170px_170px_auto_auto_auto]">
                       <div className="space-y-1">
@@ -2454,7 +2826,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       </Button>
                       <Button
                         className="bg-emerald-700 hover:bg-emerald-800 xl:self-end"
-                        onClick={() => void downloadLeaveAnalyticsPdf((hrOfficeAnalytics.records ?? []) as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.pdf`, `HR Leave Office Analytics ${analyticsRange.start} to ${analyticsRange.end}`)}
+                        onClick={() => void downloadLeaveAnalyticsPdf((hrOfficeAnalytics.records ?? []) as LeaveAnalyticsRecord[], `hr-leave-office-analytics-${analyticsRange.start}-to-${analyticsRange.end}.pdf`, `HR-Leave-Office-Admin Analytics ${analyticsRange.start} to ${analyticsRange.end}`)}
                         disabled={analyticsLoading || (hrOfficeAnalytics.records?.length ?? 0) === 0}
                       >
                         <Download className="mr-2 h-4 w-4" /> Export PDF
@@ -2473,7 +2845,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   <ScientificMetricCard
                     label="Outstanding Requests"
                     value={hrOfficeAnalytics.totals.outstanding_requests}
-                    hint="Waiting for HR Leave Office action"
+                    hint="Waiting for HR-Leave-Office-Admin action"
                     accent="border-cyan-200"
                     icon={<ClipboardList className="h-5 w-5" />}
                   />
@@ -2505,7 +2877,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">HR Leave Office Intelligence</p>
+                          <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-100">HR-Leave-Office-Admin Intelligence</p>
                           <h3 className="mt-2 text-2xl font-semibold tracking-tight">Operational Analytics Board</h3>
                           <p className="mt-2 max-w-2xl text-sm text-slate-200">
                             Monitor outstanding leave actions, approved leave utilization, geographic distribution, and staff leave consumption patterns in one scientific dashboard.
@@ -2761,11 +3133,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-red-700">
-                                    <Minus className="w-3 h-3" /> Deduct — Public Holidays
+                                    <Minus className="w-3 h-3" /> Deduct — Weekends & Holidays
+                                    {officeHolidayDays[req.id] && !Object.keys(officeAdjStart).includes(req.id) === false && (
+                                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-auto">auto</span>
+                                    )}
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officeHolidayDays[req.id] || "0"}
                                     onChange={(e) => setOfficeHolidayDays((p) => ({ ...p, [req.id]: e.target.value }))}
+                                    placeholder="Auto-populated"
                                     className="h-9 text-red-700 font-semibold" />
                                 </div>
                                 <div className="space-y-1">
@@ -3266,6 +3642,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
             </div>
           </TabsContent>
           )}
+          </div>
         </Tabs>
       )}
     </div>

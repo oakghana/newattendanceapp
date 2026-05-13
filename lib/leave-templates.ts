@@ -1,5 +1,5 @@
 /**
- * Leave Templates for HR Leave Office
+ * Leave Templates for HR-Leave-Office-Admin
  * These templates are used for generating leave approval memos and payment drafts to accounts
  */
 
@@ -28,7 +28,7 @@ Approved Days: {{approved_days}} day(s)
       approved_days: "Number of days approved",
       travelling_days_info: "Only include if applicable: 'Travelling Days: {{travelling_days}} day(s)\n'",
       return_to_work_date: "Format: DD/MM/YYYY",
-      adjustment_details: "Only include if HR Leave Office made adjustments with reason",
+      adjustment_details: "Only include if HR-Leave-Office-Admin made adjustments with reason",
     },
   },
 
@@ -113,7 +113,7 @@ Please proceed with the above payment and debit the appropriate cost center. Sup
 
 Submitted by:
 {{hr_officer_name}}
-HR Leave Office`,
+HR-Leave-Office-Admin`,
     cc: "Finance Director, Deputy Finance Director, Audit Manager",
     placeholder_help: {
       staff_name: "Full name of staff member",
@@ -153,7 +153,7 @@ Please arrange payment to the above staff member. Supporting documentation is at
 
 Submitted by:
 {{hr_officer_name}}
-HR Leave Office`,
+HR-Leave-Office-Admin`,
     cc: "Finance Director, Personnel Department, Audit Manager",
   },
 
@@ -193,6 +193,42 @@ Human Resources Department
 Quality Control Company Limited`,
     cc: "Managing Director, HR Head",
   },
+
+  // Professional Annual Leave Memo
+  annual_leave_memo: {
+    key: "annual_leave_memo",
+    name: "Annual Leave Approval Memo",
+    category: "leave_approval",
+    subject: "ANNUAL LEAVE ADVICE FOR {{leave_year}}",
+    body: `Your Ref No: _____________________
+
+{{staff_name}} (S/NO.: {{staff_number}})
+{{staff_position}}
+{{staff_department}}
+
+THRO: {{hod_name}}
+      {{company_name}}
+
+ANNUAL LEAVE ADVICE FOR {{leave_year}}
+
+In accordance with COCOBOD's vacation leave policy, we wish to inform you that approval has been granted for you to proceed on your annual leave in respect of the year January to December {{leave_year}}.
+
+Your leave details are shown below.
+
+┌──────────────────────────┬──────────────────────┬────────────┬────────────┬─────────────────────────┐
+│ Number of Days Entitled  │ Number of Days       │ From       │ To         │ Remarks                 │
+│                          │ Granted              │            │            │                         │
+├──────────────────────────┼──────────────────────┼────────────┼────────────┼─────────────────────────┤
+│ {{days_entitled}}        │ {{days_granted}}     │ {{from}}   │ {{to}}     │ {{remarks}}             │
+├──────────────────────────┴──────────────────────┴────────────┴────────────┴─────────────────────────┤
+│ TOTAL: {{days_granted}}                                                                              │
+└────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+You are to resume duty on {{return_to_work_date}}.
+
+We wish you a pleasant and relaxing vacation.`,
+    cc: "Managing Director, Deputy Managing Director, HR Head, Accounts Manager",
+  },
 }
 
 /**
@@ -201,19 +237,29 @@ Quality Control Company Limited`,
 export const placeholderDescriptions: Record<string, string> = {
   "{{staff_name}}": "Full name of the staff member",
   "{{staff_number}}": "Staff ID number",
+  "{{staff_position}}": "Staff position/title",
+  "{{staff_department}}": "Staff department name",
+  "{{company_name}}": "Company name",
+  "{{hod_name}}": "Head of Department or director name",
   "{{leave_type}}": "Type of leave (Annual, Sick, Personal, etc.)",
+  "{{leave_year}}": "Leave year (e.g., 2026)",
   "{{leave_year_period}}": "Financial year (e.g., 2026/2027)",
   "{{leave_start_date}}": "Leave commencement date (DD/MM/YYYY)",
   "{{leave_end_date}}": "Leave end date (DD/MM/YYYY)",
+  "{{from}}": "Leave start date in short format (e.g., 1st May, 2026)",
+  "{{to}}": "Leave end date in short format (e.g., 9th June, 2026)",
+  "{{days_entitled}}": "Number of days entitled with travelling days",
+  "{{days_granted}}": "Actual number of days granted after adjustments",
   "{{approved_days}}": "Number of days approved by HR",
   "{{travelling_days}}": "Number of travelling days added",
   "{{travelling_days_info}}": "Travelling Days: [number] day(s)\\n(only include if applicable)",
-  "{{return_to_work_date}}": "Date staff should return to work",
+  "{{return_to_work_date}}": "Date staff should return to work (e.g., 10th June, 2026)",
   "{{submitted_date}}": "Date of staff request submission",
   "{{memo_date}}": "Date memo is prepared (current date)",
-  "{{adjustment_details}}": "Details of any adjustments made by HR Leave Office",
+  "{{adjustment_details}}": "Details of any adjustments made by HR-Leave-Office-Admin",
   "{{rejection_reason}}": "Reason for rejecting the leave request",
-  "{{adjustment_reason}}": "Reason why HR Leave Office adjusted the leave dates/days",
+  "{{adjustment_reason}}": "Reason why HR-Leave-Office-Admin adjusted the leave dates/days",
+  "{{remarks}}": "Complete remarks field showing all adjustments, HOD changes, deferrals, and holiday deductions",
   "{{holiday_days_deducted}}": "Number of public holidays deducted",
   "{{travelling_days_added}}": "Number of travelling days added",
   "{{basic_salary}}": "Staff basic monthly salary",

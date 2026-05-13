@@ -395,7 +395,7 @@ export async function notifyLeaveSubmitted(
 }
 
 /**
- * HOD has approved the leave request → notify HR Leave Office.
+ * HOD has approved the leave request → notify HR-Leave-Office-Admin.
  */
 export async function notifyLeaveHodApproved(
   admin: AdminClient,
@@ -410,7 +410,7 @@ export async function notifyLeaveHodApproved(
   },
 ): Promise<void> {
   try {
-    const hrOfficeRoles = ["hr_leave_office", "hr_officer", "hr_office", "manager_hr", "admin"]
+    const hrOfficeRoles = ["leave_admin", "hr_officer", "hr_office", "manager_hr", "admin"]
     const hrEmails = await emailsForRoles(admin, hrOfficeRoles)
     if (!hrEmails.length) return
 
@@ -418,7 +418,7 @@ export async function notifyLeaveHodApproved(
     const subject = `[Action Required] Leave Request Approved by HOD — ${opts.staffName}`
     const html = baseLayout(
       "Leave Request Ready for HR Office Review",
-      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A leave request has been approved by the HOD and is now awaiting HR Leave Office review.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A leave request has been approved by the HOD and is now awaiting HR-Leave-Office-Admin review.</p>
       <p style="margin:0 0 22px;">${statusBadge("HOD Approved — Awaiting HR Office", "info")}</p>
       ${sectionHeading("Request Details")}
       ${table(
@@ -428,7 +428,7 @@ export async function notifyLeaveHodApproved(
         row("Days Requested", String(opts.requestedDays)) +
         row("HOD Approver", opts.hodName)
       )}
-      ${btn(link, "Process in HR Leave Office")}`,
+      ${btn(link, "Process in HR-Leave-Office-Admin")}`,
     )
     await send(admin, hrEmails, subject, html, "leave HOD approved notification")
   } catch (e) {
@@ -483,7 +483,7 @@ export async function notifyLeaveHodDecision(
 }
 
 /**
- * HR Leave Office has forwarded the request → notify HR Approvers.
+ * HR-Leave-Office-Admin has forwarded the request → notify HR Approvers.
  */
 export async function notifyLeaveHrOfficeForwarded(
   admin: AdminClient,
@@ -509,7 +509,7 @@ export async function notifyLeaveHrOfficeForwarded(
     const subject = `[Action Required] Leave Request Ready for Final Approval — ${opts.staffName}`
     const html = baseLayout(
       "Leave Request Awaiting Final HR Approval",
-      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">HR Leave Office has reviewed and forwarded this request for your final approval.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">HR-Leave-Office-Admin has reviewed and forwarded this request for your final approval.</p>
       <p style="margin:0 0 22px;">${statusBadge("Awaiting Final HR Approval", "info")}</p>
       ${sectionHeading("Approved Leave Details")}
       ${table(
@@ -517,7 +517,7 @@ export async function notifyLeaveHrOfficeForwarded(
         row("Leave Type", opts.leaveType) +
         row("Approved Period", `${opts.adjustedStartDate} — ${opts.adjustedEndDate}`) +
         row("Approved Days", String(opts.adjustedDays)) +
-        row("HR Leave Office", opts.reviewerName)
+        row("HR-Leave-Office-Admin", opts.reviewerName)
       )}
       ${btn(link, "Review & Approve")}`,
     )
@@ -945,5 +945,241 @@ export async function notifyLoanRejected(
     await send(admin, email, subject, html, "loan rejected notification")
   } catch (e) {
     console.warn("[workflow-emails] notifyLoanRejected failed:", e)
+  }
+}
+
+/**
+ * HOD has proposed date changes → staff must acknowledge before forwarding to HR Leave Office
+ */
+export async function notifyLeaveHodChangesProposed(
+  admin: AdminClient,
+  opts: {
+    staffUserId: string
+    staffName: string
+    hodName: string
+    originalStartDate: string
+    originalEndDate: string
+    proposedStartDate: string
+    proposedEndDate: string
+    hodNotes: string
+  },
+): Promise<void> {
+  try {
+    const email = await emailForUser(admin, opts.staffUserId)
+    if (!email) return
+
+    const link = `${APP_URL}/dashboard/leave-planning`
+    const subject = `HOD Has Proposed Changes to Your Leave Request`
+    const html = baseLayout(
+      "Leave Dates Adjusted by HOD",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">
+        Your HOD has reviewed your leave request and proposed new dates.
+      </p>
+      <p style="margin:0 0 22px;">${statusBadge("Awaiting Your Acknowledgment", "warning")}</p>
+      ${sectionHeading("Original Request")}
+      ${table(
+        row("Start Date", opts.originalStartDate) +
+        row("End Date", opts.originalEndDate)
+      )}
+      ${sectionHeading("Proposed Dates")}
+      ${table(
+        row("Start Date", opts.proposedStartDate) +
+        row("End Date", opts.proposedEndDate)
+      )}
+      ${sectionHeading("HOD Notes")}
+      ${table(
+        row("Message", opts.hodNotes || "No additional notes")
+      )}
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">
+        Please log in and review the proposed dates. You can either <strong>accept the changes</strong> (which will forward your request to the HR Leave Office) 
+        or <strong>propose alternative dates</strong> to discuss further with your HOD.
+      </p>
+      ${btn(link, "Review & Respond")}`,
+    )
+    await send(admin, email, subject, html, "leave HOD changes proposed notification")
+  } catch (e) {
+    console.warn("[workflow-emails] notifyLeaveHodChangesProposed failed:", e)
+  }
+}
+
+/**
+ * Staff submitted a leave deferment request → HOD/Regional Manager reviews
+ */
+export async function notifyLeaveHodDefermentRequest(
+  admin: AdminClient,
+  opts: {
+    hodUserId: string
+    staffName: string
+    hodName: string
+    leaveType: string
+    originalLeaveStart: string
+    originalLeaveEnd: string
+    requestedDefermentPeriod: string
+    reason?: string
+  },
+): Promise<void> {
+  try {
+    const email = await emailForUser(admin, opts.hodUserId)
+    if (!email) return
+
+    const link = `${APP_URL}/dashboard/leave-management?tab=leave-deferment`
+    const subject = `Leave Deferment Request from ${opts.staffName}`
+    const html = baseLayout(
+      "Leave Deferment Request",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">
+        ${opts.staffName} has requested to defer their approved ${opts.leaveType} leave to a future period.
+      </p>
+      <p style="margin:0 0 22px;">${statusBadge("Awaiting Your Review", "info")}</p>
+      ${sectionHeading("Original Leave Details")}
+      ${table(
+        row("Staff", opts.staffName) +
+        row("Leave Type", opts.leaveType) +
+        row("Start Date", opts.originalLeaveStart) +
+        row("End Date", opts.originalLeaveEnd)
+      )}
+      ${sectionHeading("Deferment Request")}
+      ${table(
+        row("Requested Period", opts.requestedDefermentPeriod) +
+        (opts.reason ? row("Reason", opts.reason) : "")
+      )}
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">
+        You can approve this deferment, propose an alternative period, or request more information.
+      </p>
+      ${btn(link, "Review Deferment Request")}`,
+    )
+    await send(admin, email, subject, html, "leave deferment request notification")
+  } catch (e) {
+    console.warn("[workflow-emails] notifyLeaveHodDefermentRequest failed:", e)
+  }
+}
+
+/**
+ * HOD approved the deferment → Staff is notified
+ */
+export async function notifyLeaveDefermentApprovedByHod(
+  admin: AdminClient,
+  opts: {
+    staffUserId: string
+    staffName: string
+    hodName: string
+    leaveType: string
+    defermentPeriod: string
+    hodNotes?: string
+  },
+): Promise<void> {
+  try {
+    const email = await emailForUser(admin, opts.staffUserId)
+    if (!email) return
+
+    const link = `${APP_URL}/dashboard/leave-management?tab=leave-deferment`
+    const subject = `Your Leave Deferment Has Been Approved`
+    const html = baseLayout(
+      "Leave Deferment Approved",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">
+        Your ${opts.leaveType} leave deferment request has been approved by your ${opts.hodName}.
+      </p>
+      <p style="margin:0 0 22px;">${statusBadge("Approved by HOD", "success")}</p>
+      ${sectionHeading("Deferment Details")}
+      ${table(
+        row("Leave Type", opts.leaveType) +
+        row("Deferred To", opts.defermentPeriod) +
+        row("Approved By", opts.hodName)
+      )}
+      ${opts.hodNotes ? `
+        ${sectionHeading("HOD Notes")}
+        ${table(row("Message", opts.hodNotes))}
+      ` : ""}
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">
+        Your request has been forwarded to the HR Leave Office for final approval and memo issuance.
+      </p>
+      ${btn(link, "View Deferment Status")}`,
+    )
+    await send(admin, email, subject, html, "leave deferment approved by HOD notification")
+  } catch (e) {
+    console.warn("[workflow-emails] notifyLeaveDefermentApprovedByHod failed:", e)
+  }
+}
+
+/**
+ * HOD rejected the deferment → Staff is notified
+ */
+export async function notifyLeaveDefermentRejectedByHod(
+  admin: AdminClient,
+  opts: {
+    staffUserId: string
+    staffName: string
+    hodName: string
+    leaveType: string
+    reason?: string
+  },
+): Promise<void> {
+  try {
+    const email = await emailForUser(admin, opts.staffUserId)
+    if (!email) return
+
+    const link = `${APP_URL}/dashboard/leave-management?tab=leave-deferment`
+    const subject = `Your Leave Deferment Request Was Not Approved`
+    const html = baseLayout(
+      "Leave Deferment Not Approved",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">
+        Your ${opts.leaveType} leave deferment request could not be approved by your ${opts.hodName}.
+      </p>
+      <p style="margin:0 0 22px;">${statusBadge("Not Approved", "danger")}</p>
+      ${sectionHeading("Deferment Details")}
+      ${table(
+        row("Leave Type", opts.leaveType) +
+        row("Reviewed By", opts.hodName) +
+        (opts.reason ? row("Reason", opts.reason) : "")
+      )}
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">
+        Please contact your HOD to discuss your leave deferment options.
+      </p>
+      ${btn(link, "View Details")}`,
+    )
+    await send(admin, email, subject, html, "leave deferment rejected by HOD notification")
+  } catch (e) {
+    console.warn("[workflow-emails] notifyLeaveDefermentRejectedByHod failed:", e)
+  }
+}
+
+/**
+ * HR Leave Office approved the deferment → Staff is notified of final approval
+ */
+export async function notifyLeaveDefermentFinalApproval(
+  admin: AdminClient,
+  opts: {
+    staffUserId: string
+    staffName: string
+    leaveType: string
+    defermentPeriod: string
+    memoReference?: string
+  },
+): Promise<void> {
+  try {
+    const email = await emailForUser(admin, opts.staffUserId)
+    if (!email) return
+
+    const link = `${APP_URL}/dashboard/leave-management?tab=leave-deferment`
+    const subject = `Your Leave Deferment Is Approved - Memo Issued`
+    const html = baseLayout(
+      "Leave Deferment Final Approval",
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">
+        Your ${opts.leaveType} leave has been successfully deferred. The HR Leave Office has issued your official deferment memo.
+      </p>
+      <p style="margin:0 0 22px;">${statusBadge("Final Approval Complete", "success")}</p>
+      ${sectionHeading("Deferment Confirmation")}
+      ${table(
+        row("Leave Type", opts.leaveType) +
+        row("Deferred To", opts.defermentPeriod) +
+        (opts.memoReference ? row("Memo Reference", opts.memoReference) : "")
+      )}
+      <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">
+        Your leave has been officially deferred. You can download your deferment memo from your dashboard.
+      </p>
+      ${btn(link, "View My Deferments")}`,
+    )
+    await send(admin, email, subject, html, "leave deferment final approval notification")
+  } catch (e) {
+    console.warn("[workflow-emails] notifyLeaveDefermentFinalApproval failed:", e)
   }
 }

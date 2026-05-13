@@ -1,7 +1,8 @@
 "use client"
 
+import React from "react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { format } from "date-fns"
 import {
   ArrowUpRight,
@@ -10,9 +11,11 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Download,
   FileClock,
   Info,
   Loader2,
+  RefreshCw,
   Sparkles,
   XCircle,
 } from "lucide-react"
@@ -146,6 +149,32 @@ export function LeaveManagementClient({
     cc_recipients: "",
     category: "approval",
   })
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState("")
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+  const [allHolidays, setAllHolidays] = useState<Array<{ date: string; name: string }>>([])
+
+  // Load holidays on mount for HR calculations
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const res = await fetch("/api/admin/holidays", { cache: "no-store" })
+        if (res.ok) {
+          const json = await res.json()
+          const holidayList = Array.isArray(json.holidays) ? json.holidays : []
+          setAllHolidays(
+            holidayList.map((h: any) => ({
+              date: String(h.holiday_date || ""),
+              name: String(h.holiday_name || "Holiday")
+            }))
+          )
+        }
+      } catch (e) {
+        console.log("[v0] Error loading holidays for HR:", e)
+      }
+    }
+    loadHolidays()
+  }, [])
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -153,6 +182,72 @@ export function LeaveManagementClient({
       toast({ title: `${label} copied`, description: "Template copied to clipboard." })
     } catch {
       toast({ title: "Copy failed", description: "Please copy manually.", variant: "destructive" })
+    }
+  }
+
+  // Helper function to calculate weekends in a date range
+  const calculateWeekends = (startDateStr: string | null, endDateStr: string | null) => {
+    if (!startDateStr || !endDateStr) return { weekends: [], weekendCount: 0, calendarDays: 0 }
+
+    const start = new Date(startDateStr)
+    const end = new Date(endDateStr)
+
+    if (end < start) return { weekends: [], weekendCount: 0, calendarDays: 0 }
+
+    const weekends = []
+    let current = new Date(start)
+    let weekendCount = 0
+
+    while (current <= end) {
+      const day = current.getDay()
+      if (day === 0 || day === 6) {
+        weekends.push({
+          date: current.toISOString().split("T")[0],
+          dayName: current.toLocaleDateString("en-US", { weekday: "short" })
+        })
+        weekendCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    return {
+      weekends,
+      weekendCount,
+      calendarDays: Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    }
+  }
+
+  // Helper function to calculate holidays in a date range
+  const calculateHolidaysInRange = (startDateStr: string | null, endDateStr: string | null) => {
+    if (!startDateStr || !endDateStr || allHolidays.length === 0) return { holidays: [], holidayCount: 0 }
+
+    const start = new Date(startDateStr)
+    const end = new Date(endDateStr)
+
+    if (end < start) return { holidays: [], holidayCount: 0 }
+
+    const holidaysInRange = []
+    let current = new Date(start)
+    let holidayCount = 0
+
+    while (current <= end) {
+      const currentDateStr = current.toISOString().split("T")[0]
+      const holiday = allHolidays.find((h) => h.date === currentDateStr)
+
+      if (holiday) {
+        holidaysInRange.push({
+          date: currentDateStr,
+          name: holiday.name,
+          dayName: current.toLocaleDateString("en-US", { weekday: "short" })
+        })
+        holidayCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    return {
+      holidays: holidaysInRange,
+      holidayCount
     }
   }
 
@@ -349,7 +444,7 @@ export function LeaveManagementClient({
 
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "hr_director", "loan_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -394,7 +489,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "hr_director", "loan_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -461,11 +556,11 @@ export function LeaveManagementClient({
   const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
-  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
-  const isAdminView = normalizedRole === "admin"
-  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
-  const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "hr_office", "leave_admin", "hr_leave_office", "regional_hr_leave", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
+  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "hr_director", "hr_office", "leave_admin", "hr_leave_office", "regional_hr_leave", "hr"].includes(normalizedRole)
+  const isAdminView = ["admin", "leave_admin"].includes(normalizedRole)
+  const canViewHrTemplates = ["admin", "leave_admin"].includes(normalizedRole)
+  const canEditHrTemplates = ["admin", "leave_admin"].includes(normalizedRole)
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -554,7 +649,7 @@ export function LeaveManagementClient({
     if (!canEditHrTemplates) {
       toast({
         title: "Forbidden",
-        description: "Only Director HR, Manager HR, and HR Leave Office can edit templates.",
+        description: "Only Director HR, Manager HR, and HR-Leave-Office-Admin can edit templates.",
         variant: "destructive",
       })
       return
@@ -606,6 +701,52 @@ export function LeaveManagementClient({
     }
   }
 
+  const handleExportLeaveRequests = async () => {
+    setIsExporting(true)
+    setExportMessage("")
+    try {
+      // Get current leave year
+      const now = new Date()
+      const currentYear = now.getFullYear()
+      const leaveYear = now.getMonth() >= 11 ? `${currentYear}/${currentYear + 1}` : `${currentYear - 1}/${currentYear}`
+
+      const response = await fetch("/api/leave/export/hod-annual-leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leaveYear }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Export failed")
+      }
+
+      // Download file
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Annual_Leave_Requests_${leaveYear}_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      setExportMessage("✓ Leave requests exported successfully")
+      setTimeout(() => setExportMessage(""), 5000)
+    } catch (error) {
+      console.error("[v0] Export error:", error)
+      setExportMessage(`✗ Export failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Could not export leave requests",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string) => {
     if (rows.length === 0) {
       return (
@@ -625,6 +766,7 @@ export function LeaveManagementClient({
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
+                  <th className="w-8 px-4 py-3"></th>
                   <th className="px-4 py-3">Staff</th>
                   <th className="px-4 py-3">Leave Type</th>
                   <th className="px-4 py-3">Start</th>
@@ -643,47 +785,98 @@ export function LeaveManagementClient({
                     end_date: null,
                     reason: "",
                   }
+                  const isExpanded = expandedRows[notification.id]
+                  const weekendData = calculateWeekends(leave.start_date, leave.end_date)
+                  const holidayData = calculateHolidaysInRange(leave.start_date, leave.end_date)
+
                   return (
-                    <tr key={notification.id} className="border-t border-slate-100 align-top">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">{notification.requester_name || "Staff"}</div>
-                        <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(String(leave.leave_type || "annual"))}</td>
-                      <td className="px-4 py-3">{formatDateSafe(leave.start_date)}</td>
-                      <td className="px-4 py-3">{formatDateSafe(leave.end_date)}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant="outline">{formatLeaveType(String(notification.status || "pending"))}</Badge>
-                      </td>
-                      <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
+                    <React.Fragment key={notification.id}>
+                      <tr className="border-t border-slate-100 align-top">
+                        <td className="px-4 py-3">
                           <Button
-                            onClick={() => handleApprove(notification.id)}
-                            disabled={processingId === notification.id}
                             size="sm"
-                            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={() => setExpandedRows((prev) => ({ ...prev, [notification.id]: !prev[notification.id] }))}
                           >
-                            {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                            Approve
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </Button>
-                          <Button
-                            onClick={() => {
-                              const rejectReason = window.prompt("Provide rejection reason") || ""
-                              if (!rejectReason.trim()) return
-                              void handleDismiss(notification.id, rejectReason)
-                            }}
-                            disabled={processingId === notification.id}
-                            size="sm"
-                            variant="destructive"
-                            className="gap-1"
-                          >
-                            {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                            Reject
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{notification.requester_name || "Staff"}</div>
+                          <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(String(leave.leave_type || "annual"))}</td>
+                        <td className="px-4 py-3">{formatDateSafe(leave.start_date)}</td>
+                        <td className="px-4 py-3">{formatDateSafe(leave.end_date)}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline">{formatLeaveType(String(notification.status || "pending"))}</Badge>
+                        </td>
+                        <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleApprove(notification.id)}
+                              disabled={processingId === notification.id}
+                              size="sm"
+                              className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                            >
+                              {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                              Approve
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                const rejectReason = window.prompt("Provide rejection reason") || ""
+                                if (!rejectReason.trim()) return
+                                void handleDismiss(notification.id, rejectReason)
+                              }}
+                              disabled={processingId === notification.id}
+                              size="sm"
+                              variant="destructive"
+                              className="gap-1"
+                            >
+                              {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                              Reject
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-t border-slate-100 bg-slate-50/50">
+                          <td colSpan={8} className="px-8 py-4">
+                            <div className="space-y-4">
+                              {weekendData.weekendCount > 0 && (
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold text-slate-700 uppercase">Weekends ({weekendData.weekendCount} days)</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {weekendData.weekends.map((weekend) => (
+                                      <span key={weekend.date} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
+                                        {weekend.dayName} {weekend.date}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {holidayData.holidayCount > 0 && (
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold text-slate-700 uppercase">Public Holidays ({holidayData.holidayCount} day{holidayData.holidayCount !== 1 ? "s" : ""})</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {holidayData.holidays.map((holiday) => (
+                                      <span key={holiday.date} className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-1 text-xs text-orange-800">
+                                        {holiday.dayName} {holiday.date} ({holiday.name})
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {weekendData.weekendCount === 0 && holidayData.holidayCount === 0 && (
+                                <p className="text-xs text-slate-500">No weekends or holidays in selected period</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>
@@ -745,12 +938,73 @@ export function LeaveManagementClient({
         </CardContent>
       </Card>
 
-      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "hr_leave_office" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && (
+      {canUseStaffLeaveHub && !hasHodLinkage && normalizedRole !== "leave_admin" && normalizedRole !== "hr_leave_office" && normalizedRole !== "hr_office" && normalizedRole !== "hr" && normalizedRole !== "loan_office" && normalizedRole !== "loan_office_admin" && (
         <Alert className="border-blue-200 bg-blue-50">
           <AlertDescription className="text-blue-800">
             Your leave profile is not linked to a HOD yet. Kindly inform HR/Admin to complete your HOD linkage so approvals route correctly.
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* HOD/Regional Manager Export Section */}
+      {(normalizedRole === "department_head" || normalizedRole === "regional_manager") && (
+        <Card className="overflow-hidden border-purple-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-purple-200 bg-purple-50 pb-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Export Annual Leave Requests</h3>
+                <p className="mt-1 text-sm text-slate-600">Download all staff annual leave requests for your department/region as an Excel file</p>
+              </div>
+              <Button 
+                onClick={handleExportLeaveRequests}
+                disabled={isExporting}
+                className="gap-2 bg-purple-600 hover:bg-purple-700"
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? "Exporting..." : "Export to Excel"}
+              </Button>
+            </div>
+          </CardHeader>
+          {exportMessage && (
+            <CardContent className="p-4">
+              <div className={`rounded px-4 py-2 text-sm ${exportMessage.includes("successfully") ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+                {exportMessage}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* HOD/Regional Manager Deferment & Recall Section - HIDDEN */}
+      {false && (normalizedRole === "department_head" || normalizedRole === "regional_manager") && (
+        <Card className="overflow-hidden border-blue-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-blue-200 bg-blue-50 pb-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Manage Staff Leave Deferment & Recall</h3>
+                <p className="mt-1 text-sm text-slate-600">Process leave deferment requests from staff and initiate leave recalls when needed</p>
+              </div>
+              <Link href="/dashboard/leave/deferment-recall" className="inline-block">
+                <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
+                  <RefreshCw className="h-4 w-4" />
+                  Manage Deferments & Recalls
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4">
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <p className="text-sm text-blue-900">
+                <strong>Deferment:</strong> Process staff requests to reschedule approved leave to different dates
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+              <p className="text-sm text-amber-900">
+                <strong>Recall:</strong> Call back staff from approved leave in case of emergencies. Unused leave days will be restored to their balance
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {canViewHrTemplates && (
@@ -1111,26 +1365,26 @@ export function LeaveManagementClient({
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setSelectedTab("my-requests")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
+            className={`px-6 py-3 font-bold rounded-lg transition-all duration-300 shadow-md transform ${
               selectedTab === "my-requests"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                ? "bg-green-600 hover:bg-green-700 text-white scale-105 shadow-lg ring-2 ring-green-400 ring-offset-2"
+                : "bg-orange-400 text-white hover:bg-orange-500"
             }`}
           >
             My Requests ({staffRequests.length})
           </button>
           <Link href="/dashboard/leave-planning">
-            <button className="px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700">
+            <button className="px-6 py-3 font-bold rounded-lg transition-all duration-300 flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg hover:scale-102 transform">
               <Calendar className="h-5 w-5" />
               Apply for Leave
             </button>
           </Link>
           <button
             onClick={() => setSelectedTab("approved")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
+            className={`px-6 py-3 font-bold rounded-lg transition-all duration-300 shadow-md transform ${
               selectedTab === "approved"
-                ? "bg-green-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                ? "bg-green-600 hover:bg-green-700 text-white scale-105 shadow-lg ring-2 ring-green-400 ring-offset-2"
+                : "bg-orange-400 text-white hover:bg-orange-500"
             }`}
           >
             Approved ({approvedRequests.length})
@@ -1138,7 +1392,15 @@ export function LeaveManagementClient({
         </div>
 
         {/* Tab Content */}
-        <div>
+        <div className={`transition-colors duration-300 rounded-lg p-4 ${
+          selectedTab === "my-requests" ? "bg-green-50 border border-green-200" : 
+          selectedTab === "approved" ? "bg-emerald-50 border border-emerald-200" :
+          selectedTab === "pending-approvals" ? "bg-blue-50 border border-blue-200" :
+          selectedTab === "role-staff" ? "bg-purple-50 border border-purple-200" :
+          selectedTab === "role-manager" ? "bg-indigo-50 border border-indigo-200" :
+          selectedTab === "role-hr" ? "bg-amber-50 border border-amber-200" :
+          "bg-slate-50 border border-slate-200"
+        }`}>
           {selectedTab === "my-requests" && (
             <>
               {staffRequests.length === 0 ? (

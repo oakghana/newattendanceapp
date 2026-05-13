@@ -794,6 +794,7 @@ export default function LoanAppPage() {
   const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | null>(null)
   const [supportingDocumentName, setSupportingDocumentName] = useState<string>("")
   const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [fdDocumentUploaded, setFdDocumentUploaded] = useState(false)
 
   const [hodNotes, setHodNotes] = useState<Record<string, string>>({})
   const [loanOfficeNotes, setLoanOfficeNotes] = useState<Record<string, string>>({})
@@ -977,8 +978,9 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
+  const isHrLoanOfficeAdmin = isAdmin || ["director_hr", "manager_hr"].includes(normalizedRole)
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
-  const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
+  const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "loan_office_admin", "director_hr", "manager_hr"].includes(normalizedRole)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
@@ -992,6 +994,65 @@ export default function LoanAppPage() {
 
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
+    
+    // HR Leave Office: Only show staff tabs (My Loans and Apply for Loans)
+    if (normalizedRole === "hr_leave_office") {
+      const c = {
+        mine: data?.myTasks?.length || 0,
+      }
+      return [
+        { key: "staff", label: "My Loans" },
+        { key: "apply", label: "Apply for Loans" },
+      ]
+    }
+    
+    // Loan Office: Show My Loans, Tracking, Loan Office, My Tasks, All Loans (no admin tabs)
+    if (normalizedRole === "loan_office") {
+      const c = {
+        loanOffice: data?.inbox?.loanOffice?.length || 0,
+        hr: data?.inbox?.hrOffice?.length || 0,
+        all: data?.inbox?.allLoans?.length || 0,
+        mine: data?.myTasks?.length || 0,
+      }
+      const tabs = [
+        { key: "staff", label: "My Loans" },
+        { key: "tracking", label: "Tracking" },
+        { key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` },
+        { key: "my-tasks", label: `My Tasks (${c.mine})` },
+        { key: "overview", label: `All Loans (${c.all})` },
+      ]
+      return tabs
+    }
+    
+    // Loan Office Admin: Same as Loan Office but with Setup & Linkage tab
+    if (normalizedRole === "loan_office_admin") {
+      const c = {
+        loanOffice: data?.inbox?.loanOffice?.length || 0,
+        hr: data?.inbox?.hrOffice?.length || 0,
+        all: data?.inbox?.allLoans?.length || 0,
+        mine: data?.myTasks?.length || 0,
+      }
+      const tabs = [
+        { key: "staff", label: "My Loans" },
+        { key: "tracking", label: "Tracking" },
+        { key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` },
+        { key: "my-tasks", label: `My Tasks (${c.mine})` },
+        { key: "setup", label: "Setup & Linkage" },
+        { key: "overview", label: `All Loans (${c.all})` },
+      ]
+      return tabs
+    }
+    
+    // HR Loan Office Admin: Only show Setup & Linkage and Committee tabs
+    if (isHrLoanOfficeAdmin && !["loan_office", "loan_office_admin"].includes(normalizedRole) && !p?.viewAllTabs) {
+      const c = {
+        committee: data?.inbox?.committee?.length || 0,
+      }
+      const tabs = [{ key: "setup", label: "Setup & Linkage" }]
+      if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+      return tabs
+    }
+    
     const c = {
       hod: data?.inbox?.hod?.length || 0,
       loanOffice: data?.inbox?.loanOffice?.length || 0,
@@ -1004,19 +1065,20 @@ export default function LoanAppPage() {
     }
     const tabs = [{ key: "staff", label: "My Loans" }, { key: "tracking", label: "Tracking" }]
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
-    if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
+    if (canAccessLoanOfficeWorkspace && !["loan_office", "loan_office_admin"].includes(normalizedRole)) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-    if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
+    if (canAccessLoanOfficeWorkspace && !["loan_office", "loan_office_admin"].includes(normalizedRole)) tabs.push({ key: "setup", label: "Setup & Linkage" })
+    const isHrAdminRole = normalizedRole === "hr_leave_office" || normalizedRole === "leave_admin"
+    if (!isHrAdminRole && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
     if (p?.allLoans || p?.viewAllTabs) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs
-  }, [data, canAccessLoanOfficeWorkspace])
+  }, [data, canAccessLoanOfficeWorkspace, isHrLoanOfficeAdmin, normalizedRole])
 
   const defaultTab = visibleTabs[0]?.key || "staff"
 
@@ -1400,11 +1462,6 @@ export default function LoanAppPage() {
 
       setData(result)
       setWarning(result.degraded ? result.warning || "Loan module is in degraded mode." : null)
-
-      const allowedLoanTypes = result.loanTypes || []
-      if (allowedLoanTypes.length > 0 && !loanTypeKey) {
-        setLoanTypeKey(allowedLoanTypes[0].loan_key)
-      }
     } catch (e: any) {
       toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
     } finally {
@@ -1435,7 +1492,7 @@ export default function LoanAppPage() {
     setSupportingDocumentUrl(null)
     setSupportingDocumentName("")
     setSalaryAdvanceMonths(null)
-    if (filteredLoanTypes.length) setLoanTypeKey(filteredLoanTypes[0].loan_key)
+    setLoanTypeKey("")
   }
 
   useEffect(() => {
@@ -1444,16 +1501,6 @@ export default function LoanAppPage() {
     setSetupLoanLabel(found?.loan_label || "")
     setSetupIsActive(found?.is_active ?? true)
   }, [selectedLoanType, lookupData?.loanTypes])
-
-  useEffect(() => {
-    if (!loanTypeKey && filteredLoanTypes.length > 0) {
-      setLoanTypeKey(filteredLoanTypes[0].loan_key)
-      return
-    }
-    if (loanTypeKey && filteredLoanTypes.length > 0 && !filteredLoanTypes.find((l) => l.loan_key === loanTypeKey)) {
-      setLoanTypeKey(filteredLoanTypes[0].loan_key)
-    }
-  }, [loanTypeKey, filteredLoanTypes])
 
   useEffect(() => {
     setSelectedHodsForLink([])
@@ -1603,6 +1650,41 @@ export default function LoanAppPage() {
         toast({
           title: "Uploads not configured",
           description: "Set BLOB_READ_WRITE_TOKEN in environment variables to enable attachment uploads.",
+          variant: "destructive",
+        })
+      } else {
+        toast({ title: "Upload failed", description: message, variant: "destructive" })
+      }
+    } finally {
+      setUploadingDocument(false)
+    }
+  }
+
+  const handleFdDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>, loanId: string) => {
+    try {
+      const file = e.target.files?.[0]
+      if (!file) return
+      
+      setUploadingDocument(true)
+      const fd = new FormData()
+      fd.append("file", file)
+      fd.append("folder", "fd-support-documents")
+      fd.append("loanId", loanId)
+      
+      const res = await fetch("/api/upload", { method: "POST", body: fd })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || "Upload failed")
+      
+      setFdDocumentUploaded(true)
+      toast({ title: "FD Document Uploaded", description: `Document "${file.name}" uploaded successfully for loan ${loanId}.` })
+      // Reset the input
+      e.target.value = ""
+    } catch (err: any) {
+      const message = String(err?.message || "Try again")
+      if (message.includes("BLOB_NOT_CONFIGURED") || message.toLowerCase().includes("storage is not configured")) {
+        toast({
+          title: "Uploads not configured",
+          description: "Set BLOB_READ_WRITE_TOKEN in environment variables to enable FD document uploads.",
           variant: "destructive",
         })
       } else {
@@ -2007,6 +2089,7 @@ export default function LoanAppPage() {
         setModalDecision("approve")
         setModalFdScore("")
         setModalFdNote("")
+        setFdDocumentUploaded(false)
         setModalDisbursement("")
         setModalRecovery("")
         setModalMonths("")
@@ -2327,7 +2410,7 @@ export default function LoanAppPage() {
                   <SearchableSelect
                     value={loanTypeKey}
                     onChange={setLoanTypeKey}
-                    placeholder="Select loan type"
+                    placeholder="Search and select the loan you want to apply for"
                     searchPlaceholder="Search loan type..."
                     options={filteredLoanTypes.map((type) => ({
                       value: type.loan_key,
@@ -2592,7 +2675,13 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        {canSeeFdReviewerName && <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>}
+                        {canSeeFdReviewerName && (
+                          <TableCell className="text-xs whitespace-nowrap">
+                            <span title={`FD Reviewer: ${row.accounts_reviewer_name || 'Unassigned'}`} className="cursor-help underline decoration-dotted">
+                              {row.accounts_reviewer_name || "—"}
+                            </span>
+                          </TableCell>
+                        )}
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.hod && (
@@ -2717,22 +2806,37 @@ export default function LoanAppPage() {
 
               <Tabs value={loanOfficeStageTab} onValueChange={setLoanOfficeStageTab} className="space-y-2">
                 <TabsList className="flex w-full flex-wrap gap-2 h-auto bg-transparent p-0">
-                  <TabsTrigger value="pending" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Pending FD ({loanOfficeStageBuckets["pending"].length})
+                  <TabsTrigger value="pending" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Pending
                   </TabsTrigger>
-                  <TabsTrigger value="good-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="good-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Good FD
+                  </TabsTrigger>
+                  <TabsTrigger value="poor-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Poor FD
+                  </TabsTrigger>
+                  <TabsTrigger value="good-fd-not-pushed" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Good FD Not Pushed
+                  </TabsTrigger>
+                  <TabsTrigger value="sent-for-approval" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Sent for Approval
+                  </TabsTrigger>
+                  <TabsTrigger value="archivable" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
+                    Archivable
+                  </TabsTrigger>
+                  <TabsTrigger value="good-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Good FD ({loanOfficeStageBuckets["good-fd"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="poor-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="poor-fd" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Poor FD ({loanOfficeStageBuckets["poor-fd"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="good-fd-not-pushed" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="good-fd-not-pushed" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Good FD Not Pushed ({loanOfficeStageBuckets["good-fd-not-pushed"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="sent-for-approval" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="sent-for-approval" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Sent for Approval ({loanOfficeStageBuckets["sent-for-approval"].length})
                   </TabsTrigger>
-                  <TabsTrigger value="archivable" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
+                  <TabsTrigger value="archivable" className="data-[state=active]:bg-green-500 data-[state=active]:text-white">
                     Archivable ({loanOfficeStageBuckets.archivable.length})
                   </TabsTrigger>
                   <TabsTrigger value="archived" className="data-[state=active]:bg-slate-700 data-[state=active]:text-white">
@@ -2780,7 +2884,18 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          
+                            
+                              
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              
+                              
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              
+                            
+                          
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Badge className={`text-[10px] whitespace-nowrap ${row.status === "hod_approved" ? "bg-green-700" : "bg-purple-700"} text-white`}>
@@ -2928,7 +3043,18 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          
+                            
+                              
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              
+                              
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              
+                            
+                          
+                        </TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           {p?.hrOffice && (
                             <TableCell>
@@ -3187,8 +3313,18 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "—"}</TableCell>
-                          <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            
+                              
+                                
+                                  <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                                
+                                
+                                  <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                                
+                              
+                            
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
                             <TableCell>
@@ -3206,7 +3342,9 @@ export default function LoanAppPage() {
 
           {accountsViewMode === "card" && pagedAccounts.map((row) => (
             <StageCard key={row.id} row={row}>
-              {p?.accounts && <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>}
+              {p?.accounts && (
+                <Button size="sm" onClick={() => openActionModal(row, "accounts")}>Set FD Score</Button>
+              )}
             </StageCard>
           ))}
 
@@ -3337,9 +3475,18 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
-                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          
+                            
+                              
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              
+                              
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              
+                            
+                          
+                        </TableCell>
                         {p?.committee && (
                           <TableCell>
                             <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "committee")}>Further Information</Button>
@@ -3380,7 +3527,7 @@ export default function LoanAppPage() {
                 <div key={`good-fd-${row.id}`} className="rounded border p-2 text-sm">
                   <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
                   {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
-                  <div>FD: {row.fd_score ?? "N/A"} | FD Reviewer: {row.accounts_reviewer_name || "—"} | Status: {statusText(row.status)}</div>
+                  <div>FD: {row.fd_score ?? "N/A"} | FD Reviewer: <span title={`FD Reviewer: ${row.accounts_reviewer_name || 'Unassigned'}`} className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span> | Status: {statusText(row.status)}</div>
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                 </div>
               ))}
@@ -3470,9 +3617,18 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
-                        <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          
+                            
+                              
+                                <span className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span>
+                              
+                              
+                                <p>FD Reviewer: {row.accounts_reviewer_name || "Unassigned"}</p>
+                              
+                            
+                          
+                        </TableCell>
                         {p?.directorHr && (
                           <TableCell>
                             <div className="flex flex-col gap-1">
@@ -3729,7 +3885,7 @@ export default function LoanAppPage() {
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div className="text-muted-foreground">Address: {row.staff_location_address || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Status: {statusText(row.status)}</div>
-                  <div className="text-xs text-muted-foreground">FD Score: {row.fd_score ?? "—"} | FD Reviewer: {row.accounts_reviewer_name || "—"}</div>
+                  <div className="text-xs text-muted-foreground">FD Score: {row.fd_score ?? "—"} | FD Reviewer: <span title={`FD Reviewer: ${row.accounts_reviewer_name || 'Unassigned'}`} className="cursor-help underline decoration-dotted">{row.accounts_reviewer_name || "—"}</span></div>
                   {["approved_director", "director_rejected", "rejected_fd"].includes(row.status) && (
                     <div className="mt-2 flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Secure Memo PDF</Button>
@@ -4435,7 +4591,6 @@ export default function LoanAppPage() {
                   <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="approve">Endorse</SelectItem>
-                    <SelectItem value="reject">Reject</SelectItem>
                   </SelectContent>
                 </Select>
                 <Label className="text-sm">Note (optional)</Label>
@@ -4506,6 +4661,23 @@ export default function LoanAppPage() {
                 <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
                 <Label className="text-xs">Your Comments (optional)</Label>
                 <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} className="text-xs" />
+                <div>
+                  <Label className="text-xs">Support Document <span className="text-red-500">*</span> <span className="text-xs font-normal text-muted-foreground">(required)</span></Label>
+                  <label htmlFor="fd-upload-modal">
+                    <Button size="sm" className="text-xs whitespace-nowrap bg-blue-600 hover:bg-blue-700 w-full cursor-pointer" asChild>
+                      <span>{uploadingDocument ? "Uploading..." : "Upload Document"}</span>
+                    </Button>
+                    <input
+                      id="fd-upload-modal"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => actionModal.row && handleFdDocumentUpload(e, actionModal.row.id)}
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+                  {fdDocumentUploaded && <p className="text-xs text-green-600 mt-1">✓ Document uploaded</p>}
+                </div>
               </>
             )}
             {/* Committee - Further Information */}
@@ -4591,11 +4763,11 @@ export default function LoanAppPage() {
             <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Cancel</Button>
             {actionModal.actionType === "hod" && actionModal.row && (
               <>
-                <Button variant={modalDecision === "reject" ? "destructive" : "default"} onClick={() => {
-                  runAction({ action: "hod_decision", id: actionModal.row!.id, decision: modalDecision, note: modalNote || null })
+                <Button onClick={() => {
+                  runAction({ action: "hod_decision", id: actionModal.row!.id, decision: "approve", note: modalNote || null })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>
-                  {modalDecision === "approve" ? "Endorse" : "Reject"}
+                  Endorse
                 </Button>
               </>
             )}
@@ -4644,8 +4816,13 @@ export default function LoanAppPage() {
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
               <Button onClick={() => {
+                if (!fdDocumentUploaded) {
+                  toast({ title: "Document Required", description: "Please upload a support document before saving the FD score.", variant: "destructive" })
+                  return
+                }
                 runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null })
                 setActionModal((s) => ({ ...s, open: false }))
+                setFdDocumentUploaded(false)
               }}>Save FD Score</Button>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (

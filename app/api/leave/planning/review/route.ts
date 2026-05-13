@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
+import { notifyLeaveHodApproved, notifyLeaveHodDecision, notifyLeaveHodChangesProposed } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
 
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head"].includes(role)) {
-      return NextResponse.json({ error: "Only regional managers and department heads can review this request." }, { status: 403 })
+    if (!["regional_manager", "department_head", "admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)) {
+      return NextResponse.json({ error: "Only admins, regional managers, and department heads can review this request." }, { status: 403 })
     }
 
     const body = await request.json()
@@ -86,7 +86,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: review, error: reviewError } = await admin
+    // For HOD/RM: review must already exist (assigned)
+    // For admin: create review with the actual decision being submitted
+    const isAdmin = ["admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)
+    
+    if (!decision) {
+      return NextResponse.json({ error: "Decision is required to submit review" }, { status: 400 })
+    }
+
+    let review: any
+    const { data: existingReview, error: reviewError } = await admin
       .from("leave_plan_reviews")
       .select("id")
       .eq("leave_plan_request_id", leave_plan_request_id)
@@ -97,7 +106,39 @@ export async function POST(request: NextRequest) {
       return schemaIssueResponse()
     }
 
-    if (reviewError || !review) {
+    if (existingReview) {
+      // Review already exists (HOD/RM assigned)
+      review = existingReview
+    } else if (isAdmin) {
+      // Admin creating new review with actual decision
+      if (!leave_plan_request_id) {
+        return NextResponse.json({ error: "leave_plan_request_id is required to create review" }, { status: 400 })
+      }
+      
+      // For admin/leave_admin/hr_leave_office, store actual role in database (not converted to "admin")
+      const { data: newReview, error: createError } = await admin
+        .from("leave_plan_reviews")
+        .insert([{
+          leave_plan_request_id,
+          reviewer_id: user.id,
+          reviewer_role: role, // Keep the actual role (admin, leave_admin, or hr_leave_office)
+          decision,
+          recommendation: recommendation || null,
+          reviewed_at: new Date().toISOString(),
+        }])
+        .select("id")
+        .single()
+
+      console.log("[v0] Admin review creation - createError:", createError?.message || "No error")
+      console.log("[v0] Admin review creation - newReview:", newReview?.id || "No review")
+
+      if (createError) {
+        console.log("[v0] Admin review insert failed with code:", createError.code, "message:", createError.message)
+        return NextResponse.json({ error: `Database error: ${createError.message}` }, { status: 400 })
+      }
+      review = newReview
+    } else {
+      // HOD/RM but no existing review assignment
       return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
     }
 
@@ -193,9 +234,41 @@ export async function POST(request: NextRequest) {
     }
 
     if (decision === "recommend_change") {
-      requestUpdatePayload.preferred_start_date = nextStartDate
-      requestUpdatePayload.preferred_end_date = nextEndDate
-      requestUpdatePayload.requested_days = nextRequestedDays
+      requestUpdatePayload.hod_decision = "changes_requested"
+      requestUpdatePayload.status = "hod_changes_pending_acceptance" // NEW: Wait for staff acknowledgment
+      requestUpdatePayload.hod_proposed_start_date = nextStartDate // Store HOD proposals
+      requestUpdatePayload.hod_proposed_end_date = nextEndDate
+      requestUpdatePayload.hod_change_notes = recommendation || null
+      
+      // Create notification record for staff to acknowledge
+      const { data: staffProfile, error: staffError } = await admin
+        .from("user_profiles")
+        .select("id, full_name")
+        .eq("id", leavePlan.user_id)
+        .single()
+      
+      if (!staffError && staffProfile) {
+        const { error: notifError } = await admin
+          .from("hod_change_notifications")
+          .upsert({
+            leave_plan_request_id,
+            hod_user_id: user.id,
+            staff_user_id: leavePlan.user_id,
+            original_requested_start: leavePlan.preferred_start_date,
+            original_requested_end: leavePlan.preferred_end_date,
+            hod_proposed_start: nextStartDate,
+            hod_proposed_end: nextEndDate,
+            hod_notes: recommendation || null,
+            staff_response_status: "pending",
+          }, {
+            onConflict: "leave_plan_request_id",
+          })
+        
+        if (notifError) {
+          console.error("[v0] Failed to create change notification:", notifError)
+          // Don't fail the entire request if notification creation fails
+        }
+      }
     }
 
     const { error: requestUpdateError } = await admin
@@ -233,19 +306,41 @@ export async function POST(request: NextRequest) {
         is_read: false,
       })
 
-      // Email notification to staff
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || (profile as any).role || "HOD"
-      notifyLeaveHodDecision(admin, {
-        staffUserId: leavePlan.user_id,
-        staffName: "Staff Member",
-        decision: decision as "rejected" | "recommend_change",
-        hodName,
-        reason: recommendation || "",
-        leavePlanRequestId: leave_plan_request_id,
-      }).catch(() => {})
+      
+      // Send appropriate notification based on decision
+      if (decision === "recommend_change") {
+        // New email: HOD has proposed date changes
+        const { data: staffProfile } = await admin
+          .from("user_profiles")
+          .select("full_name")
+          .eq("id", leavePlan.user_id)
+          .single()
+        
+        notifyLeaveHodChangesProposed(admin, {
+          staffUserId: leavePlan.user_id,
+          staffName: staffProfile?.full_name || "Staff Member",
+          hodName,
+          originalStartDate: String(leavePlan.preferred_start_date || ""),
+          originalEndDate: String(leavePlan.preferred_end_date || ""),
+          proposedStartDate: nextStartDate,
+          proposedEndDate: nextEndDate,
+          hodNotes: recommendation || "Please review the proposed dates.",
+        }).catch((e) => console.error("[v0] Failed to send HOD changes notification:", e))
+      } else {
+        // Original email: HOD rejected the request
+        notifyLeaveHodDecision(admin, {
+          staffUserId: leavePlan.user_id,
+          staffName: "Staff Member",
+          decision: "rejected",
+          hodName,
+          reason: recommendation || "",
+          leavePlanRequestId: leave_plan_request_id,
+        }).catch(() => {})
+      }
     }
 
-    // If fully approved by all HODs → notify HR Leave Office
+    // If fully approved by all HODs → notify HR-Leave-Office-Admin
     if (nextStatus === "hod_approved" || nextStatus === "manager_confirmed") {
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
       notifyLeaveHodApproved(admin, {

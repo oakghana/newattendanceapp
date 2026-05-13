@@ -116,8 +116,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (roleFilter && roleFilter !== "all") {
-      if (roleFilter === "hr_leave_office") {
-        query = query.in("role", ["hr_leave_office", "hr_office"])
+      if (roleFilter === "leave_admin") {
+        query = query.in("role", ["leave_admin", "hr_office"])
       } else {
         query = query.eq("role", roleFilter)
       }
@@ -435,7 +435,7 @@ export async function POST(request: NextRequest) {
       console.error("[v0] Staff API - Profile insert/update error:", insertError)
 
       // Detect role enumeration constraint missing (common when adding new role values)
-      if (String(insertError.message || "").toLowerCase().includes("role_check") || String(insertError.details || "").toLowerCase().includes("role_check") || String(insertError.message || "").toLowerCase().includes("audit_staff")) {
+      if (String(insertError.message || "").toLowerCase().includes("role_check") || String(insertError.details || "").toLowerCase().includes("role_check") || String(insertError.message || "").toLowerCase().includes("audit_staff") || String(insertError.message || "").toLowerCase().includes("value too long")) {
         // Clean up auth user
         await adminSupabase.auth.admin.deleteUser(authUser.user.id)
         return createJsonResponse(
@@ -444,7 +444,7 @@ export async function POST(request: NextRequest) {
             error:
               "Database constraint prevents the new role from being saved. Please run the migration to update the user_profiles role constraint.",
             details:
-              "Suggested SQL (Postgres):\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;\nALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','hr_leave_office','director_hr','manager_hr'));",
+              "Suggested SQL (Postgres):\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;\nALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff','accounts','loan_office','leave_admin','hr_leave_office','regional_hr_leave','director_hr','manager_hr'));",
           },
           400,
         )

@@ -14,7 +14,6 @@ export interface LeavePolicyPayload {
 
 export const DEFAULT_LEAVE_TYPES: LeaveTypePolicy[] = [
   { leaveTypeKey: "annual", leaveTypeLabel: "Annual Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
-  { leaveTypeKey: "sick", leaveTypeLabel: "Sick Leave", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "maternity", leaveTypeLabel: "Maternity Leave", entitlementDays: 84, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "paternity", leaveTypeLabel: "Paternity Leave", entitlementDays: 5, leaveYearPeriod: "2026/2027", isEnabled: true },
   { leaveTypeKey: "study_with_pay", leaveTypeLabel: "Study Leave (With Pay)", entitlementDays: 30, leaveYearPeriod: "2026/2027", isEnabled: true },

@@ -125,7 +125,7 @@ export function LeaveRequestDetailPanel({
 
           {request.hr_office_reviewer_name && (
             <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
-              Reviewed by: <strong>{request.hr_office_reviewer_name}</strong> (HR Leave Office)
+              Reviewed by: <strong>{request.hr_office_reviewer_name}</strong> (HR-Leave-Office-Admin)
             </div>
           )}
         </CardContent>
@@ -269,7 +269,7 @@ export function LeaveRequestDetailPanel({
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p className="text-purple-700">
-              The HR Leave Office has prepared the leave approval memo. You can review and edit before final approval.
+              The HR-Leave-Office-Admin has prepared the leave approval memo. You can review and edit before final approval.
             </p>
             <Button size="sm" className="bg-purple-600 hover:bg-purple-700 w-full">
               <Pencil className="h-4 w-4 mr-1" />
