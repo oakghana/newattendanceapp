@@ -1,7 +1,8 @@
 "use client"
 
+import React from "react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { format } from "date-fns"
 import {
   ArrowUpRight,
@@ -149,6 +150,30 @@ export function LeaveManagementClient({
   })
   const [isExporting, setIsExporting] = useState(false)
   const [exportMessage, setExportMessage] = useState("")
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+  const [allHolidays, setAllHolidays] = useState<Array<{ date: string; name: string }>>([])
+
+  // Load holidays on mount for HR calculations
+  useEffect(() => {
+    const loadHolidays = async () => {
+      try {
+        const res = await fetch("/api/admin/holidays", { cache: "no-store" })
+        if (res.ok) {
+          const json = await res.json()
+          const holidayList = Array.isArray(json.holidays) ? json.holidays : []
+          setAllHolidays(
+            holidayList.map((h: any) => ({
+              date: String(h.holiday_date || ""),
+              name: String(h.holiday_name || "Holiday")
+            }))
+          )
+        }
+      } catch (e) {
+        console.log("[v0] Error loading holidays for HR:", e)
+      }
+    }
+    loadHolidays()
+  }, [])
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -156,6 +181,72 @@ export function LeaveManagementClient({
       toast({ title: `${label} copied`, description: "Template copied to clipboard." })
     } catch {
       toast({ title: "Copy failed", description: "Please copy manually.", variant: "destructive" })
+    }
+  }
+
+  // Helper function to calculate weekends in a date range
+  const calculateWeekends = (startDateStr: string | null, endDateStr: string | null) => {
+    if (!startDateStr || !endDateStr) return { weekends: [], weekendCount: 0, calendarDays: 0 }
+
+    const start = new Date(startDateStr)
+    const end = new Date(endDateStr)
+
+    if (end < start) return { weekends: [], weekendCount: 0, calendarDays: 0 }
+
+    const weekends = []
+    let current = new Date(start)
+    let weekendCount = 0
+
+    while (current <= end) {
+      const day = current.getDay()
+      if (day === 0 || day === 6) {
+        weekends.push({
+          date: current.toISOString().split("T")[0],
+          dayName: current.toLocaleDateString("en-US", { weekday: "short" })
+        })
+        weekendCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    return {
+      weekends,
+      weekendCount,
+      calendarDays: Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    }
+  }
+
+  // Helper function to calculate holidays in a date range
+  const calculateHolidaysInRange = (startDateStr: string | null, endDateStr: string | null) => {
+    if (!startDateStr || !endDateStr || allHolidays.length === 0) return { holidays: [], holidayCount: 0 }
+
+    const start = new Date(startDateStr)
+    const end = new Date(endDateStr)
+
+    if (end < start) return { holidays: [], holidayCount: 0 }
+
+    const holidaysInRange = []
+    let current = new Date(start)
+    let holidayCount = 0
+
+    while (current <= end) {
+      const currentDateStr = current.toISOString().split("T")[0]
+      const holiday = allHolidays.find((h) => h.date === currentDateStr)
+
+      if (holiday) {
+        holidaysInRange.push({
+          date: currentDateStr,
+          name: holiday.name,
+          dayName: current.toLocaleDateString("en-US", { weekday: "short" })
+        })
+        holidayCount++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    return {
+      holidays: holidaysInRange,
+      holidayCount
     }
   }
 
@@ -674,6 +765,7 @@ export function LeaveManagementClient({
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
+                  <th className="w-8 px-4 py-3"></th>
                   <th className="px-4 py-3">Staff</th>
                   <th className="px-4 py-3">Leave Type</th>
                   <th className="px-4 py-3">Start</th>
@@ -692,47 +784,98 @@ export function LeaveManagementClient({
                     end_date: null,
                     reason: "",
                   }
+                  const isExpanded = expandedRows[notification.id]
+                  const weekendData = calculateWeekends(leave.start_date, leave.end_date)
+                  const holidayData = calculateHolidaysInRange(leave.start_date, leave.end_date)
+
                   return (
-                    <tr key={notification.id} className="border-t border-slate-100 align-top">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">{notification.requester_name || "Staff"}</div>
-                        <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(String(leave.leave_type || "annual"))}</td>
-                      <td className="px-4 py-3">{formatDateSafe(leave.start_date)}</td>
-                      <td className="px-4 py-3">{formatDateSafe(leave.end_date)}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant="outline">{formatLeaveType(String(notification.status || "pending"))}</Badge>
-                      </td>
-                      <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
+                    <React.Fragment key={notification.id}>
+                      <tr className="border-t border-slate-100 align-top">
+                        <td className="px-4 py-3">
                           <Button
-                            onClick={() => handleApprove(notification.id)}
-                            disabled={processingId === notification.id}
                             size="sm"
-                            className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={() => setExpandedRows((prev) => ({ ...prev, [notification.id]: !prev[notification.id] }))}
                           >
-                            {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                            Approve
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </Button>
-                          <Button
-                            onClick={() => {
-                              const rejectReason = window.prompt("Provide rejection reason") || ""
-                              if (!rejectReason.trim()) return
-                              void handleDismiss(notification.id, rejectReason)
-                            }}
-                            disabled={processingId === notification.id}
-                            size="sm"
-                            variant="destructive"
-                            className="gap-1"
-                          >
-                            {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                            Reject
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{notification.requester_name || "Staff"}</div>
+                          <div className="text-xs text-slate-500">{formatLeaveType(String(notification.requester_role || "staff"))}</div>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{formatLeaveType(String(leave.leave_type || "annual"))}</td>
+                        <td className="px-4 py-3">{formatDateSafe(leave.start_date)}</td>
+                        <td className="px-4 py-3">{formatDateSafe(leave.end_date)}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline">{formatLeaveType(String(notification.status || "pending"))}</Badge>
+                        </td>
+                        <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleApprove(notification.id)}
+                              disabled={processingId === notification.id}
+                              size="sm"
+                              className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                            >
+                              {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                              Approve
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                const rejectReason = window.prompt("Provide rejection reason") || ""
+                                if (!rejectReason.trim()) return
+                                void handleDismiss(notification.id, rejectReason)
+                              }}
+                              disabled={processingId === notification.id}
+                              size="sm"
+                              variant="destructive"
+                              className="gap-1"
+                            >
+                              {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                              Reject
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-t border-slate-100 bg-slate-50/50">
+                          <td colSpan={8} className="px-8 py-4">
+                            <div className="space-y-4">
+                              {weekendData.weekendCount > 0 && (
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold text-slate-700 uppercase">Weekends ({weekendData.weekendCount} days)</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {weekendData.weekends.map((weekend) => (
+                                      <span key={weekend.date} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
+                                        {weekend.dayName} {weekend.date}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {holidayData.holidayCount > 0 && (
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold text-slate-700 uppercase">Public Holidays ({holidayData.holidayCount} day{holidayData.holidayCount !== 1 ? "s" : ""})</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {holidayData.holidays.map((holiday) => (
+                                      <span key={holiday.date} className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-1 text-xs text-orange-800">
+                                        {holiday.dayName} {holiday.date} ({holiday.name})
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {weekendData.weekendCount === 0 && holidayData.holidayCount === 0 && (
+                                <p className="text-xs text-slate-500">No weekends or holidays in selected period</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>
