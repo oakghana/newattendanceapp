@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { notifyLeaveHodDefermentRequest } from "@/lib/workflow-emails"
 
+function normalizeRole(role: string | null | undefined): string {
+  return String(role || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_")
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -109,16 +116,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the HOD of the staff member's department
-    const { data: hod, error: hodError } = await admin
+    // Get HOD for this staff member - search for any non-staff role in the same department
+    // We'll fetch all users in the department and filter by role normalization
+    const { data: deptUsers } = await admin
       .from("user_profiles")
-      .select("id, full_name, email, role")
+      .select("id, first_name, last_name, email, role")
       .eq("department_id", leaveStaffProfile.department_id)
-      .in("role", ["HOD", "Head of Department", "Head_of_Department", "Manager", "Head_Department"])
-      .single()
 
-    if (!hod || hodError) {
-      console.error("[v0] HOD not found for department:", leaveStaffProfile.department_id, hodError)
+    if (!deptUsers || deptUsers.length === 0) {
+      return NextResponse.json(
+        { error: "No users found in staff member's department" },
+        { status: 404 }
+      )
+    }
+
+    // Find a HOD/Manager from the department users
+    const hod = deptUsers.find((user: any) => {
+      const roleNorm = (user.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+      return ["hod", "head_of_department", "head_department", "manager", "department_head"].includes(roleNorm)
+    })
+
+    if (!hod) {
+      console.error("[v0] No HOD/Manager found in department:", leaveStaffProfile.department_id)
       return NextResponse.json(
         { error: "HOD or Manager not found for this department" },
         { status: 404 }
@@ -168,7 +187,7 @@ export async function POST(request: NextRequest) {
     notifyLeaveHodDefermentRequest(admin, {
       hodUserId: hod.id,
       staffName: requestingStaffProfile?.full_name || "Staff Member",
-      hodName: hod.full_name || "Manager",
+      hodName: `${hod.first_name || ""} ${hod.last_name || ""}`.trim() || "Manager",
       leaveType: leaveRequest.leave_type_key || "Leave",
       originalLeaveStart: leaveRequest.preferred_start_date,
       originalLeaveEnd: leaveRequest.preferred_end_date,
@@ -280,10 +299,10 @@ export async function GET(request: NextRequest) {
     // Default: Get deferment requests
     let query = admin.from("leave_deferment_requests").select(
       `*,
-       leave_plan_requests(id, user_id, leave_type_key, preferred_start_date, preferred_end_date, requested_days, hod_user_id, regional_manager_id),
-       hod_reviewer:hod_reviewer_id(id, full_name, email),
-       hr_office_reviewer:hr_office_reviewer_id(id, full_name, email),
-       user_profiles(id, full_name, email)`
+       leave_plan_requests(id, user_id, leave_type_key, preferred_start_date, preferred_end_date, requested_days),
+       hod_reviewer:hod_reviewer_id(id, first_name, last_name, email),
+       hr_office_reviewer:hr_office_reviewer_id(id, first_name, last_name, email),
+       user_profiles(id, first_name, last_name, email)`
     )
 
     // Filter based on role
