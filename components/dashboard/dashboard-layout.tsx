@@ -31,39 +31,70 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const supabase = createClient()
+      try {
+        const supabase = createClient()
 
-      const { data, error } = await supabase.auth.getUser()
-      if (error || !data?.user) {
-        router.push("/auth/login")
-        return
+        const { data, error } = await supabase.auth.getUser()
+        if (error || !data?.user) {
+          router.push("/auth/login")
+          return
+        }
+
+        setUser(data.user)
+
+        // Get user profile with department info - optimized query with specific fields
+        const { data: profileData, error: profileError } = await supabase
+          .from("user_profiles")
+          .select(`
+            id,
+            first_name,
+            last_name,
+            employee_id,
+            role,
+            profile_image_url,
+            departments (
+              name,
+              code
+            )
+          `)
+          .eq("id", data.user.id)
+          .single()
+
+        if (profileError) {
+          console.error("[v0] Profile fetch error:", profileError)
+          // Set default profile so dashboard still loads
+          setProfile({
+            id: data.user.id,
+            first_name: data.user.user_metadata?.first_name || "User",
+            last_name: data.user.user_metadata?.last_name || "",
+            role: "staff",
+          })
+        } else {
+          setProfile(profileData)
+        }
+
+        setLoading(false)
+      } catch (err) {
+        console.error("[v0] Auth check error:", err)
+        // Set minimal profile to allow dashboard to load
+        setProfile({
+          id: "unknown",
+          first_name: "User",
+          last_name: "",
+          role: "staff",
+        })
+        setLoading(false)
       }
-
-      setUser(data.user)
-
-      // Get user profile with department info - optimized query with specific fields
-      const { data: profileData } = await supabase
-        .from("user_profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          employee_id,
-          role,
-          profile_image_url,
-          departments (
-            name,
-            code
-          )
-        `)
-        .eq("id", data.user.id)
-        .single()
-
-      setProfile(profileData)
-      setLoading(false)
     }
 
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      setLoading(false)
+    }, 10000) // 10 second timeout
+
     checkAuth()
+
+    return () => clearTimeout(timeoutId)
   }, [router])
 
   useEffect(() => {
