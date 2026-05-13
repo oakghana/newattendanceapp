@@ -27,6 +27,7 @@ export default async function LeaveManagementPage() {
 
   let staffRequests = []
   let managerNotifications = []
+  let approvedStaffRequests = [] // NEW: For HOD/RM deferment/recall operations
   let hasHodLinkage = false
 
   try {
@@ -175,6 +176,46 @@ export default async function LeaveManagementPage() {
 
   }
 
+  // Fetch approved leaves from staff for HOD/RM to perform deferment/recall
+  if (canReviewLeave && profile.department_id) {
+    // Get all staff in this HOD/RM's department
+    const { data: deptStaff } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("department_id", profile.department_id)
+
+    const staffIds = (deptStaff || []).map((s: any) => s.id)
+
+    if (staffIds.length > 0) {
+      const { data: approvedLeaves } = await admin
+        .from("leave_plan_requests")
+        .select(`
+          id,
+          user_id,
+          preferred_start_date,
+          preferred_end_date,
+          leave_type_key,
+          reason,
+          status,
+          created_at
+        `)
+        .in("user_id", staffIds)
+        .in("status", ["approved", "hr_approved"])
+        .order("preferred_start_date", { ascending: true })
+
+      approvedStaffRequests = (approvedLeaves || []).map((req: any) => ({
+        id: String(req.id),
+        user_id: String(req.user_id),
+        start_date: req.preferred_start_date,
+        end_date: req.preferred_end_date,
+        reason: req.reason || "",
+        leave_type: req.leave_type_key || "annual",
+        status: req.status,
+        created_at: req.created_at,
+      }))
+    }
+  }
+
   return (
     <div className="leave-theme">
       <LeaveManagementModuleClient
@@ -189,6 +230,7 @@ export default async function LeaveManagementPage() {
         hasHodLinkage={hasHodLinkage}
         initialStaffRequests={staffRequests}
         initialManagerNotifications={managerNotifications}
+        initialApprovedStaffRequests={approvedStaffRequests}
       />
     </div>
   )

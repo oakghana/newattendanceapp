@@ -65,6 +65,7 @@ interface LeaveManagementClientProps {
   inactivityDays: number
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
+  initialApprovedStaffRequests?: LeaveRequest[]
 }
 
 interface HrMemoTemplate {
@@ -90,6 +91,7 @@ export function LeaveManagementClient({
   inactivityDays,
   initialStaffRequests,
   initialManagerNotifications,
+  initialApprovedStaffRequests = [],
 }: LeaveManagementClientProps) {
     const formatDateSafe = (value?: string | null) => {
       if (!value) return "-"
@@ -531,7 +533,18 @@ export function LeaveManagementClient({
   }
 
   const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
-  const approvedRequests = useMemo(() => staffRequests.filter((r) => approvedStatuses.has(String(r.status || ""))), [staffRequests])
+  const approvedRequests = useMemo(() => {
+    // For HOD/RM: use staff's approved leaves for deferment/recall
+    const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const isHodRm = ["regional_manager", "department_head", "admin", "hr_officer"].includes(roleNorm)
+    
+    if (isHodRm && initialApprovedStaffRequests && initialApprovedStaffRequests.length > 0) {
+      return initialApprovedStaffRequests
+    }
+    
+    // For staff: use their own approved leaves
+    return staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
+  }, [staffRequests, initialApprovedStaffRequests, userRole])
   
   const pendingNotifications = useMemo(() => managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending"), [managerNotifications])
   const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])

@@ -32,6 +32,7 @@ interface LeaveManagementModuleClientProps {
   hasHodLinkage: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
+  initialApprovedStaffRequests?: any[]
 }
 
 export function LeaveManagementModuleClient({
@@ -46,6 +47,7 @@ export function LeaveManagementModuleClient({
   hasHodLinkage,
   initialStaffRequests,
   initialManagerNotifications,
+  initialApprovedStaffRequests = [],
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
   const normalizedRole = normalizeRole(userRole)
@@ -90,6 +92,7 @@ export function LeaveManagementModuleClient({
             inactivityDays={inactivityDays}
             initialStaffRequests={initialStaffRequests}
             initialManagerNotifications={initialManagerNotifications}
+            initialApprovedStaffRequests={initialApprovedStaffRequests}
           />
         </TabsContent>
 
