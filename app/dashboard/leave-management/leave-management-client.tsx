@@ -1911,8 +1911,17 @@ function LeaveRequestCard({
     <Card className={`overflow-hidden border shadow-sm ${emphasizeApproved ? "border-emerald-200 bg-emerald-50/70" : statusTone}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
+          <div className="flex-1">
+            <div className="flex flex-col gap-1 mb-2">
+              <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
+              {(request.user_name || request.rank || request.location) && (
+                <div className="text-sm text-slate-600 flex flex-wrap items-center gap-2">
+                  {request.user_name && <span className="font-medium text-slate-700">{request.user_name}</span>}
+                  {request.rank && <span>• {request.rank}</span>}
+                  {request.location && <span>• {request.location}</span>}
+                </div>
+              )}
+            </div>
             <CardDescription className="mt-1 line-clamp-2">{request.reason}</CardDescription>
           </div>
           <div className="flex gap-2">
