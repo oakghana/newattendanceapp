@@ -1428,7 +1428,7 @@ export function LeaveManagementClient({
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {staffRequests.map((request) => (
-                    <LeaveRequestCard key={request.id} request={request} canEdit={editableStatuses.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} />
+                    <LeaveRequestCard key={request.id} request={request} canEdit={editableStatuses.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} toast={toast} />
                   ))}
                 </div>
               )}
@@ -1447,7 +1447,7 @@ export function LeaveManagementClient({
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {approvedRequests.map((request) => (
-                    <LeaveRequestCard key={request.id} request={request} emphasizeApproved />
+                    <LeaveRequestCard key={request.id} request={request} emphasizeApproved toast={toast} />
                   ))}
                 </div>
               )}
@@ -1798,12 +1798,18 @@ function LeaveRequestCard({
   emphasizeApproved = false,
   canEdit = false,
   onEdit,
+  toast,
 }: {
   request: LeaveRequest
   emphasizeApproved?: boolean
   canEdit?: boolean
   onEdit?: () => void
+  toast?: ReturnType<typeof useToast>["toast"]
 }) {
+  const [respondingToHod, setRespondingToHod] = useState(false)
+  const [counterStartDate, setCounterStartDate] = useState("")
+  const [counterEndDate, setCounterEndDate] = useState("")
+  const [counterReason, setCounterReason] = useState("")
   const normalizedStatus = String(request.status || "").toLowerCase()
   const isApproved = ["approved", "hr_approved"].includes(normalizedStatus)
   const isPending = [
@@ -1816,6 +1822,64 @@ function LeaveRequestCard({
     "hod_approved",
     "hr_office_forwarded",
   ].includes(normalizedStatus)
+
+  // Check if HOD has requested changes
+  const hasHodChanges = (request as any)?.hod_decision === "pending_staff_response"
+  const hodSuggestedStart = (request as any)?.adjusted_start_date
+  const hodSuggestedEnd = (request as any)?.adjusted_end_date
+
+  const handleAcceptHodChanges = async () => {
+    try {
+      const response = await fetch("/api/leave/respond-to-hod-changes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leaveRequestId: request.id,
+          action: "accept",
+        }),
+      })
+      
+      if (response.ok) {
+        toast?.({ title: "Accepted", description: "HOD date changes accepted successfully" })
+        setRespondingToHod(false)
+        window.location.reload()
+      }
+    } catch (error) {
+      toast?.({ title: "Error", description: "Failed to accept changes", variant: "destructive" })
+    }
+  }
+
+  const handleSubmitCounterOffer = async () => {
+    if (!counterStartDate || !counterEndDate) {
+      toast?.({ title: "Error", description: "Please provide counter-offer dates", variant: "destructive" })
+      return
+    }
+
+    try {
+      const response = await fetch("/api/leave/respond-to-hod-changes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leaveRequestId: request.id,
+          action: "counter",
+          counterStartDate,
+          counterEndDate,
+          reason: counterReason,
+        }),
+      })
+      
+      if (response.ok) {
+        toast?.({ title: "Submitted", description: "Counter-offer submitted to HOD for approval" })
+        setRespondingToHod(false)
+        setCounterStartDate("")
+        setCounterEndDate("")
+        setCounterReason("")
+        window.location.reload()
+      }
+    } catch (error) {
+      toast?.({ title: "Error", description: "Failed to submit counter-offer", variant: "destructive" })
+    }
+  }
 
   const statusTone =
     isApproved
@@ -1832,9 +1896,14 @@ function LeaveRequestCard({
             <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
             <CardDescription className="mt-1 line-clamp-2">{request.reason}</CardDescription>
           </div>
-          <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
-            {formatLeaveType(request.status)}
-          </Badge>
+          <div className="flex gap-2">
+            {hasHodChanges && (
+              <Badge className="bg-amber-600 text-white hover:bg-amber-600">HOD Changes Requested</Badge>
+            )}
+            <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
+              {formatLeaveType(request.status)}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1848,7 +1917,91 @@ function LeaveRequestCard({
             <p className="mt-1 font-semibold text-slate-900">{format(new Date(request.end_date), "MMM dd, yyyy")}</p>
           </div>
         </div>
-        {canEdit && onEdit && (
+
+        {/* HOD Suggested Changes */}
+        {hasHodChanges && hodSuggestedStart && hodSuggestedEnd && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <p className="text-sm font-semibold text-amber-900 mb-2">HOD Suggested Dates</p>
+            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+              <div className="rounded border border-amber-200 bg-white p-2">
+                <p className="text-xs text-amber-700 font-medium">Start</p>
+                <p className="font-semibold text-amber-900">{format(new Date(hodSuggestedStart), "MMM dd, yyyy")}</p>
+              </div>
+              <div className="rounded border border-amber-200 bg-white p-2">
+                <p className="text-xs text-amber-700 font-medium">End</p>
+                <p className="font-semibold text-amber-900">{format(new Date(hodSuggestedEnd), "MMM dd, yyyy")}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HOD Response UI */}
+        {hasHodChanges && !respondingToHod && (
+          <div className="flex gap-2">
+            <Button
+              onClick={handleAcceptHodChanges}
+              size="sm"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              Accept Changes
+            </Button>
+            <Button
+              onClick={() => setRespondingToHod(true)}
+              size="sm"
+              variant="outline"
+              className="flex-1"
+            >
+              Counter-Offer
+            </Button>
+          </div>
+        )}
+
+        {/* Counter-Offer Form */}
+        {hasHodChanges && respondingToHod && (
+          <div className="space-y-3 border-t pt-3">
+            <p className="text-sm font-semibold text-slate-700">Suggest Alternative Dates</p>
+            <input
+              type="date"
+              value={counterStartDate}
+              onChange={(e) => setCounterStartDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              placeholder="Start Date"
+            />
+            <input
+              type="date"
+              value={counterEndDate}
+              onChange={(e) => setCounterEndDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              placeholder="End Date"
+            />
+            <textarea
+              value={counterReason}
+              onChange={(e) => setCounterReason(e.target.value)}
+              placeholder="Reason for counter-offer (optional)"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              rows={2}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSubmitCounterOffer}
+                size="sm"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Submit Counter
+              </Button>
+              <Button
+                onClick={() => setRespondingToHod(false)}
+                size="sm"
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {canEdit && onEdit && !hasHodChanges && (
           <Button variant="outline" size="sm" onClick={onEdit} className="w-full">
             Edit Before Review
           </Button>
