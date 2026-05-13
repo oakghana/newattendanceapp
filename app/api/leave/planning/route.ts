@@ -931,15 +931,31 @@ export async function GET(request: NextRequest) {
       const requestUserIds = (data || []).map((row: any) => String(row?.user?.id || row?.user_id || "")).filter(Boolean)
       const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
 
-      // Admin users should also see all HOD reviews
+      // Admin users should see all HOD/RM reviews and pending requests
       let reviews: any[] = []
       if (isAdmin) {
-        const { data: hodReviews, error: reviewError } = await admin
-          .from("leave_plan_request_hod_review")
+        // Fetch all leave plan reviews (already completed)
+        const { data: existingReviews, error: reviewError } = await admin
+          .from("leave_plan_reviews")
           .select(`
-            *,
-            leave_plan_request:leave_plan_request_id (
-              *,
+            id,
+            decision,
+            recommendation,
+            reviewed_at,
+            reviewer_id,
+            reviewer_role,
+            leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
+              id,
+              leave_year_period,
+              preferred_start_date,
+              preferred_end_date,
+              leave_type_key,
+              entitlement_days,
+              requested_days,
+              reason,
+              status,
+              is_archived,
+              submitted_at,
               user:user_profiles!leave_plan_requests_user_id_fkey (
                 id, first_name, last_name, employee_id,
                 departments(name, code)
@@ -948,8 +964,49 @@ export async function GET(request: NextRequest) {
           `)
           .order("created_at", { ascending: false })
         
+        // Also fetch pending requests that haven't been reviewed yet by HOD
+        const { data: pendingRequests } = await admin
+          .from("leave_plan_requests")
+          .select(`
+            id,
+            leave_year_period,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            entitlement_days,
+            requested_days,
+            reason,
+            status,
+            is_archived,
+            submitted_at,
+            user:user_profiles!leave_plan_requests_user_id_fkey (
+              id, first_name, last_name, employee_id,
+              departments(name, code)
+            )
+          `)
+          .eq("status", "pending_hod_review")
+          .order("created_at", { ascending: false })
+        
+        // Combine: show reviewed items plus pending items
         if (!reviewError) {
-          reviews = hodReviews || []
+          reviews = existingReviews || []
+          
+          // Add pending requests that aren't already in reviews
+          const reviewedRequestIds = new Set((existingReviews || []).map((r: any) => String(r?.leave_plan_request?.id || "")))
+          const pendingNeedsReview = (pendingRequests || []).filter((r: any) => !reviewedRequestIds.has(String(r.id || "")))
+          
+          // Transform pending requests to match review structure
+          const pendingAsReviews = pendingNeedsReview.map((req: any) => ({
+            id: `pending-${req.id}`,
+            decision: "pending",
+            recommendation: null,
+            reviewed_at: null,
+            reviewer_id: null,
+            reviewer_role: null,
+            leave_plan_request: req
+          }))
+          
+          reviews = [...reviews, ...pendingAsReviews]
         }
       }
 
