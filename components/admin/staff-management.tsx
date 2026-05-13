@@ -647,6 +647,7 @@ export function StaffManagement() {
                   <SelectItem value="audit_staff">Audit Staff</SelectItem>
                   <SelectItem value="accounts">Accounts</SelectItem>
                   <SelectItem value="loan_office">Loan Office</SelectItem>
+                  <SelectItem value="loan_office_admin">Loan Office Admin</SelectItem>
                   <SelectItem value="leave_admin">HR-Leave-Office-Admin</SelectItem>
                   <SelectItem value="manager_hr">Manager HR</SelectItem>
                   <SelectItem value="director_hr">Director HR</SelectItem>
@@ -807,6 +808,7 @@ export function StaffManagement() {
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="loan_office_admin">Loan Office Admin</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="leave_admin">HR-Leave-Office-Admin</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="regional_hr_leave">Regional HR Leave</SelectItem>}
@@ -986,6 +988,7 @@ export function StaffManagement() {
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="loan_office_admin">Loan Office Admin</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="leave_admin">HR-Leave-Office-Admin</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="regional_hr_leave">Regional HR Leave</SelectItem>}
