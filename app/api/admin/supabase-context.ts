@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
           user:user_profiles!left (
             first_name,
             last_name,
-            staff_number
+            staff_number,
+            location,
+            rank
           )
         `
         )
@@ -72,6 +74,8 @@ export async function POST(request: NextRequest) {
         id: leave.id,
         staff_name: `${leave.user?.first_name || ""} ${leave.user?.last_name || ""}`.trim(),
         staff_number: leave.user?.staff_number || "-",
+        location: leave.user?.location || "-",
+        rank: leave.user?.rank || "-",
         leave_type_key: leave.leave_type_key,
         preferred_start_date: leave.preferred_start_date,
         preferred_end_date: leave.preferred_end_date,

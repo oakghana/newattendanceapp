@@ -15,6 +15,7 @@ import {
   FileClock,
   Info,
   Loader2,
+  RefreshCw,
   Sparkles,
   XCircle,
 } from "lucide-react"
@@ -971,6 +972,38 @@ export function LeaveManagementClient({
               </div>
             </CardContent>
           )}
+        </Card>
+      )}
+
+      {/* HOD/Regional Manager Deferment & Recall Section */}
+      {(normalizedRole === "department_head" || normalizedRole === "regional_manager") && (
+        <Card className="overflow-hidden border-blue-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-blue-200 bg-blue-50 pb-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Manage Staff Leave Deferment & Recall</h3>
+                <p className="mt-1 text-sm text-slate-600">Process leave deferment requests from staff and initiate leave recalls when needed</p>
+              </div>
+              <Link href="/dashboard/leave/deferment-recall" className="inline-block">
+                <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
+                  <RefreshCw className="h-4 w-4" />
+                  Manage Deferments & Recalls
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4">
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <p className="text-sm text-blue-900">
+                <strong>Deferment:</strong> Process staff requests to reschedule approved leave to different dates
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+              <p className="text-sm text-amber-900">
+                <strong>Recall:</strong> Call back staff from approved leave in case of emergencies. Unused leave days will be restored to their balance
+              </p>
+            </div>
+          </CardContent>
         </Card>
       )}
 

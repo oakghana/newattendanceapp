@@ -16,6 +16,8 @@ interface LeaveRequest {
   status: string
   reason?: string
   created_at: string
+  location?: string
+  rank?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -79,6 +81,8 @@ export async function POST(request: NextRequest) {
     worksheet.columns = [
       { header: "Staff Name", key: "staff_name", width: 20 },
       { header: "Staff Number", key: "staff_number", width: 15 },
+      { header: "Location", key: "location", width: 18 },
+      { header: "Rank", key: "rank", width: 20 },
       { header: "Leave Type", key: "leave_type_key", width: 20 },
       { header: "Start Date", key: "preferred_start_date", width: 15 },
       { header: "End Date", key: "preferred_end_date", width: 15 },
@@ -99,6 +103,8 @@ export async function POST(request: NextRequest) {
       worksheet.addRow({
         staff_name: leave.staff_name,
         staff_number: leave.staff_number,
+        location: leave.location || "-",
+        rank: leave.rank || "-",
         leave_type_key: leave.leave_type_key.replace(/_/g, " ").toUpperCase(),
         preferred_start_date: leave.preferred_start_date,
         preferred_end_date: leave.preferred_end_date,
