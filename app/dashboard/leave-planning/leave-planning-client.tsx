@@ -1172,14 +1172,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
       const isHoliday = holidays.find((h) => h.date === currentDateStr)
       
-      console.log("[v0] Checking date:", currentDateStr, "isWeekend:", isWeekend, "isHoliday:", !!isHoliday)
-      
       if (isWeekend || isHoliday) {
         count++
       }
       current.setDate(current.getDate() + 1)
     }
-    console.log("[v0] Weekend/Holiday count from", startStr, "to", endStr, "=", count)
     return count
   }
 

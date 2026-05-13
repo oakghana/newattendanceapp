@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
         .insert([{
           leave_plan_request_id,
           reviewer_id: user.id,
-          reviewer_role: role,
+          reviewer_role: role === "leave_admin" || role === "hr_leave_office" ? "admin" : role,
           decision,
           recommendation: recommendation || null,
           reviewed_at: new Date().toISOString(),
@@ -134,9 +134,6 @@ export async function POST(request: NextRequest) {
       if (createError) {
         console.log("[v0] Admin review insert failed with code:", createError.code, "message:", createError.message)
         return NextResponse.json({ error: `Database error: ${createError.message}` }, { status: 400 })
-      }
-      if (!newReview) {
-        return NextResponse.json({ error: "Failed to create review - no data returned" }, { status: 400 })
       }
       review = newReview
     } else {

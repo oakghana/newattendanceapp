@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
         .insert([{
           leave_plan_stagger_request_id,
           reviewer_id: user.id,
-          reviewer_role: role,
+          reviewer_role: role === "leave_admin" || role === "hr_leave_office" ? "admin" : role,
           decision,
           recommendation: recommendation || null,
           reviewed_at: new Date().toISOString(),
@@ -127,11 +127,7 @@ export async function POST(request: NextRequest) {
         .select("id")
         .single()
 
-      console.log("[v0] Admin stagger review creation - createError:", createError?.message || "No error")
-      console.log("[v0] Admin stagger review creation - newReview:", newReview?.id || "No review")
-
       if (createError) {
-        console.log("[v0] Admin stagger review insert failed with code:", createError.code, "message:", createError.message)
         return NextResponse.json({ error: `Database error: ${createError.message}` }, { status: 400 })
       }
       if (!newReview) {
