@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
           leave_plan_stagger_request_id,
           reviewer_id: user.id,
           reviewer_role: role,
-          decision: null,
+          decision: "pending_review",
           recommendation: null,
           reviewed_at: null,
         }])
