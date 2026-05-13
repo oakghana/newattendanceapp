@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
       .trim()
       .replace(/[-\s]+/g, "_")
 
-    if (!["regional_manager", "department_head"].includes(role)) {
-      return NextResponse.json({ error: "Only managers can review stagger requests." }, { status: 403 })
+    if (!["regional_manager", "department_head", "admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)) {
+      return NextResponse.json({ error: "Only admins, managers can review stagger requests." }, { status: 403 })
     }
 
     const body = await request.json()
@@ -105,20 +105,33 @@ export async function POST(request: NextRequest) {
       // Review already exists (HOD/RM assigned)
       review = existingReview
     } else if (isAdmin) {
-      // Admin creating new review
+      // Admin creating new review - must have valid leave_plan_stagger_request_id
+      if (!leave_plan_stagger_request_id) {
+        return NextResponse.json({ error: "leave_plan_stagger_request_id is required to create review" }, { status: 400 })
+      }
+      
       const { data: newReview, error: createError } = await admin
         .from("leave_plan_stagger_reviews")
-        .insert({
+        .insert([{
           leave_plan_stagger_request_id,
           reviewer_id: user.id,
           reviewer_role: role,
-          created_at: new Date().toISOString(),
-        })
+          decision: null,
+          recommendation: null,
+          reviewed_at: null,
+        }])
         .select("id")
         .single()
 
-      if (createError || !newReview) {
-        return NextResponse.json({ error: "Failed to create review assignment." }, { status: 400 })
+      console.log("[v0] Admin stagger review creation - createError:", createError?.message || "No error")
+      console.log("[v0] Admin stagger review creation - newReview:", newReview?.id || "No review")
+
+      if (createError) {
+        console.log("[v0] Admin stagger review insert failed with code:", createError.code, "message:", createError.message)
+        return NextResponse.json({ error: `Database error: ${createError.message}` }, { status: 400 })
+      }
+      if (!newReview) {
+        return NextResponse.json({ error: "Failed to create review - no data returned" }, { status: 400 })
       }
       review = newReview
     } else {
