@@ -86,9 +86,13 @@ export async function POST(request: NextRequest) {
     }
 
     // For HOD/RM: review must already exist (assigned)
-    // For admin: can create new review if doesn't exist
+    // For admin: create review with the actual decision being submitted
     const isAdmin = ["admin", "leave_admin", "hr_leave_office", "hr_office"].includes(role)
     
+    if (!decision) {
+      return NextResponse.json({ error: "Decision is required to submit review" }, { status: 400 })
+    }
+
     let review: any
     const { data: existingReview, error: reviewError } = await admin
       .from("leave_plan_stagger_reviews")
@@ -105,7 +109,7 @@ export async function POST(request: NextRequest) {
       // Review already exists (HOD/RM assigned)
       review = existingReview
     } else if (isAdmin) {
-      // Admin creating new review - must have valid leave_plan_stagger_request_id
+      // Admin creating new review with actual decision
       if (!leave_plan_stagger_request_id) {
         return NextResponse.json({ error: "leave_plan_stagger_request_id is required to create review" }, { status: 400 })
       }
@@ -116,9 +120,9 @@ export async function POST(request: NextRequest) {
           leave_plan_stagger_request_id,
           reviewer_id: user.id,
           reviewer_role: role,
-          decision: "pending_review",
-          recommendation: null,
-          reviewed_at: null,
+          decision,
+          recommendation: recommendation || null,
+          reviewed_at: new Date().toISOString(),
         }])
         .select("id")
         .single()

@@ -920,7 +920,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   )
 }
 
-// �����── Main Component ───────────────────────────────────────────────────────────
+// �������── Main Component ───────────────────────────────────────────────────────────
 export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -1030,7 +1030,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────��─���──���──────────────────────────────────�����──
+  // ── Computed ─────────────����─���──���──────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1135,51 +1135,51 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     }
   }, [startDate, endDate, holidays])
 
+  // Helper function to calculate weekends and holidays in a date range
+  const calculateWeekendHolidayCount = (startStr: string, endStr: string): number => {
+    if (!startStr || !endStr || !holidays.length) return 0
+    
+    const start = new Date(startStr)
+    const end = new Date(endStr)
+    
+    if (end < start || isNaN(start.getTime()) || isNaN(end.getTime())) return 0
+    
+    let count = 0
+    let current = new Date(start)
+    
+    while (current <= end) {
+      const dayOfWeek = current.getDay()
+      const currentDateStr = current.toISOString().split('T')[0]
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+      const isHoliday = holidays.find((h) => h.date === currentDateStr)
+      
+      if (isWeekend || isHoliday) {
+        count++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    return count
+  }
+
   // Auto-calculate holidays for adjusted dates in HR office tab
+  // When HR office changes adjusted dates, auto-populate the weekends & holidays field
   useEffect(() => {
     if (!holidays.length) return
 
-    // For each request with adjusted dates, calculate holidays and weekends in that range
-    const adjustedRequests = Object.keys(officeAdjStart).concat(Object.keys(officeAdjEnd))
-    const uniqueIds = [...new Set(adjustedRequests)]
+    // Handle HR office adjusted dates
+    const hrAdjustedRequests = Object.keys(officeAdjStart).concat(Object.keys(officeAdjEnd))
+    const hrUniqueIds = [...new Set(hrAdjustedRequests)]
 
-    uniqueIds.forEach((requestId) => {
+    hrUniqueIds.forEach((requestId) => {
       const adjStart = officeAdjStart[requestId]
       const adjEnd = officeAdjEnd[requestId]
+      
+      // Skip if already manually set
+      if (officeHolidayDays[requestId]) return
 
-      // Only calculate if both dates exist and we haven't manually set it yet
-      if (!adjStart || !adjEnd) return
-      if (officeHolidayDays[requestId]) return // Skip if already manually set
-
-      const start = new Date(adjStart)
-      const end = new Date(adjEnd)
-
-      if (end < start || isNaN(start.getTime()) || isNaN(end.getTime())) return
-
-      // Count holidays and weekends in the adjusted date range
-      let holidayCount = 0
-      let current = new Date(start)
-
-      while (current <= end) {
-        const dayOfWeek = current.getDay()
-        const currentDateStr = current.toISOString().split('T')[0]
-        
-        // Check if it's a weekend (Saturday=6 or Sunday=0)
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-        
-        // Check if it's a holiday
-        const isHoliday = holidays.find((h) => h.date === currentDateStr)
-        
-        // Count both weekends and holidays
-        if (isWeekend || isHoliday) {
-          holidayCount++
-        }
-        current.setDate(current.getDate() + 1)
-      }
-
-      // Auto-populate the holiday days field with weekends + holidays
-      if (holidayCount > 0 && !officeHolidayDays[requestId]) {
-        setOfficeHolidayDays((p) => ({ ...p, [requestId]: String(holidayCount) }))
+      const count = calculateWeekendHolidayCount(adjStart, adjEnd)
+      if (count > 0) {
+        setOfficeHolidayDays((p) => ({ ...p, [requestId]: String(count) }))
       }
     })
   }, [officeAdjStart, officeAdjEnd, holidays, officeHolidayDays])
