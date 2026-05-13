@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { format } from "date-fns"
 import {
   ArrowUpRight,
@@ -459,17 +459,19 @@ export function LeaveManagementClient({
     }
   }
 
-  const pendingRequests = staffRequests.filter((r) => pendingStatuses.has(String(r.status || "")))
-  const approvedRequests = staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
-  const pendingNotifications = managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending")
-  const adminAllPending = pendingNotifications
-  const adminStaffQueue = pendingNotifications.filter((n) => {
-    const role = String(n.requester_role || "").toLowerCase()
-    return ["staff", "nsp", "intern", "it-admin", "it_admin", "contract"].includes(role)
-  })
-  const adminHodQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "department_head")
-  const adminRegionalQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager")
-  const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
+  const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
+  const approvedRequests = useMemo(() => staffRequests.filter((r) => approvedStatuses.has(String(r.status || ""))), [staffRequests])
+  
+  const pendingNotifications = useMemo(() => managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending"), [managerNotifications])
+  const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
+  const adminStaffQueue = useMemo(() => 
+    pendingNotifications.filter((n) => {
+      const role = String(n.requester_role || "").toLowerCase()
+      return ["staff", "nsp", "intern", "it-admin", "it_admin", "contract"].includes(role)
+    }), [pendingNotifications])
+  const adminHodQueue = useMemo(() => pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "department_head"), [pendingNotifications])
+  const adminRegionalQueue = useMemo(() => pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager"), [pendingNotifications])
+  const adminDelayedQueue = useMemo(() => pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays), [pendingNotifications, inactivityDays])
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
