@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { notifyLeaveHodDefermentRequest } from "@/lib/workflow-emails"
 
 export async function POST(request: NextRequest) {
   try {
@@ -110,6 +111,24 @@ export async function POST(request: NextRequest) {
           message: `Your leave deferment request for ${requested_deferment_period} has been submitted to your HOD/Manager for approval.`,
         },
       ])
+
+    // Send notification to HOD/Regional Manager
+    const { data: staffProfile } = await admin
+      .from("user_profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single()
+
+    notifyLeaveHodDefermentRequest(admin, {
+      hodUserId: hod.id,
+      staffName: staffProfile?.full_name || "Staff Member",
+      hodName: hod.full_name || "Manager",
+      leaveType: leaveRequest.leave_type_key || "Leave",
+      originalLeaveStart: leaveRequest.preferred_start_date,
+      originalLeaveEnd: leaveRequest.preferred_end_date,
+      requestedDefermentPeriod: requested_deferment_period,
+      reason: reason || undefined,
+    }).catch((e) => console.error("[v0] Failed to send HOD notification:", e))
 
     return NextResponse.json({
       success: true,

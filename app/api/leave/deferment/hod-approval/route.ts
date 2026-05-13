@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { notifyLeaveDefermentApprovedByHod, notifyLeaveDefermentRejectedByHod } from "@/lib/workflow-emails"
 
 export async function POST(request: NextRequest) {
   try {
@@ -118,6 +119,40 @@ export async function POST(request: NextRequest) {
           message,
         },
       ])
+
+    // Send email notifications
+    const { data: staffProfile } = await admin
+      .from("user_profiles")
+      .select("full_name")
+      .eq("id", defermentRequest.user_id)
+      .single()
+
+    const { data: approvedLeave } = await admin
+      .from("leave_plan_requests")
+      .select("leave_type_key, preferred_start_date, preferred_end_date")
+      .eq("id", defermentRequest.leave_plan_request_id)
+      .single()
+
+    const hodName = `${(user as any).first_name || ""} ${(user as any).last_name || ""}`.trim() || "Your Manager"
+
+    if (decision === "approved") {
+      notifyLeaveDefermentApprovedByHod(admin, {
+        staffUserId: defermentRequest.user_id,
+        staffName: staffProfile?.full_name || "Staff Member",
+        hodName,
+        leaveType: approvedLeave?.leave_type_key || "Leave",
+        defermentPeriod: defermentRequest.requested_deferment_period,
+        hodNotes: hod_notes || undefined,
+      }).catch((e) => console.error("[v0] Failed to send approval email:", e))
+    } else if (decision === "rejected") {
+      notifyLeaveDefermentRejectedByHod(admin, {
+        staffUserId: defermentRequest.user_id,
+        staffName: staffProfile?.full_name || "Staff Member",
+        hodName,
+        leaveType: approvedLeave?.leave_type_key || "Leave",
+        reason: hod_notes || undefined,
+      }).catch((e) => console.error("[v0] Failed to send rejection email:", e))
+    }
 
     return NextResponse.json({
       success: true,
