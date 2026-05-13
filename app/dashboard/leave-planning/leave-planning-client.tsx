@@ -1877,7 +1877,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Render ──────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ── Header Banner ──────�����───────────────────────────────────── */}
+      {/* ─�� Header Banner ──────�����───────────────────────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -2011,7 +2011,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-slate-500">
-                      Current cycle auto-detected: <strong>{activeLeaveYearPeriod}</strong> (October to September).
+                      Current year: <strong>{activeLeaveYearPeriod.split("/")[0]}</strong>
                     </p>
                     {inOctoberPlanningWindow && (
                       <p className="text-xs text-amber-700 font-medium">
@@ -2041,22 +2041,27 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 </div>
 
-                <div className={editingId ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
+                <div className={editingId ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 sm:grid-cols-2 gap-4"}>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
                     <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
                   </div>
-                  {editingId && (
-                    <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
-                      <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      End Date {leaveType === "annual" && <span className="text-red-500">*</span>}
+                    </Label>
+                    <Input 
+                      type="date" 
+                      value={endDate} 
+                      onChange={(e) => setEndDate(e.target.value)} 
+                      className="h-10"
+                      required={leaveType === "annual"}
+                    />
+                    {leaveType === "annual" && !endDate && (
+                      <p className="text-xs text-amber-600">End date is required for annual leave</p>
+                    )}
+                  </div>
                 </div>
-
-                {!editingId && (
-                  <p className="text-xs text-slate-500">End date is hidden for new requests. HR Leave Office will review and finalize the leave range.</p>
-                )}
 
                 {sameMonthConflict && (
                   <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-700">
