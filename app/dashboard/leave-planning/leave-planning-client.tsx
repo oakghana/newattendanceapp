@@ -920,7 +920,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   )
 }
 
-// ���── Main Component ───────────────────────────────────────────────────────────
+// �����── Main Component ───────────────────────────────────────────────────────────
 export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -1030,7 +1030,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────��────���──────────────────────────────────�����──
+  // ── Computed ─────────────��─���──���──────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1134,6 +1134,55 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       holidays: holidaysInRange
     }
   }, [startDate, endDate, holidays])
+
+  // Auto-calculate holidays for adjusted dates in HR office tab
+  useEffect(() => {
+    if (!holidays.length) return
+
+    // For each request with adjusted dates, calculate holidays and weekends in that range
+    const adjustedRequests = Object.keys(officeAdjStart).concat(Object.keys(officeAdjEnd))
+    const uniqueIds = [...new Set(adjustedRequests)]
+
+    uniqueIds.forEach((requestId) => {
+      const adjStart = officeAdjStart[requestId]
+      const adjEnd = officeAdjEnd[requestId]
+
+      // Only calculate if both dates exist and we haven't manually set it yet
+      if (!adjStart || !adjEnd) return
+      if (officeHolidayDays[requestId]) return // Skip if already manually set
+
+      const start = new Date(adjStart)
+      const end = new Date(adjEnd)
+
+      if (end < start || isNaN(start.getTime()) || isNaN(end.getTime())) return
+
+      // Count holidays and weekends in the adjusted date range
+      let holidayCount = 0
+      let current = new Date(start)
+
+      while (current <= end) {
+        const dayOfWeek = current.getDay()
+        const currentDateStr = current.toISOString().split('T')[0]
+        
+        // Check if it's a weekend (Saturday=6 or Sunday=0)
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+        
+        // Check if it's a holiday
+        const isHoliday = holidays.find((h) => h.date === currentDateStr)
+        
+        // Count both weekends and holidays
+        if (isWeekend || isHoliday) {
+          holidayCount++
+        }
+        current.setDate(current.getDate() + 1)
+      }
+
+      // Auto-populate the holiday days field with weekends + holidays
+      if (holidayCount > 0 && !officeHolidayDays[requestId]) {
+        setOfficeHolidayDays((p) => ({ ...p, [requestId]: String(holidayCount) }))
+      }
+    })
+  }, [officeAdjStart, officeAdjEnd, holidays, officeHolidayDays])
 
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((t) => t.leaveTypeKey === leaveType),
@@ -2960,11 +3009,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-red-700">
-                                    <Minus className="w-3 h-3" /> Deduct — Public Holidays
+                                    <Minus className="w-3 h-3" /> Deduct — Weekends & Holidays
+                                    {officeHolidayDays[req.id] && !Object.keys(officeAdjStart).includes(req.id) === false && (
+                                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-auto">auto</span>
+                                    )}
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officeHolidayDays[req.id] || "0"}
                                     onChange={(e) => setOfficeHolidayDays((p) => ({ ...p, [req.id]: e.target.value }))}
+                                    placeholder="Auto-populated"
                                     className="h-9 text-red-700 font-semibold" />
                                 </div>
                                 <div className="space-y-1">
