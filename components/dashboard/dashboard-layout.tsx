@@ -22,7 +22,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const router = useRouter()
   const lastSeenIdRef = useRef<string | null>(null)
@@ -126,17 +126,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       }
     }
 
-    // Kick off first check after a short delay to avoid running before auth settles
-    const firstCheckTimer = setTimeout(checkNewNotifications, 3000)
+    // Kick off first check immediately (no delay) for faster notifications
+    checkNewNotifications()
     pollTimerRef.current = setInterval(checkNewNotifications, POLL_INTERVAL_MS)
 
     return () => {
-      clearTimeout(firstCheckTimer)
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     }
   }, [profile])
 
-  if (loading) {
+  if (loading && !profile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-muted/10 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
