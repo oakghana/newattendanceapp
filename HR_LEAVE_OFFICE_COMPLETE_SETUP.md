@@ -19,16 +19,26 @@ The **HR Leave Office** role is now fully implemented in the system with:
 ### 2. Sidebar Navigation
 - Added `hr_leave_office` to all user-accessible menu items
 - HR Leave Office users now see normal employee sidebar + leave admin features
+- Can access: Home Dashboard, Attendance Check, Excuse Duty, Leave Administration, Loan Application, Help Center
 
-### 3. Leave Management Restrictions
-- Tab visibility: Restricted from Holiday Management and Leave Policy tabs
-- Can access: Leave Management, Planning, Analytics, Balance & Calendar
+### 3. Loan Application Access
+- HR Leave Office users can now access and manage Loan Applications
+- Full loan module access available alongside leave management
 
-### 4. Authorization System
+### 4. Leave Management Tabs & Restrictions
+- **Leave Management Tab**: Fully accessible
+- **Leave & HR Leave Planning Tab**: Can access all staff tabs (My Requests, Apply, All Requests) BUT NOT the HR-Leave-Office-Admin tab
+- **Leave Analytics Tab**: Fully accessible
+- **Balance & Calendar Tab**: Fully accessible
+- **Holiday Management Tab**: RESTRICTED (hidden from HR Leave Office)
+- **Leave Policy Tab**: RESTRICTED (hidden from HR Leave Office)
+
+### 5. Authorization System
 - Added to `proxy.ts` protected routes
 - Can access `/dashboard` main entry point
 - Can access `/dashboard/leave-management`
 - Can access `/dashboard/leave-planning`
+- Can access `/dashboard/loan-app`
 
 ## Setup Instructions
 
@@ -96,12 +106,29 @@ npm run dev
      - ❌ Holiday Management (should NOT be visible)
      - ❌ Leave Policy (should NOT be visible)
 
-4. **Verify Functions**
-   - Can approve/process leave requests
-   - Can plan leave schedules
-   - Can view analytics and reports
+4. **Check Leave & HR Leave Planning Tab**
+   - Click "Leave & HR Leave Planning" tab
+   - Visible options:
+     - ✅ My Requests (can view own leave requests)
+     - ✅ Apply (can apply for new leave)
+     - ✅ All Requests (can view all leave requests)
+   - Hidden options:
+     - ❌ HR-Leave-Office-Admin (tab/button should NOT be visible)
+   - Cannot see: HR-Leave-Office-Admin workflow steps or actions
+
+5. **Verify Loan Application Access**
+   - Click "Loan Application" in sidebar
+   - Should load Loan Application module without errors
+   - Can view and manage loan applications
+
+6. **Verify Functions**
+   - Can apply for and view leave requests
+   - Can view leave planning for team members
+   - Can view leave analytics and reports
+   - Can view and manage loan applications
    - Cannot create holidays
    - Cannot modify leave policies
+   - Cannot access HR-Leave-Office-Admin functions
 
 ## Role Capabilities Matrix
 
