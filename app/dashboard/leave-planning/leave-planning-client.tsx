@@ -989,7 +989,6 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
   const [partLeaveDays, setPartLeaveDays] = useState("")
-  const [resumptionDate, setResumptionDate] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
@@ -1669,10 +1668,6 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       toast({ title: "Missing days", description: "Please specify the number of days for part leave.", variant: "destructive" })
       return
     }
-    if (!resumptionDate) {
-      toast({ title: "Missing resumption date", description: "Resumption (return-to-work) date is mandatory.", variant: "destructive" })
-      return
-    }
     if (!activeSig.text && !activeSig.dataUrl) {
       toast({ title: "Signature required", description: "Please provide your signature.", variant: "destructive" })
       return
@@ -1680,6 +1675,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     setSubmitting(true)
     setError(null)
     try {
+      const autoResumptionDate = computeReturnToWorkDate(endDate)
       const res = await fetch("/api/leave/planning", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -1690,7 +1686,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           preferred_end_date: leaveType === "annual" ? endDate : startDate,
           leave_type: leaveType,
           reason,
-          resumption_date: resumptionDate,
+          resumption_date: autoResumptionDate,
           part_leave_days: leaveType === "part_leave" ? Number(partLeaveDays) : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
