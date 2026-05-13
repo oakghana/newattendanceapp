@@ -1036,7 +1036,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────────────────────────────────────────────���������──
+  // ── Computed ─────────────────────────────────────────────────────�����������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1625,8 +1625,12 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Actions ──────────────────────────────────────────────────────────
 
   const submitPlan = async () => {
-    if (!startDate || !endDate) {
-      toast({ title: "Missing dates", description: "Please select start and end dates.", variant: "destructive" })
+    if (!startDate) {
+      toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
+      return
+    }
+    if (leaveType === "annual" && !endDate) {
+      toast({ title: "Missing end date", description: "Annual leave requires both start and end dates.", variant: "destructive" })
       return
     }
     if (!activeSig.text && !activeSig.dataUrl) {
@@ -1643,7 +1647,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           id: editingId,
           leave_year_period: leaveYearPeriod,
           preferred_start_date: startDate,
-          preferred_end_date: endDate,
+          preferred_end_date: leaveType === "annual" ? endDate : startDate,
           leave_type: leaveType,
           reason,
           user_signature_mode: signatureMode,
@@ -1670,7 +1674,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       }
       toast({
         title: editingId ? "Leave request updated" : "Leave request submitted",
-        description: `Return-to-work: ${computeReturnToWorkDate(endDate)}`,
+        description: leaveType === "annual" ? `Return-to-work: ${computeReturnToWorkDate(endDate)}` : "Request submitted for HR approval",
       })
       setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
       setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
@@ -2040,26 +2044,28 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 </div>
 
-                <div className={editingId ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 sm:grid-cols-2 gap-4"}>
+                <div className={leaveType === "annual" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
                     <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                      End Date {leaveType === "annual" && <span className="text-red-500">*</span>}
-                    </Label>
-                    <Input 
-                      type="date" 
-                      value={endDate} 
-                      onChange={(e) => setEndDate(e.target.value)} 
-                      className="h-10"
-                      required={leaveType === "annual"}
-                    />
-                    {leaveType === "annual" && !endDate && (
-                      <p className="text-xs text-amber-600">End date is required for annual leave</p>
-                    )}
-                  </div>
+                  {leaveType === "annual" && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                        End Date <span className="text-red-500">*</span>
+                      </Label>
+                      <Input 
+                        type="date" 
+                        value={endDate} 
+                        onChange={(e) => setEndDate(e.target.value)} 
+                        className="h-10"
+                        required
+                      />
+                      {!endDate && (
+                        <p className="text-xs text-amber-600">End date is required for annual leave</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {sameMonthConflict && (
@@ -2071,7 +2077,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 )}
 
-                {startDate && endDate && (
+                {leaveType === "annual" && startDate && endDate && (
                   <div className="flex flex-wrap gap-3">
                     <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
                       <p className="text-xs text-green-700 font-medium">Days Requested</p>
