@@ -35,19 +35,13 @@ async function migrateLeavePolicies() {
   try {
     // Step 1: Update unpaid leave label
     console.log('📝 Updating unpaid leave label to "Leave Without Pay"...');
-    const { error: updateError } = await supabase.rpc('exec_sql', {
-      sql: `UPDATE leave_policies
-            SET leave_type_label = 'Leave Without Pay'
-            WHERE leave_type_key = 'unpaid'
-            AND leave_type_label IN ('Unpaid Leave', 'unpaid_leave');`,
-    }).catch(async () => {
-      // Fallback: Use direct update if RPC not available
-      const { error } = await supabase
-        .from('leave_policies')
-        .update({ leave_type_label: 'Leave Without Pay' })
-        .eq('leave_type_key', 'unpaid');
-      return { error };
-    });
+    const { error: updateError } = await supabase
+      .from('leave_policy_catalog')
+      .update({ leave_type_label: 'Leave Without Pay' })
+      .eq('leave_type_key', 'unpaid')
+      .in('leave_type_label', ['Unpaid Leave', 'unpaid_leave'])
+      .then(() => ({ error: null }))
+      .catch((err) => ({ error: err }));
 
     if (updateError) {
       console.error('⚠️  Error updating leave labels:', updateError.message);
@@ -59,7 +53,7 @@ async function migrateLeavePolicies() {
     // Step 2: Verify changes
     console.log('\n📊 Verifying leave policy updates...');
     const { data: policies, error: selectError } = await supabase
-      .from('leave_policies')
+      .from('leave_policy_catalog')
       .select('leave_type_key, leave_type_label, entitlement_days, is_enabled')
       .in('leave_type_key', ['unpaid', 'special'])
       .order('leave_type_key');

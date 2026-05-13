@@ -648,6 +648,7 @@ export function StaffManagement() {
                   <SelectItem value="accounts">Accounts</SelectItem>
                   <SelectItem value="loan_office">Loan Office</SelectItem>
                   <SelectItem value="loan_office_admin">Loan Office Admin</SelectItem>
+                  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
                   <SelectItem value="leave_admin">HR-Leave-Office-Admin</SelectItem>
                   <SelectItem value="manager_hr">Manager HR</SelectItem>
                   <SelectItem value="director_hr">Director HR</SelectItem>
