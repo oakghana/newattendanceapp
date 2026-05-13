@@ -1036,7 +1036,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ─────────────────────────────────────────────────────���──
+  // ── Computed ─────────────────────────────────────────────────────�����──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1418,25 +1418,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     const requests = data.myRequests || data.requests || []
     
     // Role-based visibility filtering
-    // Staff: only see their own requests
-    if (isStaff && !isHod && !isAdmin && !canSeeAllRequests) {
-      return requests.filter((r: any) => r.user_id === userId)
-    }
-    
-    // HOD/Regional Manager: see requests from their staff
-    if ((isHod || normalizedRole === "regional_manager") && !isAdmin && !canSeeAllRequests) {
-      // This would typically filter based on HOD linkages
-      // For now, return all requests that are assigned for HOD review
-      return requests
-    }
-    
-    // HR Leave Office, HR Admin, HR Executive, Admin: see all requests
-    if (canSeeAllRequests || isAdmin) {
-      return requests
-    }
-    
+    // All roles can see: requests that are theirs or for review/approval
+    // The backend already filters based on the user, so just return the data
     return requests
-  }, [data, isStaff, isHod, isAdmin, canSeeAllRequests, userId, normalizedRole])
+  }, [data])
 
   const hodAssignedReviews: any[] = useMemo(() => {
     if (!data) return []
