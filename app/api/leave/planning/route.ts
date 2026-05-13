@@ -944,7 +944,20 @@ export async function GET(request: NextRequest) {
             reviewed_at,
             reviewer_id,
             reviewer_role,
-            leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
+            leave_plan_request_id
+          `)
+          .order("created_at", { ascending: false })
+        
+        // Get all unique leave request IDs from reviews
+        const reviewedRequestIds = new Set((existingReviews || []).map((r: any) => r.leave_plan_request_id))
+        
+        // Fetch the leave requests for these reviews
+        let allRequests: any[] = []
+        if (reviewedRequestIds.size > 0) {
+          const requestIds = Array.from(reviewedRequestIds)
+          const { data: reviewedRequests } = await admin
+            .from("leave_plan_requests")
+            .select(`
               id,
               leave_year_period,
               preferred_start_date,
@@ -960,9 +973,25 @@ export async function GET(request: NextRequest) {
                 id, first_name, last_name, employee_id,
                 departments(name, code)
               )
-            )
-          `)
-          .order("created_at", { ascending: false })
+            `)
+            .in("id", requestIds)
+          
+          allRequests = reviewedRequests || []
+        }
+        
+        // Map reviews with their requests
+        reviews = (existingReviews || []).map((review: any) => {
+          const request = allRequests.find((r: any) => r.id === review.leave_plan_request_id)
+          return {
+            id: review.id,
+            decision: review.decision,
+            recommendation: review.recommendation,
+            reviewed_at: review.reviewed_at,
+            reviewer_id: review.reviewer_id,
+            reviewer_role: review.reviewer_role,
+            leave_plan_request: request
+          }
+        })
         
         // Also fetch pending requests that haven't been reviewed yet by HOD
         const { data: pendingRequests } = await admin
@@ -985,29 +1014,21 @@ export async function GET(request: NextRequest) {
             )
           `)
           .eq("status", "pending_hod_review")
+          .not("id", "in", `(${Array.from(reviewedRequestIds).join(",")})`)
           .order("created_at", { ascending: false })
         
-        // Combine: show reviewed items plus pending items
-        if (!reviewError) {
-          reviews = existingReviews || []
-          
-          // Add pending requests that aren't already in reviews
-          const reviewedRequestIds = new Set((existingReviews || []).map((r: any) => String(r?.leave_plan_request?.id || "")))
-          const pendingNeedsReview = (pendingRequests || []).filter((r: any) => !reviewedRequestIds.has(String(r.id || "")))
-          
-          // Transform pending requests to match review structure
-          const pendingAsReviews = pendingNeedsReview.map((req: any) => ({
-            id: `pending-${req.id}`,
-            decision: "pending",
-            recommendation: null,
-            reviewed_at: null,
-            reviewer_id: null,
-            reviewer_role: null,
-            leave_plan_request: req
-          }))
-          
-          reviews = [...reviews, ...pendingAsReviews]
-        }
+        // Transform pending requests to match review structure
+        const pendingAsReviews = (pendingRequests || []).map((req: any) => ({
+          id: `pending-${req.id}`,
+          decision: "pending",
+          recommendation: null,
+          reviewed_at: null,
+          reviewer_id: null,
+          reviewer_role: null,
+          leave_plan_request: req
+        }))
+        
+        reviews = [...reviews, ...pendingAsReviews]
       }
 
       const analytics = await fetchHrOfficeAnalytics(admin)
