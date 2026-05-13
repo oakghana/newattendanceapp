@@ -40,6 +40,8 @@ interface LeaveRequest {
   created_at: string
   user_name?: string
   department?: string
+  location?: string
+  rank?: string
 }
 
 interface LeaveNotification {
@@ -1497,7 +1499,7 @@ export function LeaveManagementClient({
                           <option value="">-- Choose a leave request --</option>
                           {approvedRequests.map((req) => (
                             <option key={req.id} value={req.id}>
-                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                              {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
                             </option>
                           ))}
                         </select>
@@ -1583,7 +1585,7 @@ export function LeaveManagementClient({
                           <option value="">-- Choose a leave request --</option>
                           {approvedRequests.map((req) => (
                             <option key={req.id} value={req.id}>
-                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                              {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
                             </option>
                           ))}
                         </select>

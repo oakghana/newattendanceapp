@@ -187,6 +187,7 @@ export default async function LeaveManagementPage() {
     const staffIds = (deptStaff || []).map((s: any) => s.id)
 
     if (staffIds.length > 0) {
+      // Fetch approved leaves
       const { data: approvedLeaves } = await admin
         .from("leave_plan_requests")
         .select(`
@@ -203,16 +204,46 @@ export default async function LeaveManagementPage() {
         .in("status", ["approved", "hr_approved"])
         .order("preferred_start_date", { ascending: true })
 
-      approvedStaffRequests = (approvedLeaves || []).map((req: any) => ({
-        id: String(req.id),
-        user_id: String(req.user_id),
-        start_date: req.preferred_start_date,
-        end_date: req.preferred_end_date,
-        reason: req.reason || "",
-        leave_type: req.leave_type_key || "annual",
-        status: req.status,
-        created_at: req.created_at,
-      }))
+      // Fetch user profiles separately to get names, ranks, locations
+      const { data: staffProfiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, assigned_location_id")
+        .in("id", staffIds)
+
+      // Create a map for quick lookup
+      const profileMap = new Map((staffProfiles || []).map((p: any) => [p.id, p]))
+
+      // Fetch locations if needed
+      const locationIds = new Set((staffProfiles || []).map((p: any) => p.assigned_location_id).filter(Boolean))
+      const { data: locations } = locationIds.size > 0 
+        ? await admin
+            .from("geofence_locations")
+            .select("id, name")
+            .in("id", Array.from(locationIds))
+        : { data: [] }
+      
+      const locationMap = new Map((locations || []).map((l: any) => [l.id, l.name]))
+
+      approvedStaffRequests = (approvedLeaves || []).map((req: any) => {
+        const staffProfile = profileMap.get(req.user_id) || {}
+        const locationName = staffProfile.assigned_location_id 
+          ? locationMap.get(staffProfile.assigned_location_id) 
+          : null
+
+        return {
+          id: String(req.id),
+          user_id: String(req.user_id),
+          start_date: req.preferred_start_date,
+          end_date: req.preferred_end_date,
+          reason: req.reason || "",
+          leave_type: req.leave_type_key || "annual",
+          status: req.status,
+          created_at: req.created_at,
+          user_name: `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim() || "Staff",
+          rank: staffProfile.position || undefined,
+          location: locationName || undefined,
+        }
+      })
     }
   }
 
