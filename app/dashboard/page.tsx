@@ -363,12 +363,12 @@ export default async function DashboardPage() {
 
           {/* Leave & Notifications Section */}
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Leave Hub & Planning */}
+            {/* Leave Administration */}
             <Card className="bg-gradient-to-br from-white/90 to-white/50 dark:from-slate-900/90 dark:to-slate-800/50 backdrop-blur-xl border-white/20 dark:border-slate-700/20 shadow-xl">
               <CardHeader className="pb-6">
                 <CardTitle className="text-xl font-bold flex items-center gap-3">
                   <Calendar className="h-6 w-6 text-orange-600" />
-                  Leave Hub & Planning
+                  Leave Administration
                 </CardTitle>
                 <CardDescription className="text-lg">Manage leave requests and plan your time off</CardDescription>
               </CardHeader>
@@ -378,14 +378,14 @@ export default async function DashboardPage() {
                     <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-950/50 dark:to-orange-900/50 rounded-full flex items-center justify-center mx-auto mb-6 border border-orange-200/50 dark:border-orange-800/50">
                       <Calendar className="h-10 w-10 text-orange-600" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Leave Hub & Planning</h3>
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Leave Administration</h3>
                     <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-sm mx-auto">
                       Review and manage team leave requests with smart approval tracking
                     </p>
                     <Button asChild size="lg" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg hover:shadow-xl transition-all duration-300">
                       <Link href="/dashboard/leave-management">
                         <Calendar className="h-5 w-5 mr-2" />
-                        Open Leave Hub
+                        Open Leave Administration
                       </Link>
                     </Button>
                   </div>
