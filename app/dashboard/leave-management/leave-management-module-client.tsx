@@ -10,8 +10,10 @@ import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { LeaveCalendarSettingsClient } from "@/components/leave/leave-calendar-settings-client"
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
-const HR_ANALYTICS_ROLES = ["leave_admin", "admin", "hr_office", "hr"]
-const HOLIDAY_MANAGEMENT_ROLES = ["admin", "leave_admin", "hr_office", "director_hr", "manager_hr"]
+const HR_ANALYTICS_ROLES = ["leave_admin", "admin", "hr_office", "hr_leave_office", "hr"]
+const HOLIDAY_MANAGEMENT_ROLES = ["admin", "leave_admin", "director_hr", "manager_hr"]
+const LEAVE_POLICY_ROLES = ["admin", "leave_admin", "director_hr"]
+// HR Leave Office has all admin capabilities EXCEPT Holiday Management and Leave Policy access
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -25,6 +27,11 @@ function isHrAnalyticsRole(role: string | null | undefined) {
 function canManageHolidays(role: string | null | undefined) {
   const normalized = normalizeRole(role)
   return HOLIDAY_MANAGEMENT_ROLES.includes(normalized)
+}
+
+function canManageLeavePolicies(role: string | null | undefined) {
+  const normalized = normalizeRole(role)
+  return LEAVE_POLICY_ROLES.includes(normalized)
 }
 
 interface LeaveManagementModuleClientProps {
