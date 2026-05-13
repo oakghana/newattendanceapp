@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { format } from "date-fns"
 import {
   ArrowUpRight,
@@ -533,24 +533,6 @@ export function LeaveManagementClient({
   const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
   const approvedRequests = useMemo(() => staffRequests.filter((r) => approvedStatuses.has(String(r.status || ""))), [staffRequests])
   
-  // For manager view, show approved staff requests from managerNotifications
-  const approvedStaffRequests = useMemo(() => {
-    if (!isManagerView) return approvedRequests
-    return (managerNotifications || [])
-      .filter((n) => approvedStatuses.has(String(n.status || "")))
-      .map((n) => ({
-        id: n.leave_plan_request_id || n.leave_requests?.id,
-        user_id: n.leave_requests?.user_id,
-        start_date: n.leave_requests?.start_date,
-        end_date: n.leave_requests?.end_date,
-        reason: n.leave_requests?.reason,
-        leave_type: n.leave_requests?.leave_type,
-        status: n.status,
-        created_at: n.leave_requests?.created_at,
-        requester_name: n.requester_name,
-      }))
-  }, [isManagerView, approvedRequests, managerNotifications])
-  
   const pendingNotifications = useMemo(() => managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending"), [managerNotifications])
   const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
   const adminStaffQueue = useMemo(() => 
@@ -934,7 +916,7 @@ export function LeaveManagementClient({
 
             <div className="grid grid-cols-2 gap-3">
               <LeaveMetricCard label="Pending" value={String(canUseStaffLeaveHub ? pendingRequests.length : pendingNotifications.length)} hint={canUseStaffLeaveHub ? "Awaiting decision" : "Need review"} tone="blue" icon={<FileClock className="h-4 w-4" />} />
-              <LeaveMetricCard label="Approved" value={String(approvedStaffRequests.length)} hint="Confirmed leave" tone="emerald" icon={<CheckCircle2 className="h-4 w-4" />} />
+              <LeaveMetricCard label="Approved" value={String(approvedRequests.length)} hint="Confirmed leave" tone="emerald" icon={<CheckCircle2 className="h-4 w-4" />} />
               <LeaveMetricCard label="Submitted" value={String(staffRequests.length)} hint="My requests" tone="cyan" icon={<Calendar className="h-4 w-4" />} />
               <LeaveMetricCard label="Approvals" value={String(pendingNotifications.length)} hint="Manager queue" tone="violet" icon={<ArrowUpRight className="h-4 w-4" />} />
             </div>
@@ -1376,7 +1358,7 @@ export function LeaveManagementClient({
                 variant={selectedTab === "approved" ? "default" : "outline"}
               >
                 <CheckCircle2 className="h-4 w-4" />
-                Approved ({approvedStaffRequests.length})
+                Approved ({approvedRequests.length})
               </Button>
               <Button
                 onClick={() => setSelectedTab("deferrments")}
@@ -1455,7 +1437,7 @@ export function LeaveManagementClient({
           
           {selectedTab === "approved" && (
             <>
-              {approvedStaffRequests.length === 0 ? (
+              {approvedRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
                   <CardContent className="py-14 text-center">
                     <CheckCircle2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
@@ -1464,7 +1446,7 @@ export function LeaveManagementClient({
                 </Card>
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {approvedStaffRequests.map((request) => (
+                  {approvedRequests.map((request) => (
                     <LeaveRequestCard key={request.id} request={request} emphasizeApproved />
                   ))}
                 </div>
@@ -1500,15 +1482,11 @@ export function LeaveManagementClient({
                           className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
                         >
                           <option value="">-- Choose a leave request --</option>
-                          {approvedRequests.map((req) => {
-                            const startDate = req.start_date ? new Date(req.start_date).toLocaleDateString() : "N/A"
-                            const endDate = req.end_date ? new Date(req.end_date).toLocaleDateString() : startDate
-                            return (
-                              <option key={req.id} value={req.id}>
-                                {req.leave_type} - {startDate} to {endDate}
-                              </option>
-                            )
-                          })}
+                          {approvedRequests.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                            </option>
+                          ))}
                         </select>
                       </div>
 
@@ -1590,15 +1568,11 @@ export function LeaveManagementClient({
                           className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
                         >
                           <option value="">-- Choose a leave request --</option>
-                          {approvedRequests.map((req) => {
-                            const startDate = req.start_date ? new Date(req.start_date).toLocaleDateString() : "N/A"
-                            const endDate = req.end_date ? new Date(req.end_date).toLocaleDateString() : startDate
-                            return (
-                              <option key={req.id} value={req.id}>
-                                {req.leave_type} - {startDate} to {endDate}
-                              </option>
-                            )
-                          })}
+                          {approvedRequests.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                            </option>
+                          ))}
                         </select>
                       </div>
 
@@ -1842,11 +1816,9 @@ function LeaveRequestCard({
     "hod_approved",
     "hr_office_forwarded",
   ].includes(normalizedStatus)
-  const hasHodChanges = normalizedStatus === "hod_changes_requested"
 
-  const statusTone = hasHodChanges
-    ? "border-amber-200 bg-amber-50/60"
-    : isApproved
+  const statusTone =
+    isApproved
       ? "border-emerald-200 bg-emerald-50/60"
       : isPending
         ? "border-blue-200 bg-blue-50/60"
@@ -1860,8 +1832,8 @@ function LeaveRequestCard({
             <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
             <CardDescription className="mt-1 line-clamp-2">{request.reason}</CardDescription>
           </div>
-          <Badge className={hasHodChanges ? "bg-amber-600 text-white hover:bg-amber-600" : isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
-            {hasHodChanges ? "HOD Changes Requested" : formatLeaveType(request.status)}
+          <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
+            {formatLeaveType(request.status)}
           </Badge>
         </div>
       </CardHeader>
@@ -1876,56 +1848,7 @@ function LeaveRequestCard({
             <p className="mt-1 font-semibold text-slate-900">{format(new Date(request.end_date), "MMM dd, yyyy")}</p>
           </div>
         </div>
-        
-        {/* HOD Changes Actions */}
-        {hasHodChanges && (
-          <div className="flex gap-2">
-            <Button 
-              size="sm" 
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={async () => {
-                try {
-                  console.log("[v0] Accepting HOD changes for request:", request.id)
-                  const response = await fetch("/api/leave/change-proposal", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "accept",
-                      leaveRequestId: request.id,
-                      staffId: request.staff_id,
-                    }),
-                  })
-                  
-                  const data = await response.json()
-                  if (!response.ok) throw new Error(data.error || "Failed to accept changes")
-                  
-                  console.log("[v0] HOD changes accepted successfully")
-                  toast.success("Changes accepted successfully! Request forwarded to HR.")
-                  
-                  // Refresh the page after a short delay
-                  setTimeout(() => window.location.reload(), 1000)
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : "Unknown error"
-                  console.error("[v0] Error accepting changes:", msg)
-                  toast.error(msg)
-                }
-              }}
-            >
-              <CheckCircle2 className="h-4 w-4 mr-1" />
-              Accept Changes
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              className="flex-1"
-              onClick={onEdit}
-            >
-              Counter-Propose
-            </Button>
-          </div>
-        )}
-
-        {canEdit && onEdit && !hasHodChanges && (
+        {canEdit && onEdit && (
           <Button variant="outline" size="sm" onClick={onEdit} className="w-full">
             Edit Before Review
           </Button>
