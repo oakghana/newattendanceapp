@@ -184,12 +184,10 @@ export async function GET(request: NextRequest) {
            preferred_end_date, 
            requested_days,
            status,
-           is_deferred,
            user_profiles!inner(id, first_name, last_name, department_id),
            departments(id, name)`
         )
         .eq("status", "hr_approved")
-        .eq("is_deferred", false)
 
       // Filter based on role
       if (["admin", "leave_admin", "hr_office", "hr_leave_office", "director_hr", "manager_hr"].includes(roleNorm)) {
@@ -219,7 +217,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch approved leaves" }, { status: 500 })
       }
 
-      return NextResponse.json({ requests: approvedLeaves })
+      console.log("[v0] Approved leaves fetched for user", user.id, ":", approvedLeaves?.length || 0, "records")
+
+      return NextResponse.json({ requests: approvedLeaves || [] })
     }
 
     // Default: Get deferment requests
