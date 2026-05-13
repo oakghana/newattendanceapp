@@ -533,6 +533,24 @@ export function LeaveManagementClient({
   const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
   const approvedRequests = useMemo(() => staffRequests.filter((r) => approvedStatuses.has(String(r.status || ""))), [staffRequests])
   
+  // For manager view, show approved staff requests from managerNotifications
+  const approvedStaffRequests = useMemo(() => {
+    if (!isManagerView) return approvedRequests
+    return (managerNotifications || [])
+      .filter((n) => approvedStatuses.has(String(n.status || "")))
+      .map((n) => ({
+        id: n.leave_plan_request_id || n.leave_requests?.id,
+        user_id: n.leave_requests?.user_id,
+        start_date: n.leave_requests?.start_date,
+        end_date: n.leave_requests?.end_date,
+        reason: n.leave_requests?.reason,
+        leave_type: n.leave_requests?.leave_type,
+        status: n.status,
+        created_at: n.leave_requests?.created_at,
+        requester_name: n.requester_name,
+      }))
+  }, [isManagerView, approvedRequests, managerNotifications])
+  
   const pendingNotifications = useMemo(() => managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending"), [managerNotifications])
   const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
   const adminStaffQueue = useMemo(() => 
@@ -916,7 +934,7 @@ export function LeaveManagementClient({
 
             <div className="grid grid-cols-2 gap-3">
               <LeaveMetricCard label="Pending" value={String(canUseStaffLeaveHub ? pendingRequests.length : pendingNotifications.length)} hint={canUseStaffLeaveHub ? "Awaiting decision" : "Need review"} tone="blue" icon={<FileClock className="h-4 w-4" />} />
-              <LeaveMetricCard label="Approved" value={String(approvedRequests.length)} hint="Confirmed leave" tone="emerald" icon={<CheckCircle2 className="h-4 w-4" />} />
+              <LeaveMetricCard label="Approved" value={String(approvedStaffRequests.length)} hint="Confirmed leave" tone="emerald" icon={<CheckCircle2 className="h-4 w-4" />} />
               <LeaveMetricCard label="Submitted" value={String(staffRequests.length)} hint="My requests" tone="cyan" icon={<Calendar className="h-4 w-4" />} />
               <LeaveMetricCard label="Approvals" value={String(pendingNotifications.length)} hint="Manager queue" tone="violet" icon={<ArrowUpRight className="h-4 w-4" />} />
             </div>
@@ -1358,7 +1376,7 @@ export function LeaveManagementClient({
                 variant={selectedTab === "approved" ? "default" : "outline"}
               >
                 <CheckCircle2 className="h-4 w-4" />
-                Approved ({approvedRequests.length})
+                Approved ({approvedStaffRequests.length})
               </Button>
               <Button
                 onClick={() => setSelectedTab("deferrments")}
@@ -1437,7 +1455,7 @@ export function LeaveManagementClient({
           
           {selectedTab === "approved" && (
             <>
-              {approvedRequests.length === 0 ? (
+              {approvedStaffRequests.length === 0 ? (
                 <Card className="border border-dashed border-slate-300 bg-slate-50/80">
                   <CardContent className="py-14 text-center">
                     <CheckCircle2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
@@ -1446,7 +1464,7 @@ export function LeaveManagementClient({
                 </Card>
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {approvedRequests.map((request) => (
+                  {approvedStaffRequests.map((request) => (
                     <LeaveRequestCard key={request.id} request={request} emphasizeApproved />
                   ))}
                 </div>
