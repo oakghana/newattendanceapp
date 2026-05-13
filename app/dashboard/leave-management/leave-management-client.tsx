@@ -128,6 +128,16 @@ export function LeaveManagementClient({
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
   const [selectedTab, setSelectedTab] = useState("my-requests")
+  const [defermentRequests, setDefermentRequests] = useState<any[]>([])
+  const [recallRequests, setRecallRequests] = useState<any[]>([])
+  const [isSubmittingDeferment, setIsSubmittingDeferment] = useState(false)
+  const [isSubmittingRecall, setIsSubmittingRecall] = useState(false)
+  const [selectedApprovedForDeferment, setSelectedApprovedForDeferment] = useState<string | null>(null)
+  const [deferralYear, setDeferralYear] = useState<string>("")
+  const [defermentReason, setDefermentReason] = useState<string>("")
+  const [recallDateInput, setRecallDateInput] = useState<string>("")
+  const [recallReasonInput, setRecallReasonInput] = useState<string>("")
+  const [selectedApprovedForRecall, setSelectedApprovedForRecall] = useState<string | null>(null)
   const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -467,6 +477,93 @@ export function LeaveManagementClient({
   const isAdminView = normalizedRole === "admin"
   const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
+
+  // ─── Deferment Handler ───
+  const submitDefermentRequest = async () => {
+    try {
+      if (!selectedApprovedForDeferment || !deferralYear) {
+        toast({ title: "Validation Error", description: "Please select a leave request and deferral year", variant: "destructive" })
+        return
+      }
+
+      if (!/^\d{4}$/.test(deferralYear)) {
+        toast({ title: "Validation Error", description: "Deferral year must be in YYYY format", variant: "destructive" })
+        return
+      }
+
+      setIsSubmittingDeferment(true)
+
+      const response = await fetch("/api/leave/deferment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leave_plan_request_id: selectedApprovedForDeferment,
+          deferral_year: deferralYear,
+          reason: defermentReason || null,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit deferment request")
+      }
+
+      toast({ title: "Success", description: "Deferment request submitted successfully" })
+      setSelectedApprovedForDeferment(null)
+      setDeferralYear("")
+      setDefermentReason("")
+    } catch (error) {
+      console.error("[v0] Deferment error:", error)
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to submit deferment", variant: "destructive" })
+    } finally {
+      setIsSubmittingDeferment(false)
+    }
+  }
+
+  // ─── Recall Handler ───
+  const submitRecallRequest = async () => {
+    try {
+      if (!selectedApprovedForRecall || !recallDateInput) {
+        toast({ title: "Validation Error", description: "Please select a leave request and recall date", variant: "destructive" })
+        return
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(recallDateInput)) {
+        toast({ title: "Validation Error", description: "Recall date must be in YYYY-MM-DD format", variant: "destructive" })
+        return
+      }
+
+      setIsSubmittingRecall(true)
+
+      const response = await fetch("/api/leave/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leave_plan_request_id: selectedApprovedForRecall,
+          recall_date: recallDateInput,
+          reason: recallReasonInput || null,
+          user_role: userRole,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit recall request")
+      }
+
+      toast({ title: "Success", description: "Recall request submitted successfully" })
+      setSelectedApprovedForRecall(null)
+      setRecallDateInput("")
+      setRecallReasonInput("")
+    } catch (error) {
+      console.error("[v0] Recall error:", error)
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to submit recall", variant: "destructive" })
+    } finally {
+      setIsSubmittingRecall(false)
+    }
+  }
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -1150,6 +1247,30 @@ export function LeaveManagementClient({
                 <CheckCircle2 className="h-4 w-4" />
                 Approved ({approvedRequests.length})
               </Button>
+              <Button
+                onClick={() => setSelectedTab("deferrments")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "deferrments"
+                    ? "bg-amber-600 text-white shadow-md hover:bg-amber-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "deferrments" ? "default" : "outline"}
+              >
+                <Calendar className="h-4 w-4" />
+                Deferrments
+              </Button>
+              <Button
+                onClick={() => setSelectedTab("recalls")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "recalls"
+                    ? "bg-rose-600 text-white shadow-md hover:bg-rose-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "recalls" ? "default" : "outline"}
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                Recalls
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -1204,6 +1325,172 @@ export function LeaveManagementClient({
                 </div>
               )}
             </>
+          )}
+
+          {selectedTab === "deferrments" && (
+            <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
+              <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Defer Your Approved Leave
+                </CardTitle>
+                <CardDescription className="text-amber-100">Defer your approved leave to a future leave year</CardDescription>
+              </CardHeader>
+              <CardContent className="py-6">
+                {approvedRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                    <p className="font-medium text-slate-700">No approved leave to defer</p>
+                    <p className="text-sm text-slate-500 mt-2">You must have approved leave requests to create a deferment</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">Select Approved Leave Request</Label>
+                        <select
+                          id="defer_request"
+                          value={selectedApprovedForDeferment || ""}
+                          onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
+                        >
+                          <option value="">-- Choose a leave request --</option>
+                          {approvedRequests.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
+                        <Input
+                          id="deferral_year"
+                          type="text"
+                          placeholder="2027"
+                          value={deferralYear}
+                          onChange={(e) => setDeferralYear(e.target.value)}
+                          maxLength={4}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">Reason (Optional)</Label>
+                        <Textarea
+                          id="deferment_reason"
+                          placeholder="Explain why you want to defer this leave..."
+                          value={defermentReason}
+                          onChange={(e) => setDefermentReason(e.target.value)}
+                          rows={3}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={submitDefermentRequest}
+                        disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear}
+                        className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                      >
+                        {isSubmittingDeferment ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Deferment Request"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedTab === "recalls" && (
+            <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
+              <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowUpRight className="h-5 w-5" />
+                  Recall Your Leave
+                </CardTitle>
+                <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
+              </CardHeader>
+              <CardContent className="py-6">
+                {!isManagerView ? (
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
+                  </Alert>
+                ) : approvedRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
+                    <p className="font-medium text-slate-700">No approved leave to recall</p>
+                    <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_request" className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
+                        <select
+                          id="recall_request"
+                          value={selectedApprovedForRecall || ""}
+                          onChange={(e) => setSelectedApprovedForRecall(e.target.value || null)}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
+                        >
+                          <option value="">-- Choose a leave request --</option>
+                          {approvedRequests.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_date" className="text-sm font-semibold text-slate-700">Recall Date (YYYY-MM-DD)</Label>
+                        <Input
+                          id="recall_date"
+                          type="date"
+                          value={recallDateInput}
+                          onChange={(e) => setRecallDateInput(e.target.value)}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_reason" className="text-sm font-semibold text-slate-700">Reason for Recall</Label>
+                        <Textarea
+                          id="recall_reason"
+                          placeholder="Explain the reason for recalling this leave..."
+                          value={recallReasonInput}
+                          onChange={(e) => setRecallReasonInput(e.target.value)}
+                          rows={3}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={submitRecallRequest}
+                        disabled={isSubmittingRecall || !selectedApprovedForRecall || !recallDateInput}
+                        className="w-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                      >
+                        {isSubmittingRecall ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Recall Request"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
 
         {isManagerView && selectedTab === "pending-approvals" && (
