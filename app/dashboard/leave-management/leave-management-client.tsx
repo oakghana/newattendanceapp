@@ -1816,9 +1816,11 @@ function LeaveRequestCard({
     "hod_approved",
     "hr_office_forwarded",
   ].includes(normalizedStatus)
+  const hasHodChanges = normalizedStatus === "hod_changes_requested"
 
-  const statusTone =
-    isApproved
+  const statusTone = hasHodChanges
+    ? "border-amber-200 bg-amber-50/60"
+    : isApproved
       ? "border-emerald-200 bg-emerald-50/60"
       : isPending
         ? "border-blue-200 bg-blue-50/60"
@@ -1832,8 +1834,8 @@ function LeaveRequestCard({
             <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
             <CardDescription className="mt-1 line-clamp-2">{request.reason}</CardDescription>
           </div>
-          <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
-            {formatLeaveType(request.status)}
+          <Badge className={hasHodChanges ? "bg-amber-600 text-white hover:bg-amber-600" : isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
+            {hasHodChanges ? "HOD Changes Requested" : formatLeaveType(request.status)}
           </Badge>
         </div>
       </CardHeader>
@@ -1848,7 +1850,33 @@ function LeaveRequestCard({
             <p className="mt-1 font-semibold text-slate-900">{format(new Date(request.end_date), "MMM dd, yyyy")}</p>
           </div>
         </div>
-        {canEdit && onEdit && (
+        
+        {/* HOD Changes Actions */}
+        {hasHodChanges && (
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => {
+                // Accept HOD changes - would trigger API call
+                console.log("[v0] Accepting HOD changes for request:", request.id)
+              }}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Accept Changes
+            </Button>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="flex-1"
+              onClick={onEdit}
+            >
+              Counter-Propose
+            </Button>
+          </div>
+        )}
+
+        {canEdit && onEdit && !hasHodChanges && (
           <Button variant="outline" size="sm" onClick={onEdit} className="w-full">
             Edit Before Review
           </Button>

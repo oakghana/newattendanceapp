@@ -272,10 +272,11 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search leave type..."
+                  placeholder="Search your leave here..."
                   value={leaveSearchQuery}
                   onChange={(e) => setLeaveSearchQuery(e.target.value.toLowerCase())}
                   className="w-full pl-10 pr-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  autoFocus
                 />
               </div>
 
