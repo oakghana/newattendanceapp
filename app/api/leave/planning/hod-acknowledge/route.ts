@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { calculateRequestedDays } from "@/lib/leave-planning"
 
 export async function POST(request: NextRequest) {
   try {
-    const { leave_plan_request_id, action, counter_start_date, counter_end_date, notes } = await request.json()
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+    const { leave_plan_request_id, action, counter_start_date, counter_end_date } = await request.json()
 
     // Validate required fields
     if (!leave_plan_request_id || !action) {
@@ -19,9 +17,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate action
-    if (!["accept", "counter_propose"].includes(action)) {
+    if (!["accept", "counter"].includes(action)) {
       return NextResponse.json(
-        { error: "action must be 'accept' or 'counter_propose'" },
+        { error: "action must be 'accept' or 'counter'" },
         { status: 400 }
       )
     }
@@ -35,141 +33,105 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user profile for the staff member
-    const { data: staffProfile, error: profileError } = await supabase
-      .from("user_profiles")
-      .select("id, full_name, email, department_name")
-      .eq("user_id", user.id)
-      .single()
-
-    if (profileError || !staffProfile) {
-      return NextResponse.json({ error: "User profile not found" }, { status: 404 })
-    }
-
     // Get the leave request
-    const { data: leaveRequest, error: leaveError } = await supabase
+    const { data: leaveRequest, error: leaveError } = await admin
       .from("leave_plan_requests")
       .select("*")
       .eq("id", leave_plan_request_id)
+      .eq("user_id", user.id)
       .single()
 
     if (leaveError || !leaveRequest) {
-      return NextResponse.json(
-        { error: "Leave request not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
     }
 
-    // Verify the request is in pending acceptance status and belongs to the staff member
+    // Validate status - must be awaiting staff acknowledgment
     if (leaveRequest.status !== "hod_changes_pending_acceptance") {
       return NextResponse.json(
-        { error: "This request is not awaiting your acknowledgment" },
+        { error: "Leave request is not awaiting your acknowledgment of HOD changes" },
         { status: 400 }
       )
     }
 
-    if (leaveRequest.staff_user_id !== staffProfile.id) {
-      return NextResponse.json(
-        { error: "You don't have permission to acknowledge this request" },
-        { status: 403 }
-      )
-    }
-
-    // Get the notification record
-    const { data: notification, error: notifError } = await supabase
-      .from("hod_change_notifications")
-      .select("*")
-      .eq("leave_plan_request_id", leave_plan_request_id)
-      .single()
-
-    if (notifError || !notification) {
-      return NextResponse.json(
-        { error: "Change notification not found" },
-        { status: 404 }
-      )
-    }
-
-    // Process the staff response
     if (action === "accept") {
-      // Staff accepted HOD changes - forward to HR Leave Office
-      const { error: updateError } = await supabase
+      // Staff accepts HOD proposed changes → forward directly to HR Leave Office
+      const updatePayload = {
+        status: "hr_office_forwarded",
+        staff_accepted_hod_changes: true,
+        staff_acceptance_date: new Date().toISOString(),
+        preferred_start_date: leaveRequest.hod_proposed_start_date,
+        preferred_end_date: leaveRequest.hod_proposed_end_date,
+        requested_days: calculateRequestedDays(
+          leaveRequest.hod_proposed_start_date,
+          leaveRequest.hod_proposed_end_date
+        ),
+      }
+
+      const { error: updateError } = await admin
         .from("leave_plan_requests")
-        .update({
-          status: "hr_office_forwarded",
-          staff_acknowledged_at: new Date().toISOString(),
-          staff_acknowledgment_status: "accepted",
-          preferred_start_date: leaveRequest.hod_proposed_start_date,
-          preferred_end_date: leaveRequest.hod_proposed_end_date,
-        })
+        .update(updatePayload)
         .eq("id", leave_plan_request_id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error("[v0] Failed to update leave request on acceptance:", updateError)
+        return NextResponse.json({ error: "Failed to process acceptance" }, { status: 500 })
+      }
 
-      // Update notification
-      const { error: notifUpdateError } = await supabase
+      // Update notification status
+      await admin
         .from("hod_change_notifications")
-        .update({
-          staff_response_status: "accepted",
-          staff_responded_at: new Date().toISOString(),
-        })
+        .update({ staff_response_status: "accepted" })
         .eq("leave_plan_request_id", leave_plan_request_id)
 
-      if (notifUpdateError) throw notifUpdateError
-
-      return NextResponse.json({
-        success: true,
-        message: "Changes accepted. Request forwarded to HR Leave Office.",
-        status: "hr_office_forwarded",
-      })
-    }
-
-    if (action === "counter_propose") {
-      // Staff counter-proposed different dates - send back to HOD
+      return NextResponse.json({ success: true, message: "Changes accepted. Request forwarded to HR Leave Office." })
+    } else if (action === "counter") {
+      // Staff proposes counter dates → send back to HOD for negotiation
       if (!counter_start_date || !counter_end_date) {
         return NextResponse.json(
-          { error: "Counter dates are required when counter-proposing" },
+          { error: "Counter dates are required" },
           { status: 400 }
         )
       }
 
-      const { error: updateError } = await supabase
+      const counterDays = calculateRequestedDays(counter_start_date, counter_end_date)
+      if (counterDays <= 0) {
+        return NextResponse.json({ error: "Invalid counter date range" }, { status: 400 })
+      }
+
+      const updatePayload = {
+        status: "pending_hod_review",
+        preferred_start_date: counter_start_date,
+        preferred_end_date: counter_end_date,
+        requested_days: counterDays,
+        staff_counter_proposed: true,
+        staff_counter_dates_start: counter_start_date,
+        staff_counter_dates_end: counter_end_date,
+        staff_counter_proposed_date: new Date().toISOString(),
+      }
+
+      const { error: updateError } = await admin
         .from("leave_plan_requests")
-        .update({
-          status: "pending_hod_review", // Goes back to HOD for review
-          staff_acknowledged_at: new Date().toISOString(),
-          staff_acknowledgment_status: "counter_proposed",
-          preferred_start_date: counter_start_date,
-          preferred_end_date: counter_end_date,
-        })
+        .update(updatePayload)
         .eq("id", leave_plan_request_id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error("[v0] Failed to update leave request on counter:", updateError)
+        return NextResponse.json({ error: "Failed to process counter proposal" }, { status: 500 })
+      }
 
-      // Update notification
-      const { error: notifUpdateError } = await supabase
+      // Update notification status
+      await admin
         .from("hod_change_notifications")
-        .update({
-          staff_response_status: "counter_proposed",
-          staff_counter_start: counter_start_date,
-          staff_counter_end: counter_end_date,
-          staff_response_notes: notes || null,
-          staff_responded_at: new Date().toISOString(),
-        })
+        .update({ staff_response_status: "counter_proposed" })
         .eq("leave_plan_request_id", leave_plan_request_id)
 
-      if (notifUpdateError) throw notifUpdateError
-
-      return NextResponse.json({
-        success: true,
-        message: "Counter-proposal sent to HOD for review.",
-        status: "pending_hod_review",
+      return NextResponse.json({ 
+        success: true, 
+        message: "Counter proposal sent to HOD for review. Please await their response." 
       })
     }
   } catch (error) {
     console.error("[v0] HOD acknowledgment error:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Acknowledgment failed" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to process acknowledgment" }, { status: 500 })
   }
 }

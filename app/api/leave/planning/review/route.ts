@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { notifyLeaveHodApproved, notifyLeaveHodDecision } from "@/lib/workflow-emails"
+import { notifyLeaveHodApproved, notifyLeaveHodDecision, notifyLeaveHodChangesProposed } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { calculateRequestedDays, summarizeManagerReviewStatus, type LeavePlanReviewDecision } from "@/lib/leave-planning"
 
@@ -306,16 +306,38 @@ export async function POST(request: NextRequest) {
         is_read: false,
       })
 
-      // Email notification to staff
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || (profile as any).role || "HOD"
-      notifyLeaveHodDecision(admin, {
-        staffUserId: leavePlan.user_id,
-        staffName: "Staff Member",
-        decision: decision as "rejected" | "recommend_change",
-        hodName,
-        reason: recommendation || "",
-        leavePlanRequestId: leave_plan_request_id,
-      }).catch(() => {})
+      
+      // Send appropriate notification based on decision
+      if (decision === "recommend_change") {
+        // New email: HOD has proposed date changes
+        const { data: staffProfile } = await admin
+          .from("user_profiles")
+          .select("full_name")
+          .eq("id", leavePlan.user_id)
+          .single()
+        
+        notifyLeaveHodChangesProposed(admin, {
+          staffUserId: leavePlan.user_id,
+          staffName: staffProfile?.full_name || "Staff Member",
+          hodName,
+          originalStartDate: String(leavePlan.preferred_start_date || ""),
+          originalEndDate: String(leavePlan.preferred_end_date || ""),
+          proposedStartDate: nextStartDate,
+          proposedEndDate: nextEndDate,
+          hodNotes: recommendation || "Please review the proposed dates.",
+        }).catch((e) => console.error("[v0] Failed to send HOD changes notification:", e))
+      } else {
+        // Original email: HOD rejected the request
+        notifyLeaveHodDecision(admin, {
+          staffUserId: leavePlan.user_id,
+          staffName: "Staff Member",
+          decision: "rejected",
+          hodName,
+          reason: recommendation || "",
+          leavePlanRequestId: leave_plan_request_id,
+        }).catch(() => {})
+      }
     }
 
     // If fully approved by all HODs → notify HR-Leave-Office-Admin
