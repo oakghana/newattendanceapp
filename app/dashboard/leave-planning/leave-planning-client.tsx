@@ -2901,6 +2901,75 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                               </div>
                             </div>
 
+                            {/* Instant Weekend and Holiday Detection */}
+                            {adjStart && adjEnd && (() => {
+                              const holidayDates = holidays.map((h) => h.holiday_date)
+                              const holidayMap = holidays.reduce(
+                                (acc, h) => {
+                                  acc[h.holiday_date] = h.holiday_name
+                                  return acc
+                                },
+                                {} as Record<string, string>
+                              )
+                              const workingDaysData = calculateWorkingDays(adjStart, adjEnd, holidayDates)
+                              const weekendHolidayList = getWeekendsAndHolidaysInRange(adjStart, adjEnd, holidayDates, holidayMap)
+
+                              return (
+                                <div className="border border-slate-200 rounded-lg bg-slate-50 p-3 space-y-2">
+                                  <p className="text-xs font-semibold text-slate-700">Adjusted Period Breakdown</p>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                                    <div className="bg-white rounded px-2 py-1.5 border border-slate-200">
+                                      <p className="text-slate-600 font-medium">Total</p>
+                                      <p className="text-base font-bold text-slate-800">{workingDaysData.totalDays}</p>
+                                    </div>
+                                    <div className="bg-blue-50 rounded px-2 py-1.5 border border-blue-200">
+                                      <p className="text-blue-600 font-medium">Weekends</p>
+                                      <p className="text-base font-bold text-blue-800">{workingDaysData.weekendDays}</p>
+                                    </div>
+                                    <div className="bg-red-50 rounded px-2 py-1.5 border border-red-200">
+                                      <p className="text-red-600 font-medium">Holidays</p>
+                                      <p className="text-base font-bold text-red-800">{workingDaysData.holidayDays}</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded px-2 py-1.5 border border-green-200">
+                                      <p className="text-green-600 font-medium">Working Days</p>
+                                      <p className="text-base font-bold text-green-800">{workingDaysData.workingDays}</p>
+                                    </div>
+                                  </div>
+                                  {weekendHolidayList.length > 0 && (
+                                    <div className="text-xs space-y-1 pt-2 border-t border-slate-200">
+                                      <p className="font-medium text-slate-700">Non-working days:</p>
+                                      <div className="flex flex-wrap gap-1">
+                                        {weekendHolidayList.slice(0, 8).map((item, idx) => {
+                                          const dateStr = item.date.toLocaleDateString("en-US", { 
+                                            month: "short", 
+                                            day: "numeric"
+                                          })
+                                          const label = item.type === "holiday" ? `${item.name} (${dateStr})` : dateStr
+                                          return (
+                                            <span
+                                              key={idx}
+                                              className={`inline-block px-1.5 py-0.5 rounded text-xs whitespace-nowrap ${
+                                                item.type === "holiday"
+                                                  ? "bg-red-100 text-red-700"
+                                                  : "bg-blue-100 text-blue-700"
+                                              }`}
+                                            >
+                                              {label}
+                                            </span>
+                                          )
+                                        })}
+                                        {weekendHolidayList.length > 8 && (
+                                          <span className="inline-block px-1.5 py-0.5 text-xs text-slate-600">
+                                            +{weekendHolidayList.length - 8} more
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
+
                             {/* Day adjustment breakdown */}
                             <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
                               <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Day Adjustment Breakdown</p>
