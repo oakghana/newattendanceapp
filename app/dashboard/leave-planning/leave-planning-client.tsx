@@ -1000,7 +1000,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
   const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
+  const [endDate, setEndDate] = useState("") // Auto-calculated from start date + entitlement
+  const [calculatingEndDate, setCalculatingEndDate] = useState(false)
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
   const [partLeaveDays, setPartLeaveDays] = useState("")
@@ -1048,7 +1049,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
-  // ── HR Approver ──────────────────�����──────────────────────────────────
+  // ── HR Approver ──────────────────������──────────────────────────────────
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
@@ -1079,6 +1080,40 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     [leaveTypes, leaveType],
   )
   const activeLeaveYearPeriod = useMemo(() => getActiveLeaveYearPeriod(), [])
+
+  // Auto-calculate end date when start date or leave type changes
+  useEffect(() => {
+    const calculateEndDate = async () => {
+      if (!startDate || !leaveType) {
+        setEndDate("")
+        return
+      }
+      setCalculatingEndDate(true)
+      try {
+        const res = await fetch("/api/leave/calculate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startDate,
+            leaveType,
+            leaveYearPeriod,
+          }),
+        })
+        const result = await res.json()
+        if (result.success && result.calculation?.endDate) {
+          setEndDate(result.calculation.endDate)
+        } else {
+          // Fallback: use start date as end date
+          setEndDate(startDate)
+        }
+      } catch {
+        setEndDate(startDate)
+      } finally {
+        setCalculatingEndDate(false)
+      }
+    }
+    void calculateEndDate()
+  }, [startDate, leaveType, leaveYearPeriod])
   const leaveYearPeriodOptions = useMemo(() => getLeaveYearPeriodOptions(), [])
   const inOctoberPlanningWindow = useMemo(() => isOctoberPlanningWindow(), [])
 
@@ -1762,10 +1797,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
-    if (leaveType === "annual" && !endDate) {
-      toast({ title: "Missing end date", description: "Annual leave requires both start and end dates.", variant: "destructive" })
-      return
-    }
+    // End date is now auto-calculated, no manual validation needed
     if (leaveType === "part_leave" && !partLeaveDays) {
       toast({ title: "Missing days", description: "Please specify the number of days for part leave.", variant: "destructive" })
       return
@@ -1785,7 +1817,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           id: editingId,
           leave_year_period: leaveYearPeriod,
           preferred_start_date: startDate,
-          preferred_end_date: leaveType === "annual" ? endDate : startDate,
+          preferred_end_date: endDate || startDate,
           leave_type: leaveType,
           reason,
           resumption_date: autoResumptionDate,
@@ -2184,27 +2216,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 </div>
 
-                <div className={leaveType === "annual" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
-                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
-                  </div>
-                  {leaveType === "annual" && (
-                    <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                        End Date <span className="text-red-500">*</span>
-                      </Label>
-                      <Input 
-                        type="date" 
-                        value={endDate} 
-                        onChange={(e) => setEndDate(e.target.value)} 
-                        className="h-10"
-                        required
-                      />
-                      {!endDate && (
-                        <p className="text-xs text-amber-600">End date is required for annual leave</p>
-                      )}
-                    </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
+                  {calculatingEndDate && (
+                    <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}
                 </div>
 
@@ -2217,7 +2233,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 )}
 
-                {leaveType === "annual" && startDate && endDate && (
+                {startDate && endDate && !calculatingEndDate && (
                   <div className="space-y-3">
                     <div className="flex flex-wrap gap-3">
                       <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
@@ -2336,7 +2352,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Card>
           </TabsContent>
 
-          {/* ── HOD Review ──────────────────────────────────────────────── */}
+          {/* ── HOD Review ���─────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
