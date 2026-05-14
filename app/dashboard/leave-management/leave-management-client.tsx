@@ -169,9 +169,6 @@ export function LeaveManagementClient({
   const [isExportingAnnualLeave, setIsExportingAnnualLeave] = useState(false)
   const [staffApprovedMemos, setStaffApprovedMemos] = useState<any[]>([])
   const [isLoadingApprovedMemos, setIsLoadingApprovedMemos] = useState(false)
-  const [myDefermentRequests, setMyDefermentRequests] = useState<any[]>([])
-  const [myRecallRequests, setMyRecallRequests] = useState<any[]>([])
-  const [staffRequestsLoading, setStaffRequestsLoading] = useState(false)
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -738,66 +735,6 @@ export function LeaveManagementClient({
     
     void fetchDefermentAndRecallRequests()
   }, [userId, userRole])
-
-  // Fetch deferment and recall requests for HOD/RM to manage their department's requests
-  useEffect(() => {
-    const fetchHodRmDefermentAndRecallRequests = async () => {
-      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      
-      // Only fetch for HOD/RM
-      if (!["department_head", "regional_manager"].includes(normalizedRole)) return
-      
-      try {
-        // Fetch pending deferment requests for their department
-        const defermentRes = await fetch(`/api/leave/deferment?status=pending&department=${encodeURIComponent(userDepartment || '')}`, { cache: "no-store" })
-        if (defermentRes.ok) {
-          const defermentData = await defermentRes.json()
-          setDefermentRequests(Array.isArray(defermentData) ? defermentData : defermentData.deferments || [])
-        }
-        
-        // Fetch pending recall requests for their department
-        const recallRes = await fetch(`/api/leave/recall?status=pending&department=${encodeURIComponent(userDepartment || '')}`, { cache: "no-store" })
-        if (recallRes.ok) {
-          const recallData = await recallRes.json()
-          setRecallRequests(Array.isArray(recallData) ? recallData : recallData.recalls || [])
-        }
-      } catch (error) {
-        console.error("[v0] Failed to fetch HOD/RM deferment/recall requests:", error)
-      }
-    }
-    
-    void fetchHodRmDefermentAndRecallRequests()
-  }, [userId, userRole, userDepartment])
-
-  // Fetch staff's own deferment and recall requests for status view
-  useEffect(() => {
-    const fetchStaffRequestStatus = async () => {
-      if (!userId) return
-      
-      setStaffRequestsLoading(true)
-      try {
-        // Fetch staff's own deferment requests
-        const myDeferRes = await fetch(`/api/leave/deferment?user_id=${encodeURIComponent(userId)}`, { cache: "no-store" })
-        if (myDeferRes.ok) {
-          const myDeferData = await myDeferRes.json()
-          setMyDefermentRequests(Array.isArray(myDeferData) ? myDeferData : myDeferData.deferments || [])
-        }
-
-        // Fetch staff's own recall requests (they are affected by)
-        const myRecallRes = await fetch(`/api/leave/recall?affected_user_id=${encodeURIComponent(userId)}`, { cache: "no-store" })
-        if (myRecallRes.ok) {
-          const myRecallData = await myRecallRes.json()
-          setMyRecallRequests(Array.isArray(myRecallData) ? myRecallData : myRecallData.recalls || [])
-        }
-      } catch (error) {
-        console.error("[v0] Failed to fetch staff request status:", error)
-      } finally {
-        setStaffRequestsLoading(false)
-      }
-    }
-
-    void fetchStaffRequestStatus()
-  }, [userId])
 
   const runTemplateAction = async (templateKey: string, action: "duplicate" | "deactivate" | "activate") => {
     setTemplateActionKey(`${action}:${templateKey}`)
@@ -1525,21 +1462,6 @@ export function LeaveManagementClient({
                 <ArrowUpRight className="h-4 w-4" />
                 Recalls
               </Button>
-              <Button
-                onClick={() => setSelectedTab("request-status")}
-                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                  selectedTab === "request-status"
-                    ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                }`}
-                variant={selectedTab === "request-status" ? "default" : "outline"}
-              >
-                <Clock className="h-4 w-4" />
-                Request Status
-                {(myDefermentRequests.length + myRecallRequests.length) > 0 && (
-                  <Badge variant="secondary" className="ml-1">{myDefermentRequests.length + myRecallRequests.length}</Badge>
-                )}
-              </Button>
               {isManagerView && (
                 <Button
                   onClick={() => setSelectedTab("approved-memos")}
@@ -1615,14 +1537,14 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
-                  {isLeaveOfficeRole ? "Pending Leave Deferments" : isManagerView ? "Department Deferment Requests" : "Defer Your Approved Leave"}
+                  {isLeaveOfficeRole ? "Pending Leave Deferments" : "Defer Your Approved Leave"}
                 </CardTitle>
                 <CardDescription className="text-amber-100">
-                  {isLeaveOfficeRole ? "Review and process pending deferment requests from staff" : isManagerView ? "Review deferment requests from your department staff" : "Defer your approved leave to a future leave year"}
+                  {isLeaveOfficeRole ? "Review and process pending deferment requests from staff" : "Defer your approved leave to a future leave year"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {isLeaveOfficeRole || isManagerView ? (
+                {isLeaveOfficeRole ? (
                   defermentRequests.length === 0 ? (
                     <div className="text-center py-12">
                       <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
@@ -1746,49 +1668,12 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <ArrowUpRight className="h-5 w-5" />
-                  {isManagerView && recallRequests.length > 0 ? "Pending Recall Requests" : "Recall Your Leave"}
+                  Recall Your Leave
                 </CardTitle>
-                <CardDescription className="text-rose-100">
-                  {isManagerView && recallRequests.length > 0 ? "Review and process pending recall requests from staff" : "Request to recall active or upcoming leave (HOD/RM/HR only)"}
-                </CardDescription>
+                <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {isManagerView && recallRequests.length > 0 ? (
-                  <div className="space-y-4">
-                    {recallRequests.map((req: any) => (
-                      <div key={req.id} className="bg-white rounded-lg border border-rose-200 p-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-sm text-slate-600">Staff Name</p>
-                            <p className="font-semibold text-slate-900">{req.user_name}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-slate-600">Leave Type</p>
-                            <p className="font-semibold text-slate-900">{req.leave_type}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-slate-600">Original Leave Period</p>
-                            <p className="text-sm text-slate-700">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-slate-600">Recall Date</p>
-                            <p className="font-semibold text-slate-900">{new Date(req.recall_date).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-                        {req.recall_reason && (
-                          <div className="mt-4 pt-4 border-t border-rose-100">
-                            <p className="text-sm text-slate-600">Reason</p>
-                            <p className="text-sm text-slate-700">{req.recall_reason}</p>
-                          </div>
-                        )}
-                        <div className="flex gap-3 mt-4">
-                          <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
-                          <Button variant="outline" className="flex-1">Decline</Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : !isManagerView ? (
+                {!isManagerView ? (
                   <Alert className="border-blue-200 bg-blue-50">
                     <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
                   </Alert>
@@ -1860,97 +1745,6 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
-          )}
-
-          {selectedTab === "request-status" && (
-            <div className="space-y-4">
-              {staffRequestsLoading ? (
-                <Card className="border border-slate-200">
-                  <CardContent className="py-12 text-center">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
-                    <p className="mt-2 text-slate-600">Loading your request status...</p>
-                  </CardContent>
-                </Card>
-              ) : myDefermentRequests.length === 0 && myRecallRequests.length === 0 ? (
-                <Card className="border border-dashed border-slate-300 bg-slate-50/80">
-                  <CardContent className="py-14 text-center">
-                    <Clock className="mx-auto mb-4 h-12 w-12 text-slate-400" />
-                    <p className="font-medium text-slate-700">No deferment or recall requests</p>
-                    <p className="text-sm text-slate-500 mt-2">You don&apos;t have any pending deferment or recall requests</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  {/* My Deferments */}
-                  {myDefermentRequests.length > 0 && (
-                    <Card className="border border-amber-200 bg-gradient-to-br from-white to-amber-50/30">
-                      <CardHeader className="border-b border-amber-200 bg-amber-100/50">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Calendar className="h-5 w-5" />
-                          My Deferment Requests ({myDefermentRequests.length})
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="py-4">
-                        <div className="space-y-3">
-                          {myDefermentRequests.map((req: any) => (
-                            <div key={req.id} className="bg-white rounded-lg border border-amber-200 p-4">
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <p className="font-semibold text-slate-900">{req.leave_type} Leave Deferment</p>
-                                  <p className="text-sm text-slate-600">Submitted {new Date(req.created_at).toLocaleDateString()}</p>
-                                </div>
-                                <Badge className={req.status === "approved" ? "bg-emerald-100 text-emerald-800" : req.status === "declined" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
-                                  {req.status?.toUpperCase()}
-                                </Badge>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 text-sm mb-2">
-                                <div><span className="text-slate-600">Original:</span> {new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</div>
-                                <div><span className="text-slate-600">Defer to:</span> {req.deferral_year}</div>
-                              </div>
-                              {req.deferment_reason && <p className="text-sm text-slate-700 bg-amber-50 p-2 rounded">{req.deferment_reason}</p>}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* My Recalls */}
-                  {myRecallRequests.length > 0 && (
-                    <Card className="border border-rose-200 bg-gradient-to-br from-white to-rose-50/30">
-                      <CardHeader className="border-b border-rose-200 bg-rose-100/50">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <ArrowUpRight className="h-5 w-5" />
-                          My Recall Requests ({myRecallRequests.length})
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="py-4">
-                        <div className="space-y-3">
-                          {myRecallRequests.map((req: any) => (
-                            <div key={req.id} className="bg-white rounded-lg border border-rose-200 p-4">
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <p className="font-semibold text-slate-900">{req.leave_type} Leave Recall</p>
-                                  <p className="text-sm text-slate-600">Recall Date: {new Date(req.recall_date).toLocaleDateString()}</p>
-                                </div>
-                                <Badge className={req.status === "approved" ? "bg-emerald-100 text-emerald-800" : req.status === "declined" ? "bg-rose-100 text-rose-800" : "bg-rose-100 text-rose-800"}>
-                                  {req.status?.toUpperCase()}
-                                </Badge>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 text-sm mb-2">
-                                <div><span className="text-slate-600">Leave Period:</span> {new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</div>
-                                <div><span className="text-slate-600">Resume:</span> {new Date(req.recall_date).toLocaleDateString()}</div>
-                              </div>
-                              {req.recall_reason && <p className="text-sm text-slate-700 bg-rose-50 p-2 rounded">{req.recall_reason}</p>}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              )}
-            </div>
           )}
 
           {selectedTab === "approved-memos" && isManagerView && (

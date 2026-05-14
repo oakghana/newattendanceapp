@@ -1,6 +1,7 @@
 export type LeavePlanningRole =
   | "admin"
   | "regional_manager"
+  | "regional_hr_officer"
   | "department_head"
   | "staff"
   | "it-admin"
@@ -71,7 +72,12 @@ export function isManagerRole(role: string | null | undefined): boolean {
   return ["regional_manager", "department_head"].includes(normalized)
 }
 
-/** HR Leave Office role — receives HOD-approved leaves, can adjust days/dates, forwards to HR Approver */
+/** Regional HR Officer role — view-only access to regional leave data */
+export function isRegionalHrOfficerRole(role: string | null | undefined): boolean {
+  const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
+  return normalized === "regional_hr_officer"
+}
+
 export function isHrLeaveOfficeRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
   return ["hr_leave_office", "hr_office", "loan_office"].includes(normalized)

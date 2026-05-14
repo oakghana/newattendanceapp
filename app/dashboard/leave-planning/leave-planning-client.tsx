@@ -1,7 +1,7 @@
 "use client"
 
 // ============================================================
-// Leave Planning Client - V2 Redesign (4-stage workflow)
+// Leave Planning Client — V2 Redesign (4-stage workflow)
 // Staff → HOD Review → HR Leave Office → HR Approval + Memo
 // ============================================================
 
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SignaturePad } from "@/components/leave/signature-pad"
+import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
 import {
   isHrApproverRole,
   isHrLeaveOfficeRole,
@@ -100,7 +101,7 @@ interface RegistrySignature {
   signature_data_url: string | null
 }
 
-// - Helpers -
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 type SignatureMode = "typed" | "upload" | "draw"
 
@@ -132,15 +133,15 @@ async function readAsDataUrl(file: File): Promise<string> {
 }
 
 function fmtDate(val?: string | null) {
-  if (!val) return "-"
+  if (!val) return "—"
   try {
     return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "short", year: "numeric" })
   } catch { return val }
 }
 
 function fmtName(user?: any) {
-  if (!user) return "-"
-  return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.employee_id || "-"
+  if (!user) return "—"
+  return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.employee_id || "—"
 }
 
 function leaveTypeLabelShort(key: string) {
@@ -215,9 +216,9 @@ function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySigna
   return leaveSignatures[0] || null
 }
 
-// - Corporate Memo Template Builder -
+// ─── Corporate Memo Template Builder ────────────────────────────────────────
 function fmtLongDate(val?: string | null) {
-  if (!val) return "-"
+  if (!val) return "—"
   try {
     return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
   } catch {
@@ -226,7 +227,7 @@ function fmtLongDate(val?: string | null) {
 }
 
 function fmtFormalDate(val?: string | null) {
-  if (!val) return "-"
+  if (!val) return "—"
   try {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
@@ -240,7 +241,7 @@ function fmtFormalDate(val?: string | null) {
 }
 
 function fmtFormalDateWithWeekday(val?: string | null) {
-  if (!val) return "-"
+  if (!val) return "—"
   try {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
@@ -308,8 +309,8 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     approved_days: effectiveDays,
     approved_months: String(approvedMonths),
     approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
-    return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "-",
-    return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "-",
+    return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "—",
+    return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "—",
     leave_year_period: String(req.leave_year_period || getActiveLeaveYearPeriod()),
     outstanding_leave_days: String(outstandingLeaveDays),
     travelling_days_balance_sentence: travellingDays > 0 ? ` plus ${travellingDays} travelling day(s)` : "",
@@ -514,7 +515,7 @@ function buildMemoTemplate(req: any): { subject: string; body: string; cc: strin
     templateKey: fallbackTemplate.template_key,
   }
 }
-// -
+// ────────────────────────────────────────────────────────────────────────────
 
 function getCurrentMonthRange() {
   const now = new Date()
@@ -628,7 +629,7 @@ async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName:
   doc.save(fileName)
 }
 
-// - Stage Progress Indicator -
+// ─── Stage Progress Indicator ────────────────────────────────────────────────
 function WorkflowStages({ status }: { status: string }) {
   const stages = [
     { label: "Submitted", Icon: Send },
@@ -681,7 +682,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// - InfoPill -
+// ─── InfoPill ────────────────────────────────────────────────────────────────
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -856,7 +857,7 @@ const EMPTY_HR_ANALYTICS = {
   monthly_leave_counts: [],
   records: [],
 }
-// - Leave Request Card -
+// ─── Leave Request Card ───────────────────────────────────────────────────────
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
 }) {
@@ -869,7 +870,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="font-semibold text-slate-800 text-sm">
-              {leaveTypeLabelShort(req.leave_type_key)} - {req.leave_year_period}
+              {leaveTypeLabelShort(req.leave_type_key)} — {req.leave_year_period}
             </p>
             <p className="text-xs text-slate-500 mt-0.5">
               {fmtDate(effectiveStart)} → {fmtDate(effectiveEnd)}
@@ -949,7 +950,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   )
 }
 
-// - Main Component -
+// ─── Main Component ───────────────────────────────────────────────────────────
 export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -967,7 +968,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const canSelfApply = isStaff || isHod || isAdmin ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "accounts"].includes(normalizedRole)
 
-  // - Data -
+  // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -997,10 +998,22 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
-  // - Submit form -
+  // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
   const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
+  const [endDate, setEndDate] = useState("") // Auto-calculated from start date + entitlement
+  const [calculatingEndDate, setCalculatingEndDate] = useState(false)
+  // Store full calculation result from the API for accurate display
+  const [calculationResult, setCalculationResult] = useState<{
+    endDate: string;
+    daysCount: number;
+    estimatedReturn: string;
+    businessDays: number;
+    weekendDays: number;
+    holidayDays: number;
+    totalCalendarDays: number;
+    holidaysInPeriod?: Array<{ date: string; name: string }>;
+  } | null>(null)
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
   const [partLeaveDays, setPartLeaveDays] = useState("")
@@ -1027,14 +1040,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return fullName || "Staff Signature"
   }, [profile.firstName, profile.lastName])
 
-  // - HOD review -
+  // ── HOD review ──────────────────────────────────────────────────────
   const [hodAction, setHodAction] = useState<Record<string, "approve" | "reject" | "recommend_change">>({})
   const [hodNote, setHodNote] = useState<Record<string, string>>({})
   const [hodAdjStart, setHodAdjStart] = useState<Record<string, string>>({})
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // - HR Leave Office -
+  // ── HR Leave Office ─────────────────────────────────────────────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -1048,7 +1061,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
-  // - HR Approver -
+  // ── HR Approver ──────────────────������──────────────────────────────────
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
@@ -1062,7 +1075,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // - Computed -
+  // ── Computed ────���────────────────────────────────────────────────�������������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1079,10 +1092,52 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     [leaveTypes, leaveType],
   )
   const activeLeaveYearPeriod = useMemo(() => getActiveLeaveYearPeriod(), [])
+
+  // Auto-calculate end date when start date or leave type changes
+  useEffect(() => {
+    if (!startDate || !leaveType) {
+      setEndDate("")
+      setCalculationResult(null)
+      return
+    }
+    const calculateEndDate = async () => {
+      setCalculatingEndDate(true)
+      setCalculationResult(null)
+      try {
+        const res = await fetch("/api/leave/calculate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startDate,
+            leaveType,
+            leaveYearPeriod,
+            // Pass entitlement directly from the loaded policy so the API
+            // does not need to look it up (avoids key-mismatch bugs)
+            entitlementDays: selectedLeaveType?.entitlementDays ?? null,
+          }),
+        })
+        const result = await res.json()
+        if (result.success && result.calculation?.endDate) {
+          setEndDate(result.calculation.endDate)
+          setCalculationResult(result.calculation)
+        } else {
+          // Fallback: same day, 1 working day
+          setEndDate(startDate)
+          setCalculationResult(null)
+        }
+      } catch {
+        setEndDate(startDate)
+        setCalculationResult(null)
+      } finally {
+        setCalculatingEndDate(false)
+      }
+    }
+    void calculateEndDate()
+  }, [startDate, leaveType, leaveYearPeriod, selectedLeaveType])
   const leaveYearPeriodOptions = useMemo(() => getLeaveYearPeriodOptions(), [])
   const inOctoberPlanningWindow = useMemo(() => isOctoberPlanningWindow(), [])
 
-  // - Real-time same-month conflict warning -
+  // ── Real-time same-month conflict warning ────────────────────────────
   const sameMonthConflict = useMemo(() => {
     if (!startDate || !leaveType || !data?.myRequests) return null
     const newStart = new Date(startDate)
@@ -1124,7 +1179,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }) || null
   }, [startDate, leaveType, data?.myRequests, editingId])
 
-  // - Loaders -
+  // ── Loaders ─────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -1371,7 +1426,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // - Holiday CRUD Functions -
+  // ─── Holiday CRUD Functions ─────────────────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1541,7 +1596,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
   }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
 
-  // - Derived lists -
+  // ─����� Derived lists ──���─────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => {
     if (!data) return []
     const requests = data.myRequests || data.requests || []
@@ -1751,7 +1806,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return data.analytics
   }, [analyticsData, data])
 
-  // - Actions -
+  // ── Actions ──────────────────────────────────────────────────────────
 
   const submitPlan = async () => {
     if (!leaveType) {
@@ -1762,10 +1817,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
       return
     }
-    if (leaveType === "annual" && !endDate) {
-      toast({ title: "Missing end date", description: "Annual leave requires both start and end dates.", variant: "destructive" })
-      return
-    }
+    // End date is now auto-calculated, no manual validation needed
     if (leaveType === "part_leave" && !partLeaveDays) {
       toast({ title: "Missing days", description: "Please specify the number of days for part leave.", variant: "destructive" })
       return
@@ -1785,7 +1837,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           id: editingId,
           leave_year_period: leaveYearPeriod,
           preferred_start_date: startDate,
-          preferred_end_date: leaveType === "annual" ? endDate : startDate,
+          preferred_end_date: endDate || startDate,
           leave_type: leaveType,
           reason,
           resumption_date: autoResumptionDate,
@@ -1884,7 +1936,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const rsn = officeReason[requestId]
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
     if (!rsn || rsn.trim().length < 5) {
-      toast({ title: "Reason required", description: "Provide a detailed reason - it will appear in the memo.", variant: "destructive" })
+      toast({ title: "Reason required", description: "Provide a detailed reason — it will appear in the memo.", variant: "destructive" })
       return
     }
 
@@ -1960,7 +2012,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Approval failed")
       toast({
-        title: action === "approve" ? "Leave approved - memo ready" : "Leave rejected",
+        title: action === "approve" ? "Leave approved — memo ready" : "Leave rejected",
         description: action === "approve" ? "Staff can now download their leave memo." : undefined,
       })
       setHrExpandedId(null)
@@ -2005,7 +2057,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
   }
 
-  // - Tab config -
+  // ── Tab config ────────────────────────────────────────────────────────
   const tabs = useMemo(() => {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
     if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
@@ -2017,10 +2069,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
-  // - Render -
+  // ── Render ────��─────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* - Header Banner - */}
+      {/* ─��� Header Banner ──────�����──────────��────────────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -2083,7 +2135,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             ))}
           </TabsList>
 
-          {/* - My Leaves - */}
+          {/* ── My Leaves ─────────────────────────────────────────────── */}
           <TabsContent value="my-leaves">
             {myRequests.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -2113,7 +2165,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             )}
           </TabsContent>
 
-          {/* - Apply for Leave - */}
+          {/* ── Apply for Leave ───────────────────────────────────────── */}
           <TabsContent value="apply">
             <Card className="border-0 shadow-md">
               <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b pb-4">
@@ -2134,7 +2186,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         Annual Leave Planning Reminder:
                       </h4>
                       <p className="text-sm text-amber-800 leading-relaxed">
-                        In September, all staff must submit their annual leave requests for the October cocoa season cycle. This allows HOD/Regional Managers time to review and approve all leave days by the start of October. Plan ahead to avoid operational disruptions.
+                        In October, all staff are expected to submit their annual leave requests for the cocoa season cycle. This gives HODs and Regional Managers enough time to review and approve leave before the period progresses. Kindly plan ahead to keep operations running smoothly.
                       </p>
                     </div>
                   </div>
@@ -2184,27 +2236,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 </div>
 
-                <div className={leaveType === "annual" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
-                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
-                  </div>
-                  {leaveType === "annual" && (
-                    <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                        End Date <span className="text-red-500">*</span>
-                      </Label>
-                      <Input 
-                        type="date" 
-                        value={endDate} 
-                        onChange={(e) => setEndDate(e.target.value)} 
-                        className="h-10"
-                        required
-                      />
-                      {!endDate && (
-                        <p className="text-xs text-amber-600">End date is required for annual leave</p>
-                      )}
-                    </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
+                  {calculatingEndDate && (
+                    <p className="text-xs text-blue-600">Calculating leave duration...</p>
                   )}
                 </div>
 
@@ -2217,84 +2253,69 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 )}
 
-                {leaveType === "annual" && startDate && endDate && (
+                {startDate && endDate && !calculatingEndDate && calculationResult && (
                   <div className="space-y-3">
+                    {/* Top summary chips */}
                     <div className="flex flex-wrap gap-3">
-                      <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
-                        <p className="text-xs text-green-700 font-medium">Days Requested</p>
-                        <p className="text-2xl font-bold text-green-800">{computedDays}</p>
+                      <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center min-w-[110px]">
+                        <p className="text-xs text-green-700 font-medium">Working Days</p>
+                        <p className="text-2xl font-bold text-green-800">{calculationResult.daysCount}</p>
                       </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center">
-                        <p className="text-xs text-slate-600 font-medium">Return to Work</p>
-                        <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center min-w-[140px]">
+                        <p className="text-xs text-slate-600 font-medium">Period</p>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {new Date(startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                          {" - "}
+                          {new Date(calculationResult.endDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-center min-w-[140px]">
+                        <p className="text-xs text-blue-600 font-medium">Return to Work</p>
+                        <p className="text-sm font-semibold text-blue-800">
+                          {new Date(calculationResult.estimatedReturn).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Weekends and Holidays Breakdown */}
-                    {(() => {
-                      const holidayDates = holidays.map((h) => h.holiday_date)
-                      const holidayMap = holidays.reduce(
-                        (acc, h) => {
-                          acc[h.holiday_date] = h.holiday_name
-                          return acc
-                        },
-                        {} as Record<string, string>
-                      )
-                      const workingDaysData = calculateWorkingDays(startDate, endDate, holidayDates)
-                      const weekendHolidayList = getWeekendsAndHolidaysInRange(startDate, endDate, holidayDates, holidayMap)
-
-                      return (
-                        <div className="border border-slate-200 rounded-lg bg-slate-50 p-4 space-y-3">
-                          <h4 className="font-semibold text-sm text-slate-700">Leave Period Breakdown</h4>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                            <div className="bg-white rounded px-2 py-2 border border-slate-200">
-                              <p className="text-xs text-slate-600">Total Days</p>
-                              <p className="text-lg font-bold text-slate-800">{workingDaysData.totalDays}</p>
-                            </div>
-                            <div className="bg-blue-50 rounded px-2 py-2 border border-blue-200">
-                              <p className="text-xs text-blue-600">Weekends</p>
-                              <p className="text-lg font-bold text-blue-800">{workingDaysData.weekendDays}</p>
-                            </div>
-                            <div className="bg-red-50 rounded px-2 py-2 border border-red-200">
-                              <p className="text-xs text-red-600">Holidays</p>
-                              <p className="text-lg font-bold text-red-800">{workingDaysData.holidayDays}</p>
-                            </div>
-                            <div className="bg-green-50 rounded px-2 py-2 border border-green-200">
-                              <p className="text-xs text-green-600">Working Days</p>
-                              <p className="text-lg font-bold text-green-800">{workingDaysData.workingDays}</p>
-                            </div>
-                          </div>
-
-                          {weekendHolidayList.length > 0 && (
-                            <div className="text-xs space-y-1 mt-2 pt-2 border-t border-slate-200">
-                              <p className="font-medium text-slate-700">Non-working days in this period:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {weekendHolidayList.map((item, idx) => {
-                                  const dateStr = item.date.toLocaleDateString("en-US", { 
-                                    month: "short", 
-                                    day: "numeric",
-                                    weekday: "short"
-                                  })
-                                  const label = item.type === "holiday" ? `🎉 ${item.name} (${dateStr})` : `📅 ${dateStr}`
-                                  return (
-                                    <span
-                                      key={idx}
-                                      className={`inline-block px-2 py-1 rounded text-xs ${
-                                        item.type === "holiday"
-                                          ? "bg-red-100 text-red-700"
-                                          : "bg-blue-100 text-blue-700"
-                                      }`}
-                                    >
-                                      {label}
-                                    </span>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
+                    {/* Full breakdown using API values */}
+                    <div className="border border-slate-200 rounded-lg bg-slate-50 p-4 space-y-3">
+                      <h4 className="font-semibold text-sm text-slate-700">Leave Period Breakdown</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                        <div className="bg-white rounded px-2 py-2 border border-slate-200">
+                          <p className="text-xs text-slate-600">Total Calendar Days</p>
+                          <p className="text-lg font-bold text-slate-800">{calculationResult.totalCalendarDays}</p>
                         </div>
-                      )
-                    })()}
+                        <div className="bg-blue-50 rounded px-2 py-2 border border-blue-200">
+                          <p className="text-xs text-blue-600">Weekends</p>
+                          <p className="text-lg font-bold text-blue-800">{calculationResult.weekendDays}</p>
+                        </div>
+                        <div className="bg-red-50 rounded px-2 py-2 border border-red-200">
+                          <p className="text-xs text-red-600">Public Holidays</p>
+                          <p className="text-lg font-bold text-red-800">{calculationResult.holidayDays}</p>
+                        </div>
+                        <div className="bg-green-50 rounded px-2 py-2 border border-green-200">
+                          <p className="text-xs text-green-600">Working Days</p>
+                          <p className="text-lg font-bold text-green-800">{calculationResult.businessDays}</p>
+                        </div>
+                      </div>
+
+                      {/* Named public holidays in the period */}
+                      {calculationResult.holidaysInPeriod && calculationResult.holidaysInPeriod.length > 0 && (
+                        <div className="text-xs space-y-1 mt-2 pt-2 border-t border-slate-200">
+                          <p className="font-medium text-slate-700">Public holidays within this period:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {calculationResult.holidaysInPeriod.map((h, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-block px-2 py-1 rounded text-xs bg-red-100 text-red-700"
+                              >
+                                {h.name} ({new Date(h.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -2336,7 +2357,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Card>
           </TabsContent>
 
-          {/* - HOD Review - */}
+          {/* ── HOD Review ���─────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -2378,7 +2399,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <div>
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
                             <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "-")} · {String(req.user?.employee_id || "")}
+                              {String(req.user?.departments?.name || "—")} · {String(req.user?.employee_id || "")}
                             </p>
                           </div>
                           <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
@@ -2483,13 +2504,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             )}
           </TabsContent>
 
-          {/* - HR Leave Office - */}
+          {/* ── HR Leave Office ───────────────────────────────────────── */}
           <TabsContent value="hr-office">
             <div className="mb-4 space-y-3">
               <Alert className="border-blue-200 bg-blue-50">
                 <ClipboardList className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="text-xs text-blue-800 ml-1">
-                  Review HOD-approved leave requests. You may adjust days - add travelling days, deduct public holidays or
+                  Review HOD-approved leave requests. You may adjust days — add travelling days, deduct public holidays or
                   prior partial leave enjoyed. All adjustments and reasons will appear in the staff&apos;s official leave memo.
                 </AlertDescription>
               </Alert>
@@ -2564,7 +2585,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <Clock3 className="h-3.5 w-3.5" />
-                  Last refresh: {hrOfficeLastRefresh ? fmtDate(hrOfficeLastRefresh) : "-"}
+                  Last refresh: {hrOfficeLastRefresh ? fmtDate(hrOfficeLastRefresh) : "—"}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -3016,7 +3037,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <div>
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
                             <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "-")} ·{" "}
+                              {String(req.user?.departments?.name || "—")} ·{" "}
                               {leaveTypeLabelShort(req.leave_type_key)} · HOD approved {fmtDate(req.hod_reviewed_at)}
                             </p>
                           </div>
@@ -3028,7 +3049,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Original Start" value={fmtDate(req.preferred_start_date)} />
                           <InfoPill label="Original End" value={fmtDate(req.preferred_end_date)} />
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
-                          <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "-"} />
+                          <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
                         </div>
                         {req.manager_recommendation && (
                           <p className="text-xs text-slate-600 bg-amber-50 p-2 rounded border border-amber-200 mb-3">
@@ -3037,7 +3058,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         )}
                         <div className="mb-3 flex flex-wrap gap-2">
                           <Badge className="border border-slate-200 bg-white text-slate-700">Requested: {req.requested_days} day(s)</Badge>
-                          <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "-"} day(s)</Badge>
+                          <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "—"} day(s)</Badge>
                         </div>
                         <Button size="sm" variant="outline"
                           disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
@@ -3074,6 +3095,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                         {isExpanded && (
                           <div className="mt-4 space-y-4 border-t pt-4">
+                            {/* Leave history for this staff member — supports informed HR decisions */}
+                            <StaffLeaveHistory
+                              userId={String(req.user_id || req.user?.id || "")}
+                              staffName={fmtName(req.user)}
+                            />
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1">
                                 <Label className="text-xs font-semibold">Adjusted Start Date</Label>
@@ -3162,7 +3188,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-red-700">
-                                    <Minus className="w-3 h-3" /> Deduct - Public Holidays
+                                    <Minus className="w-3 h-3" /> Deduct — Public Holidays
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officeHolidayDays[req.id] || "0"}
@@ -3171,7 +3197,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-red-700">
-                                    <Minus className="w-3 h-3" /> Deduct - Prior Leave Enjoyed
+                                    <Minus className="w-3 h-3" /> Deduct — Prior Leave Enjoyed
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officePriorDays[req.id] || "0"}
@@ -3180,7 +3206,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-emerald-700">
-                                    <Plus className="w-3 h-3" /> Add - Travelling Days
+                                    <Plus className="w-3 h-3" /> Add — Travelling Days
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officeTravelDays[req.id] || "0"}
@@ -3259,7 +3285,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 <Input
                                   value={officeMemoSubject[req.id] || ""}
                                   onChange={(e) => setOfficeMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="RE: APPLICATION FOR ANNUAL LEAVE - 2026/2027"
+                                  placeholder="RE: APPLICATION FOR ANNUAL LEAVE — 2026/2027"
                                   className="h-9 bg-white"
                                 />
                               </div>
@@ -3285,8 +3311,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               </div>
                             </div>
 
-                            <Button onClick={() => submitHrOfficeReview(req.id)}
-                              disabled={officeSubmitting === req.id}
+                            <Button onClick={() => {
+                              if (!officeMemoBody[req.id] || !officeMemoBody[req.id].trim()) {
+                                toast({ title: "Remarks Required", description: "Please provide remarks before forwarding to HR Approvers", variant: "destructive" })
+                                return
+                              }
+                              submitHrOfficeReview(req.id)
+                            }}
+                              disabled={officeSubmitting === req.id || !officeMemoBody[req.id]?.trim()}
                               className="bg-blue-700 hover:bg-blue-800 text-white">
                               {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
                             </Button>
@@ -3329,7 +3361,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Tabs>
           </TabsContent>
 
-          {/* - HR Final Approval - */}
+          {/* ── HR Final Approval ─────────────────────────────────────── */}
           <TabsContent value="hr-approve">
             {hrApproverQueue.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -3441,7 +3473,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <div>
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
                             <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "-")} · {leaveTypeLabelShort(req.leave_type_key)}
+                              {String(req.user?.departments?.name || "—")} · {leaveTypeLabelShort(req.leave_type_key)}
                             </p>
                           </div>
                           <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
@@ -3452,7 +3484,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Start" value={fmtDate(effectiveStart)} />
                           <InfoPill label="End" value={fmtDate(effectiveEnd)} />
                           <InfoPill label="Days" value={String(effectiveDays)} highlight />
-                          <InfoPill label="Year" value={req.leave_year_period || "-"} />
+                          <InfoPill label="Year" value={req.leave_year_period || "—"} />
                         </div>
                         {req.adjustment_reason && (
                           <Alert className="mb-3 py-2 border-blue-200 bg-blue-50">
@@ -3637,8 +3669,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                             </p>
                             <p className="text-xs text-slate-500">
                               {String(req?.leave_type_key || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
-                              {" · "}{req?.preferred_start_date} - {req?.preferred_end_date}
-                              {" · "}{req?.adjusted_days || req?.requested_days || "-"} day(s)
+                              {" · "}{req?.preferred_start_date} — {req?.preferred_end_date}
+                              {" · "}{req?.adjusted_days || req?.requested_days || "—"} day(s)
                             </p>
                             {req?.user?.departments?.name && (
                               <p className="text-xs text-slate-400">{req.user.departments.name}</p>

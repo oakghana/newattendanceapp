@@ -40,8 +40,6 @@ export interface LeaveRequestData {
   leaveYearPeriod?: string
   documentFile?: File
   isDirectSubmit?: boolean
-  isHalfDay?: boolean
-  halfDayPeriod?: "morning" | "afternoon"
 }
 
 const LEAVE_ICONS: Record<string, React.ReactNode> = {
@@ -90,8 +88,8 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   const [leaveSearchQuery, setLeaveSearchQuery] = useState("")
   const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [isHalfDay, setIsHalfDay] = useState(false)
-  const [halfDayPeriod, setHalfDayPeriod] = useState<"morning" | "afternoon">("morning")
+  const [calculatedEnd, setCalculatedEnd] = useState<{ endDate: string; daysCount: number; businessDays: number; estimatedReturn: string } | null>(null)
+  const [calculating, setCalculating] = useState(false)
   const [formData, setFormData] = useState<LeaveRequestData>({
     startDate: new Date(),
     endDate: new Date(),
@@ -121,10 +119,38 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
     }
     if (open) {
       setStep("type")
-      setIsHalfDay(false)
+      setCalculatedEnd(null)
       void loadPolicy()
     }
   }, [open])
+
+  const calculateDuration = async (startDate: Date, leaveType: string, period: string) => {
+    if (!startDate || !leaveType) return
+    setCalculating(true)
+    try {
+      const res = await fetch("/api/leave/calculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startDate: startDate.toISOString().split("T")[0],
+          leaveType,
+          leaveYearPeriod: period,
+        }),
+      })
+      const result = await res.json()
+      if (result.success && result.calculation) {
+        const { endDate, daysCount, businessDays, estimatedReturn } = result.calculation
+        setCalculatedEnd({ endDate, daysCount, businessDays, estimatedReturn })
+        setFormData((p) => ({ ...p, endDate: new Date(endDate) }))
+      }
+    } catch {
+      // Fallback: set endDate same as startDate
+      setCalculatedEnd(null)
+      setFormData((p) => ({ ...p, endDate: startDate }))
+    } finally {
+      setCalculating(false)
+    }
+  }
 
   const handleSubmit = async () => {
     setLoading(true)
@@ -132,8 +158,6 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
       await onSubmit({
         ...formData,
         documentFile: uploadedFile || undefined,
-        isHalfDay,
-        halfDayPeriod: isHalfDay ? halfDayPeriod : undefined,
       })
       resetForm()
       onOpenChange(false)
@@ -145,7 +169,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   const resetForm = () => {
     setStep("type")
     setUploadedFile(null)
-    setIsHalfDay(false)
+    setCalculatedEnd(null)
     setFormData({
       startDate: new Date(),
       endDate: new Date(),
@@ -165,9 +189,8 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   const currentIdx = stepIndex(step, !!hasApprovedLeave)
   const totalSteps = steps.length
 
-  const daysDifference = isHalfDay
-    ? 0.5
-    : Math.max(1, Math.ceil((formData.endDate.getTime() - formData.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+  const daysDifference = calculatedEnd?.daysCount
+    ?? Math.max(1, Math.ceil((formData.endDate.getTime() - formData.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1)
 
   const selectedType = leaveTypeOptions.find((t) => t.value === formData.leaveType)
   const typeColor = LEAVE_COLORS[formData.leaveType] || LEAVE_COLORS.other
@@ -185,10 +208,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
 
   const canProceed =
     step === "type" ? !!formData.leaveType :
-    step === "dates" ? 
-      (formData.endDate >= formData.startDate && (
-        formData.leaveType !== "annual" || (formData.leaveType === "annual" && formData.startDate && formData.endDate)
-      )) :
+    step === "dates" ? (!!formData.startDate && !calculating) :
     step === "reason" ? formData.reason.trim().length >= 3 :
     step === "document" ? !!uploadedFile :
     true
@@ -297,10 +317,8 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                         onClick={() => {
                           setFormData((p) => ({ ...p, leaveType: type.value }))
                           setLeaveSearchQuery("")
-                          if (type.value === "annual") {
-                            setIsHalfDay(false)
-                          }
                           setStep("dates")
+                          void calculateDuration(formData.startDate, type.value, activePeriod)
                         }}
                         className={cn(
                         "flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 text-left transition-all duration-150 hover:scale-[1.01] active:scale-[0.99]",
@@ -322,105 +340,72 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
           {/* Step: Dates */}
           {step === "dates" && (
             <div className="space-y-4">
-              {/* Annual Leave Requirements Notice */}
-              {formData.leaveType === "annual" && (
-                <Alert className="border-amber-300 bg-amber-50">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800 font-medium">
-                    Annual leave requires both start and end dates for HOD/Regional Manager review and approval.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {/* Half-day toggle */}
-              <div className="flex items-center justify-between rounded-xl border bg-muted/40 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium">Half-day leave</p>
-                  <p className="text-xs text-muted-foreground">Take morning or afternoon off</p>
-                </div>
-                <button
-                  onClick={() => formData.leaveType !== "annual" && setIsHalfDay(!isHalfDay)}
-                  disabled={formData.leaveType === "annual"}
-                  className={cn(
-                    "relative w-11 h-6 rounded-full transition-colors",
-                    isHalfDay ? "bg-blue-600" : "bg-muted-foreground/30",
-                    formData.leaveType === "annual" && "opacity-50 cursor-not-allowed"
-                  )}
-                  title={formData.leaveType === "annual" ? "Annual leave requires full days" : ""}
-                >
-                  <span className={cn(
-                    "absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all",
-                    isHalfDay ? "left-6" : "left-1"
-                  )} />
-                </button>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
+                  Leave Start Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.startDate.toISOString().split("T")[0]}
+                  onChange={(e) => {
+                    const d = new Date(e.target.value)
+                    setFormData((p) => ({ ...p, startDate: d, endDate: d }))
+                    setCalculatedEnd(null)
+                    void calculateDuration(d, formData.leaveType, activePeriod)
+                  }}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
               </div>
-              {formData.leaveType === "annual" && isHalfDay && (
-                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  Annual leave cannot be taken as half-day. Please select full day(s).
-                </p>
-              )}
 
-              {isHalfDay && (
-                <div className="grid grid-cols-2 gap-2">
-                  {(["morning", "afternoon"] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setHalfDayPeriod(p)}
-                      className={cn(
-                        "py-2.5 rounded-xl border-2 text-sm font-medium capitalize transition-all",
-                        halfDayPeriod === p
-                          ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                          : "border-border bg-background hover:bg-muted"
-                      )}
-                    >
-                      {p === "morning" ? "🌅 Morning" : "🌇 Afternoon"}
-                    </button>
-                  ))}
+              {/* Auto-calculated duration card */}
+              {calculating && (
+                <div className="flex items-center gap-2 rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4 animate-spin" />
+                  Calculating duration...
                 </div>
               )}
 
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Start Date</label>
-                  <input
-                    type="date"
-                    value={formData.startDate.toISOString().split("T")[0]}
-                    onChange={(e) => {
-                      const d = new Date(e.target.value)
-                      setFormData((p) => ({ ...p, startDate: d, endDate: isHalfDay ? d : p.endDate < d ? d : p.endDate }))
-                    }}
-                    min={new Date().toISOString().split("T")[0]}
-                    className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-                {!isHalfDay && (
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
-                      End Date {formData.leaveType === "annual" && <span className="text-red-500">*</span>}
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.endDate.toISOString().split("T")[0]}
-                      onChange={(e) => setFormData((p) => ({ ...p, endDate: new Date(e.target.value) }))}
-                      min={formData.startDate.toISOString().split("T")[0]}
-                      required={formData.leaveType === "annual"}
-                      className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
+              {!calculating && calculatedEnd && (
+                <div className={cn("rounded-xl border px-4 py-3 space-y-2", typeColor)}>
+                  <div className="flex items-center gap-2">
+                    {typeIcon}
+                    <p className="font-semibold text-sm">
+                      {calculatedEnd.daysCount} working day{calculatedEnd.daysCount !== 1 ? "s" : ""}
+                    </p>
                   </div>
-                )}
-              </div>
-
-              {/* Summary chip */}
-              <div className={cn("flex items-center gap-3 rounded-xl border px-4 py-3", typeColor)}>
-                {typeIcon}
-                <div>
-                  <p className="font-semibold text-sm">{daysDifference} day{daysDifference !== 1 ? "s" : ""}</p>
-                  <p className="text-xs opacity-80">
-                    {isHalfDay
-                      ? `${halfDayPeriod} half-day on ${formData.startDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
-                      : `${formData.startDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${formData.endDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
-                  </p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs opacity-90">
+                    <div>
+                      <span className="font-medium">Start:</span>{" "}
+                      {new Date(calculatedEnd.endDate.replace(/-/g, "/")).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                    <div>
+                      <span className="font-medium">End:</span>{" "}
+                      {new Date(calculatedEnd.endDate.replace(/-/g, "/")).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                    <div>
+                      <span className="font-medium">Return to work:</span>{" "}
+                      {new Date(calculatedEnd.estimatedReturn.replace(/-/g, "/")).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                    <div>
+                      <span className="font-medium">Business days:</span>{" "}
+                      {calculatedEnd.businessDays}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {!calculating && !calculatedEnd && formData.startDate && (
+                <div className={cn("flex items-center gap-3 rounded-xl border px-4 py-3", typeColor)}>
+                  {typeIcon}
+                  <div>
+                    <p className="font-semibold text-sm">1 day</p>
+                    <p className="text-xs opacity-80">
+                      {formData.startDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -482,9 +467,10 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
               <div className="rounded-2xl border divide-y overflow-hidden">
                 {[
                   { label: "Leave Type", value: selectedType?.label ?? formData.leaveType },
-                  { label: "Duration", value: `${daysDifference} day${daysDifference !== 1 ? "s" : ""}${isHalfDay ? ` (${halfDayPeriod})` : ""}` },
+                  { label: "Duration", value: `${daysDifference} working day${daysDifference !== 1 ? "s" : ""}` },
                   { label: "Start Date", value: formData.startDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
-                  ...(!isHalfDay ? [{ label: "End Date", value: formData.endDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) }] : []),
+                  { label: "End Date", value: formData.endDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
+                  ...(calculatedEnd ? [{ label: "Return to Work", value: new Date(calculatedEnd.estimatedReturn.replace(/-/g, "/")).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) }] : []),
                   { label: "Reason", value: formData.reason },
                   ...(uploadedFile ? [{ label: "Document", value: uploadedFile.name }] : []),
                 ].map(({ label, value }) => (
@@ -509,14 +495,6 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
         {/* Footer */}
         {step !== "type" && (
           <div className="border-t px-6 py-4 space-y-3 bg-background">
-            {step === "dates" && formData.leaveType === "annual" && !formData.endDate && (
-              <Alert className="border-red-200 bg-red-50">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800 text-sm">
-                  Please enter both start and end dates to proceed with annual leave.
-                </AlertDescription>
-              </Alert>
-            )}
             <div className="flex gap-2">
               <Button variant="outline" onClick={goBack} className="flex-1" disabled={loading}>
                 Back
