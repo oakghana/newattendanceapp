@@ -54,7 +54,20 @@ export function QuickActions({ userRole }: QuickActionsProps) {
         ]
       : []
 
-  const allActions = [...actions, ...adminActions]
+  const hrLeaveAdminActions = 
+    userRole && ["hr_leave_office", "admin"].includes(String(userRole).toLowerCase().replace(/[\s-]+/g, "_"))
+      ? [
+          {
+            title: "HR Leave Admin",
+            description: "Manage holidays, leave types, and HR configurations",
+            href: "/dashboard/hr-leave-admin",
+            icon: Zap,
+            tag: "HR Admin",
+          },
+        ]
+      : []
+
+  const allActions = [...actions, ...hrLeaveAdminActions, ...adminActions]
 
   return (
     <Card className="bg-white/95 dark:bg-slate-900/95 border-slate-200/80 dark:border-slate-800/90 shadow-sm">

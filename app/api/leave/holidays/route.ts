@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase/server"
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,14 +13,14 @@ export async function GET(req: NextRequest) {
     // Fetch all public holidays for Ghana
     const { data: holidays, error } = await admin
       .from("ghana_public_holidays")
-      .select("holiday_date, holiday_name")
+      .select("id, holiday_date, holiday_name")
       .order("holiday_date", { ascending: true })
 
     if (error) {
       console.error("[v0] Error fetching holidays:", error)
       return NextResponse.json(
         { error: "Failed to fetch holidays", holidays: [] },
-        { status: 200 } // Return 200 with empty array on error for graceful degradation
+        { status: 200 }
       )
     }
 
@@ -31,7 +32,88 @@ export async function GET(req: NextRequest) {
     console.error("[v0] Holidays API error:", error)
     return NextResponse.json(
       { error: "Internal server error", holidays: [] },
-      { status: 200 } // Return 200 with empty array on error for graceful degradation
+      { status: 200 }
+    )
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const admin = await createAdminClient()
+    const { holiday_date, holiday_name } = await req.json()
+
+    // Get current user
+    const {
+      data: { user },
+    } = await admin.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Get user role - check EXACT role string
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    const userRole = profile?.role || ""
+    console.log("[v0] Holiday POST - User role:", userRole)
+
+    // Check authorization - exact role matching for clarity
+    const authorizedRoles = ["HR LEAVE_OFFICE", "admin", "Admin"]
+    const isAuthorized = authorizedRoles.includes(userRole)
+
+    if (!isAuthorized) {
+      console.log("[v0] NOT authorized. Role:", userRole, "Expected one of:", authorizedRoles)
+      return NextResponse.json(
+        { error: `Unauthorized: Role "${userRole}" cannot manage holidays` },
+        { status: 403 }
+      )
+    }
+
+    // Validate inputs
+    if (!holiday_date || !holiday_name) {
+      return NextResponse.json(
+        { error: "holiday_date and holiday_name are required" },
+        { status: 400 }
+      )
+    }
+
+    // Add holiday using admin client (bypasses RLS)
+    const { data: newHoliday, error: insertError } = await admin
+      .from("ghana_public_holidays")
+      .insert([
+        {
+          holiday_date,
+          holiday_name,
+          is_custom: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ])
+      .select()
+
+    if (insertError) {
+      console.error("[v0] Error adding holiday:", insertError)
+      return NextResponse.json(
+        { error: "Failed to add holiday", details: insertError.message },
+        { status: 400 }
+      )
+    }
+
+    console.log("[v0] Holiday added successfully:", newHoliday?.[0]?.holiday_date)
+    return NextResponse.json({
+      success: true,
+      holiday: newHoliday?.[0],
+      message: "Holiday added successfully",
+    })
+  } catch (error) {
+    console.error("[v0] Holidays POST error:", error)
+    return NextResponse.json(
+      { error: "Internal server error", details: String(error) },
+      { status: 500 }
     )
   }
 }

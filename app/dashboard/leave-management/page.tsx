@@ -66,6 +66,20 @@ export default async function LeaveManagementPage() {
   }
 
   const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+  
+  // Prevent Loan Officers from accessing Leave Management module
+  if (roleNorm === "loan_office") {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-4">
+          <h1 className="text-2xl font-bold text-slate-900">Access Denied</h1>
+          <p className="text-slate-600">Loan Officers do not have access to the Leave Management module.</p>
+          <p className="text-sm text-slate-500">Please contact your administrator if you need access.</p>
+        </div>
+      </div>
+    )
+  }
+
   const canReviewLeave = [
     "admin",
     "regional_manager",
@@ -77,7 +91,6 @@ export default async function LeaveManagementPage() {
     "manager_hr",
     "director_hr",
     "hr_director",
-    "loan_office",
     "it_admin",
   ].includes(roleNorm)
 
@@ -180,14 +193,25 @@ export default async function LeaveManagementPage() {
   }
 
   // Fetch approved leaves from staff for HOD/RM to perform deferment/recall
-  if (canReviewLeave && profile.department_id) {
-    // Get all staff in this HOD/RM's department
-    const { data: deptStaff } = await admin
-      .from("user_profiles")
-      .select("id")
-      .eq("department_id", profile.department_id)
-
-    const staffIds = (deptStaff || []).map((s: any) => s.id)
+  if (canReviewLeave) {
+    let staffIds: any[] = []
+    
+    // For admin/hr roles: get all staff with approved leaves
+    if (["admin", "hr_leave_office", "hr_office", "hr", "hr_officer", "manager_hr", "director_hr"].includes(roleNorm)) {
+      // Get all users
+      const { data: allUsers } = await admin
+        .from("user_profiles")
+        .select("id")
+      staffIds = (allUsers || []).map((s: any) => s.id)
+    } 
+    // For HOD/RM: get staff in their department
+    else if (profile.department_id) {
+      const { data: deptStaff } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", profile.department_id)
+      staffIds = (deptStaff || []).map((s: any) => s.id)
+    }
 
     if (staffIds.length > 0) {
       // Fetch approved leaves

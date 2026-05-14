@@ -119,6 +119,7 @@ interface LeavePlanningClientProps {
     departmentName: string | null
     departmentCode: string | null
   }
+  initialHolidays?: Array<{ holiday_date: string; holiday_name: string }>
 }
 
 async function readAsDataUrl(file: File): Promise<string> {
@@ -935,7 +936,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
+export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
@@ -946,11 +947,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
-  const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin || ["loan_office"].includes(normalizedRole)
+  const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
   const canSelfApply = isStaff || isHod || isAdmin ||
-    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "loan_office", "accounts"].includes(normalizedRole)
+    ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "accounts"].includes(normalizedRole)
 
   // ── Data ────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false)
@@ -1001,7 +1002,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [typedSignature, setTypedSignature] = useState("")
   const [uploadedSigUrl, setUploadedSigUrl] = useState<string | null>(null)
   const [drawnSigUrl, setDrawnSigUrl] = useState<string | null>(null)
-  const [holidays, setHolidays] = useState<Array<{ holiday_date: string; holiday_name: string }>>([])
+  const [holidays, setHolidays] = useState<Array<{ holiday_date: string; holiday_name: string }>>(initialHolidays || [])
   const [holidaysLoading, setHolidaysLoading] = useState(false)
 
   const defaultStaffSignature = useMemo(() => {
@@ -1133,11 +1134,18 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const json = await res.json()
       if (!res.ok) return
       setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
-      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes) ? json.leaveTypes : []
+      // Filter only active leave types, excluding inactive ones and Sick Leave
+      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes)
+        ? json.leaveTypes.filter((t: any) => 
+            t.is_active !== false && 
+            t.leaveTypeKey !== "sick_leave" && 
+            String(t.leaveTypeLabel || "").toLowerCase() !== "sick leave"
+          )
+        : []
       const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
       setLeaveTypes(hasPartLeave ? types : [
         ...types,
-        { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027" },
+        { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", is_active: true },
       ])
     } catch { /* silent */ }
   }, [])

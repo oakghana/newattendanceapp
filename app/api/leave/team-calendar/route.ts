@@ -11,6 +11,16 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    // Get user's role and department
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("role, department_id")
+      .eq("id", user.id)
+      .single()
+
+    const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const userDepartment = userProfile?.department_id
+
     // Optional: filter by month query param  ?month=2026-04
     const url = new URL(request.url)
     const monthParam = url.searchParams.get("month")
@@ -33,12 +43,29 @@ export async function GET(request: NextRequest) {
     }
 
     // Current workflow source: leave_plan_requests with final HR approval.
-    const { data: requests, error } = await admin
+    let requestsQuery = admin
       .from("leave_plan_requests")
       .select("id, user_id, leave_type_key, preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, status, is_archived")
       .eq("status", "hr_approved")
       .eq("is_archived", false)
       .order("preferred_start_date", { ascending: true })
+
+    // For HOD/RM: only show their department's staff leaves
+    if (["department_head", "regional_manager"].includes(userRole) && userDepartment) {
+      // Get all staff in this HOD/RM's department
+      const { data: deptStaff } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", userDepartment)
+
+      const staffIds = (deptStaff || []).map((s: any) => s.id)
+      if (staffIds.length === 0) {
+        return NextResponse.json({ entries: [], rangeStart, rangeEnd })
+      }
+      requestsQuery = requestsQuery.in("user_id", staffIds)
+    }
+
+    const { data: requests, error } = await requestsQuery
 
     if (error) return NextResponse.json({ entries: [], rangeStart, rangeEnd })
 

@@ -119,7 +119,6 @@ export function LeaveManagementClient({
     const editableStatuses = new Set([
       "pending",
       "pending_manager_review",
-      "pending_hod_review",
       "manager_changes_requested",
       "manager_rejected",
       "hod_changes_requested",
@@ -438,7 +437,7 @@ export function LeaveManagementClient({
 
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_leave_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -483,7 +482,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_leave_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -564,7 +563,7 @@ export function LeaveManagementClient({
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
-  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
+  const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
   const isAdminView = normalizedRole === "admin"
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
@@ -584,15 +583,19 @@ export function LeaveManagementClient({
 
       setIsSubmittingDeferment(true)
 
+      const payload = {
+        leave_plan_request_id: selectedApprovedForDeferment,
+        deferral_year: deferralYear,
+        reason: defermentReason || null,
+        user_id: userId,
+      }
+
+      console.log("[v0] Deferment payload:", payload)
+
       const response = await fetch("/api/leave/deferment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leave_plan_request_id: selectedApprovedForDeferment,
-          deferral_year: deferralYear,
-          reason: defermentReason || null,
-          user_id: userId,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
@@ -628,16 +631,20 @@ export function LeaveManagementClient({
 
       setIsSubmittingRecall(true)
 
+      const payload = {
+        leave_plan_request_id: selectedApprovedForRecall,
+        recall_date: recallDateInput,
+        reason: recallReasonInput || null,
+        user_id: userId,
+        user_role: userRole,
+      }
+
+      console.log("[v0] Recall payload:", payload)
+
       const response = await fetch("/api/leave/recall", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leave_plan_request_id: selectedApprovedForRecall,
-          recall_date: recallDateInput,
-          reason: recallReasonInput || null,
-          user_id: userId,
-          user_role: userRole,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
@@ -1985,8 +1992,8 @@ function LeaveRequestCard({
           </div>
         )}
 
-        {/* HOD Response UI */}
-        {hasHodChanges && !respondingToHod && (
+        {/* HOD Response UI - Only show if HOD changes requested and NOT yet approved by HR */}
+        {hasHodChanges && !respondingToHod && !isApproved && (
           <div className="flex gap-2">
             <Button
               onClick={handleAcceptHodChanges}
