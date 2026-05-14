@@ -566,7 +566,7 @@ export function LeaveManagementClient({
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
   const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
   const isAdminView = normalizedRole === "admin"
-  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canViewHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
 
   // ─── Deferment Handler ───
@@ -952,6 +952,26 @@ export function LeaveManagementClient({
         </Alert>
       )}
 
+      {/* HR Officer Leave Approval History */}
+      {normalizedRole === "hr_officer" && (
+        <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-slate-200 bg-[linear-gradient(135deg,_#fef3ff_0%,_#fefbff_55%,_#faf5ff_100%)] pb-4">
+            <div>
+              <CardTitle className="text-xl text-slate-900">Leave Approval History</CardTitle>
+              <CardDescription className="mt-1 max-w-2xl text-slate-600">
+                Review staff leave history, approval details from HOD/Manager, leave types, duration, and remarks for your HR decision.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 p-5">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-600">Loading staff leave approval history...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* HR Memo Templates - Hidden from HR Officer */}
       {canViewHrTemplates && (
         <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardHeader className="border-b border-slate-200 bg-[linear-gradient(135deg,_#eef6ff_0%,_#f8fbff_55%,_#eefaf5_100%)] pb-4">
