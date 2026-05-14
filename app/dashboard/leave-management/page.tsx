@@ -14,16 +14,31 @@ export default async function LeaveManagementPage() {
     return <div>Please log in</div>
   }
 
-  // Get user profile
+  // Get user profile with location and region info
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, department_id, assigned_location_id, first_name, last_name, departments(name, code)")
+    .select(`
+      role, 
+      department_id, 
+      assigned_location_id, 
+      first_name, 
+      last_name, 
+      region_id,
+      departments(name, code),
+      geofence_locations!user_profiles_assigned_location_id_fkey(id, name, district_id),
+      regions!user_profiles_region_id_fkey(id, name)
+    `)
     .eq("id", user.id)
     .single()
 
   if (!profile) {
     return <div>Profile not found</div>
   }
+
+  // Extract location and region names
+  const userLocationId = (profile as any)?.assigned_location_id || null
+  const userLocationName = (profile as any)?.geofence_locations?.name || null
+  const userRegionName = (profile as any)?.regions?.name || null
 
   let staffRequests = []
   let managerNotifications = []
@@ -272,6 +287,9 @@ export default async function LeaveManagementPage() {
         inactivityDays={Math.max(1, inactivityDays)}
         userDepartmentName={(profile as any)?.departments?.name || null}
         userDepartmentCode={(profile as any)?.departments?.code || null}
+        userLocationId={userLocationId}
+        userLocationName={userLocationName}
+        userRegionName={userRegionName}
         hasHodLinkage={hasHodLinkage}
         initialStaffRequests={staffRequests}
         initialManagerNotifications={managerNotifications}

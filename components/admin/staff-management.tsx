@@ -636,6 +636,7 @@ export function StaffManagement() {
                   <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="regional_manager">Regional Manager</SelectItem>
+                  <SelectItem value="regional_hr_officer">Regional HR Officer</SelectItem>
                   <SelectItem value="it-admin">IT-Admin</SelectItem>
                   <SelectItem value="department_head">Department Head</SelectItem>
                   <SelectItem value="audit_staff">Audit Staff</SelectItem>
