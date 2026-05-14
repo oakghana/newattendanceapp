@@ -1192,6 +1192,32 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       if (!res.ok) throw new Error(json.error || "Failed to load data")
       setData(json)
       setHrOfficeLastRefresh(new Date().toISOString())
+      
+      // Fetch outstanding leave for annual leave requests in HR queue
+      const hrRequests = (json.requests || []).filter((r: any) => String(r.leave_type_key || "").toLowerCase() === "annual")
+      if (hrRequests.length > 0) {
+        const outstandingMap: Record<string, string> = {}
+        for (const req of hrRequests) {
+          try {
+            const outRes = await fetch(`/api/leave/hr-admin/outstanding?userId=${String(req.user_id || req.user?.id || "")}&leaveYearPeriod=${req.leave_year_period || "2026/2027"}`, {
+              cache: "no-store",
+            })
+            if (outRes.ok) {
+              const outJson = await outRes.json()
+              const records = Array.isArray(outJson.data) ? outJson.data : []
+              if (records.length > 0) {
+                outstandingMap[req.id] = String(Math.max(0, records[0].carryover_to_next_year || 0))
+              }
+            }
+          } catch (e) {
+            console.error("[v0] Failed to fetch outstanding for request", req.id, e)
+          }
+        }
+        if (Object.keys(outstandingMap).length > 0) {
+          console.log("[v0] Fetched outstanding leave for requests:", outstandingMap)
+          setOfficeOutstandingDays(outstandingMap)
+        }
+      }
     } catch (e) {
       console.error("[v0] Load data error:", e)
       setError(e instanceof Error ? e.message : "Failed to load data")
@@ -3112,10 +3138,17 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <Badge className="border border-slate-200 bg-white text-slate-700">Requested: {req.requested_days} day(s)</Badge>
                           <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "—"} day(s)</Badge>
                           {/* Show outstanding/carryover leave for annual leave type */}
-                          {String(req.leave_type_key || "").toLowerCase() === "annual" && req.outstanding_leave_days !== undefined && req.outstanding_leave_days > 0 && (
-                            <Badge className="border border-green-300 bg-green-50 text-green-700">
-                              Available Carryover: {req.outstanding_leave_days} day(s)
-                            </Badge>
+                          {String(req.leave_type_key || "").toLowerCase() === "annual" && (
+                            (() => {
+                              const outstandingFromState = Number(officeOutstandingDays[req.id] || 0)
+                              const outstandingFromReq = req.outstanding_leave_days ? Number(req.outstanding_leave_days) : 0
+                              const outstanding = outstandingFromState > 0 ? outstandingFromState : outstandingFromReq
+                              return outstanding > 0 ? (
+                                <Badge className="border border-green-300 bg-green-50 text-green-700">
+                                  Available Carryover: {outstanding} day(s)
+                                </Badge>
+                              ) : null
+                            })()
                           )}
                         </div>
                         <Button size="sm" variant="outline"
