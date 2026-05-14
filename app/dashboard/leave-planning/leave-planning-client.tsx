@@ -918,7 +918,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
               <Download className="w-3 h-3 mr-1" /> Download Memo
             </Button>
           )}
-          {req.status === "hod_changes_requested" && onEdit && (
+          {req.status === "hod_changes_requested" && !req.hr_office_forwarded && onEdit && (
             <>
               <Button size="sm" variant="outline"
                 className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"

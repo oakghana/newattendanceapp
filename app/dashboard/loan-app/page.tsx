@@ -532,7 +532,7 @@ function normalizeRoleValue(value?: string | null) {
     .replace(/[\s-]+/g, "_")
 }
 
-const ADMIN_ROLE_ALIASES = new Set(["admin", "it_admin", "super_admin", "god"])
+const ADMIN_ROLE_ALIASES = new Set(["admin", "super_admin", "god"])
 
 function isAdminRoleValue(value?: string | null) {
   return ADMIN_ROLE_ALIASES.has(normalizeRoleValue(value))
