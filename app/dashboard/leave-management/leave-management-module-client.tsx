@@ -62,10 +62,26 @@ export function LeaveManagementModuleClient({
   const fetchAnalytics = async () => {
     try {
       setLoadingAnalytics(true)
-      const response = await fetch("/api/leave/analytics", { method: "POST" })
+      const response = await fetch("/api/leave/analytics")
       const result = await response.json()
-      if (result.success) {
-        setAnalyticsData(result.data)
+      if (result.analytics) {
+        setAnalyticsData({
+          outstanding_requests: result.analytics.totals?.outstanding_requests || 0,
+          approved_total: result.analytics.totals?.approved_total || 0,
+          on_leave_now: result.analytics.totals?.staff_on_leave_now || 0,
+          yet_to_enjoy: result.analytics.totals?.staff_yet_to_enjoy || 0,
+          completed: result.analytics.totals?.completed_leave_requests || 0,
+          unique_staff: result.analytics.totals?.unique_staff_in_range || 0,
+          byType: (result.analytics.leave_type_breakdown || []).map((t: any) => ({
+            type: t.leave_type_key || "Unknown",
+            count: t.total || 0,
+          })),
+          byLocation: (result.analytics.location_ranking || []).map((l: any) => ({
+            location: l.name || "Unknown",
+            count: l.total || 0,
+          })),
+          currentRoster: result.analytics.current_leave_roster || [],
+        })
       }
     } catch (error) {
       console.error("[v0] Error fetching analytics:", error)
@@ -151,40 +167,40 @@ export function LeaveManagementModuleClient({
         {/* Tab 2: Leave & HR Leave Planning */}
         <TabsContent value="leave-planning" className="space-y-6 w-full">
           {/* Green Header with Workflow */}
-          <Card className="bg-gradient-to-r from-emerald-700 to-teal-700 border-0 text-white shadow-lg">
+          <Card className="bg-gradient-to-r from-emerald-600 to-teal-600 border-0 text-white shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-2xl font-bold">Leave Management</h2>
-                  <p className="text-emerald-100 text-sm mt-1">2025/2026 Leave Year • Quality Control Company Limited</p>
+                  <p className="text-emerald-100 text-sm mt-1">2025/2026 Leave Year - Quality Control Company Limited</p>
                 </div>
-                <Button size="sm" variant="secondary" className="gap-2">
+                <Button size="sm" variant="secondary" className="gap-2" onClick={fetchBalances}>
                   <RefreshCw className="h-4 w-4" />
                   Refresh
                 </Button>
               </div>
               
               {/* Workflow Steps */}
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-2">
                 {[
                   { num: "1", text: "Staff Applies" },
                   { num: "2", text: "HOD Reviews" },
                   { num: "3", text: "HR Leave Office Adjusts" },
                   { num: "4", text: "HR Issues Memo" },
                 ].map((step, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Badge className="bg-white/20 text-white border-0">
-                      <span className="bg-white/40 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-1.5">{step.num}</span>
+                  <div key={i} className="flex items-center gap-1">
+                    <Badge className="bg-white/20 text-white border-0 px-3 py-1">
+                      <span className="bg-white/30 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold mr-1.5">{step.num}</span>
                       {step.text}
                     </Badge>
-                    {i < 3 && <ChevronRight className="h-4 w-4 text-white/60" />}
+                    {i < 3 && <ChevronRight className="h-4 w-4 text-white/50" />}
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Action Buttons */}
+          {/* Action Buttons Row */}
           <div className="flex flex-wrap gap-2">
             <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2">
               <FileText className="h-4 w-4" />
@@ -197,33 +213,27 @@ export function LeaveManagementModuleClient({
             <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2">
               <Users className="h-4 w-4" />
               HOD Review
-              <Badge className="ml-1 bg-blue-500">0</Badge>
+              <Badge className="ml-1 bg-blue-600 text-white">0</Badge>
             </Button>
-            <Button variant="outline" className="gap-2">
-              HR Leave Office
-            </Button>
-            <Button variant="outline" className="gap-2">
-              HR Approvals
-            </Button>
-            <Button variant="outline" className="gap-2">
-              All Requests
-            </Button>
+            <Button variant="outline">HR Leave Office</Button>
+            <Button variant="outline">HR Approvals</Button>
+            <Button variant="outline">All Requests</Button>
           </div>
 
           {/* Leave Planning Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Annual Leave Planning</CardTitle>
                 <CardDescription>Submit your annual leave plan for the year</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full">Submit Annual Plan</Button>
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700">Submit Annual Plan</Button>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Leave Amendments</CardTitle>
                 <CardDescription>Request changes to your approved dates</CardDescription>
               </CardHeader>
@@ -232,26 +242,34 @@ export function LeaveManagementModuleClient({
               </CardContent>
             </Card>
 
-            <Card className="md:col-span-2">
-              <CardHeader>
+            <Card className="md:col-span-2 border shadow-sm">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Leave Deferment Request</CardTitle>
                 <CardDescription>Defer unused leave to the next year</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="p-3 border rounded-lg text-center bg-gray-50">
-                    <p className="text-xs text-gray-600 font-medium">Entitlement</p>
-                    <p className="text-2xl font-bold">25</p>
-                    <p className="text-xs text-gray-600">days</p>
+                  <div className="p-4 border rounded-xl text-center bg-slate-50">
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Entitlement</p>
+                    <p className="text-3xl font-bold text-slate-800 mt-1">
+                      {balancesData.length > 0 ? balancesData.reduce((acc, b) => acc + (b.entitlement_days || 0), 0) : 30}
+                    </p>
+                    <p className="text-xs text-slate-500">days</p>
                   </div>
-                  <div className="p-3 border rounded-lg text-center bg-gray-50">
-                    <p className="text-xs text-gray-600 font-medium">Used</p>
-                    <p className="text-2xl font-bold">12</p>
-                    <p className="text-xs text-gray-600">days</p>
+                  <div className="p-4 border rounded-xl text-center bg-slate-50">
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Used</p>
+                    <p className="text-3xl font-bold text-slate-800 mt-1">
+                      {balancesData.length > 0 ? balancesData.reduce((acc, b) => acc + (b.used_this_period || 0), 0) : 0}
+                    </p>
+                    <p className="text-xs text-slate-500">days</p>
                   </div>
-                  <div className="p-3 border rounded-lg text-center bg-green-50">
-                    <p className="text-xs text-green-600 font-medium">Available</p>
-                    <p className="text-2xl font-bold text-green-600">13</p>
+                  <div className="p-4 border rounded-xl text-center bg-green-50 border-green-200">
+                    <p className="text-xs text-green-600 font-medium uppercase tracking-wider">Available</p>
+                    <p className="text-3xl font-bold text-green-600 mt-1">
+                      {balancesData.length > 0 
+                        ? balancesData.reduce((acc, b) => acc + ((b.entitlement_days || 0) - (b.used_this_period || 0)), 0) 
+                        : 30}
+                    </p>
                     <p className="text-xs text-green-600">days</p>
                   </div>
                 </div>
@@ -329,10 +347,16 @@ export function LeaveManagementModuleClient({
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {["Annual Leave", "Maternity", "Paternity", "Sick Leave", "Study Leave"].map((type, i) => (
-                          <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
-                            <span className="text-sm">{type}</span>
-                            <Badge variant="secondary">{Math.floor(Math.random() * 5) + 1}</Badge>
+                        {(analyticsData?.byType || [
+                          { type: "Annual Leave", count: analyticsData?.approved_total || 0 },
+                          { type: "Maternity", count: 0 },
+                          { type: "Paternity", count: 0 },
+                          { type: "Sick Leave", count: 0 },
+                          { type: "Study Leave", count: 0 },
+                        ]).map((item: any, i: number) => (
+                          <div key={i} className="flex justify-between p-3 bg-slate-50 rounded-lg border">
+                            <span className="text-sm font-medium">{item.type}</span>
+                            <Badge variant="secondary" className="bg-slate-200">{item.count || 0}</Badge>
                           </div>
                         ))}
                       </div>
@@ -348,10 +372,15 @@ export function LeaveManagementModuleClient({
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {["QCC Head Office", "Regional Office", "Factory", "Warehouse"].map((loc, i) => (
-                          <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
-                            <span className="text-sm">{loc}</span>
-                            <Badge variant="secondary">{Math.floor(Math.random() * 8) + 1}</Badge>
+                        {(analyticsData?.byLocation || [
+                          { location: "QCC Head Office", count: analyticsData?.approved_total || 0 },
+                          { location: "Regional Office", count: 0 },
+                          { location: "Factory", count: 0 },
+                          { location: "Warehouse", count: 0 },
+                        ]).map((item: any, i: number) => (
+                          <div key={i} className="flex justify-between p-3 bg-slate-50 rounded-lg border">
+                            <span className="text-sm font-medium">{item.location}</span>
+                            <Badge variant="secondary" className="bg-slate-200">{item.count || 0}</Badge>
                           </div>
                         ))}
                       </div>
@@ -367,20 +396,28 @@ export function LeaveManagementModuleClient({
                         <Users className="h-5 w-5 text-blue-500" />
                         <CardTitle>Currently on Leave</CardTitle>
                       </div>
-                      <Badge>{teamOnLeave.length}</Badge>
+                      <Badge>{analyticsData?.currentRoster?.length || teamOnLeave.length}</Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {teamOnLeave.length > 0 ? (
-                        teamOnLeave.slice(0, 5).map((emp, i) => (
-                          <div key={i} className="p-3 border rounded-lg text-sm">
-                            <div className="font-medium">Team Member</div>
-                            <div className="text-gray-600 text-xs mt-1">{emp.leave_type} • {emp.days || "N/A"}d</div>
+                      {(analyticsData?.currentRoster || teamOnLeave).length > 0 ? (
+                        (analyticsData?.currentRoster || teamOnLeave).slice(0, 5).map((emp: any, i: number) => (
+                          <div key={i} className="p-4 border rounded-lg bg-slate-50">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="font-medium text-slate-900">{emp.staff_name || "Team Member"}</div>
+                                <div className="text-slate-600 text-xs mt-1">{emp.leave_type_key || emp.leave_type || "Leave"} - {emp.days || "N/A"} days</div>
+                              </div>
+                              <Badge variant="outline" className="text-xs">{emp.location_name || "Location"}</Badge>
+                            </div>
+                            <div className="text-xs text-slate-500 mt-2">
+                              {emp.start_date} - {emp.end_date}
+                            </div>
                           </div>
                         ))
                       ) : (
-                        <p className="text-center text-muted-foreground py-4">No team members on leave</p>
+                        <p className="text-center text-muted-foreground py-8">No team members currently on leave</p>
                       )}
                     </div>
                   </CardContent>
@@ -398,51 +435,97 @@ export function LeaveManagementModuleClient({
               <p className="text-muted-foreground">Loading balances...</p>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Leave Balance */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Leave Balance</CardTitle>
-                  <CardDescription>Period 2025/2027</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {balancesData.length > 0 ? (
-                    balancesData.slice(0, 5).map((item, i) => (
-                      <div key={i} className="p-3 rounded-lg bg-blue-100">
-                        <p className="text-sm font-medium">{item.leave_type_key}</p>
-                        <p className="text-xs text-gray-600">{item.outstanding_days || 0} left</p>
-                      </div>
-                    ))
-                  ) : (
-                    [
-                      { type: "Study Leave", left: 154, color: "bg-blue-100" },
-                      { type: "Maternity", left: 84, color: "bg-pink-100" },
-                      { type: "Annual Leave", left: 25, color: "bg-green-100" },
-                      { type: "Sick Leave", left: 10, color: "bg-red-100" },
-                      { type: "Paternity", left: 5, color: "bg-purple-100" },
-                    ].map((item, i) => (
-                      <div key={i} className={`p-3 rounded-lg ${item.color}`}>
-                        <p className="text-sm font-medium">{item.type}</p>
-                        <p className="text-xs text-gray-600">{item.left} left</p>
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
+            <div className="space-y-6">
+              {/* Leave Balance Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {(balancesData.length > 0 ? balancesData : [
+                  { leave_type_key: "Annual Leave", entitlement_days: 30, used_this_period: 0 },
+                  { leave_type_key: "Sick Leave", entitlement_days: 10, used_this_period: 0 },
+                  { leave_type_key: "Study Leave", entitlement_days: 30, used_this_period: 0 },
+                  { leave_type_key: "Maternity", entitlement_days: 84, used_this_period: 0 },
+                  { leave_type_key: "Paternity", entitlement_days: 5, used_this_period: 0 },
+                ]).map((item: any, i: number) => {
+                  const colors = [
+                    "from-blue-500 to-blue-600",
+                    "from-green-500 to-green-600",
+                    "from-purple-500 to-purple-600",
+                    "from-pink-500 to-pink-600",
+                    "from-cyan-500 to-cyan-600",
+                  ]
+                  const remaining = (item.entitlement_days || 0) - (item.used_this_period || 0)
+                  return (
+                    <Card key={i} className={`bg-gradient-to-br ${colors[i % colors.length]} border-0 text-white shadow-md`}>
+                      <CardContent className="p-4">
+                        <p className="text-xs opacity-80 font-medium uppercase tracking-wider">{item.leave_type_key || "Leave"}</p>
+                        <p className="text-3xl font-bold mt-1">{remaining}</p>
+                        <p className="text-xs opacity-70 mt-1">of {item.entitlement_days || 0} days</p>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
 
-              {/* Team Calendar */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-lg">Team Calendar</CardTitle>
-                  <CardDescription>Who&apos;s off this month</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-48 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
-                    <Calendar className="h-8 w-8 mr-2" />
-                    Interactive calendar view
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Team on Leave */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-5 w-5 text-orange-500" />
+                      <CardTitle className="text-lg">Staff on Leave</CardTitle>
+                    </div>
+                    <CardDescription>Team members currently off</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {teamOnLeave.length > 0 ? (
+                      teamOnLeave.slice(0, 5).map((emp: any, i: number) => (
+                        <div key={i} className="p-3 rounded-lg border bg-slate-50 flex justify-between items-center">
+                          <div>
+                            <p className="text-sm font-medium">Staff Member</p>
+                            <p className="text-xs text-slate-500">{emp.leave_type || "Leave"}</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs">{emp.end_date}</Badge>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-muted-foreground py-8">No team members on leave today</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Team Calendar */}
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-5 w-5 text-blue-500" />
+                      <CardTitle className="text-lg">Team Calendar</CardTitle>
+                    </div>
+                    <CardDescription>{"Who's off this month"}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-7 gap-1">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                        <div key={day} className="text-center text-xs font-medium text-slate-500 py-2">{day}</div>
+                      ))}
+                      {Array.from({ length: 35 }, (_, i) => {
+                        const day = i - new Date().getDay() + 1
+                        const isToday = day === new Date().getDate()
+                        const isValid = day > 0 && day <= 31
+                        return (
+                          <div 
+                            key={i} 
+                            className={`text-center py-2 text-sm rounded ${
+                              isToday ? "bg-blue-500 text-white font-bold" : 
+                              isValid ? "hover:bg-slate-100 cursor-pointer" : "text-slate-300"
+                            }`}
+                          >
+                            {isValid ? day : ""}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
         </TabsContent>

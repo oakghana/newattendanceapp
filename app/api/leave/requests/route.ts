@@ -36,21 +36,28 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseKey)
     const body = await request.json()
 
+    // Generate a reference number
+    const refNumber = `LR-${Date.now().toString(36).toUpperCase()}`
+
     const { data, error } = await supabase.from("leave_requests").insert([
       {
         user_id: body.userId,
         start_date: body.startDate,
         end_date: body.endDate,
-        leave_type: body.leaveType,
-        reason: body.reason,
+        reason: body.reason || `${body.leaveType || "Annual"} Leave Request`,
         status: "pending",
+        reference_number: refNumber,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       },
     ]).select()
 
     if (error) throw error
 
-    return NextResponse.json({ data: data[0], success: true }, { status: 201 })
+    // Return with leave_type added to the response
+    const result = data[0] ? { ...data[0], leave_type: body.leaveType || "Annual Leave" } : null
+
+    return NextResponse.json({ data: result, success: true }, { status: 201 })
   } catch (error) {
     console.error("[v0] Error creating leave request:", error)
     return NextResponse.json({ error: "Failed to create request", success: false }, { status: 500 })
