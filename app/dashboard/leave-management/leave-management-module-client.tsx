@@ -4,10 +4,11 @@ import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp } from "lucide-rea
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
-import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
-import { TeamCalendarView } from "@/components/leave/team-calendar-view"
-import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
+// Temporarily commented out problematic components - will be added back after testing
+// import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
+// import { TeamCalendarView } from "@/components/leave/team-calendar-view"
+// import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
@@ -108,17 +109,20 @@ export function LeaveManagementModuleClient({
 
         {showAnalytics && (
           <TabsContent value="hr-analytics" className="space-y-4 sm:space-y-6 w-full">
-            <HrLeaveAnalyticsPanel />
+            {/* <HrLeaveAnalyticsPanel /> - Temporarily disabled */}
+            <div className="text-center py-8 text-muted-foreground">Analytics coming soon</div>
           </TabsContent>
         )}
 
         <TabsContent value="insights" className="space-y-4 sm:space-y-6 w-full">
           <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 w-full">
             <div className="w-full">
-              <LeaveBalanceWidget />
+              {/* <LeaveBalanceWidget /> - Temporarily disabled */}
+              <div className="text-center py-8 text-muted-foreground">Balance widget coming soon</div>
             </div>
             <div className="w-full">
-              <TeamCalendarView isHrOffice={isHrOffice} />
+              {/* <TeamCalendarView isHrOffice={isHrOffice} /> - Temporarily disabled */}
+              <div className="text-center py-8 text-muted-foreground">Calendar view coming soon</div>
             </div>
           </div>
         </TabsContent>
