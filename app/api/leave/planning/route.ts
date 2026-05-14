@@ -698,11 +698,24 @@ export async function GET(request: NextRequest) {
 
       const analytics = await fetchHrOfficeAnalytics(admin)
 
+      // Fetch outstanding leave balances for all staff with pending requests
+      const staffIds = Array.from(new Set((requests || []).map((r: any) => r.user_id).filter(Boolean)))
+      const { data: outstandingRecords } = await admin
+        .from("outstanding_leave_balances")
+        .select("user_id, carryover_to_next_year")
+        .in("user_id", staffIds)
+      
+      const outstandingLeaveMap = new Map<string, number>()
+      ;(outstandingRecords || []).forEach((record: any) => {
+        outstandingLeaveMap.set(String(record.user_id), Number(record.carryover_to_next_year || 0))
+      })
+
       return NextResponse.json({
         mode: "hr_office",
         requests: requests || [],
         myRequests: myRequests || [],
         analytics,
+        outstandingLeaveMap: Object.fromEntries(outstandingLeaveMap),
       })
     }
 

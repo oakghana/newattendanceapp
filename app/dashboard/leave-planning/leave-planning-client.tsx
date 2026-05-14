@@ -1448,7 +1448,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ─── Holiday CRUD Functions ─────────────────────────────────────────
+  // ─── Holiday CRUD Functions ───────��─────────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1718,9 +1718,21 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
-    return (data.requests || []).filter((r: any) =>
+    const requests = (data.requests || []).filter((r: any) =>
       (HR_OFFICE_PENDING_STATUSES as string[]).includes(String(r?.status || "")),
     )
+    
+    // Enhance requests with outstanding leave data if available
+    return requests.map((r: any) => {
+      // For annual leave, try to get outstanding leave from the data
+      if (String(r.leave_type_key || "").toLowerCase() === "annual" && data.outstandingLeaveMap) {
+        const outstanding = data.outstandingLeaveMap[String(r.user_id || "")]
+        if (outstanding && outstanding > 0) {
+          return { ...r, outstanding_leave_days: outstanding }
+        }
+      }
+      return r
+    })
   }, [data])
 
   const hrOfficeFilteredQueue: any[] = useMemo(() => {
@@ -3095,6 +3107,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         <div className="mb-3 flex flex-wrap gap-2">
                           <Badge className="border border-slate-200 bg-white text-slate-700">Requested: {req.requested_days} day(s)</Badge>
                           <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "—"} day(s)</Badge>
+                          {/* Show outstanding/carryover leave for annual leave type */}
+                          {String(req.leave_type_key || "").toLowerCase() === "annual" && req.outstanding_leave_days !== undefined && req.outstanding_leave_days > 0 && (
+                            <Badge className="border border-green-300 bg-green-50 text-green-700">
+                              Available Carryover: {req.outstanding_leave_days} day(s)
+                            </Badge>
+                          )}
                         </div>
                         <Button size="sm" variant="outline"
                           disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
