@@ -1048,7 +1048,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
-  // ── HR Approver ──────────────────��──────────────────────────────────
+  // ── HR Approver ──────────────────���──────────────────────────────────
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
@@ -1599,7 +1599,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
     return (data.requests || []).filter((r: any) =>
-      ["hod_approved", "manager_confirmed", ...(HR_APPROVER_PENDING_STATUSES as string[])].includes(String(r?.status || "")),
+      ["hod_approved", "manager_confirmed"].includes(String(r?.status || "")),
     )
   }, [data])
 
