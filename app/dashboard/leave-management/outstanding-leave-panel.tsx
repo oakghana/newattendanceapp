@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Gift, Users, Calendar, RefreshCw, Search, Plus, X, ListFilter } from "lucide-react"
+import { Gift, Users, Calendar, RefreshCw, Search, Plus, X, ListFilter, FileSpreadsheet, Download, MapPin } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,13 @@ interface StaffOption {
   first_name: string
   last_name: string
   department_name: string
+  region_name?: string
+  region_id?: string | null
+}
+
+interface RegionOption {
+  id: string
+  name: string
 }
 
 interface OutstandingLeave {
@@ -57,7 +64,13 @@ export function OutstandingLeavePanel() {
   })
   const [saving, setSaving] = useState(false)
 
-  // Load staff list for add form
+  // Report generation state
+  const [regions, setRegions] = useState<RegionOption[]>([])
+  const [selectedRegion, setSelectedRegion] = useState<string>("all")
+  const [reportMonth, setReportMonth] = useState<string>(new Date().toISOString().slice(0, 7))
+  const [generatingReport, setGeneratingReport] = useState(false)
+
+  // Load staff list and regions for add form
   useEffect(() => {
     const loadStaff = async () => {
       try {
@@ -65,6 +78,15 @@ export function OutstandingLeavePanel() {
         if (res.ok) {
           const data = await res.json()
           setStaffList(data.staff || [])
+          
+          // Extract unique regions from staff list
+          const uniqueRegions = new Map<string, string>()
+          ;(data.staff || []).forEach((s: StaffOption) => {
+            if (s.region_id && s.region_name) {
+              uniqueRegions.set(s.region_id, s.region_name)
+            }
+          })
+          setRegions(Array.from(uniqueRegions, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)))
         }
       } catch (err) {
         console.error("[v0] Failed to load staff list:", err)
@@ -120,19 +142,57 @@ export function OutstandingLeavePanel() {
         : 0,
   }
 
-  // Filter staff list for add form
+  // Filter staff list for add form - show more results for better searching
   const filteredStaffList = useMemo(() => {
-    if (!staffSearch) return staffList.slice(0, 20)
-    const term = staffSearch.toLowerCase()
+    if (!staffSearch || staffSearch.length < 2) return []
+    const term = staffSearch.toLowerCase().trim()
+    const terms = term.split(/\s+/)
     return staffList
-      .filter(
-        (s) =>
-          s.first_name?.toLowerCase().includes(term) ||
-          s.last_name?.toLowerCase().includes(term) ||
-          s.employee_id?.toLowerCase().includes(term)
-      )
-      .slice(0, 20)
+      .filter((s) => {
+        const fullName = `${s.first_name || ""} ${s.last_name || ""}`.toLowerCase()
+        const empId = (s.employee_id || "").toLowerCase()
+        const dept = (s.department_name || "").toLowerCase()
+        // Match all terms (for "mama lee" to match first_name and last_name)
+        return terms.every(t => 
+          fullName.includes(t) || 
+          empId.includes(t) || 
+          dept.includes(t)
+        )
+      })
+      .slice(0, 50) // Show up to 50 results
   }, [staffList, staffSearch])
+
+  // Generate monthly leave report
+  const generateReport = async () => {
+    setGeneratingReport(true)
+    try {
+      const params = new URLSearchParams({
+        month: reportMonth,
+        year_period: yearFilter,
+        ...(selectedRegion !== "all" && { region_id: selectedRegion }),
+      })
+      
+      const res = await fetch(`/api/leave/reports/monthly?${params.toString()}`)
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `leave-report-${reportMonth}${selectedRegion !== "all" ? `-region-${selectedRegion}` : ""}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        a.remove()
+      } else {
+        alert("Failed to generate report. Please try again.")
+      }
+    } catch (err) {
+      console.error("[v0] Failed to generate report:", err)
+      alert("Failed to generate report. Please try again.")
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
 
   // Save outstanding leave record
   const handleSave = async () => {
@@ -224,7 +284,7 @@ export function OutstandingLeavePanel() {
         </Card>
       </div>
 
-      {/* Tabs for View/Add */}
+      {/* Tabs for View/Add/Reports */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-xl border border-slate-600 bg-slate-700/50 p-2">
           <TabsTrigger value="view" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-green-500 data-[state=active]:bg-green-600 data-[state=active]:text-white">
@@ -234,6 +294,10 @@ export function OutstandingLeavePanel() {
           <TabsTrigger value="add" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-blue-500 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             <Plus className="h-4 w-4" />
             Add Outstanding Days
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-amber-500 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+            <FileSpreadsheet className="h-4 w-4" />
+            Generate Reports
           </TabsTrigger>
         </TabsList>
 
@@ -442,7 +506,10 @@ export function OutstandingLeavePanel() {
                         ))}
                       </div>
                     )}
-                    {staffSearch && filteredStaffList.length === 0 && (
+                    {staffSearch && staffSearch.length < 2 && (
+                      <p className="text-slate-400 text-sm py-2">Type at least 2 characters to search...</p>
+                    )}
+                    {staffSearch && staffSearch.length >= 2 && filteredStaffList.length === 0 && (
                       <p className="text-slate-400 text-sm py-2">No staff found matching your search.</p>
                     )}
                   </div>
@@ -542,6 +609,89 @@ export function OutstandingLeavePanel() {
                   className="bg-green-600 hover:bg-green-700"
                 >
                   {saving ? "Saving..." : "Save Outstanding Record"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Generate Reports Tab */}
+        <TabsContent value="reports" className="mt-4">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+                Generate Monthly Leave Report
+              </CardTitle>
+              <CardDescription>
+                Generate and download monthly leave reports. Filter by region for location-specific reports.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Month Selection */}
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Report Month</Label>
+                  <Input
+                    type="month"
+                    value={reportMonth}
+                    onChange={(e) => setReportMonth(e.target.value)}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                </div>
+
+                {/* Leave Year Period */}
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Leave Year Period</Label>
+                  <select
+                    value={yearFilter}
+                    onChange={(e) => setYearFilter(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
+                  >
+                    <option value="2024/2025">2024/2025</option>
+                    <option value="2025/2026">2025/2026</option>
+                    <option value="2026/2027">2026/2027</option>
+                  </select>
+                </div>
+
+                {/* Region Filter */}
+                <div className="space-y-2">
+                  <Label className="text-slate-300 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" /> Region/Location
+                  </Label>
+                  <select
+                    value={selectedRegion}
+                    onChange={(e) => setSelectedRegion(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
+                  >
+                    <option value="all">All Regions</option>
+                    {regions.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Report Preview Info */}
+              <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600">
+                <h4 className="font-medium text-white mb-2">Report Details</h4>
+                <ul className="text-sm text-slate-300 space-y-1">
+                  <li>- Monthly leave summary for: <strong>{new Date(reportMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong></li>
+                  <li>- Leave Year: <strong>{yearFilter}</strong></li>
+                  <li>- Region: <strong>{selectedRegion === "all" ? "All Regions" : regions.find(r => r.id === selectedRegion)?.name || "Selected Region"}</strong></li>
+                  <li>- Format: CSV (Excel compatible)</li>
+                </ul>
+              </div>
+
+              {/* Generate Button */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                <Button
+                  onClick={generateReport}
+                  disabled={generatingReport}
+                  className="bg-amber-600 hover:bg-amber-700 gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  {generatingReport ? "Generating..." : "Generate & Download Report"}
                 </Button>
               </div>
             </CardContent>
