@@ -3475,8 +3475,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 </div>
               </TabsContent>
 
-              {/* HR Final Approval */}
-              <TabsContent value="hr-approve">
+          {/* ── HR Final Approval ─────────────────────────────────────── */}
+          <TabsContent value="hr-approve">
             {hrApproverQueue.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
