@@ -736,6 +736,36 @@ export function LeaveManagementClient({
     void fetchDefermentAndRecallRequests()
   }, [userId, userRole])
 
+  // Fetch deferment and recall requests for HOD/RM to manage their department's requests
+  useEffect(() => {
+    const fetchHodRmDefermentAndRecallRequests = async () => {
+      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+      
+      // Only fetch for HOD/RM
+      if (!["department_head", "regional_manager"].includes(normalizedRole)) return
+      
+      try {
+        // Fetch pending deferment requests for their department
+        const defermentRes = await fetch(`/api/leave/deferment?status=pending&department=${encodeURIComponent(userDepartment || '')}`, { cache: "no-store" })
+        if (defermentRes.ok) {
+          const defermentData = await defermentRes.json()
+          setDefermentRequests(Array.isArray(defermentData) ? defermentData : defermentData.deferments || [])
+        }
+        
+        // Fetch pending recall requests for their department
+        const recallRes = await fetch(`/api/leave/recall?status=pending&department=${encodeURIComponent(userDepartment || '')}`, { cache: "no-store" })
+        if (recallRes.ok) {
+          const recallData = await recallRes.json()
+          setRecallRequests(Array.isArray(recallData) ? recallData : recallData.recalls || [])
+        }
+      } catch (error) {
+        console.error("[v0] Failed to fetch HOD/RM deferment/recall requests:", error)
+      }
+    }
+    
+    void fetchHodRmDefermentAndRecallRequests()
+  }, [userId, userRole, userDepartment])
+
   const runTemplateAction = async (templateKey: string, action: "duplicate" | "deactivate" | "activate") => {
     setTemplateActionKey(`${action}:${templateKey}`)
     try {
@@ -1537,14 +1567,14 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
-                  {isLeaveOfficeRole ? "Pending Leave Deferments" : "Defer Your Approved Leave"}
+                  {isLeaveOfficeRole ? "Pending Leave Deferments" : isManagerView ? "Department Deferment Requests" : "Defer Your Approved Leave"}
                 </CardTitle>
                 <CardDescription className="text-amber-100">
-                  {isLeaveOfficeRole ? "Review and process pending deferment requests from staff" : "Defer your approved leave to a future leave year"}
+                  {isLeaveOfficeRole ? "Review and process pending deferment requests from staff" : isManagerView ? "Review deferment requests from your department staff" : "Defer your approved leave to a future leave year"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {isLeaveOfficeRole ? (
+                {isLeaveOfficeRole || isManagerView ? (
                   defermentRequests.length === 0 ? (
                     <div className="text-center py-12">
                       <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
@@ -1668,12 +1698,49 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <ArrowUpRight className="h-5 w-5" />
-                  Recall Your Leave
+                  {isManagerView && recallRequests.length > 0 ? "Pending Recall Requests" : "Recall Your Leave"}
                 </CardTitle>
-                <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
+                <CardDescription className="text-rose-100">
+                  {isManagerView && recallRequests.length > 0 ? "Review and process pending recall requests from staff" : "Request to recall active or upcoming leave (HOD/RM/HR only)"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {!isManagerView ? (
+                {isManagerView && recallRequests.length > 0 ? (
+                  <div className="space-y-4">
+                    {recallRequests.map((req: any) => (
+                      <div key={req.id} className="bg-white rounded-lg border border-rose-200 p-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-slate-600">Staff Name</p>
+                            <p className="font-semibold text-slate-900">{req.user_name}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-slate-600">Leave Type</p>
+                            <p className="font-semibold text-slate-900">{req.leave_type}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-slate-600">Original Leave Period</p>
+                            <p className="text-sm text-slate-700">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-slate-600">Recall Date</p>
+                            <p className="font-semibold text-slate-900">{new Date(req.recall_date).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        {req.recall_reason && (
+                          <div className="mt-4 pt-4 border-t border-rose-100">
+                            <p className="text-sm text-slate-600">Reason</p>
+                            <p className="text-sm text-slate-700">{req.recall_reason}</p>
+                          </div>
+                        )}
+                        <div className="flex gap-3 mt-4">
+                          <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
+                          <Button variant="outline" className="flex-1">Decline</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !isManagerView ? (
                   <Alert className="border-blue-200 bg-blue-50">
                     <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
                   </Alert>
