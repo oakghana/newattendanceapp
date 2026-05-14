@@ -584,15 +584,19 @@ export function LeaveManagementClient({
 
       setIsSubmittingDeferment(true)
 
+      const payload = {
+        leave_plan_request_id: selectedApprovedForDeferment,
+        deferral_year: deferralYear,
+        reason: defermentReason || null,
+        user_id: userId,
+      }
+
+      console.log("[v0] Deferment payload:", payload)
+
       const response = await fetch("/api/leave/deferment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leave_plan_request_id: selectedApprovedForDeferment,
-          deferral_year: deferralYear,
-          reason: defermentReason || null,
-          user_id: userId,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
@@ -628,16 +632,20 @@ export function LeaveManagementClient({
 
       setIsSubmittingRecall(true)
 
+      const payload = {
+        leave_plan_request_id: selectedApprovedForRecall,
+        recall_date: recallDateInput,
+        reason: recallReasonInput || null,
+        user_id: userId,
+        user_role: userRole,
+      }
+
+      console.log("[v0] Recall payload:", payload)
+
       const response = await fetch("/api/leave/recall", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leave_plan_request_id: selectedApprovedForRecall,
-          recall_date: recallDateInput,
-          reason: recallReasonInput || null,
-          user_id: userId,
-          user_role: userRole,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()

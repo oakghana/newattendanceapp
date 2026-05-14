@@ -193,14 +193,25 @@ export default async function LeaveManagementPage() {
   }
 
   // Fetch approved leaves from staff for HOD/RM to perform deferment/recall
-  if (canReviewLeave && profile.department_id) {
-    // Get all staff in this HOD/RM's department
-    const { data: deptStaff } = await admin
-      .from("user_profiles")
-      .select("id")
-      .eq("department_id", profile.department_id)
-
-    const staffIds = (deptStaff || []).map((s: any) => s.id)
+  if (canReviewLeave) {
+    let staffIds: any[] = []
+    
+    // For admin/hr roles: get all staff with approved leaves
+    if (["admin", "hr_leave_office", "hr_office", "hr", "hr_officer", "manager_hr", "director_hr"].includes(roleNorm)) {
+      // Get all users
+      const { data: allUsers } = await admin
+        .from("user_profiles")
+        .select("id")
+      staffIds = (allUsers || []).map((s: any) => s.id)
+    } 
+    // For HOD/RM: get staff in their department
+    else if (profile.department_id) {
+      const { data: deptStaff } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", profile.department_id)
+      staffIds = (deptStaff || []).map((s: any) => s.id)
+    }
 
     if (staffIds.length > 0) {
       // Fetch approved leaves
