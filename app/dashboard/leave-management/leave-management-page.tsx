@@ -1,366 +1,371 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  FileText,
-  Plus,
-  Users,
-  Calendar,
-  RefreshCw,
-  AlertCircle,
-  ChevronRight,
-} from "lucide-react"
+import { useState } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Calendar, Download, RefreshCw, FileText, X } from 'lucide-react'
 
 export function LeaveManagementPage() {
-  const [selectedTab, setSelectedTab] = useState("leave-management")
-
-  // Mock data
-  const stats = {
-    pending: 2,
-    approved: 3,
-    submitted: 5,
-    manager_queue: 1,
-  }
-
-  const leaveRequests = [
-    {
-      id: 1,
-      date: "14 May - 18 May 2026",
-      type: "Annual Leave",
-      status: "pending",
-      days: 5,
-    },
-    {
-      id: 2,
-      date: "10 June 2026",
-      type: "Sick Leave",
-      status: "approved",
-      days: 1,
-    },
-  ]
-
-  const leaveBalance = [
-    { type: "Annual Leave", entitlement: 30, used: 5, available: 25 },
-    { type: "Sick Leave", entitlement: 10, used: 0, available: 10 },
-    { type: "Study Leave", entitlement: 30, used: 0, available: 30 },
-    { type: "Maternity Leave", entitlement: 84, used: 0, available: 84 },
-  ]
-
-  const analyticsData = {
-    outstanding: 2,
-    approved_total: 8,
-    on_leave: 3,
-    yet_to_enjoy: 5,
-    completed: 12,
-    unique_staff: 15,
-  }
-
-  const currentlyOnLeave = [
-    { name: "John Doe", type: "Annual Leave", days: 5, end: "18 May 2026" },
-    { name: "Jane Smith", type: "Study Leave", days: 10, end: "25 May 2026" },
-    { name: "Mike Johnson", type: "Sick Leave", days: 1, end: "15 May 2026" },
-  ]
+  const [activeTab, setActiveTab] = useState('management')
+  const [showBanner, setShowBanner] = useState(true)
 
   return (
-    <div className="w-full space-y-6 p-6">
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-        {/* Tab List */}
-        <TabsList className="grid w-full grid-cols-4 mb-6">
-          <TabsTrigger value="leave-management">Leave Management</TabsTrigger>
-          <TabsTrigger value="leave-planning">Leave & HR Leave</TabsTrigger>
-          <TabsTrigger value="analytics">Leave Analytics</TabsTrigger>
-          <TabsTrigger value="balance">Balance & Calendar</TabsTrigger>
+    <div className="min-h-screen bg-slate-900 p-6">
+      {/* Pink Info Banner */}
+      {showBanner && (
+        <Alert className="mb-6 border-pink-300 bg-pink-50 flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-pink-900">New Flash: Loan & Leave Administration Upgrade</p>
+            <AlertDescription className="text-pink-700 text-sm">
+              We're introducing a smarter system with stronger approval tracking and improved manager notifications to enhance loan and leave administration. Stay tuned for the rollout soon.
+            </AlertDescription>
+          </div>
+          <button onClick={() => setShowBanner(false)} className="text-pink-500 hover:text-pink-700">
+            <X className="w-5 h-5" />
+          </button>
+        </Alert>
+      )}
+
+      {/* Tab Navigation */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="flex gap-3 mb-6 bg-transparent p-0">
+          <TabsTrigger
+            value="management"
+            className="px-6 py-2 rounded-full border-2 border-orange-400 bg-orange-400 text-white font-semibold hover:bg-orange-500 data-[state=active]:bg-orange-500"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Leave Management
+          </TabsTrigger>
+          <TabsTrigger
+            value="hr-leave"
+            className="px-6 py-2 rounded-full border-2 border-orange-400 bg-orange-400 text-white font-semibold hover:bg-orange-500 data-[state=active]:bg-orange-500"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Leave & HR Leave
+          </TabsTrigger>
+          <TabsTrigger
+            value="analytics"
+            className="px-6 py-2 rounded-full border-2 border-orange-400 bg-orange-400 text-white font-semibold hover:bg-orange-500 data-[state=active]:bg-orange-500"
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Leave Analytics
+          </TabsTrigger>
+          <TabsTrigger
+            value="balance"
+            className="px-6 py-2 rounded-full border-2 border-blue-400 bg-blue-400 text-white font-semibold hover:bg-blue-500 data-[state=active]:bg-blue-500"
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Balance & Calendar
+          </TabsTrigger>
         </TabsList>
 
         {/* Tab 1: Leave Management */}
-        <TabsContent value="leave-management" className="space-y-4">
-          {/* Dark Blue Header */}
-          <Card className="bg-gradient-to-r from-slate-800 to-slate-900 border-0 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold">Leave Management</h2>
-                  <p className="text-slate-300 text-sm mt-1">
-                    2025/2026 Leave Year - Quality Control Company Limited
-                  </p>
+        <TabsContent value="management" className="space-y-6">
+          {/* Dark Blue Workspace Header */}
+          <div className="bg-blue-900 rounded-lg p-8 text-white">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="w-4 h-4" />
+                  <span className="text-xs font-semibold tracking-wider">LEAVE WORKSPACE</span>
                 </div>
-                {/* Stats on Right */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-slate-700/50 rounded-lg p-3 text-center">
-                    <p className="text-slate-300 text-xs">PENDING</p>
-                    <p className="text-2xl font-bold text-white mt-1">{stats.pending}</p>
-                  </div>
-                  <div className="bg-slate-700/50 rounded-lg p-3 text-center">
-                    <p className="text-slate-300 text-xs">APPROVED</p>
-                    <p className="text-2xl font-bold text-white mt-1">{stats.approved}</p>
-                  </div>
-                  <div className="bg-slate-700/50 rounded-lg p-3 text-center">
-                    <p className="text-slate-300 text-xs">SUBMITTED</p>
-                    <p className="text-2xl font-bold text-white mt-1">{stats.submitted}</p>
-                  </div>
-                  <div className="bg-slate-700/50 rounded-lg p-3 text-center">
-                    <p className="text-slate-300 text-xs">MANAGER QUEUE</p>
-                    <p className="text-2xl font-bold text-white mt-1">{stats.manager_queue}</p>
-                  </div>
-                </div>
+                <h1 className="text-3xl font-bold">Leave Management</h1>
+                <p className="text-sm text-blue-200 mt-1">Review leave activity, track submissions, and move quickly between personal requests and approvals.</p>
               </div>
-            </CardContent>
-          </Card>
+              <Button variant="outline" size="sm" className="bg-blue-800 border-blue-600 text-white hover:bg-blue-700">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
 
-          {/* Export Section */}
-          <Card className="border-amber-200 bg-amber-50">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-amber-900">Export Annual Leave Requests</p>
-                  <p className="text-sm text-amber-700 mt-1">
-                    Download all staff annual leave requests for your department/region as an Excel file.
-                  </p>
-                </div>
-                <Button className="bg-purple-600 hover:bg-purple-700 text-white gap-2">
-                  <FileText className="h-4 w-4" />
-                  Export to Excel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2">
-            <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2">
-              <FileText className="h-4 w-4" />
-              Request
-            </Button>
-            <Button className="bg-green-500 hover:bg-green-600 text-white gap-2">
-              <Plus className="h-4 w-4" />
-              Apply for Leave
-            </Button>
-            <Button className="bg-blue-500 hover:bg-blue-600 text-white gap-2">
-              <Users className="h-4 w-4" />
-              HOD Review
-              <Badge className="ml-1 bg-blue-700">0</Badge>
-            </Button>
-            <Button variant="outline">HR Leave Office</Button>
-            <Button variant="outline">HR Approvals</Button>
-            <Button variant="outline" className="ml-auto">All Requests</Button>
+            {/* Role Badges */}
+            <div className="flex gap-2 text-xs">
+              <span className="px-3 py-1 bg-blue-800 rounded-full">Role: department head</span>
+              <span className="px-3 py-1 bg-blue-800 rounded-full">Department Linked</span>
+              <span className="px-3 py-1 bg-blue-800 rounded-full">Self service Enabled</span>
+            </div>
           </div>
 
-          {/* Leave Requests List */}
-          <div className="space-y-3">
-            {leaveRequests.map((req) => (
-              <Card key={req.id} className="border">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold">{req.type}</p>
-                    <p className="text-sm text-muted-foreground">{req.date}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{req.days} days</p>
-                  </div>
-                  <Badge
-                    className={
-                      req.status === "approved"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }
-                  >
-                    {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
-                  </Badge>
-                </CardContent>
-              </Card>
-            ))}
+          {/* Stats Grid */}
+          <div className="grid grid-cols-4 gap-4">
+            <div className="bg-blue-900 text-white p-6 rounded-lg">
+              <div className="text-3xl font-bold">0</div>
+              <div className="text-sm text-blue-200 mt-2">Pending</div>
+              <p className="text-xs text-blue-300">Awaiting decision</p>
+            </div>
+            <div className="bg-blue-900 text-white p-6 rounded-lg">
+              <div className="text-3xl font-bold">4</div>
+              <div className="text-sm text-blue-200 mt-2">Approved</div>
+              <p className="text-xs text-blue-300">Confirmed leave</p>
+            </div>
+            <div className="bg-blue-900 text-white p-6 rounded-lg">
+              <div className="text-3xl font-bold">0</div>
+              <div className="text-sm text-blue-200 mt-2">Submitted</div>
+              <p className="text-xs text-blue-300">My requests</p>
+            </div>
+            <div className="bg-blue-900 text-white p-6 rounded-lg">
+              <div className="text-3xl font-bold">0</div>
+              <div className="text-sm text-blue-200 mt-2">Approvals</div>
+              <p className="text-xs text-blue-300">Manager queue</p>
+            </div>
+          </div>
+
+          {/* Export Section */}
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <div className="mb-4">
+              <h3 className="font-semibold text-gray-900">Export Annual Leave Requests</h3>
+              <p className="text-sm text-gray-600">Download all staff annual leave requests for your department/region as an Excel file.</p>
+            </div>
+            <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3">
+              <Download className="w-4 h-4 mr-2" />
+              Export to Excel
+            </Button>
+          </div>
+
+          {/* Leave Application Actions */}
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <h3 className="font-semibold text-gray-900 mb-4">Leave Application Actions</h3>
+            <p className="text-sm text-gray-600 mb-4">Manage your leave requests and submissions</p>
+            <div className="grid grid-cols-6 gap-3">
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white">My Requests (0)</Button>
+              <Button className="bg-green-600 hover:bg-green-700 text-white">+ Apply for Leave</Button>
+              <Button className="bg-gray-400 hover:bg-gray-500 text-white">Approved (4)</Button>
+              <Button className="bg-gray-400 hover:bg-gray-500 text-white">Deferrments</Button>
+              <Button className="bg-gray-400 hover:bg-gray-500 text-white">Recalls</Button>
+              <Button className="bg-gray-400 hover:bg-gray-500 text-white">Approved Memos</Button>
+            </div>
+          </div>
+
+          {/* Empty State */}
+          <div className="bg-white rounded-lg p-12 border border-gray-200 text-center">
+            <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="font-semibold text-gray-900 mb-2">No leave requests yet</h3>
+            <p className="text-sm text-gray-600 mb-6">You haven't submitted any leave requests. Click the button below to apply for leave.</p>
+            <Button className="bg-green-600 hover:bg-green-700 text-white">+ Apply for Leave</Button>
           </div>
         </TabsContent>
 
-        {/* Tab 2: Leave & HR Leave Planning */}
-        <TabsContent value="leave-planning" className="space-y-4">
-          {/* Green Header with Workflow */}
-          <Card className="bg-gradient-to-r from-emerald-600 to-teal-600 border-0 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold">Leave Management</h2>
-                  <p className="text-emerald-100 text-sm mt-1">
-                    2025/2026 Leave Year - Quality Control Company Limited
-                  </p>
-                </div>
-                <Button size="sm" variant="secondary" className="gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  Refresh
-                </Button>
-              </div>
-
-              {/* Workflow Steps */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { num: "1", text: "Staff Applies" },
-                  { num: "2", text: "HOD Reviews" },
-                  { num: "3", text: "HR Adjusts" },
-                  { num: "4", text: "HR Issues Memo" },
-                ].map((step, i) => (
-                  <div key={i} className="flex items-center gap-1">
-                    <Badge className="bg-white/20 text-white border-0">
-                      <span className="bg-white/40 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold mr-1.5">
-                        {step.num}
-                      </span>
-                      {step.text}
-                    </Badge>
-                    {i < 3 && <ChevronRight className="h-4 w-4 text-white/50" />}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2">
-            <Button className="bg-orange-500 hover:bg-orange-600 text-white">Request</Button>
-            <Button className="bg-green-500 hover:bg-green-600 text-white">Apply</Button>
-            <Button className="bg-orange-500 hover:bg-orange-600 text-white">HOD Review</Button>
-            <Button variant="outline">HR Leave Office</Button>
-            <Button variant="outline">HR Approvals</Button>
-            <Button variant="outline">All Requests</Button>
+        {/* Tab 2: Leave & HR Leave */}
+        <TabsContent value="hr-leave" className="space-y-6">
+          <div className="bg-green-600 rounded-lg p-6 text-white">
+            <h2 className="text-2xl font-bold">Leave Management</h2>
+            <p className="text-sm text-green-100">2025/2026 Leave Year · Quality Control Company Limited</p>
+            <div className="flex gap-2 mt-4 text-xs">
+              <span className="px-2 py-1 bg-green-700 rounded">Staff Applies</span>
+              <span className="px-2 py-1 bg-green-700 rounded">HOD Reviews</span>
+              <span className="px-2 py-1 bg-green-700 rounded">HR Leave Office Adjusts</span>
+              <span className="px-2 py-1 bg-green-700 rounded">HR Issues Memo</span>
+            </div>
           </div>
 
-          {/* Leave Planning Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Annual Leave Planning</CardTitle>
-                <CardDescription>Submit your annual leave plan for the year</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
-                  Submit Annual Plan
-                </Button>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-3 gap-3">
+            <Button className="bg-orange-400 hover:bg-orange-500 text-white">Request</Button>
+            <Button className="bg-orange-400 hover:bg-orange-500 text-white">+ Apply</Button>
+            <Button className="bg-orange-400 hover:bg-orange-500 text-white">HOD Review</Button>
+          </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Leave Amendments</CardTitle>
-                <CardDescription>Request changes to your approved dates</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" className="w-full">
-                  Request Amendment
-                </Button>
-              </CardContent>
-            </Card>
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <h3 className="font-semibold mb-2">New Leave Application</h3>
+            <p className="text-sm text-gray-600">Leave Year Period: 2025/2026</p>
+          </div>
 
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-lg">Leave Deferment Request</CardTitle>
-                <CardDescription>Defer unused leave to the next year</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="p-4 border rounded-xl text-center bg-slate-50">
-                    <p className="text-xs text-slate-500 font-medium uppercase">Entitlement</p>
-                    <p className="text-3xl font-bold text-slate-800 mt-2">30</p>
-                    <p className="text-xs text-slate-500">days</p>
-                  </div>
-                  <div className="p-4 border rounded-xl text-center bg-slate-50">
-                    <p className="text-xs text-slate-500 font-medium uppercase">Used</p>
-                    <p className="text-3xl font-bold text-slate-800 mt-2">5</p>
-                    <p className="text-xs text-slate-500">days</p>
-                  </div>
-                  <div className="p-4 border rounded-xl text-center bg-green-50 border-green-200">
-                    <p className="text-xs text-green-600 font-medium uppercase">Available</p>
-                    <p className="text-3xl font-bold text-green-600 mt-2">25</p>
-                    <p className="text-xs text-green-600">days</p>
-                  </div>
-                </div>
-                <Button variant="outline" className="w-full">
-                  Request Deferment
-                </Button>
-              </CardContent>
-            </Card>
+          <Alert className="border-yellow-300 bg-yellow-50">
+            <AlertDescription className="text-yellow-800">
+              <strong>Annual Leave Planning Reminder:</strong> In September, all staff must submit their annual leave requests for the October cocoa season cycle. This allows HOD/Regional Managers time to review and approve all leave days by the start of October. Plan ahead to avoid operational disruptions.
+            </AlertDescription>
+          </Alert>
+
+          <p className="text-sm text-gray-600">Select leave type <span className="text-red-500">*</span></p>
+          <div className="grid grid-cols-3 gap-3">
+            <Button className="bg-orange-400 hover:bg-orange-500 text-white">Maternity Leave</Button>
+            <Button className="bg-gray-300 hover:bg-gray-400">Paternity Leave</Button>
+            <Button className="bg-gray-300 hover:bg-gray-400">Study Leave (With Pay)</Button>
+          </div>
+
+          <div className="bg-white rounded-lg p-6 border border-gray-200 space-y-4">
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Current year: 2025/2026</label>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Date</label>
+              <input type="text" placeholder="01/mm/yyyy" className="w-full px-3 py-2 border rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Brief reason for leave (Optional)</label>
+              <textarea className="w-full px-3 py-2 border rounded-lg text-sm" rows={4}></textarea>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Staff Signature</label>
+              <p className="text-xs text-gray-500">Signature is auto-populated from your staff profile name</p>
+            </div>
+            <Button className="w-full bg-green-600 hover:bg-green-700 text-white">Submit Application</Button>
           </div>
         </TabsContent>
 
         {/* Tab 3: Leave Analytics */}
-        <TabsContent value="analytics" className="space-y-4">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>This tab is visible to HR staff only</AlertDescription>
-          </Alert>
+        <TabsContent value="analytics" className="space-y-6">
+          <div className="bg-purple-900 rounded-lg p-8 text-white">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-3xl font-bold">Leave Analytics Dashboard</h2>
+                <p className="text-sm text-purple-200">Executive Insights - Quality Control Company Limited</p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="border-purple-400 text-white">Refresh</Button>
+                <Button size="sm" variant="outline" className="border-purple-400 text-white">CSV</Button>
+                <Button size="sm" variant="outline" className="border-purple-400 text-white">PDF</Button>
+                <Button size="sm" className="bg-purple-700 hover:bg-purple-800">Send 5-Day Reminders</Button>
+              </div>
+            </div>
+
+            <div className="flex gap-4 text-sm">
+              <input type="date" defaultValue="2026-05-01" className="px-3 py-2 rounded bg-purple-800 text-white" />
+              <span className="text-purple-300">to</span>
+              <input type="date" defaultValue="2026-05-31" className="px-3 py-2 rounded bg-purple-800 text-white" />
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Apply Range</Button>
+            </div>
+          </div>
 
           {/* Metric Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {[
-              { label: "Outstanding Requests", value: analyticsData.outstanding, color: "from-orange-500 to-orange-600" },
-              { label: "Approved Total", value: analyticsData.approved_total, color: "from-teal-500 to-teal-600" },
-              { label: "On Leave Now", value: analyticsData.on_leave, color: "from-blue-500 to-blue-600" },
-              { label: "Yet to Enjoy", value: analyticsData.yet_to_enjoy, color: "from-purple-500 to-purple-600" },
-              { label: "Completed", value: analyticsData.completed, color: "from-cyan-500 to-cyan-600" },
-              { label: "Unique Staff", value: analyticsData.unique_staff, color: "from-pink-500 to-pink-600" },
-            ].map((item, i) => (
-              <Card key={i} className={`bg-gradient-to-br ${item.color} border-0 text-white`}>
-                <CardContent className="p-4">
-                  <p className="text-xs opacity-80 font-medium uppercase">{item.label}</p>
-                  <p className="text-3xl font-bold mt-2">{item.value}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-6 gap-3">
+            <div className="bg-orange-500 text-white p-6 rounded-lg text-center">
+              <div className="text-3xl font-bold">2</div>
+              <p className="text-xs uppercase font-semibold mt-2">Outstanding</p>
+            </div>
+            <div className="bg-teal-500 text-white p-6 rounded-lg text-center">
+              <div className="text-3xl font-bold">3</div>
+              <p className="text-xs uppercase font-semibold mt-2">Approved Total</p>
+            </div>
+            <div className="bg-blue-500 text-white p-6 rounded-lg text-center">
+              <div className="text-3xl font-bold">2</div>
+              <p className="text-xs uppercase font-semibold mt-2">On Leave Now</p>
+            </div>
+            <div className="bg-purple-500 text-white p-6 rounded-lg text-center">
+              <div className="text-3xl font-bold">0</div>
+              <p className="text-xs uppercase font-semibold mt-2">Yet to Enjoy</p>
+            </div>
+            <div className="bg-cyan-500 text-white p-6 rounded-lg text-center">
+              <div className="text-3xl font-bold">1</div>
+              <p className="text-xs uppercase font-semibold mt-2">Completed</p>
+            </div>
+            <div className="bg-pink-500 text-white p-6 rounded-lg text-center">
+              <div className="text-3xl font-bold">3</div>
+              <p className="text-xs uppercase font-semibold mt-2">Unique Staff</p>
+            </div>
+          </div>
+
+          {/* Leave by Type and Location */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
+              <h3 className="font-semibold text-gray-900 mb-4">Leave by Type</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span>Annual Leave</span>
+                  <div className="h-2 bg-purple-500 rounded" style={{ width: '100%' }}></div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg p-6 border border-gray-200">
+              <h3 className="font-semibold text-gray-900 mb-4">Leave by Location</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span>QCC Head Office</span>
+                  <div className="h-2 bg-teal-500 rounded" style={{ width: '100%' }}></div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Currently on Leave */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Currently on Leave</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {currentlyOnLeave.map((person, i) => (
-                <div key={i} className="p-3 border rounded-lg bg-slate-50">
-                  <p className="font-medium">{person.name}</p>
-                  <p className="text-sm text-slate-600">{person.type} - {person.days} days</p>
-                  <p className="text-xs text-slate-500 mt-1">Until {person.end}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <div className="bg-white rounded-lg p-6 border border-gray-200">
+            <h3 className="font-semibold text-gray-900 mb-4">Currently on Leave</h3>
+            <table className="w-full text-sm">
+              <tbody>
+                <tr className="border-b">
+                  <td className="py-2">Mr. Osuardu Aniah</td>
+                  <td className="py-2">DEPARTMENT</td>
+                  <td className="py-2">LEAVE TYPE</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2">Mrs Yaw Ofisuo Siaw</td>
+                  <td className="py-2">DEPARTMENT</td>
+                  <td className="py-2">LEAVE TYPE</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </TabsContent>
 
         {/* Tab 4: Balance & Calendar */}
-        <TabsContent value="balance" className="space-y-4">
-          {/* Leave Balance Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {leaveBalance.map((item, i) => {
-              const colors = [
-                "from-blue-500 to-blue-600",
-                "from-green-500 to-green-600",
-                "from-purple-500 to-purple-600",
-                "from-pink-500 to-pink-600",
-              ]
-              return (
-                <Card key={i} className={`bg-gradient-to-br ${colors[i % colors.length]} border-0 text-white`}>
-                  <CardContent className="p-4">
-                    <p className="text-xs opacity-80 font-medium uppercase">{item.type}</p>
-                    <p className="text-2xl font-bold mt-2">{item.available}</p>
-                    <p className="text-xs opacity-70">of {item.entitlement} days</p>
-                  </CardContent>
-                </Card>
-              )
-            })}
+        <TabsContent value="balance" className="grid grid-cols-2 gap-6">
+          {/* Left: Leave Balance Cards */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-white mb-4">Leave Balance</h3>
+            <div className="bg-blue-900 text-white p-4 rounded-lg">
+              <p className="text-sm">Period 2026/2027</p>
+              <p className="text-2xl font-bold mt-2">0</p>
+              <p className="text-xs text-blue-200">of 412 days used</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { name: 'Study Leave', days: '365 left' },
+                { name: 'Maternity Leave', days: '344 left' },
+                { name: 'Annual Leave', days: '364 left' },
+                { name: 'Sick Leave', days: '26 left' },
+                { name: 'Study Leave (With Pay)', days: '332 left' },
+                { name: 'Special / Leave Without Pay', days: '2 left' },
+                { name: 'Paternity Leave', days: '54 left' },
+                { name: 'Casual Leave', days: '334 left' },
+              ].map((item, i) => (
+                <div key={i} className="bg-gray-400 text-gray-900 p-3 rounded-lg text-sm">
+                  <p className="font-semibold">{item.name}</p>
+                  <p className="text-xs text-gray-700 mt-1">{item.days}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Calendar */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Team Calendar</CardTitle>
-              <CardDescription>Who is off this month</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-slate-50 rounded-lg p-4 text-center text-muted-foreground">
-                <Calendar className="h-8 w-8 mx-auto mb-2" />
-                Interactive calendar view
+          {/* Right: Team Calendar */}
+          <div className="space-y-4">
+            <div className="bg-blue-900 text-white p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Team Calendar</h3>
+                <p className="text-xs">Who's off this month</p>
               </div>
-            </CardContent>
-          </Card>
+              
+              {/* Calendar */}
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-semibold">May 2026</h4>
+                  <div className="flex gap-1">
+                    <button className="text-xs px-2">←</button>
+                    <button className="text-xs px-2">→</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-2 text-xs mb-3">
+                  {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
+                    <div key={day} className="text-center text-gray-300">{day}</div>
+                  ))}
+                  {Array.from({ length: 31 }).map((_, i) => (
+                    <div key={i} className={`text-center p-2 rounded ${i < 5 ? 'bg-orange-400 text-white' : 'text-gray-300'}`}>
+                      {i + 1}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Staff on Leave */}
+              <div className="bg-blue-800 p-3 rounded text-sm">
+                <p className="text-gray-300 mb-2">SUNDAY 17 MAY 2026</p>
+                <p className="text-blue-100">Mr. Osuardu Aniah</p>
+                <span className="text-xs bg-blue-700 px-2 py-1 rounded inline-block mt-1">Annual</span>
+                <p className="text-blue-100 mt-2">Mrs Yaw Ofisuo Siaw</p>
+                <span className="text-xs bg-blue-700 px-2 py-1 rounded inline-block mt-1">Annual</span>
+              </div>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
