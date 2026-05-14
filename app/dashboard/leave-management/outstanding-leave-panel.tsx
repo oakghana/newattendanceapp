@@ -93,6 +93,14 @@ export function OutstandingLeavePanel() {
   })
   const [generatingReport, setGeneratingReport] = useState(false)
 
+  // Year-end carryover state
+  const [carryoverFromYear, setCarryoverFromYear] = useState<string>("2024/2025")
+  const [carryoverToYear, setCarryoverToYear] = useState<string>("2025/2026")
+  const [carryoverRegion, setCarryoverRegion] = useState<string>("all")
+  const [runningCarryover, setRunningCarryover] = useState(false)
+  const [carryoverResults, setCarryoverResults] = useState<any>(null)
+  const [carryoverDryRun, setCarryoverDryRun] = useState(true)
+
   // Load staff list and regions for add form
   useEffect(() => {
     const loadStaff = async () => {
@@ -235,6 +243,39 @@ export function OutstandingLeavePanel() {
     }
   }
 
+  // Run year-end carryover (auto-populate outstanding leave)
+  const runCarryover = async () => {
+    setRunningCarryover(true)
+    setCarryoverResults(null)
+    try {
+      const res = await fetch("/api/leave/hr-admin/outstanding/auto-populate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_year_period: carryoverFromYear,
+          to_year_period: carryoverToYear,
+          region_id: carryoverRegion,
+          dry_run: carryoverDryRun,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setCarryoverResults(data)
+        if (!carryoverDryRun) {
+          // Refresh outstanding leave data
+          loadOutstandingLeave()
+        }
+      } else {
+        alert(data.error || "Failed to run carryover")
+      }
+    } catch (err) {
+      console.error("[v0] Carryover error:", err)
+      alert("Failed to run carryover. Please try again.")
+    } finally {
+      setRunningCarryover(false)
+    }
+  }
+
   // Save outstanding leave record
   const handleSave = async () => {
     if (!selectedStaff) return
@@ -335,6 +376,10 @@ export function OutstandingLeavePanel() {
           <TabsTrigger value="add" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-blue-500 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             <Plus className="h-4 w-4" />
             Add Outstanding Days
+          </TabsTrigger>
+          <TabsTrigger value="carryover" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-purple-500 data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <RefreshCw className="h-4 w-4" />
+            Year-End Carryover
           </TabsTrigger>
           <TabsTrigger value="reports" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-amber-500 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
             <FileSpreadsheet className="h-4 w-4" />
@@ -801,6 +846,184 @@ export function OutstandingLeavePanel() {
                   {generatingReport ? "Generating..." : `Generate ${reportPeriod.charAt(0).toUpperCase() + reportPeriod.slice(1)} Report`}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Year-End Carryover Tab */}
+        <TabsContent value="carryover" className="mt-4">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-purple-400" />
+                Year-End Outstanding Leave Carryover
+              </CardTitle>
+              <CardDescription>
+                Auto-populate outstanding leave for staff who didn&apos;t use all their annual leave days when a leave year ends.
+                Unused days (up to max carryover) will be carried over to the new year.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* From Year */}
+                <div className="space-y-2">
+                  <Label className="text-slate-300">From Year Period (Ending)</Label>
+                  <select
+                    value={carryoverFromYear}
+                    onChange={(e) => setCarryoverFromYear(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
+                  >
+                    <option value="2024/2025">2024/2025</option>
+                    <option value="2025/2026">2025/2026</option>
+                    <option value="2026/2027">2026/2027</option>
+                  </select>
+                </div>
+
+                {/* To Year */}
+                <div className="space-y-2">
+                  <Label className="text-slate-300">To Year Period (New)</Label>
+                  <select
+                    value={carryoverToYear}
+                    onChange={(e) => setCarryoverToYear(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
+                  >
+                    <option value="2025/2026">2025/2026</option>
+                    <option value="2026/2027">2026/2027</option>
+                    <option value="2027/2028">2027/2028</option>
+                  </select>
+                </div>
+
+                {/* Region Filter */}
+                <div className="space-y-2">
+                  <Label className="text-slate-300 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" /> Region / Location
+                  </Label>
+                  <select
+                    value={carryoverRegion}
+                    onChange={(e) => setCarryoverRegion(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
+                  >
+                    {COCOA_REGIONS.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Dry Run Toggle */}
+              <div className="flex items-center gap-3 p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+                <input
+                  type="checkbox"
+                  id="dryRunToggle"
+                  checked={carryoverDryRun}
+                  onChange={(e) => setCarryoverDryRun(e.target.checked)}
+                  className="w-5 h-5 rounded border-slate-500"
+                />
+                <label htmlFor="dryRunToggle" className="text-slate-300">
+                  <strong className="text-white">Preview Mode (Dry Run)</strong>
+                  <span className="block text-xs text-slate-400">
+                    When enabled, shows what would be created without actually saving. Uncheck to apply changes.
+                  </span>
+                </label>
+              </div>
+
+              {/* Run Button */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                <Button
+                  onClick={runCarryover}
+                  disabled={runningCarryover}
+                  className={carryoverDryRun ? "bg-blue-600 hover:bg-blue-700 gap-2" : "bg-purple-600 hover:bg-purple-700 gap-2"}
+                >
+                  <RefreshCw className={`w-4 h-4 ${runningCarryover ? "animate-spin" : ""}`} />
+                  {runningCarryover
+                    ? "Processing..."
+                    : carryoverDryRun
+                    ? "Preview Carryover"
+                    : "Apply Carryover Now"}
+                </Button>
+              </div>
+
+              {/* Results */}
+              {carryoverResults && (
+                <div className="mt-6 space-y-4">
+                  <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600">
+                    <h4 className="font-medium text-white mb-3 flex items-center gap-2">
+                      {carryoverResults.dry_run ? (
+                        <span className="text-blue-400">Preview Results</span>
+                      ) : (
+                        <span className="text-green-400">Carryover Applied</span>
+                      )}
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                      <div className="bg-slate-800 rounded-lg p-3">
+                        <p className="text-2xl font-bold text-white">{carryoverResults.summary?.total_staff || 0}</p>
+                        <p className="text-xs text-slate-400">Total Staff</p>
+                      </div>
+                      <div className="bg-slate-800 rounded-lg p-3">
+                        <p className="text-2xl font-bold text-green-400">{carryoverResults.summary?.created || 0}</p>
+                        <p className="text-xs text-slate-400">New Records</p>
+                      </div>
+                      <div className="bg-slate-800 rounded-lg p-3">
+                        <p className="text-2xl font-bold text-blue-400">{carryoverResults.summary?.updated || 0}</p>
+                        <p className="text-xs text-slate-400">Updated</p>
+                      </div>
+                      <div className="bg-slate-800 rounded-lg p-3">
+                        <p className="text-2xl font-bold text-slate-400">{carryoverResults.summary?.no_unused || 0}</p>
+                        <p className="text-xs text-slate-400">No Unused Days</p>
+                      </div>
+                      <div className="bg-slate-800 rounded-lg p-3">
+                        <p className="text-2xl font-bold text-amber-400">{carryoverResults.summary?.total_carryover_days || 0}</p>
+                        <p className="text-xs text-slate-400">Total Carryover Days</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Detailed Results Table */}
+                  {carryoverResults.results?.length > 0 && (
+                    <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-600">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-700 sticky top-0">
+                          <tr>
+                            <th className="text-left p-2 text-slate-300">Staff</th>
+                            <th className="text-left p-2 text-slate-300">Region</th>
+                            <th className="text-center p-2 text-slate-300">Entitlement</th>
+                            <th className="text-center p-2 text-slate-300">Used</th>
+                            <th className="text-center p-2 text-slate-300">Unused</th>
+                            <th className="text-center p-2 text-slate-300">Carryover</th>
+                            <th className="text-center p-2 text-slate-300">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {carryoverResults.results.slice(0, 50).map((r: any, idx: number) => (
+                            <tr key={idx} className="border-t border-slate-700 hover:bg-slate-700/50">
+                              <td className="p-2 text-white">{r.staff_name}</td>
+                              <td className="p-2 text-slate-400">{r.region_name}</td>
+                              <td className="p-2 text-center text-slate-300">{r.entitlement}</td>
+                              <td className="p-2 text-center text-red-400">{r.used}</td>
+                              <td className="p-2 text-center text-blue-400">{r.unused}</td>
+                              <td className="p-2 text-center text-green-400 font-semibold">{r.carryover}</td>
+                              <td className="p-2 text-center">
+                                <span className={`text-xs px-2 py-1 rounded ${
+                                  r.status === "created" ? "bg-green-800 text-green-200" :
+                                  r.status === "updated" ? "bg-blue-800 text-blue-200" :
+                                  "bg-slate-600 text-slate-300"
+                                }`}>
+                                  {r.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {carryoverResults.results.length > 50 && (
+                        <p className="text-center text-slate-400 text-xs py-2">
+                          Showing 50 of {carryoverResults.results.length} results
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
