@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     // Get the leave request details
     const { data: leaveRequest, error: leaveError } = await supabase
       .from("leave_plan_requests")
-      .select("id, user_id, start_date, end_date, status, employee_id, user_name")
+      .select("id, user_id, preferred_start_date, preferred_end_date, status")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Check if leave is currently active or upcoming
     const now = new Date()
     const recallDateObj = new Date(recall_date)
-    const endDateObj = new Date(leaveRequest.end_date)
+    const endDateObj = new Date(leaveRequest.preferred_end_date)
 
     if (recallDateObj >= endDateObj) {
       return NextResponse.json(

@@ -56,11 +56,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Create deferment request
+    const defermentPeriod = `${deferral_year}/2027` // Format as "2026/2027"
     const { data, error } = await supabase
       .from("leave_deferment_requests")
       .insert({
         leave_plan_request_id,
         requested_deferment_year: parseInt(deferral_year),
+        requested_deferment_period: defermentPeriod,
         reason: reason || null,
         user_id: user_id,
         created_at: new Date().toISOString(),
