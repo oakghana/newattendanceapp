@@ -1048,7 +1048,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
-  // ── HR Approver ──────────────────���──────────────────────────────────
+  // ── HR Approver ──────────────────����──────────────────────────────────
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
@@ -3285,8 +3285,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               </div>
                             </div>
 
-                            <Button onClick={() => submitHrOfficeReview(req.id)}
-                              disabled={officeSubmitting === req.id}
+                            <Button onClick={() => {
+                              if (!officeMemoBody[req.id] || !officeMemoBody[req.id].trim()) {
+                                toast({ title: "Remarks Required", description: "Please provide remarks before forwarding to HR Approvers", variant: "destructive" })
+                                return
+                              }
+                              submitHrOfficeReview(req.id)
+                            }}
+                              disabled={officeSubmitting === req.id || !officeMemoBody[req.id]?.trim()}
                               className="bg-blue-700 hover:bg-blue-800 text-white">
                               {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
                             </Button>

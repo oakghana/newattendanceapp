@@ -69,6 +69,15 @@
   .stagger-children > *:nth-child(5) { animation-delay: 0.4s; }
   .stagger-children > *:nth-child(6) { animation-delay: 0.5s; }
 
+  /* Animation delay utilities */
+  .animation-delay-1000 {
+    animation-delay: 1s;
+  }
+
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+
   /* Glass morphism effect */
   .glass-effect {
     background: rgba(255, 255, 255, 0.7);
