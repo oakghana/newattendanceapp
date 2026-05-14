@@ -30,7 +30,9 @@ export function normalizeRole(role: string | null | undefined): string {
     .replace(/[\s-]+/g, "_")
 }
 
-const ADMIN_ROLE_ALIASES = new Set(["admin", "it_admin", "super_admin", "god"])
+const ADMIN_ROLE_ALIASES = new Set(["admin", "super_admin", "god"])
+// Note: it_admin is NOT included - IT Admin users should only see My Loans and My Tasks tabs
+// They are not system administrators for loan workflow purposes
 
 export function isAdminRole(role: string | null | undefined): boolean {
   return ADMIN_ROLE_ALIASES.has(normalizeRole(role))
