@@ -60,12 +60,12 @@ export function LeaveManagementModuleClient({
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-blue-100 bg-blue-50/60 p-2 shadow-sm overflow-x-auto sm:overflow-visible">
           <TabsTrigger value="leave-management" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
             <LayoutPanelTop className="h-3 w-3 sm:h-4 sm:w-4" /> 
-            <span className="hidden sm:inline">Leave Management</span>
-            <span className="sm:hidden">Requests</span>
+            <span className="hidden sm:inline">Leave Center</span>
+            <span className="sm:hidden">Center</span>
           </TabsTrigger>
           <TabsTrigger value="leave-planning" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
             <CalendarRange className="h-3 w-3 sm:h-4 sm:w-4" /> 
-            <span className="hidden sm:inline">Leave & HR Leave</span>
+            <span className="hidden sm:inline">Leave Center</span>
             <span className="sm:hidden">Planning</span>
           </TabsTrigger>
           {isHrLeaveOfficeRole(userRole) && (
