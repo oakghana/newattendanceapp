@@ -10,17 +10,23 @@ import {
   getEntitlementDays,
 } from '@/lib/leave-calculation-service';
 import { createAdminClient } from '@/lib/supabase/server';
-import { format } from 'date-fns';
+import { format, addDays, isWeekend } from 'date-fns';
 
 // GET public holidays from database
 async function getPublicHolidays(leaveYearPeriod: string): Promise<Date[]> {
   try {
     const admin = await createAdminClient();
+    
+    // leaveYearPeriod is in format "2025/2026", extract both years
+    const years = leaveYearPeriod.split('/').map(y => y.trim());
+    const startYear = years[0] || new Date().getFullYear().toString();
+    const endYear = years[1] || startYear;
+    
     const { data, error } = await admin
       .from('ghana_public_holidays')
-      .select('holiday_date')
-      .gte('holiday_date', `${leaveYearPeriod}-01-01`)
-      .lte('holiday_date', `${leaveYearPeriod}-12-31`);
+      .select('holiday_date, holiday_name')
+      .gte('holiday_date', `${startYear}-01-01`)
+      .lte('holiday_date', `${endYear}-12-31`);
 
     if (error) {
       console.error('[v0] Supabase error fetching holidays:', error);
@@ -79,6 +85,14 @@ export async function POST(request: NextRequest) {
     const calculated = calculateLeaveDuration(start, endDate, holidays);
     const summary = generateCalculationSummary(calculated);
 
+    // Calculate return-to-work date (skip weekends and holidays)
+    const holidaySet = new Set(holidays.map((h: Date) => format(h, 'yyyy-MM-dd')));
+    let returnDate = addDays(endDate, 1);
+    // Skip weekends and holidays for return date
+    while (isWeekend(returnDate) || holidaySet.has(format(returnDate, 'yyyy-MM-dd'))) {
+      returnDate = addDays(returnDate, 1);
+    }
+
     // Format response
     return NextResponse.json({
       success: true,
@@ -86,7 +100,7 @@ export async function POST(request: NextRequest) {
         startDate: format(start, 'yyyy-MM-dd'),
         endDate: format(endDate, 'yyyy-MM-dd'),
         daysCount: actualLeaveDays,
-        estimatedReturn: format(new Date(endDate.getTime() + 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+        estimatedReturn: format(returnDate, 'yyyy-MM-dd'),
         businessDays: calculated.businessDays,
         weekendDays: calculated.weekendDays,
         holidayDays: calculated.holidayDays,
