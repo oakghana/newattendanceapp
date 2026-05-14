@@ -13,7 +13,8 @@ import {
 
 const HOD_AUTO_ADVANCE_DAYS = 3
 const POST_LOAN_OFFICE_DELAY_DAYS = 5
-const ADMIN_DB_ROLE_ALIASES = ["admin", "it_admin", "it-admin", "super_admin", "super-admin", "god"]
+const ADMIN_DB_ROLE_ALIASES = ["admin", "super_admin", "god"]
+// Note: it_admin is NOT included - IT Admin users should only see My Loans and My Tasks tabs
 
 async function notifyUsers(admin: any, userIds: string[], title: string, message: string, type = "loan_update", data: any = {}) {
   if (!userIds.length) return
