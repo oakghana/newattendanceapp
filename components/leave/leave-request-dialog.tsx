@@ -99,27 +99,21 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   })
 
   useEffect(() => {
-    const loadPolicy = async () => {
-      try {
-        const response = await fetch("/api/leave/policy", { cache: "no-store" })
-        const result = await response.json()
-        if (!response.ok) return
-        setActivePeriod(result.activePeriod || "2026/2027")
-        const opts = (result.leaveTypes || []).map((t: any) => ({
-          value: t.leaveTypeKey,
-          label: t.leaveTypeLabel,
-        }))
-        if (opts.length > 0) {
-          setLeaveTypeOptions(opts)
-          setFormData((prev) => ({ ...prev, leaveType: opts[0].value, leaveYearPeriod: result.activePeriod }))
-        }
-      } catch {
-        // Keep defaults
-      }
-    }
+    // DISABLED: API call disabled for debugging - using mock data
     if (open) {
       setStep("type")
-      void loadPolicy()
+      // Use mock leave types
+      const mockLeaveTypes = [
+        { value: "annual", label: "Annual Leave" },
+        { value: "sick", label: "Sick Leave" },
+        { value: "maternity", label: "Maternity Leave" },
+        { value: "paternity", label: "Paternity Leave" },
+        { value: "study", label: "Study Leave" },
+        { value: "compassionate", label: "Compassionate Leave" },
+      ]
+      setLeaveTypeOptions(mockLeaveTypes)
+      setActivePeriod("2025/2026")
+      setFormData((prev) => ({ ...prev, leaveType: "annual", leaveYearPeriod: "2025/2026" }))
     }
   }, [open])
 

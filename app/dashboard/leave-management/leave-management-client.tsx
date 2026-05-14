@@ -56,46 +56,73 @@ export function LeaveManagementClient({
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeView, setActiveView] = useState<ActiveView>("my_requests")
 
+  // DISABLED: Database fetch disabled for debugging
   useEffect(() => {
-    fetchLeaveRequests()
+    // Use mock data instead of fetching from API
+    setLeaveRequests([
+      {
+        id: "1",
+        start_date: "2026-06-01",
+        end_date: "2026-06-05",
+        reason: "Annual family vacation",
+        status: "pending",
+        created_at: "2026-05-10T10:00:00Z",
+        leave_type: "annual",
+        user_id: userId,
+      },
+      {
+        id: "2",
+        start_date: "2026-07-15",
+        end_date: "2026-07-15",
+        reason: "Medical appointment",
+        status: "approved",
+        created_at: "2026-05-08T09:00:00Z",
+        leave_type: "sick",
+        user_id: userId,
+      },
+    ])
+    setLoading(false)
   }, [userId])
 
-  const fetchLeaveRequests = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`/api/leave/requests?userId=${userId}`)
-      const result = await response.json()
-      if (result.success) {
-        setLeaveRequests(result.data || [])
-      }
-    } catch (error) {
-      console.error("[v0] Error fetching leave requests:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // DISABLED: Original fetch function
+  // const fetchLeaveRequests = async () => {
+  //   try {
+  //     setLoading(true)
+  //     const response = await fetch(`/api/leave/requests?userId=${userId}`)
+  //     const result = await response.json()
+  //     if (result.success) {
+  //       setLeaveRequests(result.data || [])
+  //     }
+  //   } catch (error) {
+  //     console.error("[v0] Error fetching leave requests:", error)
+  //   } finally {
+  //     setLoading(false)
+  //   }
+  // }
 
   const handleLeaveSubmit = async (data: any) => {
+    // DISABLED: API call disabled for debugging
+    // Simulates successful submission with mock data
     try {
       setIsSubmitting(true)
-      const response = await fetch("/api/leave/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          startDate: data.startDate.toISOString().split("T")[0],
-          endDate: data.endDate.toISOString().split("T")[0],
-          reason: data.reason,
-          leaveType: data.leaveType,
-        }),
-      })
-      const result = await response.json()
-      if (result.success) {
-        setDialogOpen(false)
-        await fetchLeaveRequests()
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Add mock leave request to the list
+      const newRequest: LeaveRequest = {
+        id: `mock-${Date.now()}`,
+        start_date: data.startDate.toISOString().split("T")[0],
+        end_date: data.endDate.toISOString().split("T")[0],
+        reason: data.reason || "Leave request",
+        status: "pending",
+        created_at: new Date().toISOString(),
+        leave_type: data.leaveType || "annual",
+        user_id: userId,
       }
+      setLeaveRequests(prev => [newRequest, ...prev])
+      setDialogOpen(false)
     } catch (error) {
-      console.error("[v0] Error submitting leave request:", error)
+      console.error("[v0] Error in mock submit:", error)
     } finally {
       setIsSubmitting(false)
     }
@@ -104,17 +131,13 @@ export function LeaveManagementClient({
   const handleDeleteRequest = async (requestId: string) => {
     if (!confirm("Are you sure you want to delete this leave request?")) return
 
+    // DISABLED: API call disabled for debugging - using local state update
     try {
       setIsSubmitting(true)
-      const response = await fetch(`/api/leave/requests?id=${requestId}`, {
-        method: "DELETE",
-      })
-      const result = await response.json()
-      if (result.success) {
-        setLeaveRequests(leaveRequests.filter(r => r.id !== requestId))
-      }
+      await new Promise(resolve => setTimeout(resolve, 300))
+      setLeaveRequests(leaveRequests.filter(r => r.id !== requestId))
     } catch (error) {
-      console.error("[v0] Error deleting request:", error)
+      console.error("[v0] Error in mock delete:", error)
     } finally {
       setIsSubmitting(false)
     }
@@ -332,7 +355,7 @@ export function LeaveManagementClient({
                 {activeView === "approved" && "Your approved leave requests"}
               </CardDescription>
             </div>
-            <Button variant="ghost" size="sm" onClick={fetchLeaveRequests}>
+            <Button variant="ghost" size="sm" onClick={() => console.log("[v0] Refresh disabled - using mock data")}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
