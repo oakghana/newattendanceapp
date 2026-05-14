@@ -3,7 +3,7 @@
 import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
-import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
+// import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 // Temporarily commented out problematic components - will be added back after testing
 // import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
@@ -98,13 +98,8 @@ export function LeaveManagementModuleClient({
         </TabsContent>
 
         <TabsContent value="leave-planning" className="space-y-4 sm:space-y-6 w-full">
-          <LeavePlanningClient
-            profile={{
-              role: userRole,
-              departmentName: userDepartmentName,
-              departmentCode: userDepartmentCode,
-            }}
-          />
+          {/* <LeavePlanningClient temporarily disabled to debug */}
+          <div className="text-center py-8 text-muted-foreground">Planning coming soon</div>
         </TabsContent>
 
         {showAnalytics && (
