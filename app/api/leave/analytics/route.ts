@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("role")
+      .select("role, department_id")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -108,6 +108,29 @@ export async function GET(request: NextRequest) {
     const rangeStart = formatDateOnly(start)
     const rangeEnd = formatDateOnly(end)
 
+    // Determine which staff records the current user can view based on their role
+    let allowedStaffIds: string[] | null = null
+    const userDepartmentId = (profile as any).department_id
+
+    if (role === "department_head" && userDepartmentId) {
+      // HOD can only see staff in their department
+      const { data: staffProfiles, error: staffError } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("department_id", userDepartmentId)
+        .eq("is_active", true)
+      
+      if (!staffError && staffProfiles) {
+        allowedStaffIds = staffProfiles.map((p: any) => String(p.id))
+      }
+    } else if (role === "regional_manager") {
+      // RM can see all staff (regional scope)
+      allowedStaffIds = null // null means no filtering - show all
+    } else {
+      // HR roles can see all staff
+      allowedStaffIds = null // null means no filtering - show all
+    }
+
     const [approvedRes, outstandingRes] = await Promise.all([
       admin
         .from("leave_plan_requests")
@@ -117,7 +140,7 @@ export async function GET(request: NextRequest) {
         .order("created_at", { ascending: false }),
       admin
         .from("leave_plan_requests")
-        .select("id, status, created_at, submitted_at")
+        .select("id, user_id, status, created_at, submitted_at")
         .eq("is_archived", false)
         .in("status", [...OUTSTANDING_STATUSES])
         .order("created_at", { ascending: false }),
@@ -126,7 +149,15 @@ export async function GET(request: NextRequest) {
     if (approvedRes.error) throw approvedRes.error
     if (outstandingRes.error) throw outstandingRes.error
 
-    const approvedRowsRaw = approvedRes.data || []
+    // Apply role-based staff filtering
+    let approvedRowsRaw = approvedRes.data || []
+    let outstandingRowsRaw = outstandingRes.data || []
+
+    if (allowedStaffIds) {
+      // Filter to only allowed staff
+      approvedRowsRaw = approvedRowsRaw.filter((row: any) => allowedStaffIds!.includes(String(row?.user_id || "")))
+      outstandingRowsRaw = outstandingRowsRaw.filter((row: any) => allowedStaffIds!.includes(String(row?.user_id || "")))
+    }
     const approvedUserIds = Array.from(new Set(approvedRowsRaw.map((row: any) => String(row?.user_id || "")).filter(Boolean)))
 
     let profileRows: any[] = []
@@ -202,7 +233,7 @@ export async function GET(request: NextRequest) {
       }]
     })
 
-    const outstandingRows = (outstandingRes.data || []).filter((row: any) => {
+    const outstandingRows = (outstandingRowsRaw || []).filter((row: any) => {
       const createdAt = row?.submitted_at || row?.created_at
       if (!createdAt) return false
       const createdDate = new Date(createdAt)
