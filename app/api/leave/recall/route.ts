@@ -98,8 +98,16 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
-      console.error("[v0] Recall insert error:", insertError)
-      return NextResponse.json({ error: "Failed to create recall request" }, { status: 500 })
+      console.error("[v0] Recall insert error:", {
+        message: insertError.message,
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint
+      })
+      return NextResponse.json({ 
+        error: insertError.message || "Failed to create recall request",
+        details: insertError.details 
+      }, { status: 500 })
     }
 
     return NextResponse.json(

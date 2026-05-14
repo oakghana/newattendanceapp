@@ -70,9 +70,14 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error("[v0] Deferment creation error:", error)
+      console.error("[v0] Deferment creation error:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      })
       return NextResponse.json(
-        { error: "Failed to create deferment request" },
+        { error: error.message || "Failed to create deferment request", details: error.details },
         { status: 500 }
       )
     }

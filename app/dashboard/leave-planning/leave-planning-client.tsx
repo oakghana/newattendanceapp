@@ -1048,7 +1048,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
-  // ── HR Approver ─────────────────────────────────────────────────────
+  // ── HR Approver ──────────────────��──────────────────────────────────
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
@@ -2641,19 +2641,16 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
               </div>
             </div>
             <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
-              <TabsList className={`grid h-auto w-full ${
-                canViewLeaveAnalytics && canManageLeaveTypePolicy ? "grid-cols-3" :
-                (canViewLeaveAnalytics || canManageLeaveTypePolicy) ? "grid-cols-2" : "grid-cols-1"
-              } rounded-xl border border-slate-200 bg-slate-50 p-1.5`}>
-                <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Operations</TabsTrigger>
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+                <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Operations</TabsTrigger>
                 {canManageLeaveTypePolicy && (
-                  <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Leave Policy</TabsTrigger>
+                  <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Leave Policy</TabsTrigger>
                 )}
                 {canManageLeaveTypePolicy && (
-                  <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Holidays</TabsTrigger>
+                  <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Holidays</TabsTrigger>
                 )}
                 {canViewLeaveAnalytics && (
-                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics</TabsTrigger>
+                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Analytics</TabsTrigger>
                 )}
               </TabsList>
 
