@@ -119,6 +119,7 @@ interface LeavePlanningClientProps {
     departmentName: string | null
     departmentCode: string | null
   }
+  initialHolidays?: Array<{ holiday_date: string; holiday_name: string }>
 }
 
 async function readAsDataUrl(file: File): Promise<string> {
@@ -935,7 +936,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
+export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
@@ -1001,7 +1002,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [typedSignature, setTypedSignature] = useState("")
   const [uploadedSigUrl, setUploadedSigUrl] = useState<string | null>(null)
   const [drawnSigUrl, setDrawnSigUrl] = useState<string | null>(null)
-  const [holidays, setHolidays] = useState<Array<{ holiday_date: string; holiday_name: string }>>([])
+  const [holidays, setHolidays] = useState<Array<{ holiday_date: string; holiday_name: string }>>(initialHolidays || [])
   const [holidaysLoading, setHolidaysLoading] = useState(false)
 
   const defaultStaffSignature = useMemo(() => {

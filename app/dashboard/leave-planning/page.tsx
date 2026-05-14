@@ -21,6 +21,12 @@ export default async function LeavePlanningPage() {
     return <div>Profile not found</div>
   }
 
+  // Fetch all public holidays for Ghana
+  const { data: holidays } = await supabase
+    .from("ghana_public_holidays")
+    .select("holiday_date, holiday_name")
+    .order("holiday_date", { ascending: true })
+
   return (
     <div className="leave-theme">
       <LeavePlanningClient
@@ -31,6 +37,7 @@ export default async function LeavePlanningPage() {
           departmentName: (profile as any)?.departments?.name || null,
           departmentCode: (profile as any)?.departments?.code || null,
         }}
+        initialHolidays={holidays || []}
       />
     </div>
   )
