@@ -35,9 +35,13 @@ export function LeaveManagementModuleClient({
   userDepartment,
   userFirstName,
   userLastName,
+  inactivityDays,
   hasHodLinkage,
   initialStaffRequests,
   initialManagerNotifications,
+  initialApprovedStaffRequests,
+  userDepartmentName,
+  userDepartmentCode,
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
   const [analyticsData, setAnalyticsData] = useState<any>(null)
