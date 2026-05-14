@@ -46,7 +46,7 @@ interface Deferment {
 type SortField = 'name' | 'date' | 'type' | 'status'
 type SortOrder = 'asc' | 'desc'
 
-export default function HRLeaveAdminClient() {
+export default function HRLeaveAdminClient({ profile }: { profile?: { id: string; role: string } }) {
   // Shared states
   const [activeTab, setActiveTab] = useState('holidays')
   const [loading, setLoading] = useState(true)
@@ -209,33 +209,42 @@ export default function HRLeaveAdminClient() {
 
   // ============ RECALLS HANDLERS ============
   const filterAndSortRecalls = () => {
-    let filtered = recalls.filter((r) =>
-      r.employee_name.toLowerCase().includes(recallsSearch.toLowerCase()) ||
-      r.leave_type.toLowerCase().includes(recallsSearch.toLowerCase()) ||
-      r.department?.toLowerCase().includes(recallsSearch.toLowerCase())
-    )
+    try {
+      let filtered = (recalls || []).filter((r) => {
+        if (!r) return false
+        const name = String(r.employee_name || '').toLowerCase()
+        const type = String(r.leave_type || '').toLowerCase()
+        const dept = String(r.department || '').toLowerCase()
+        const searchTerm = recallsSearch.toLowerCase()
+        return name.includes(searchTerm) || type.includes(searchTerm) || dept.includes(searchTerm)
+      })
 
-    filtered.sort((a, b) => {
-      let aVal, bVal
+      filtered.sort((a, b) => {
+        if (!a || !b) return 0
+        let aVal, bVal
 
-      if (recallsSort.field === 'name') {
-        aVal = a.employee_name
-        bVal = b.employee_name
-      } else if (recallsSort.field === 'type') {
-        aVal = a.leave_type
-        bVal = b.leave_type
-      } else if (recallsSort.field === 'date') {
-        aVal = a.recall_date
-        bVal = b.recall_date
-      } else {
-        aVal = a.status
-        bVal = b.status
-      }
+        if (recallsSort.field === 'name') {
+          aVal = a.employee_name || ''
+          bVal = b.employee_name || ''
+        } else if (recallsSort.field === 'type') {
+          aVal = a.leave_type || ''
+          bVal = b.leave_type || ''
+        } else if (recallsSort.field === 'date') {
+          aVal = a.recall_date || ''
+          bVal = b.recall_date || ''
+        } else {
+          aVal = a.status || ''
+          bVal = b.status || ''
+        }
 
-      return recallsSort.order === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal))
-    })
+        return recallsSort.order === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal))
+      })
 
-    return filtered
+      return filtered
+    } catch (err) {
+      console.error('[v0] Error filtering recalls:', err)
+      return recalls || []
+    }
   }
 
   const handleRecallsSort = (field: SortField) => {
@@ -246,38 +255,47 @@ export default function HRLeaveAdminClient() {
   }
 
   const filteredRecalls = filterAndSortRecalls()
-  const recallsTotal = Math.ceil(filteredRecalls.length / itemsPerPage)
-  const recallsPaginated = filteredRecalls.slice((recallsPage - 1) * itemsPerPage, recallsPage * itemsPerPage)
+  const recallsTotal = Math.max(1, Math.ceil((filteredRecalls?.length || 0) / itemsPerPage))
+  const recallsPaginated = (filteredRecalls || []).slice((recallsPage - 1) * itemsPerPage, recallsPage * itemsPerPage)
 
   // ============ DEFERMENTS HANDLERS ============
   const filterAndSortDeferments = () => {
-    let filtered = deferments.filter((d) =>
-      d.employee_name.toLowerCase().includes(deferSearch.toLowerCase()) ||
-      d.leave_type.toLowerCase().includes(deferSearch.toLowerCase()) ||
-      d.department?.toLowerCase().includes(deferSearch.toLowerCase())
-    )
+    try {
+      let filtered = (deferments || []).filter((d) => {
+        if (!d) return false
+        const name = String(d.employee_name || '').toLowerCase()
+        const type = String(d.leave_type || '').toLowerCase()
+        const dept = String(d.department || '').toLowerCase()
+        const searchTerm = deferSearch.toLowerCase()
+        return name.includes(searchTerm) || type.includes(searchTerm) || dept.includes(searchTerm)
+      })
 
-    filtered.sort((a, b) => {
-      let aVal, bVal
+      filtered.sort((a, b) => {
+        if (!a || !b) return 0
+        let aVal, bVal
 
-      if (deferSort.field === 'name') {
-        aVal = a.employee_name
-        bVal = b.employee_name
-      } else if (deferSort.field === 'type') {
-        aVal = a.leave_type
-        bVal = b.leave_type
-      } else if (deferSort.field === 'date') {
-        aVal = a.deferral_year
-        bVal = b.deferral_year
-      } else {
-        aVal = a.status
-        bVal = b.status
-      }
+        if (deferSort.field === 'name') {
+          aVal = a.employee_name || ''
+          bVal = b.employee_name || ''
+        } else if (deferSort.field === 'type') {
+          aVal = a.leave_type || ''
+          bVal = b.leave_type || ''
+        } else if (deferSort.field === 'date') {
+          aVal = a.deferral_year || ''
+          bVal = b.deferral_year || ''
+        } else {
+          aVal = a.status || ''
+          bVal = b.status || ''
+        }
 
-      return deferSort.order === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal))
-    })
+        return deferSort.order === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal))
+      })
 
-    return filtered
+      return filtered
+    } catch (err) {
+      console.error('[v0] Error filtering deferments:', err)
+      return deferments || []
+    }
   }
 
   const handleDefermentSort = (field: SortField) => {
@@ -288,8 +306,8 @@ export default function HRLeaveAdminClient() {
   }
 
   const filteredDeferments = filterAndSortDeferments()
-  const deferTotal = Math.ceil(filteredDeferments.length / itemsPerPage)
-  const defermentsPaginated = filteredDeferments.slice((deferPage - 1) * itemsPerPage, deferPage * itemsPerPage)
+  const deferTotal = Math.max(1, Math.ceil((filteredDeferments?.length || 0) / itemsPerPage))
+  const defermentsPaginated = (filteredDeferments || []).slice((deferPage - 1) * itemsPerPage, deferPage * itemsPerPage)
 
   // ============ RENDER ============
   if (loading) {
