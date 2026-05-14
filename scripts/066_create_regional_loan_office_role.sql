@@ -90,9 +90,9 @@ CREATE INDEX IF NOT EXISTS idx_regional_loan_office_locations_region_id
 ON public.regional_loan_office_locations(region_id);
 
 -- Audit log entry
-INSERT INTO audit_logs (user_id, table_name, action, details, created_at)
+INSERT INTO public.audit_logs (user_id, table_name, action, details, created_at)
 VALUES (
-  auth.uid(),
+  NULL,
   'user_profiles',
   'MIGRATION',
   jsonb_build_object('description', 'Created regional_loan_office role and regional_loan_office_locations table'),

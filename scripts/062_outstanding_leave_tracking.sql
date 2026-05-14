@@ -2,6 +2,15 @@
 -- Description: Create table to track annual leave carryover and outstanding balances
 -- Status: Safe additive change - new table only
 
+-- Create function for updating timestamps if it doesn't exist
+CREATE OR REPLACE FUNCTION modfn_update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE IF NOT EXISTS public.outstanding_leave_balances (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
