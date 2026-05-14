@@ -319,10 +319,18 @@ export default function LoginPage() {
 
       showSuccess("Login successful! Redirecting...", "Welcome Back")
 
+      // Determine dashboard based on user role
+      let dashboardUrl = "/dashboard/attendance" // Default for staff
+      if (approvalCheck.role === "leave_admin" || approvalCheck.role === "hr_admin") {
+        dashboardUrl = "/dashboard/leave-management"
+      } else if (approvalCheck.role === "hod" || approvalCheck.role === "manager") {
+        dashboardUrl = "/dashboard/leave-management"
+      }
+
       // Wait longer for Supabase to properly set and persist cookies
       setTimeout(() => {
         // Force a full page reload to ensure cookies are read on the new page
-        window.location.href = "/dashboard/attendance"
+        window.location.href = dashboardUrl
       }, 800)
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -554,9 +562,17 @@ export default function LoginPage() {
       console.log("[v0] OTP verification successful")
       showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
 
+      // Determine dashboard based on user role
+      let dashboardUrl = "/dashboard/attendance" // Default for staff
+      if (approvalCheck.role === "leave_admin" || approvalCheck.role === "hr_admin") {
+        dashboardUrl = "/dashboard/leave-management"
+      } else if (approvalCheck.role === "hod" || approvalCheck.role === "manager") {
+        dashboardUrl = "/dashboard/leave-management"
+      }
+
       // Wait longer for Supabase to properly set and persist cookies
       setTimeout(() => {
-        window.location.href = "/dashboard/attendance"
+        window.location.href = dashboardUrl
       }, 800)
     } catch (error: unknown) {
       showFieldError("OTP Code", error instanceof Error ? error.message : "Invalid OTP code")
