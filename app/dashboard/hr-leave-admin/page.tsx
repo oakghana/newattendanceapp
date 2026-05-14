@@ -24,7 +24,7 @@ export default async function HRLeaveAdminPage() {
   }
 
   const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  const isAuthorized = ["hr_leave_office", "director_hr", "manager_hr", "admin"].includes(roleNorm)
+  const isAuthorized = ["hr_leave_office", "admin"].includes(roleNorm)
 
   if (!isAuthorized) {
     return (

@@ -108,7 +108,7 @@ const navigationItems = [
     title: "HR Leave Office Admin",
     href: "/dashboard/hr-leave-admin",
     icon: Settings,
-    roles: ["admin", "director_hr", "manager_hr", "hr_leave_office"],
+    roles: ["admin", "hr_leave_office"],
     category: "admin",
   },
   {
