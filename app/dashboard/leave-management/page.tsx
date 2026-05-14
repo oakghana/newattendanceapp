@@ -66,19 +66,6 @@ export default async function LeaveManagementPage() {
   }
 
   const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  
-  // Prevent Loan Officers from accessing Leave Management module
-  if (roleNorm === "loan_office") {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Access Denied</h1>
-          <p className="text-slate-600">Loan Officers do not have access to the Leave Management module.</p>
-          <p className="text-sm text-slate-500">Please contact your administrator if you need access.</p>
-        </div>
-      </div>
-    )
-  }
 
   const canReviewLeave = [
     "admin",

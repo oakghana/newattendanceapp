@@ -835,6 +835,7 @@ export default function LoanAppPage() {
   const [modalDecision, setModalDecision] = useState<"approve" | "reject">("approve")
   const [modalFdScore, setModalFdScore] = useState("")
   const [modalFdNote, setModalFdNote] = useState("")
+  const [modalFdProof, setModalFdProof] = useState<File | null>(null)
   const [modalDisbursement, setModalDisbursement] = useState("")
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
@@ -2018,6 +2019,7 @@ export default function LoanAppPage() {
         setModalDecision("approve")
         setModalFdScore("")
         setModalFdNote("")
+        setModalFdProof(null)
         setModalDisbursement("")
         setModalRecovery("")
         setModalMonths("")
@@ -2967,60 +2969,49 @@ export default function LoanAppPage() {
             <Button variant="outline" size="sm" onClick={() => setHrPage((n) => Math.min(totalHrPages, n + 1))} disabled={hrPage >= totalHrPages}>Next</Button>
           </div>
 
-          <Card className="border-fuchsia-200/80 bg-[linear-gradient(135deg,_#fff7ff_0%,_#ffffff_55%,_#eef2ff_100%)] shadow-sm">
+          <Card className="border-slate-200 bg-white shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-base text-fuchsia-900">Loan Type Stage Summary</CardTitle>
-                <Badge className="bg-fuchsia-700 text-white">Across 5 stage tabs</Badge>
+                <CardTitle className="text-base font-semibold text-slate-900">Loan Type Workflow Status</CardTitle>
+                <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">5 Stages</Badge>
               </div>
-              <CardDescription className="text-xs text-slate-600">
-                Use this to quickly compare each loan type by stage: Good FD, Poor FD, Good FD Not Pushed, Sent for Approval, and Archivable.
+              <CardDescription className="text-sm text-slate-600">
+                Quick overview of each loan type's progress through approval stages
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5">Good FD</span>
-                <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5">Poor FD</span>
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5">Good FD Not Pushed</span>
-                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5">Sent for Approval</span>
-                <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5">Archivable</span>
-              </div>
-
+            <CardContent className="space-y-4">
               {loanOfficeTypeSummary.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No loan type counters available yet.</p>
+                <p className="py-6 text-center text-sm text-slate-500">No loan type data available yet.</p>
               ) : (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                   {loanOfficeTypeSummary.map((item) => (
-                    <div key={`loan-summary-${item.loanKey}`} className="rounded-xl border border-fuchsia-100 bg-white/90 p-3 shadow-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-slate-900 truncate" title={item.loanLabel}>{item.loanLabel}</p>
-                        <Badge variant="outline" className="border-fuchsia-300 bg-fuchsia-50 text-fuchsia-800">
-                          Total {item.totalUnique}
-                        </Badge>
+                    <div key={`loan-summary-${item.loanKey}`} className="flex flex-col rounded-lg border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 hover:shadow-md transition-shadow">
+                      <div className="mb-4">
+                        <h4 className="font-semibold text-slate-900">{item.loanLabel}</h4>
+                        <p className="text-sm text-slate-500">Total: <span className="font-semibold text-slate-700">{item.totalUnique}</span></p>
                       </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1">
-                          <p className="text-[11px] text-emerald-700">Good FD</p>
-                          <p className="font-semibold text-emerald-900">{item.goodFd}</p>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
+                          <span className="text-xs font-medium text-slate-600">Good FD</span>
+                          <span className="text-sm font-semibold text-emerald-700">{item.goodFd}</span>
                         </div>
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1">
-                          <p className="text-[11px] text-rose-700">Poor FD</p>
-                          <p className="font-semibold text-rose-900">{item.poorFd}</p>
+                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
+                          <span className="text-xs font-medium text-slate-600">Poor FD</span>
+                          <span className="text-sm font-semibold text-orange-700">{item.poorFd}</span>
                         </div>
-                        <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
-                          <p className="text-[11px] text-amber-700">Good FD Not Pushed</p>
-                          <p className="font-semibold text-amber-900">{item.goodFdNotPushed}</p>
+                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
+                          <span className="text-xs font-medium text-slate-600">Not Pushed</span>
+                          <span className="text-sm font-semibold text-amber-700">{item.goodFdNotPushed}</span>
                         </div>
-                        <div className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">
-                          <p className="text-[11px] text-sky-700">Sent for Approval</p>
-                          <p className="font-semibold text-sky-900">{item.sentForApproval}</p>
+                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
+                          <span className="text-xs font-medium text-slate-600">For Approval</span>
+                          <span className="text-sm font-semibold text-blue-700">{item.sentForApproval}</span>
                         </div>
-                      </div>
-
-                      <div className="mt-2 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs">
-                        <p className="text-[11px] text-violet-700">Archivable</p>
-                        <p className="font-semibold text-violet-900">{item.archivable}</p>
+                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
+                          <span className="text-xs font-medium text-slate-600">Archivable</span>
+                          <span className="text-sm font-semibold text-slate-700">{item.archivable}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -4515,6 +4506,18 @@ export default function LoanAppPage() {
               <>
                 <Label className="text-xs">FD Score (Mark out of 100)</Label>
                 <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
+                <Label className="text-xs">Proof of Concept / Supporting Document * <span className="text-red-500">Required</span></Label>
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 hover:border-slate-400 transition-colors">
+                  <input
+                    type="file"
+                    onChange={(e) => setModalFdProof(e.target.files?.[0] || null)}
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    className="w-full text-xs"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    {modalFdProof ? `Selected: ${modalFdProof.name}` : "Upload proof (PDF, Word, or Image)"}
+                  </p>
+                </div>
                 <Label className="text-xs">Your Comments (optional)</Label>
                 <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} className="text-xs" />
               </>
@@ -4654,10 +4657,16 @@ export default function LoanAppPage() {
               </>
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
-              <Button onClick={() => {
-                runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null })
-                setActionModal((s) => ({ ...s, open: false }))
-              }}>Save FD Score</Button>
+              <Button 
+                disabled={!modalFdProof}
+                onClick={() => {
+                  if (!modalFdProof) {
+                    toast({ title: "Missing Attachment", description: "Please upload a proof document before saving the FD score.", variant: "destructive" })
+                    return
+                  }
+                  runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null })
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}>Save FD Score</Button>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
               <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
