@@ -9,7 +9,7 @@ import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
-const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr"]
+const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")

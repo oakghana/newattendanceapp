@@ -1134,9 +1134,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       const json = await res.json()
       if (!res.ok) return
       setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
-      // Filter only active leave types, excluding inactive ones
+      // Filter only active leave types, excluding inactive ones and Sick Leave
       const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes)
-        ? json.leaveTypes.filter((t: any) => t.is_active !== false)
+        ? json.leaveTypes.filter((t: any) => 
+            t.is_active !== false && 
+            t.leaveTypeKey !== "sick_leave" && 
+            String(t.leaveTypeLabel || "").toLowerCase() !== "sick leave"
+          )
         : []
       const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
       setLeaveTypes(hasPartLeave ? types : [
