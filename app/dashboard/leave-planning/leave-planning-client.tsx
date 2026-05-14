@@ -917,7 +917,21 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
               <Download className="w-3 h-3 mr-1" /> Download Memo
             </Button>
           )}
-          {canEdit && onEdit && (
+          {req.status === "hod_changes_requested" && onEdit && (
+            <>
+              <Button size="sm" variant="outline"
+                className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={onEdit}>
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Accept Changes
+              </Button>
+              <Button size="sm" variant="outline"
+                className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={onEdit}>
+                Counter-Offer
+              </Button>
+            </>
+          )}
+          {canEdit && req.status !== "hod_changes_requested" && onEdit && (
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onEdit}>
               <Pencil className="w-3 h-3 mr-1" /> Edit
             </Button>
@@ -1527,7 +1541,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
   }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
 
-  // ─����� Derived lists ────────────────────────────────────────────────────
+  // ─����� Derived lists ──���─────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => {
     if (!data) return []
     const requests = data.myRequests || data.requests || []
@@ -2639,7 +2653,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Holidays</TabsTrigger>
                 )}
                 {canViewLeaveAnalytics && (
-                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
+                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics</TabsTrigger>
                 )}
               </TabsList>
 
