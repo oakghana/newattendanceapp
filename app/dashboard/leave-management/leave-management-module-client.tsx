@@ -19,6 +19,8 @@ interface LeaveManagementModuleClientProps {
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
   initialApprovedStaffRequests?: any[]
+  userDepartmentName?: string | null
+  userDepartmentCode?: string | null
 }
 
 function isHrAnalyticsRole(role: string | null | undefined) {
