@@ -15,18 +15,19 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user role
+    // Get user role - exact match
     const { data: profile } = await admin
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
       .single()
 
-    const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAuthorized = ["hr_leave_office", "hr_office", "admin"].includes(userRole)
+    const userRole = profile?.role || ""
+    const authorizedRoles = ["HR LEAVE_OFFICE", "admin", "Admin"]
+    const isAuthorized = authorizedRoles.includes(userRole)
 
     if (!isAuthorized) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+      return NextResponse.json({ error: `Unauthorized: Role "${userRole}" cannot manage holidays` }, { status: 403 })
     }
 
     // Validate inputs
@@ -34,7 +35,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: "holiday_date and holiday_name are required" }, { status: 400 })
     }
 
-    // Update holiday using admin client
+    // Update holiday
     const { data: updated, error } = await admin
       .from("ghana_public_holidays")
       .update({ 
@@ -54,7 +55,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ success: true, holiday: updated })
   } catch (err) {
     console.error("[v0] Holiday PUT error:", err)
-    return NextResponse.json({ error: "Internal server error", details: String(err) }, { status: 500 })
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
@@ -71,21 +72,22 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user role
+    // Get user role - exact match
     const { data: profile } = await admin
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
       .single()
 
-    const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAuthorized = ["hr_leave_office", "hr_office", "admin"].includes(userRole)
+    const userRole = profile?.role || ""
+    const authorizedRoles = ["HR LEAVE_OFFICE", "admin", "Admin"]
+    const isAuthorized = authorizedRoles.includes(userRole)
 
     if (!isAuthorized) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+      return NextResponse.json({ error: `Unauthorized: Role "${userRole}" cannot manage holidays` }, { status: 403 })
     }
 
-    // Delete holiday using admin client
+    // Delete holiday
     const { error } = await admin
       .from("ghana_public_holidays")
       .delete()
@@ -99,6 +101,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error("[v0] Holiday DELETE error:", err)
-    return NextResponse.json({ error: "Internal server error", details: String(err) }, { status: 500 })
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

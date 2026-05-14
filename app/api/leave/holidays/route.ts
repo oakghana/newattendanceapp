@@ -13,14 +13,14 @@ export async function GET(req: NextRequest) {
     // Fetch all public holidays for Ghana
     const { data: holidays, error } = await admin
       .from("ghana_public_holidays")
-      .select("holiday_date, holiday_name")
+      .select("id, holiday_date, holiday_name")
       .order("holiday_date", { ascending: true })
 
     if (error) {
       console.error("[v0] Error fetching holidays:", error)
       return NextResponse.json(
         { error: "Failed to fetch holidays", holidays: [] },
-        { status: 200 } // Return 200 with empty array on error for graceful degradation
+        { status: 200 }
       )
     }
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     console.error("[v0] Holidays API error:", error)
     return NextResponse.json(
       { error: "Internal server error", holidays: [] },
-      { status: 200 } // Return 200 with empty array on error for graceful degradation
+      { status: 200 }
     )
   }
 }
@@ -48,29 +48,27 @@ export async function POST(req: NextRequest) {
     } = await admin.auth.getUser()
 
     if (!user) {
-      console.log("[v0] No authenticated user found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user role
+    // Get user role - check EXACT role string
     const { data: profile } = await admin
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
       .single()
 
-    const rawRole = profile?.role || ""
-    const userRole = String(rawRole).toLowerCase().replace(/[\s-]+/g, "_")
-    
-    console.log("[v0] Holiday POST - Raw role:", rawRole, "Normalized:", userRole)
+    const userRole = profile?.role || ""
+    console.log("[v0] Holiday POST - User role:", userRole)
 
-    // Check if user has permission - include all valid roles
-    const isHrLeaveOffice = ["hr_leave_office", "hr_office", "admin", "director_hr", "manager_hr"].includes(userRole)
+    // Check authorization - exact role matching for clarity
+    const authorizedRoles = ["HR LEAVE_OFFICE", "admin", "Admin"]
+    const isAuthorized = authorizedRoles.includes(userRole)
 
-    if (!isHrLeaveOffice) {
-      console.log("[v0] User not authorized. Role:", userRole, "Allowed roles:", ["hr_leave_office", "hr_office", "admin", "director_hr", "manager_hr"])
+    if (!isAuthorized) {
+      console.log("[v0] NOT authorized. Role:", userRole, "Expected one of:", authorizedRoles)
       return NextResponse.json(
-        { error: "Only HR Leave Office staff can add public holidays" },
+        { error: `Unauthorized: Role "${userRole}" cannot manage holidays` },
         { status: 403 }
       )
     }

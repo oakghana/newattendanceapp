@@ -5,31 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, X, AlertCircle, CheckCircle2, Calendar, FileText, ArrowRight, ArrowLeft } from "lucide-react"
+import { Plus, Edit2, Trash2, X, AlertCircle, CheckCircle2, Calendar, ArrowRight, ArrowLeft } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface Holiday {
   id: string
   holiday_date: string
   holiday_name: string
-}
-
-interface LeaveType {
-  id: string
-  leave_type_key: string
-  leave_type_label: string
-  entitlement_days: number
-  is_active: boolean
-}
-
-interface ApprovedMemo {
-  id: string
-  employee_name: string
-  employee_id: string
-  leave_type: string
-  start_date: string
-  end_date: string
-  status: string
 }
 
 interface Deferment {
@@ -55,8 +37,6 @@ interface HRLeaveAdminClientProps {
 export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
   const [activeTab, setActiveTab] = useState("holidays")
   const [holidays, setHolidays] = useState<Holiday[]>([])
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
-  const [approvedMemos, setApprovedMemos] = useState<ApprovedMemo[]>([])
   const [deferrments, setDeferrments] = useState<Deferment[]>([])
   const [recalls, setRecalls] = useState<Recall[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,17 +48,6 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null)
   const [holidayForm, setHolidayForm] = useState({ holiday_date: "", holiday_name: "" })
   const [submittingHoliday, setSubmittingHoliday] = useState(false)
-
-  // Leave type modal states
-  const [showLeaveTypeModal, setShowLeaveTypeModal] = useState(false)
-  const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(null)
-  const [leaveTypeForm, setLeaveTypeForm] = useState({
-    leave_type_key: "",
-    leave_type_label: "",
-    entitlement_days: 0,
-    is_active: true,
-  })
-  const [submittingLeaveType, setSubmittingLeaveType] = useState(false)
 
   // Load all data on mount
   useEffect(() => {
@@ -97,20 +66,7 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
         setHolidays(holidaysData.holidays)
       }
 
-      // Load leave types
-      const typesRes = await fetch("/api/leave/leave-types")
-      const typesData = await typesRes.json()
-      if (typesData.leaveTypes) {
-        setLeaveTypes(typesData.leaveTypes)
-      }
-
-      // Load approved memos, deferrments, and recalls
-      const memosRes = await fetch("/api/leave/hr-admin/memos")
-      const memosData = await memosRes.json()
-      if (memosData.memos) {
-        setApprovedMemos(memosData.memos)
-      }
-
+      // Load deferrments, and recalls
       const deferRes = await fetch("/api/leave/hr-admin/deferrments")
       const deferData = await deferRes.json()
       if (deferData.deferrments) {
@@ -328,14 +284,10 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700">
+          <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border border-slate-700">
             <TabsTrigger value="holidays" className="flex items-center gap-2 data-[state=active]:bg-green-600">
               <Calendar className="w-4 h-4" />
               <span className="hidden sm:inline">Holidays</span>
-            </TabsTrigger>
-            <TabsTrigger value="memos" className="flex items-center gap-2 data-[state=active]:bg-green-600">
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Memos</span>
             </TabsTrigger>
             <TabsTrigger value="deferrments" className="flex items-center gap-2 data-[state=active]:bg-green-600">
               <ArrowRight className="w-4 h-4" />
@@ -406,53 +358,6 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Approved Memos Tab */}
-          <TabsContent value="memos" className="mt-6">
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">Approved Leave Memos</CardTitle>
-                <CardDescription>Review and manage approved leave memos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {approvedMemos.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400">No approved memos available</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {approvedMemos.map((memo) => (
-                      <Card key={memo.id} className="bg-slate-700/50 border-slate-600">
-                        <CardContent className="pt-4">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                              <p className="text-sm text-slate-400">Employee</p>
-                              <p className="text-white font-semibold">{memo.employee_name}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Leave Type</p>
-                              <p className="text-white">{memo.leave_type}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Period</p>
-                              <p className="text-white text-sm">{memo.start_date} to {memo.end_date}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Status</p>
-                              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-400">
-                                {memo.status}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
                   </div>
                 )}
               </CardContent>
