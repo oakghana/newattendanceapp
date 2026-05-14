@@ -567,6 +567,7 @@ export function LeaveManagementClient({
   const isAdminView = normalizedRole === "admin"
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const isLeaveOfficeRole = normalizedRole === "leave_office"
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
@@ -704,6 +705,36 @@ export function LeaveManagementClient({
       fetchStaffApprovedMemos()
     }
   }, [userId, userRole, userDepartment])
+
+  // Fetch deferment and recall requests for leave office staff
+  useEffect(() => {
+    const fetchDefermentAndRecallRequests = async () => {
+      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+      
+      // Only fetch for leave office staff
+      if (normalizedRole !== "leave_office") return
+      
+      try {
+        // Fetch pending deferment requests
+        const defermentRes = await fetch(`/api/leave/deferment?status=pending&leave_office=${encodeURIComponent(userId)}`, { cache: "no-store" })
+        if (defermentRes.ok) {
+          const defermentData = await defermentRes.json()
+          setDefermentRequests(Array.isArray(defermentData) ? defermentData : defermentData.deferments || [])
+        }
+        
+        // Fetch pending recall requests
+        const recallRes = await fetch(`/api/leave/recall?status=pending&leave_office=${encodeURIComponent(userId)}`, { cache: "no-store" })
+        if (recallRes.ok) {
+          const recallData = await recallRes.json()
+          setRecallRequests(Array.isArray(recallData) ? recallData : recallData.recalls || [])
+        }
+      } catch (error) {
+        console.error("[v0] Failed to fetch deferment/recall requests:", error)
+      }
+    }
+    
+    void fetchDefermentAndRecallRequests()
+  }, [userId, userRole])
 
   const runTemplateAction = async (templateKey: string, action: "duplicate" | "deactivate" | "activate") => {
     setTemplateActionKey(`${action}:${templateKey}`)
@@ -1506,78 +1537,127 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
-                  Defer Your Approved Leave
+                  {isLeaveOfficeRole ? "Pending Leave Deferments" : "Defer Your Approved Leave"}
                 </CardTitle>
-                <CardDescription className="text-amber-100">Defer your approved leave to a future leave year</CardDescription>
+                <CardDescription className="text-amber-100">
+                  {isLeaveOfficeRole ? "Review and process pending deferment requests from staff" : "Defer your approved leave to a future leave year"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {approvedRequests.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                    <p className="font-medium text-slate-700">No approved leave to defer</p>
-                    <p className="text-sm text-slate-500 mt-2">You must have approved leave requests to create a deferment</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
-                      <div className="space-y-3">
-                        <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">Select Approved Leave Request</Label>
-                        <select
-                          id="defer_request"
-                          value={selectedApprovedForDeferment || ""}
-                          onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
-                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
-                        >
-                          <option value="">-- Choose a leave request --</option>
-                          {approvedRequests.map((req) => (
-                            <option key={req.id} value={req.id}>
-                              {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="space-y-3">
-                        <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
-                        <Input
-                          id="deferral_year"
-                          type="text"
-                          placeholder="2027"
-                          value={deferralYear}
-                          onChange={(e) => setDeferralYear(e.target.value)}
-                          maxLength={4}
-                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        />
-                      </div>
-
-                      <div className="space-y-3">
-                        <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">Reason (Optional)</Label>
-                        <Textarea
-                          id="deferment_reason"
-                          placeholder="Explain why you want to defer this leave..."
-                          value={defermentReason}
-                          onChange={(e) => setDefermentReason(e.target.value)}
-                          rows={3}
-                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        />
-                      </div>
-
-                      <Button
-                        onClick={submitDefermentRequest}
-                        disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear}
-                        className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-semibold py-2.5 rounded-lg transition-all"
-                      >
-                        {isSubmittingDeferment ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Submitting...
-                          </>
-                        ) : (
-                          "Submit Deferment Request"
-                        )}
-                      </Button>
+                {isLeaveOfficeRole ? (
+                  defermentRequests.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                      <p className="font-medium text-slate-700">No pending deferment requests</p>
+                      <p className="text-sm text-slate-500 mt-2">There are no deferment requests awaiting review</p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {defermentRequests.map((req: any) => (
+                        <div key={req.id} className="bg-white rounded-lg border border-amber-200 p-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-slate-600">Staff Name</p>
+                              <p className="font-semibold text-slate-900">{req.user_name}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-slate-600">Leave Type</p>
+                              <p className="font-semibold text-slate-900">{req.leave_type}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-slate-600">Original Period</p>
+                              <p className="text-sm text-slate-700">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-slate-600">Defer to Year</p>
+                              <p className="font-semibold text-slate-900">{req.deferral_year}</p>
+                            </div>
+                          </div>
+                          {req.deferment_reason && (
+                            <div className="mt-4 pt-4 border-t border-amber-100">
+                              <p className="text-sm text-slate-600">Reason</p>
+                              <p className="text-sm text-slate-700">{req.deferment_reason}</p>
+                            </div>
+                          )}
+                          <div className="flex gap-3 mt-4">
+                            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
+                            <Button variant="outline" className="flex-1">Decline</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <>
+                    {approvedRequests.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                        <p className="font-medium text-slate-700">No approved leave to defer</p>
+                        <p className="text-sm text-slate-500 mt-2">You must have approved leave requests to create a deferment</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
+                          <div className="space-y-3">
+                            <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">Select Approved Leave Request</Label>
+                            <select
+                              id="defer_request"
+                              value={selectedApprovedForDeferment || ""}
+                              onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
+                              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
+                            >
+                              <option value="">-- Choose a leave request --</option>
+                              {approvedRequests.map((req) => (
+                                <option key={req.id} value={req.id}>
+                                  {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-3">
+                            <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
+                            <Input
+                              id="deferral_year"
+                              type="text"
+                              placeholder="2027"
+                              value={deferralYear}
+                              onChange={(e) => setDeferralYear(e.target.value)}
+                              maxLength={4}
+                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div className="space-y-3">
+                            <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">Reason (Optional)</Label>
+                            <Textarea
+                              id="deferment_reason"
+                              placeholder="Explain why you want to defer this leave..."
+                              value={defermentReason}
+                              onChange={(e) => setDefermentReason(e.target.value)}
+                              rows={3}
+                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <Button
+                            onClick={submitDefermentRequest}
+                            disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear}
+                            className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                          >
+                            {isSubmittingDeferment ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Submitting...
+                              </>
+                            ) : (
+                              "Submit Deferment Request"
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>

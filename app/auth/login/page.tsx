@@ -579,16 +579,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 sm:p-4 fade-in relative overflow-hidden">
-      {/* Animated gradient background elements */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500/10 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse animation-delay-2000"></div>
-      
-      <div className="w-full max-w-md scale-in relative z-10">
-        <Card className="backdrop-blur-xl bg-slate-900/80 border border-slate-700/50 shadow-2xl hover:shadow-3xl transition-all duration-300">
+    <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4 fade-in">
+      <div className="w-full max-w-md scale-in">
+        <Card className="glass-effect shadow-2xl border-border/50">
           <CardHeader className="text-center space-y-5 pb-6 sm:pb-8 px-4 sm:px-8 pt-6 sm:pt-8">
             <div className="flex justify-center">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border-2 border-blue-500/30 flex items-center justify-center shadow-2xl scale-in hover:shadow-3xl hover:border-blue-500/50 transition-all duration-300">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-card border-2 border-primary/20 flex items-center justify-center shadow-lg scale-in">
                 <Image
                   src="/images/qcc-logo.png"
                   alt="QCC Logo - Quality Control Company Limited"
@@ -600,20 +596,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2 slide-up">
-              <CardTitle className="text-xl sm:text-2xl font-bold tracking-wide">
-                <span className="bg-gradient-to-r from-blue-600 via-cyan-600 to-emerald-600 bg-clip-text text-transparent">
-                  LEAVE
-                </span>
-                <span className="text-slate-300 mx-1">|</span>
-                <span className="bg-gradient-to-r from-emerald-600 via-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  ATTENDANCE
-                </span>
-                <span className="text-slate-300 mx-1">|</span>
-                <span className="bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 bg-clip-text text-transparent">
-                  LOAN APP
-                </span>
-                <span className="ml-2">👋</span>
-              </CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">LEAVE | ATTENDANCE | LOAN APP 👋</CardTitle>
               <CardDescription className="text-xs sm:text-sm text-muted-foreground">
                 Akwaaba! Sign in with your Staff Number, Email or use OTP to get started.
               </CardDescription>
