@@ -149,20 +149,29 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
       })
 
       if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          const calculatedEndDate = new Date(result.calculation.endDate)
-          setFormData((prev) => ({
-            ...prev,
-            endDate: calculatedEndDate,
-            entitlementDays_used: result.calculation.daysCount,
-          }))
-          setCalculationSummary(result.calculation.summary)
-          console.log("[v0] Auto-calculated end date:", result.calculation.endDate)
+        try {
+          const result = await response.json()
+          if (result.success && result.calculation) {
+            const calculatedEndDate = new Date(result.calculation.endDate)
+            setFormData((prev) => ({
+              ...prev,
+              endDate: calculatedEndDate,
+              entitlementDays_used: result.calculation.daysCount,
+            }))
+            setCalculationSummary(result.calculation.summary)
+            console.log("[v0] Auto-calculated end date:", result.calculation.endDate)
+          }
+        } catch (parseError) {
+          console.error("[v0] Error parsing calculation response:", parseError)
+          // Fall back to manual date selection
         }
+      } else {
+        console.warn("[v0] Calculation API returned status:", response.status)
+        // API failed, but don't crash - user can enter end date manually
       }
     } catch (error) {
       console.error("[v0] Error calculating end date:", error)
+      // Network error or other issue - silently fail, user can proceed manually
     } finally {
       setCalculatingEndDate(false)
     }
