@@ -132,49 +132,11 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   }, [open])
 
   // Auto-calculate end date when start date changes and leave type is annual
+  // Temporarily disabled during setup - will re-enable once migrations complete
   const calculateEndDateAuto = async (startDate: Date, leaveType: string) => {
-    if (leaveType !== "annual") return // Only for annual leave
-    
-    setCalculatingEndDate(true)
-    try {
-      const leaveYearPeriod = activePeriod.split("/")[0] // e.g., "2026"
-      const response = await fetch("/api/leave/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          startDate: startDate.toISOString().split("T")[0],
-          leaveType: leaveType,
-          leaveYearPeriod: leaveYearPeriod,
-        }),
-      })
-
-      if (response.ok) {
-        try {
-          const result = await response.json()
-          if (result.success && result.calculation) {
-            const calculatedEndDate = new Date(result.calculation.endDate)
-            setFormData((prev) => ({
-              ...prev,
-              endDate: calculatedEndDate,
-              entitlementDays_used: result.calculation.daysCount,
-            }))
-            setCalculationSummary(result.calculation.summary)
-            console.log("[v0] Auto-calculated end date:", result.calculation.endDate)
-          }
-        } catch (parseError) {
-          console.error("[v0] Error parsing calculation response:", parseError)
-          // Fall back to manual date selection
-        }
-      } else {
-        console.warn("[v0] Calculation API returned status:", response.status)
-        // API failed, but don't crash - user can enter end date manually
-      }
-    } catch (error) {
-      console.error("[v0] Error calculating end date:", error)
-      // Network error or other issue - silently fail, user can proceed manually
-    } finally {
-      setCalculatingEndDate(false)
-    }
+    // Calculation feature disabled during initial setup
+    // Users can manually enter end date for now
+    return
   }
 
   const handleSubmit = async () => {
@@ -483,24 +445,6 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                   </p>
                 </div>
               </div>
-
-              {/* Calculation summary for annual leave */}
-              {formData.leaveType === "annual" && calculationSummary && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700 p-4 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-blue-900 dark:text-blue-100">
-                      <p className="font-semibold mb-1">Leave Calculation</p>
-                      <ul className="text-xs space-y-1 opacity-90">
-                        <li>• Business days: <span className="font-medium">{calculationSummary.businessDays}</span></li>
-                        <li>• Weekends: <span className="font-medium">{calculationSummary.weekendDays}</span></li>
-                        <li>• Public holidays: <span className="font-medium">{calculationSummary.holidayDays}</span></li>
-                        <li>• Return to work: <span className="font-medium">{format(new Date(formData.endDate.getTime() + 24 * 60 * 60 * 1000), 'MMM dd, yyyy')}</span></li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
