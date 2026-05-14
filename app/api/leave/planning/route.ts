@@ -699,21 +699,41 @@ export async function GET(request: NextRequest) {
       const analytics = await fetchHrOfficeAnalytics(admin)
 
       // Fetch outstanding leave balances for all staff with pending requests
+      // Get current and previous leave year periods
+      const { data: policyData } = await admin
+        .from("leave_policy_catalog")
+        .select("leave_year_period")
+        .eq("is_active_period", true)
+        .limit(1)
+        .single()
+      
+      const currentYearPeriod = policyData?.leave_year_period || "2026/2027"
       const staffIds = Array.from(new Set((requests || []).map((r: any) => r.user_id).filter(Boolean)))
-      console.log("[v0] API: Fetching outstanding balances for staff IDs:", staffIds)
+      
+      console.log("[v0] API: Current leave year:", currentYearPeriod, "Fetching outstanding for staff IDs:", staffIds.slice(0, 5))
+      
+      // Fetch outstanding balances for current AND previous year (in case staff data is from different periods)
       const { data: outstandingRecords, error: outstandingError } = await admin
         .from("outstanding_leave_balances")
-        .select("user_id, carryover_to_next_year")
+        .select("user_id, carryover_to_next_year, leave_year_period")
         .in("user_id", staffIds)
+        .order("created_at", { ascending: false })
       
-      console.log("[v0] API: Outstanding records fetched:", { count: outstandingRecords?.length, error: outstandingError, sample: outstandingRecords?.[0] })
+      console.log("[v0] API: Outstanding records fetched:", { count: outstandingRecords?.length, error: outstandingError })
       
+      // Build map using most recent record for each user
       const outstandingLeaveMap = new Map<string, number>()
+      const processedUsers = new Set<string>()
       ;(outstandingRecords || []).forEach((record: any) => {
-        outstandingLeaveMap.set(String(record.user_id), Number(record.carryover_to_next_year || 0))
+        const userId = String(record.user_id)
+        if (!processedUsers.has(userId)) {
+          outstandingLeaveMap.set(userId, Number(record.carryover_to_next_year || 0))
+          processedUsers.add(userId)
+          console.log(`[v0] API: User ${userId.substring(0, 8)}... has ${record.carryover_to_next_year} carryover (period: ${record.leave_year_period})`)
+        }
       })
 
-      console.log("[v0] API: Outstanding leave map:", Object.fromEntries(outstandingLeaveMap))
+      console.log("[v0] API: Outstanding map created with", outstandingLeaveMap.size, "users")
 
       return NextResponse.json({
         mode: "hr_office",
