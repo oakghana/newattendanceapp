@@ -1993,8 +1993,8 @@ function LeaveRequestCard({
           </div>
         )}
 
-        {/* HOD Response UI */}
-        {hasHodChanges && !respondingToHod && (
+        {/* HOD Response UI - Only show if HOD changes requested and NOT yet approved by HR */}
+        {hasHodChanges && !respondingToHod && !isApproved && (
           <div className="flex gap-2">
             <Button
               onClick={handleAcceptHodChanges}
