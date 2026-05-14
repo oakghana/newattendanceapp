@@ -1528,7 +1528,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
   }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
 
-  // ── Derived lists ────────────────────────────────────────────────────
+  // ─��� Derived lists ────────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => {
     if (!data) return []
     const requests = data.myRequests || data.requests || []
@@ -3029,6 +3029,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "—"} day(s)</Badge>
                         </div>
                         <Button size="sm" variant="outline"
+                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
                           onClick={() => {
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
@@ -3047,13 +3048,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
                             }
                           }}
-                          className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50">
+                          className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">
                           {isExpanded ? "▲ Collapse" : "▼ Adjust & Forward"}
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="ml-2 h-8 text-xs border-slate-300"
+                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
+                          className="ml-2 h-8 text-xs border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleArchiveRequest(req.id, !hrOfficeShowArchived)}
                         >
                           {hrOfficeShowArchived ? "Restore to Active" : "Archive Request"}
