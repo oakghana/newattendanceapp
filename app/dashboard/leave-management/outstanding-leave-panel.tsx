@@ -1,10 +1,21 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Gift, Users, Calendar, RefreshCw, Search } from "lucide-react"
+import { Gift, Users, Calendar, RefreshCw, Search, Plus, X, ListFilter } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+
+interface StaffOption {
+  id: string
+  employee_id: string
+  first_name: string
+  last_name: string
+  department_name: string
+}
 
 interface OutstandingLeave {
   id: string
@@ -29,6 +40,38 @@ export function OutstandingLeavePanel() {
   const [search, setSearch] = useState("")
   const [yearFilter, setYearFilter] = useState("2025/2026")
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState("view")
+
+  // Add form state
+  const [staffList, setStaffList] = useState<StaffOption[]>([])
+  const [staffSearch, setStaffSearch] = useState("")
+  const [selectedStaff, setSelectedStaff] = useState<StaffOption | null>(null)
+  const [formData, setFormData] = useState({
+    leave_year_period: "2025/2026",
+    opening_balance: 0,
+    entitlement_days: 21,
+    used_this_period: 0,
+    carryover_to_next_year: 0,
+    max_carryover_allowed: 5,
+    notes: "",
+  })
+  const [saving, setSaving] = useState(false)
+
+  // Load staff list for add form
+  useEffect(() => {
+    const loadStaff = async () => {
+      try {
+        const res = await fetch("/api/staff/list")
+        if (res.ok) {
+          const data = await res.json()
+          setStaffList(data.staff || [])
+        }
+      } catch (err) {
+        console.error("[v0] Failed to load staff list:", err)
+      }
+    }
+    loadStaff()
+  }, [])
 
   // Load outstanding leave data
   useEffect(() => {
@@ -75,6 +118,60 @@ export function OutstandingLeavePanel() {
             filtered.reduce((sum, o) => sum + (o.used_this_period / Math.max(1, o.entitlement_days)) * 100, 0) / filtered.length
           )
         : 0,
+  }
+
+  // Filter staff list for add form
+  const filteredStaffList = useMemo(() => {
+    if (!staffSearch) return staffList.slice(0, 20)
+    const term = staffSearch.toLowerCase()
+    return staffList
+      .filter(
+        (s) =>
+          s.first_name?.toLowerCase().includes(term) ||
+          s.last_name?.toLowerCase().includes(term) ||
+          s.employee_id?.toLowerCase().includes(term)
+      )
+      .slice(0, 20)
+  }, [staffList, staffSearch])
+
+  // Save outstanding leave record
+  const handleSave = async () => {
+    if (!selectedStaff) return
+    setSaving(true)
+    try {
+      const res = await fetch("/api/leave/hr-admin/outstanding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: selectedStaff.id,
+          ...formData,
+        }),
+      })
+      if (res.ok) {
+        setSelectedStaff(null)
+        setStaffSearch("")
+        setFormData({
+          leave_year_period: "2025/2026",
+          opening_balance: 0,
+          entitlement_days: 21,
+          used_this_period: 0,
+          carryover_to_next_year: 0,
+          max_carryover_allowed: 5,
+          notes: "",
+        })
+        // Reload data and switch to view tab
+        const loadRes = await fetch("/api/leave/hr-admin/outstanding")
+        if (loadRes.ok) {
+          const data = await loadRes.json()
+          setOutstandingLeave(data.data || [])
+        }
+        setActiveTab("view")
+      }
+    } catch (err) {
+      console.error("[v0] Failed to save outstanding leave:", err)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -127,14 +224,28 @@ export function OutstandingLeavePanel() {
         </Card>
       </div>
 
-      {/* Main Table Card */}
-      <Card className="bg-slate-800 border-slate-700">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Gift className="w-5 h-5 text-green-400" />
-                Outstanding Leave Days
+      {/* Tabs for View/Add */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-xl border border-slate-600 bg-slate-700/50 p-2">
+          <TabsTrigger value="view" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-green-500 data-[state=active]:bg-green-600 data-[state=active]:text-white">
+            <ListFilter className="h-4 w-4" />
+            View Records
+          </TabsTrigger>
+          <TabsTrigger value="add" className="gap-2 rounded-lg border border-slate-500 bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500 data-[state=active]:border-blue-500 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+            <Plus className="h-4 w-4" />
+            Add Outstanding Days
+          </TabsTrigger>
+        </TabsList>
+
+        {/* View Records Tab */}
+        <TabsContent value="view" className="mt-4">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Gift className="w-5 h-5 text-green-400" />
+                    Outstanding Leave Days
               </CardTitle>
               <CardDescription>Track unused Annual Leave and carryover balances</CardDescription>
             </div>
@@ -275,6 +386,168 @@ export function OutstandingLeavePanel() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Add Outstanding Days Tab */}
+        <TabsContent value="add" className="mt-4">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-blue-400" />
+                Add Outstanding Leave Days
+              </CardTitle>
+              <CardDescription>
+                Record unused leave balances for staff members. This information will be visible during HR review decisions.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Staff Selection */}
+              <div className="space-y-2">
+                <Label className="text-slate-300">Select Staff Member</Label>
+                {selectedStaff ? (
+                  <div className="flex items-center justify-between bg-slate-700 rounded-lg p-4">
+                    <div>
+                      <p className="font-medium text-white">{selectedStaff.first_name} {selectedStaff.last_name}</p>
+                      <p className="text-sm text-slate-400">{selectedStaff.employee_id} - {selectedStaff.department_name}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedStaff(null)} className="text-slate-400 hover:text-white">
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input
+                        placeholder="Search by name or employee ID..."
+                        value={staffSearch}
+                        onChange={(e) => setStaffSearch(e.target.value)}
+                        className="bg-slate-700 border-slate-600 pl-10"
+                      />
+                    </div>
+                    {staffSearch && filteredStaffList.length > 0 && (
+                      <div className="bg-slate-700 rounded-lg border border-slate-600 max-h-48 overflow-y-auto">
+                        {filteredStaffList.map((s) => (
+                          <button
+                            key={s.id}
+                            onClick={() => {
+                              setSelectedStaff(s)
+                              setStaffSearch("")
+                            }}
+                            className="w-full text-left px-4 py-3 hover:bg-slate-600 border-b border-slate-600 last:border-b-0 transition-colors"
+                          >
+                            <p className="font-medium text-white">{s.first_name} {s.last_name}</p>
+                            <p className="text-xs text-slate-400">{s.employee_id} - {s.department_name}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {staffSearch && filteredStaffList.length === 0 && (
+                      <p className="text-slate-400 text-sm py-2">No staff found matching your search.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Leave Year Period */}
+              <div className="space-y-2">
+                <Label className="text-slate-300">Leave Year Period</Label>
+                <select
+                  value={formData.leave_year_period}
+                  onChange={(e) => setFormData((f) => ({ ...f, leave_year_period: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white"
+                >
+                  <option value="2024/2025">2024/2025</option>
+                  <option value="2025/2026">2025/2026</option>
+                  <option value="2026/2027">2026/2027</option>
+                </select>
+              </div>
+
+              {/* Numeric fields in a grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-slate-300 text-sm">Entitlement Days</Label>
+                  <Input
+                    type="number"
+                    value={formData.entitlement_days}
+                    onChange={(e) => setFormData((f) => ({ ...f, entitlement_days: Number(e.target.value) }))}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-slate-300 text-sm">Opening Balance</Label>
+                  <Input
+                    type="number"
+                    value={formData.opening_balance}
+                    onChange={(e) => setFormData((f) => ({ ...f, opening_balance: Number(e.target.value) }))}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-slate-300 text-sm">Used This Period</Label>
+                  <Input
+                    type="number"
+                    value={formData.used_this_period}
+                    onChange={(e) => setFormData((f) => ({ ...f, used_this_period: Number(e.target.value) }))}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-slate-300 text-sm">Carryover Days</Label>
+                  <Input
+                    type="number"
+                    value={formData.carryover_to_next_year}
+                    onChange={(e) => setFormData((f) => ({ ...f, carryover_to_next_year: Number(e.target.value) }))}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-slate-300 text-sm">Max Carryover Allowed</Label>
+                  <Input
+                    type="number"
+                    value={formData.max_carryover_allowed}
+                    onChange={(e) => setFormData((f) => ({ ...f, max_carryover_allowed: Number(e.target.value) }))}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label className="text-slate-300">Notes (Optional)</Label>
+                <Textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Additional notes about this balance record..."
+                  className="bg-slate-700 border-slate-600 min-h-[80px]"
+                />
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedStaff(null)
+                    setStaffSearch("")
+                    setActiveTab("view")
+                  }}
+                  className="border-slate-600"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={!selectedStaff || saving}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {saving ? "Saving..." : "Save Outstanding Record"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -1033,17 +1033,11 @@ export async function POST(request: NextRequest) {
     }
     const entitlementDays = entitlementResult.entitlementDays
 
-    if (entitlementDays !== null && requestedDays > entitlementDays) {
-      return NextResponse.json(
-        {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
-          code: "LEAVE_ENTITLEMENT_EXCEEDED",
-          entitlement_days: entitlementDays,
-          requested_days: requestedDays,
-        },
-        { status: 400 },
-      )
-    }
+    // Track if entitlement is exceeded - still allow save but flag for HR review
+    const entitlementExceeded = entitlementDays !== null && requestedDays > entitlementDays
+    const entitlementWarning = entitlementExceeded
+      ? `ENTITLEMENT EXCEEDED: Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s). HR Leave Office must adjust.`
+      : null
 
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
@@ -1157,6 +1151,8 @@ export async function POST(request: NextRequest) {
         user_signature_hologram_code: buildHologramCode("USR"),
         memo_generated: true,
         memo_generated_at: new Date().toISOString(),
+        // Flag for HR Leave Office if entitlement exceeded
+        adjustment_reason: entitlementWarning,
       })
       .select("*")
       .single()
@@ -1334,17 +1330,11 @@ export async function PUT(request: NextRequest) {
     }
     const entitlementDays = entitlementResult.entitlementDays
 
-    if (entitlementDays !== null && requestedDays > entitlementDays) {
-      return NextResponse.json(
-        {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
-          code: "LEAVE_ENTITLEMENT_EXCEEDED",
-          entitlement_days: entitlementDays,
-          requested_days: requestedDays,
-        },
-        { status: 400 },
-      )
-    }
+    // Track if entitlement is exceeded - still allow save but flag for HR review
+    const entitlementExceededOnUpdate = entitlementDays !== null && requestedDays > entitlementDays
+    const entitlementWarningOnUpdate = entitlementExceededOnUpdate
+      ? `ENTITLEMENT EXCEEDED: Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s). HR Leave Office must adjust.`
+      : null
 
     const duplicateRequest = await findDuplicateLeaveRequest(
       admin,
@@ -1414,6 +1404,8 @@ export async function PUT(request: NextRequest) {
       status: "pending_manager_review",
       manager_recommendation: null,
       updated_at: new Date().toISOString(),
+      // Flag for HR Leave Office if entitlement exceeded
+      adjustment_reason: entitlementWarningOnUpdate,
     }
 
     if (user_signature_mode !== undefined) updatePayload.user_signature_mode = user_signature_mode || "typed"

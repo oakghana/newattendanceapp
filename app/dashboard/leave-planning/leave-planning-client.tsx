@@ -3051,6 +3051,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
                           <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
                         </div>
+                        {/* Entitlement Exceeded Warning */}
+                        {req.adjustment_reason?.includes("ENTITLEMENT EXCEEDED") && (
+                          <div className="flex items-start gap-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-300 mb-3">
+                            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                            <span>
+                              <strong>Action Required:</strong> {req.adjustment_reason?.replace("ENTITLEMENT EXCEEDED: ", "")}
+                            </span>
+                          </div>
+                        )}
                         {req.manager_recommendation && (
                           <p className="text-xs text-slate-600 bg-amber-50 p-2 rounded border border-amber-200 mb-3">
                             <strong>HOD Recommendation:</strong> {req.manager_recommendation}
