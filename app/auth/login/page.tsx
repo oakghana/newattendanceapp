@@ -18,6 +18,7 @@ import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
 import { Eye, EyeOff } from "lucide-react"
 import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
+import { isHrLeaveOfficeRole, isHrApproverRole, isManagerRole } from "@/lib/leave-planning"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
 const DEVICE_SHARING_WARNING_STORAGE_KEY = "qcc_pending_device_sharing_warning"
@@ -318,11 +319,9 @@ export default function LoginPage() {
 
         showSuccess("Login successful! Redirecting...", "Welcome Back")
 
-        // Determine dashboard based on user role (approvalCheck is available here)
+        // Determine dashboard based on user role
         let dashboardUrl = "/dashboard/attendance" // Default for staff
-        if (approvalCheck.role === "leave_admin" || approvalCheck.role === "hr_admin") {
-          dashboardUrl = "/dashboard/leave-management"
-        } else if (approvalCheck.role === "hod" || approvalCheck.role === "manager") {
+        if (isHrLeaveOfficeRole(approvalCheck.role) || isHrApproverRole(approvalCheck.role) || isManagerRole(approvalCheck.role)) {
           dashboardUrl = "/dashboard/leave-management"
         }
 
@@ -561,11 +560,9 @@ export default function LoginPage() {
         console.log("[v0] OTP verification successful")
         showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
 
-        // Determine dashboard based on user role (approvalCheck is available here)
+        // Determine dashboard based on user role
         let dashboardUrl = "/dashboard/attendance" // Default for staff
-        if (approvalCheck.role === "leave_admin" || approvalCheck.role === "hr_admin") {
-          dashboardUrl = "/dashboard/leave-management"
-        } else if (approvalCheck.role === "hod" || approvalCheck.role === "manager") {
+        if (isHrLeaveOfficeRole(approvalCheck.role) || isHrApproverRole(approvalCheck.role) || isManagerRole(approvalCheck.role)) {
           dashboardUrl = "/dashboard/leave-management"
         }
 
