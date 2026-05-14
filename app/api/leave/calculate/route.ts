@@ -12,28 +12,34 @@ import {
 import { createAdminClient } from '@/lib/supabase/server';
 import { format, addDays, isWeekend } from 'date-fns';
 
-// GET public holidays from database
-async function getPublicHolidays(leaveYearPeriod: string): Promise<Date[]> {
+interface HolidayRecord {
+  holiday_date: string;
+  holiday_name: string;
+}
+
+// GET public holidays from database with names for display
+async function getPublicHolidaysWithNames(leaveYearPeriod: string): Promise<HolidayRecord[]> {
   try {
     const admin = await createAdminClient();
-    
+
     // leaveYearPeriod is in format "2025/2026", extract both years
-    const years = leaveYearPeriod.split('/').map(y => y.trim());
+    const years = leaveYearPeriod.split('/').map((y: string) => y.trim());
     const startYear = years[0] || new Date().getFullYear().toString();
     const endYear = years[1] || startYear;
-    
+
     const { data, error } = await admin
       .from('ghana_public_holidays')
       .select('holiday_date, holiday_name')
       .gte('holiday_date', `${startYear}-01-01`)
-      .lte('holiday_date', `${endYear}-12-31`);
+      .lte('holiday_date', `${endYear}-12-31`)
+      .order('holiday_date', { ascending: true });
 
     if (error) {
       console.error('[v0] Supabase error fetching holidays:', error);
       return [];
     }
 
-    return (data || []).map((h: any) => new Date(h.holiday_date));
+    return (data || []) as HolidayRecord[];
   } catch (error) {
     console.error('[v0] Error fetching public holidays:', error);
     return [];
@@ -43,7 +49,7 @@ async function getPublicHolidays(leaveYearPeriod: string): Promise<Date[]> {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { startDate, leaveType, staffCategory, leaveYearPeriod } = body;
+    const { startDate, leaveType, leaveYearPeriod, entitlementDays: callerEntitlementDays } = body;
 
     // Validate required fields
     if (!startDate || !leaveType || !leaveYearPeriod) {
@@ -62,38 +68,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get entitlement days for this leave type
-    const entitlementDays = await getEntitlementDays(leaveType, leaveYearPeriod);
+    // Prefer entitlement days passed directly from the client (already loaded
+    // from the policy), fall back to the service lookup only as last resort.
+    let entitlementDays: number = 0;
+    if (typeof callerEntitlementDays === 'number' && callerEntitlementDays > 0) {
+      entitlementDays = callerEntitlementDays;
+    } else {
+      entitlementDays = await getEntitlementDays(leaveType, leaveYearPeriod);
+    }
+
     if (entitlementDays === 0) {
       return NextResponse.json(
-        { error: `Unknown leave type: ${leaveType}` },
+        { error: `No entitlement found for leave type: ${leaveType}` },
         { status: 400 }
       );
     }
 
-    // Get public holidays
-    const holidays = await getPublicHolidays(leaveYearPeriod);
+    // Get public holidays with names so we can display them
+    const holidayRecords = await getPublicHolidaysWithNames(leaveYearPeriod);
+    const holidays = holidayRecords.map((h) => new Date(h.holiday_date));
 
-    // Calculate end date based on business days
+    // Build a map of date → name for display
+    const holidayNameMap = new Map<string, string>(
+      holidayRecords.map((h) => [h.holiday_date, h.holiday_name])
+    );
+
+    // Calculate end date by counting forward exactly entitlementDays working days,
+    // skipping weekends and public holidays
     const { endDate, actualLeaveDays } = calculateEndDateFromStartAndDays(
       start,
       entitlementDays,
       holidays
     );
 
-    // Get detailed calculation breakdown
+    // Get full breakdown: total calendar days, weekend count, holiday count
     const calculated = calculateLeaveDuration(start, endDate, holidays);
     const summary = generateCalculationSummary(calculated);
 
-    // Calculate return-to-work date (skip weekends and holidays)
-    const holidaySet = new Set(holidays.map((h: Date) => format(h, 'yyyy-MM-dd')));
+    // Identify which holidays fall within the leave period (for display)
+    const holidaySet = new Map<string, string>();
+    holidayRecords.forEach((h) => {
+      const d = new Date(h.holiday_date);
+      if (d >= start && d <= endDate) {
+        holidaySet.set(h.holiday_date, h.holiday_name);
+      }
+    });
+    const holidaysInPeriod = Array.from(holidaySet.entries()).map(([date, name]) => ({
+      date,
+      name,
+    }));
+
+    // Calculate return-to-work date — first working day after leave ends
+    const allHolidayDates = new Set(holidayRecords.map((h) => h.holiday_date));
     let returnDate = addDays(endDate, 1);
-    // Skip weekends and holidays for return date
-    while (isWeekend(returnDate) || holidaySet.has(format(returnDate, 'yyyy-MM-dd'))) {
+    while (isWeekend(returnDate) || allHolidayDates.has(format(returnDate, 'yyyy-MM-dd'))) {
       returnDate = addDays(returnDate, 1);
     }
 
-    // Format response
     return NextResponse.json({
       success: true,
       calculation: {
@@ -105,7 +136,8 @@ export async function POST(request: NextRequest) {
         weekendDays: calculated.weekendDays,
         holidayDays: calculated.holidayDays,
         totalCalendarDays: calculated.totalCalendarDays,
-        summary: summary,
+        holidaysInPeriod,   // named holidays falling inside the leave window
+        summary,
       },
     });
   } catch (error) {

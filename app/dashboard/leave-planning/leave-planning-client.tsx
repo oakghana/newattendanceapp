@@ -1002,6 +1002,17 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("") // Auto-calculated from start date + entitlement
   const [calculatingEndDate, setCalculatingEndDate] = useState(false)
+  // Store full calculation result from the API for accurate display
+  const [calculationResult, setCalculationResult] = useState<{
+    endDate: string;
+    daysCount: number;
+    estimatedReturn: string;
+    businessDays: number;
+    weekendDays: number;
+    holidayDays: number;
+    totalCalendarDays: number;
+    holidaysInPeriod?: Array<{ date: string; name: string }>;
+  } | null>(null)
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
   const [partLeaveDays, setPartLeaveDays] = useState("")
@@ -1083,12 +1094,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
   // Auto-calculate end date when start date or leave type changes
   useEffect(() => {
+    if (!startDate || !leaveType) {
+      setEndDate("")
+      setCalculationResult(null)
+      return
+    }
     const calculateEndDate = async () => {
-      if (!startDate || !leaveType) {
-        setEndDate("")
-        return
-      }
       setCalculatingEndDate(true)
+      setCalculationResult(null)
       try {
         const res = await fetch("/api/leave/calculate", {
           method: "POST",
@@ -1097,23 +1110,29 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             startDate,
             leaveType,
             leaveYearPeriod,
+            // Pass entitlement directly from the loaded policy so the API
+            // does not need to look it up (avoids key-mismatch bugs)
+            entitlementDays: selectedLeaveType?.entitlementDays ?? null,
           }),
         })
         const result = await res.json()
         if (result.success && result.calculation?.endDate) {
           setEndDate(result.calculation.endDate)
+          setCalculationResult(result.calculation)
         } else {
-          // Fallback: use start date as end date
+          // Fallback: same day, 1 working day
           setEndDate(startDate)
+          setCalculationResult(null)
         }
       } catch {
         setEndDate(startDate)
+        setCalculationResult(null)
       } finally {
         setCalculatingEndDate(false)
       }
     }
     void calculateEndDate()
-  }, [startDate, leaveType, leaveYearPeriod])
+  }, [startDate, leaveType, leaveYearPeriod, selectedLeaveType])
   const leaveYearPeriodOptions = useMemo(() => getLeaveYearPeriodOptions(), [])
   const inOctoberPlanningWindow = useMemo(() => isOctoberPlanningWindow(), [])
 
@@ -2233,84 +2252,69 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 )}
 
-                {startDate && endDate && !calculatingEndDate && (
+                {startDate && endDate && !calculatingEndDate && calculationResult && (
                   <div className="space-y-3">
+                    {/* Top summary chips */}
                     <div className="flex flex-wrap gap-3">
-                      <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
-                        <p className="text-xs text-green-700 font-medium">Days Requested</p>
-                        <p className="text-2xl font-bold text-green-800">{computedDays}</p>
+                      <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center min-w-[110px]">
+                        <p className="text-xs text-green-700 font-medium">Working Days</p>
+                        <p className="text-2xl font-bold text-green-800">{calculationResult.daysCount}</p>
                       </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center">
-                        <p className="text-xs text-slate-600 font-medium">Return to Work</p>
-                        <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center min-w-[140px]">
+                        <p className="text-xs text-slate-600 font-medium">Period</p>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {new Date(startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                          {" - "}
+                          {new Date(calculationResult.endDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-center min-w-[140px]">
+                        <p className="text-xs text-blue-600 font-medium">Return to Work</p>
+                        <p className="text-sm font-semibold text-blue-800">
+                          {new Date(calculationResult.estimatedReturn).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Weekends and Holidays Breakdown */}
-                    {(() => {
-                      const holidayDates = holidays.map((h) => h.holiday_date)
-                      const holidayMap = holidays.reduce(
-                        (acc, h) => {
-                          acc[h.holiday_date] = h.holiday_name
-                          return acc
-                        },
-                        {} as Record<string, string>
-                      )
-                      const workingDaysData = calculateWorkingDays(startDate, endDate, holidayDates)
-                      const weekendHolidayList = getWeekendsAndHolidaysInRange(startDate, endDate, holidayDates, holidayMap)
-
-                      return (
-                        <div className="border border-slate-200 rounded-lg bg-slate-50 p-4 space-y-3">
-                          <h4 className="font-semibold text-sm text-slate-700">Leave Period Breakdown</h4>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                            <div className="bg-white rounded px-2 py-2 border border-slate-200">
-                              <p className="text-xs text-slate-600">Total Days</p>
-                              <p className="text-lg font-bold text-slate-800">{workingDaysData.totalDays}</p>
-                            </div>
-                            <div className="bg-blue-50 rounded px-2 py-2 border border-blue-200">
-                              <p className="text-xs text-blue-600">Weekends</p>
-                              <p className="text-lg font-bold text-blue-800">{workingDaysData.weekendDays}</p>
-                            </div>
-                            <div className="bg-red-50 rounded px-2 py-2 border border-red-200">
-                              <p className="text-xs text-red-600">Holidays</p>
-                              <p className="text-lg font-bold text-red-800">{workingDaysData.holidayDays}</p>
-                            </div>
-                            <div className="bg-green-50 rounded px-2 py-2 border border-green-200">
-                              <p className="text-xs text-green-600">Working Days</p>
-                              <p className="text-lg font-bold text-green-800">{workingDaysData.workingDays}</p>
-                            </div>
-                          </div>
-
-                          {weekendHolidayList.length > 0 && (
-                            <div className="text-xs space-y-1 mt-2 pt-2 border-t border-slate-200">
-                              <p className="font-medium text-slate-700">Non-working days in this period:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {weekendHolidayList.map((item, idx) => {
-                                  const dateStr = item.date.toLocaleDateString("en-US", { 
-                                    month: "short", 
-                                    day: "numeric",
-                                    weekday: "short"
-                                  })
-                                  const label = item.type === "holiday" ? `🎉 ${item.name} (${dateStr})` : `📅 ${dateStr}`
-                                  return (
-                                    <span
-                                      key={idx}
-                                      className={`inline-block px-2 py-1 rounded text-xs ${
-                                        item.type === "holiday"
-                                          ? "bg-red-100 text-red-700"
-                                          : "bg-blue-100 text-blue-700"
-                                      }`}
-                                    >
-                                      {label}
-                                    </span>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
+                    {/* Full breakdown using API values */}
+                    <div className="border border-slate-200 rounded-lg bg-slate-50 p-4 space-y-3">
+                      <h4 className="font-semibold text-sm text-slate-700">Leave Period Breakdown</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                        <div className="bg-white rounded px-2 py-2 border border-slate-200">
+                          <p className="text-xs text-slate-600">Total Calendar Days</p>
+                          <p className="text-lg font-bold text-slate-800">{calculationResult.totalCalendarDays}</p>
                         </div>
-                      )
-                    })()}
+                        <div className="bg-blue-50 rounded px-2 py-2 border border-blue-200">
+                          <p className="text-xs text-blue-600">Weekends</p>
+                          <p className="text-lg font-bold text-blue-800">{calculationResult.weekendDays}</p>
+                        </div>
+                        <div className="bg-red-50 rounded px-2 py-2 border border-red-200">
+                          <p className="text-xs text-red-600">Public Holidays</p>
+                          <p className="text-lg font-bold text-red-800">{calculationResult.holidayDays}</p>
+                        </div>
+                        <div className="bg-green-50 rounded px-2 py-2 border border-green-200">
+                          <p className="text-xs text-green-600">Working Days</p>
+                          <p className="text-lg font-bold text-green-800">{calculationResult.businessDays}</p>
+                        </div>
+                      </div>
+
+                      {/* Named public holidays in the period */}
+                      {calculationResult.holidaysInPeriod && calculationResult.holidaysInPeriod.length > 0 && (
+                        <div className="text-xs space-y-1 mt-2 pt-2 border-t border-slate-200">
+                          <p className="font-medium text-slate-700">Public holidays within this period:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {calculationResult.holidaysInPeriod.map((h, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-block px-2 py-1 rounded text-xs bg-red-100 text-red-700"
+                              >
+                                {h.name} ({new Date(h.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
