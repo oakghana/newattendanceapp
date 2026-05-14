@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SignaturePad } from "@/components/leave/signature-pad"
+import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
 import {
   isHrApproverRole,
   isHrLeaveOfficeRole,
@@ -2071,7 +2072,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // ── Render ────��─────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─��� Header Banner ──────�����───────────────────────────────────── */}
+      {/* ─��� Header Banner ──────�����──────────��────────────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -3094,6 +3095,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                         {isExpanded && (
                           <div className="mt-4 space-y-4 border-t pt-4">
+                            {/* Leave history for this staff member — supports informed HR decisions */}
+                            <StaffLeaveHistory
+                              userId={String(req.user_id || req.user?.id || "")}
+                              staffName={fmtName(req.user)}
+                            />
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1">
                                 <Label className="text-xs font-semibold">Adjusted Start Date</Label>

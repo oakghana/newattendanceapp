@@ -267,14 +267,11 @@ export function OutstandingLeavePanel() {
             </div>
           )}
 
-          {/* Info Notice */}
-          <div className="mt-4 p-4 rounded-lg bg-blue-900/20 border border-blue-800">
-            <h4 className="text-blue-300 font-medium mb-2">About Leave Carryover</h4>
-            <ul className="text-blue-200 text-sm space-y-1">
-              <li>Unused annual leave from the previous year can be carried over (max {paginated[0]?.max_carryover_allowed || 5} days by policy)</li>
-              <li>Carryover days must be used within the first quarter of the new leave year</li>
-              <li>Staff should plan ahead to avoid losing unused leave days</li>
-            </ul>
+          {/* Policy Notice */}
+          <div className="mt-4 p-4 rounded-lg bg-slate-700/40 border border-slate-600">
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Policy details for outstanding and carried-over leave days will be made available soon. In the meantime, please reach out to the HR Leave Office for any clarification.
+            </p>
           </div>
         </CardContent>
       </Card>
