@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, CheckCircle2, Plus, Edit2, Trash2, Calendar, BookOpen, Users, Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Plus, Edit2, Trash2, Calendar, BookOpen, Loader2 } from 'lucide-react'
 
 interface Holiday {
   id: string
@@ -22,17 +22,6 @@ interface LeaveType {
   leave_type_label: string
   entitlement_days: number
   is_active: boolean
-}
-
-interface StaffRequest {
-  id: string
-  employee_id: string
-  employee_name: string
-  leave_type: string
-  start_date: string
-  end_date: string
-  status: string
-  reason?: string
 }
 
 export function HRLeaveAdminClient() {
@@ -61,10 +50,6 @@ export function HRLeaveAdminClient() {
   })
   const [savingLeaveType, setSavingLeaveType] = useState(false)
 
-  // Staff requests states
-  const [staffRequests, setStaffRequests] = useState<StaffRequest[]>([])
-  const [approvingRequest, setApprovingRequest] = useState<string | null>(null)
-
   // Load all data
   const loadAllData = useCallback(async () => {
     try {
@@ -88,24 +73,11 @@ export function HRLeaveAdminClient() {
       setLeaveTypes(typesData.leaveTypes || [])
       console.log('[v0] Leave types loaded:', typesData.leaveTypes?.length)
 
-      // Load staff requests
-      console.log('[v0] Fetching staff requests...')
-      const requestsRes = await fetch('/api/leave/requests')
-      if (requestsRes.ok) {
-        const requestsData = await requestsRes.json()
-        setStaffRequests(requestsData.requests || [])
-        console.log('[v0] Staff requests loaded:', requestsData.requests?.length)
-      } else {
-        console.warn('[v0] Could not load staff requests')
-        setStaffRequests([])
-      }
-
-      console.log('[v0] All data loaded successfully')
+      setLoading(false)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load data'
-      console.error('[v0] Data loading error:', errorMsg)
+      console.error('[v0] Load error:', errorMsg)
       setError(errorMsg)
-    } finally {
       setLoading(false)
     }
   }, [])
@@ -276,63 +248,6 @@ export function HRLeaveAdminClient() {
     }
   }
 
-  // ============ STAFF REQUEST HANDLERS ============
-  const handleApproveRequest = async (id: string) => {
-    try {
-      setApprovingRequest(id)
-      console.log('[v0] Approving request:', id)
-
-      const res = await fetch(`/api/leave/requests/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'approved' }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to approve request')
-      }
-
-      setSuccess('Request approved successfully')
-      await loadAllData()
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error approving request'
-      console.error('[v0] Approve error:', errorMsg)
-      setError(errorMsg)
-    } finally {
-      setApprovingRequest(null)
-    }
-  }
-
-  const handleRejectRequest = async (id: string) => {
-    try {
-      setApprovingRequest(id)
-      console.log('[v0] Rejecting request:', id)
-
-      const res = await fetch(`/api/leave/requests/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'rejected' }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to reject request')
-      }
-
-      setSuccess('Request rejected successfully')
-      await loadAllData()
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error rejecting request'
-      console.error('[v0] Reject error:', errorMsg)
-      setError(errorMsg)
-    } finally {
-      setApprovingRequest(null)
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-900">
@@ -350,7 +265,7 @@ export function HRLeaveAdminClient() {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-white">HR Leave Office Admin</h1>
-          <p className="text-slate-400">Manage holidays, leave types, and review staff requests</p>
+          <p className="text-slate-400">Manage Ghana public holidays and leave types</p>
         </div>
 
         {/* Alerts */}
@@ -370,7 +285,7 @@ export function HRLeaveAdminClient() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3 bg-slate-800">
+          <TabsList className="grid w-full grid-cols-2 bg-slate-800">
             <TabsTrigger value="holidays" className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               Holidays
@@ -378,10 +293,6 @@ export function HRLeaveAdminClient() {
             <TabsTrigger value="leave-types" className="flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
               Leave Types
-            </TabsTrigger>
-            <TabsTrigger value="staff-requests" className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Staff Requests
             </TabsTrigger>
           </TabsList>
 
@@ -634,86 +545,6 @@ export function HRLeaveAdminClient() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* STAFF REQUESTS TAB */}
-          <TabsContent value="staff-requests" className="mt-6">
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">Staff Leave Requests</CardTitle>
-                <CardDescription>Review and approve/reject staff leave requests</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {staffRequests.length === 0 ? (
-                  <p className="text-slate-400 py-8 text-center">No staff requests</p>
-                ) : (
-                  <div className="space-y-4">
-                    {staffRequests.map((req) => (
-                      <Card key={req.id} className="bg-slate-700/50 border-slate-600">
-                        <CardContent className="pt-6">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                            <div>
-                              <p className="text-sm text-slate-400">Employee</p>
-                              <p className="text-white font-semibold">{req.employee_name}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Leave Type</p>
-                              <p className="text-white">{req.leave_type}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Period</p>
-                              <p className="text-white text-sm">
-                                {req.start_date} to {req.end_date}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Status</p>
-                              <span
-                                className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
-                                  req.status === 'approved'
-                                    ? 'bg-green-900/30 text-green-400'
-                                    : req.status === 'rejected'
-                                    ? 'bg-red-900/30 text-red-400'
-                                    : 'bg-yellow-900/30 text-yellow-400'
-                                }`}
-                              >
-                                {req.status}
-                              </span>
-                            </div>
-                          </div>
-                          {req.reason && (
-                            <div className="mb-4">
-                              <p className="text-sm text-slate-400">Reason</p>
-                              <p className="text-slate-300">{req.reason}</p>
-                            </div>
-                          )}
-                          {req.status === 'pending' && (
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={() => handleApproveRequest(req.id)}
-                                disabled={approvingRequest === req.id}
-                                className="bg-green-600 hover:bg-green-700"
-                                size="sm"
-                              >
-                                {approvingRequest === req.id ? 'Processing...' : 'Approve'}
-                              </Button>
-                              <Button
-                                onClick={() => handleRejectRequest(req.id)}
-                                disabled={approvingRequest === req.id}
-                                variant="destructive"
-                                size="sm"
-                              >
-                                {approvingRequest === req.id ? 'Processing...' : 'Reject'}
-                              </Button>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
                   </div>
                 )}
               </CardContent>
