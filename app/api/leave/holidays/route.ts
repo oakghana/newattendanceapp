@@ -39,24 +39,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createAdminClient()
+    const admin = await createAdminClient()
     const { holiday_date, holiday_name } = await req.json()
 
-    // Check user role - only HR Leave Office can add holidays
-    const authHeader = req.headers.get("authorization")
-    if (!authHeader) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // Get current user
+    const {
+      data: { user },
+    } = await admin.auth.getUser()
 
-    const token = authHeader.replace("Bearer ", "")
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
-
-    if (userError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Get user role
-    const { data: profile } = await supabase
+    const { data: profile } = await admin
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
@@ -80,15 +76,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Add holiday
-    const { data: newHoliday, error: insertError } = await supabase
+    // Add holiday using admin client (bypasses RLS)
+    const { data: newHoliday, error: insertError } = await admin
       .from("ghana_public_holidays")
       .insert([
         {
           holiday_date,
           holiday_name,
-          created_by: user.id,
+          is_custom: true,
           created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
       ])
       .select()
@@ -109,7 +106,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[v0] Holidays POST error:", error)
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: String(error) },
       { status: 500 }
     )
   }
