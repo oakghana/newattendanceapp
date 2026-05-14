@@ -54,28 +54,24 @@ export function LeaveManagementModuleClient({
   return (
     <div className="space-y-6 w-full">
       <Tabs defaultValue="leave-management" className="space-y-4 w-full">
-        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-blue-100 bg-blue-50/60 p-2 shadow-sm overflow-x-auto sm:overflow-visible">
-          <TabsTrigger value="leave-management" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
-            <LayoutPanelTop className="h-3 w-3 sm:h-4 sm:w-4" /> 
-            <span className="hidden sm:inline">Leave Center</span>
-            <span className="sm:hidden">Requests</span>
+        <TabsList className="inline-flex h-auto gap-2 rounded-full border-0 bg-transparent p-0 overflow-x-auto sm:overflow-visible flex-wrap sm:flex-nowrap justify-start sm:justify-center">
+          <TabsTrigger value="leave-management" className="gap-2 rounded-full border-0 bg-orange-500 hover:bg-orange-600 px-6 py-2 text-white font-medium data-[state=inactive]:bg-orange-400/70 data-[state=inactive]:text-white data-[state=active]:bg-orange-600">
+            <LayoutPanelTop className="h-4 w-4" /> 
+            Leave Management
           </TabsTrigger>
-          <TabsTrigger value="leave-planning" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
-            <CalendarRange className="h-3 w-3 sm:h-4 sm:w-4" /> 
-            <span className="hidden sm:inline">Planning & Review</span>
-            <span className="sm:hidden">Planning</span>
+          <TabsTrigger value="leave-planning" className="gap-2 rounded-full border-0 bg-green-500 hover:bg-green-600 px-6 py-2 text-white font-medium data-[state=inactive]:bg-green-400/70 data-[state=inactive]:text-white data-[state=active]:bg-green-600">
+            <CalendarRange className="h-4 w-4" /> 
+            Leave & HR Leave
           </TabsTrigger>
           {showAnalytics && (
-            <TabsTrigger value="hr-analytics" className="gap-1 sm:gap-2 rounded-2xl border border-purple-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-purple-800 hover:bg-purple-50 data-[state=active]:border-purple-600 data-[state=active]:bg-purple-600 data-[state=active]:text-white min-w-fit">
-              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" /> 
-              <span className="hidden sm:inline">Leave Analytics</span>
-              <span className="sm:hidden">Analytics</span>
+            <TabsTrigger value="hr-analytics" className="gap-2 rounded-full border-0 bg-blue-500 hover:bg-blue-600 px-6 py-2 text-white font-medium data-[state=inactive]:bg-blue-400/70 data-[state=inactive]:text-white data-[state=active]:bg-blue-600">
+              <TrendingUp className="h-4 w-4" /> 
+              Leave Analytics
             </TabsTrigger>
           )}
-          <TabsTrigger value="insights" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
-            <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" /> 
-            <span className="hidden sm:inline">Balance & Calendar</span>
-            <span className="sm:hidden">Balance</span>
+          <TabsTrigger value="insights" className="gap-2 rounded-full border-0 bg-indigo-500 hover:bg-indigo-600 px-6 py-2 text-white font-medium data-[state=inactive]:bg-indigo-400/70 data-[state=inactive]:text-white data-[state=active]:bg-indigo-600">
+            <BarChart3 className="h-4 w-4" /> 
+            Balance & Calendar
           </TabsTrigger>
         </TabsList>
 
