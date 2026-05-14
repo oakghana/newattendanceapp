@@ -1,12 +1,14 @@
-"use client"
+'use client'
 
-import { useCallback, useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, X, AlertCircle, CheckCircle2, Calendar, ArrowRight, ArrowLeft } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useEffect, useState, useCallback } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle, CheckCircle2, Plus, Edit2, Trash2, Calendar, BookOpen, Users, Loader2 } from 'lucide-react'
 
 interface Holiday {
   id: string
@@ -14,164 +16,190 @@ interface Holiday {
   holiday_name: string
 }
 
-interface Deferment {
+interface LeaveType {
   id: string
+  leave_type_key: string
+  leave_type_label: string
+  entitlement_days: number
+  is_active: boolean
+}
+
+interface StaffRequest {
+  id: string
+  employee_id: string
   employee_name: string
   leave_type: string
-  deferral_year: string
+  start_date: string
+  end_date: string
   status: string
+  reason?: string
 }
 
-interface Recall {
-  id: string
-  employee_name: string
-  leave_type: string
-  recall_date: string
-  status: string
-}
-
-interface HRLeaveAdminClientProps {
-  profile: { id: string; role: string }
-}
-
-export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
-  const [activeTab, setActiveTab] = useState("holidays")
-  const [holidays, setHolidays] = useState<Holiday[]>([])
-  const [deferrments, setDeferrments] = useState<Deferment[]>([])
-  const [recalls, setRecalls] = useState<Recall[]>([])
+export function HRLeaveAdminClient() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState('holidays')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  // Holiday modal states
-  const [showHolidayModal, setShowHolidayModal] = useState(false)
+  // Holiday states
+  const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [showHolidayDialog, setShowHolidayDialog] = useState(false)
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null)
-  const [holidayForm, setHolidayForm] = useState({ holiday_date: "", holiday_name: "" })
-  const [submittingHoliday, setSubmittingHoliday] = useState(false)
+  const [holidayForm, setHolidayForm] = useState({ holiday_date: '', holiday_name: '' })
+  const [savingHoliday, setSavingHoliday] = useState(false)
 
-  // Load all data on mount
-  useEffect(() => {
-    loadAllData()
-  }, [])
+  // Leave type states
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
+  const [showLeaveTypeDialog, setShowLeaveTypeDialog] = useState(false)
+  const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(null)
+  const [leaveTypeForm, setLeaveTypeForm] = useState({
+    leave_type_key: '',
+    leave_type_label: '',
+    entitlement_days: 0,
+    is_active: true,
+  })
+  const [savingLeaveType, setSavingLeaveType] = useState(false)
 
+  // Staff requests states
+  const [staffRequests, setStaffRequests] = useState<StaffRequest[]>([])
+  const [approvingRequest, setApprovingRequest] = useState<string | null>(null)
+
+  // Load all data
   const loadAllData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
+      console.log('[v0] Starting to load all HR admin data...')
 
       // Load holidays
-      const holidaysRes = await fetch("/api/leave/holidays")
+      console.log('[v0] Fetching holidays...')
+      const holidaysRes = await fetch('/api/leave/holidays')
+      if (!holidaysRes.ok) throw new Error(`Failed to load holidays: ${holidaysRes.status}`)
       const holidaysData = await holidaysRes.json()
-      if (holidaysData.holidays) {
-        setHolidays(holidaysData.holidays)
+      setHolidays(holidaysData.holidays || [])
+      console.log('[v0] Holidays loaded:', holidaysData.holidays?.length)
+
+      // Load leave types
+      console.log('[v0] Fetching leave types...')
+      const typesRes = await fetch('/api/leave/leave-types')
+      if (!typesRes.ok) throw new Error(`Failed to load leave types: ${typesRes.status}`)
+      const typesData = await typesRes.json()
+      setLeaveTypes(typesData.leaveTypes || [])
+      console.log('[v0] Leave types loaded:', typesData.leaveTypes?.length)
+
+      // Load staff requests
+      console.log('[v0] Fetching staff requests...')
+      const requestsRes = await fetch('/api/leave/requests')
+      if (requestsRes.ok) {
+        const requestsData = await requestsRes.json()
+        setStaffRequests(requestsData.requests || [])
+        console.log('[v0] Staff requests loaded:', requestsData.requests?.length)
+      } else {
+        console.warn('[v0] Could not load staff requests')
+        setStaffRequests([])
       }
 
-      // Load deferrments, and recalls
-      const deferRes = await fetch("/api/leave/hr-admin/deferrments")
-      const deferData = await deferRes.json()
-      if (deferData.deferrments) {
-        setDeferrments(deferData.deferrments)
-      }
-
-      const recallRes = await fetch("/api/leave/hr-admin/recalls")
-      const recallData = await recallRes.json()
-      if (recallData.recalls) {
-        setRecalls(recallData.recalls)
-      }
+      console.log('[v0] All data loaded successfully')
     } catch (err) {
-      console.error("[v0] Error loading data:", err)
-      setError("Failed to load data. Please refresh the page.")
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load data'
+      console.error('[v0] Data loading error:', errorMsg)
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // Holiday handlers
+  useEffect(() => {
+    loadAllData()
+  }, [loadAllData])
+
+  // ============ HOLIDAY HANDLERS ============
   const handleAddHoliday = () => {
     setEditingHoliday(null)
-    setHolidayForm({ holiday_date: "", holiday_name: "" })
-    setShowHolidayModal(true)
+    setHolidayForm({ holiday_date: '', holiday_name: '' })
+    setShowHolidayDialog(true)
   }
 
   const handleEditHoliday = (holiday: Holiday) => {
     setEditingHoliday(holiday)
     setHolidayForm({ holiday_date: holiday.holiday_date, holiday_name: holiday.holiday_name })
-    setShowHolidayModal(true)
+    setShowHolidayDialog(true)
   }
 
   const handleSaveHoliday = async () => {
-    if (!holidayForm.holiday_date || !holidayForm.holiday_name) {
-      setError("Please fill in all holiday fields")
-      return
-    }
-
     try {
-      setSubmittingHoliday(true)
+      if (!holidayForm.holiday_date || !holidayForm.holiday_name) {
+        setError('Please fill in all holiday fields')
+        return
+      }
+
+      setSavingHoliday(true)
       setError(null)
 
-      const method = editingHoliday ? "PUT" : "POST"
       const url = editingHoliday
         ? `/api/leave/holidays/${editingHoliday.id}`
-        : "/api/leave/holidays"
+        : '/api/leave/holidays'
+
+      console.log('[v0] Saving holiday:', { editingHoliday, form: holidayForm })
 
       const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          holiday_date: holidayForm.holiday_date,
-          holiday_name: holidayForm.holiday_name,
-        }),
+        method: editingHoliday ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(holidayForm),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save holiday")
+        throw new Error(data.error || 'Failed to save holiday')
       }
 
-      setSuccessMessage(`Holiday ${editingHoliday ? "updated" : "added"} successfully`)
-      setShowHolidayModal(false)
-      loadAllData()
-
-      setTimeout(() => setSuccessMessage(null), 3000)
+      setSuccess(`Holiday ${editingHoliday ? 'updated' : 'created'} successfully`)
+      setShowHolidayDialog(false)
+      await loadAllData()
+      setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
-      console.error("[v0] Error saving holiday:", err)
-      setError(err instanceof Error ? err.message : "Failed to save holiday")
+      const errorMsg = err instanceof Error ? err.message : 'Error saving holiday'
+      console.error('[v0] Holiday save error:', errorMsg)
+      setError(errorMsg)
     } finally {
-      setSubmittingHoliday(false)
+      setSavingHoliday(false)
     }
   }
 
   const handleDeleteHoliday = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this holiday?")) return
+    if (!confirm('Delete this holiday?')) return
 
     try {
-      setError(null)
-      const res = await fetch(`/api/leave/holidays/${id}`, { method: "DELETE" })
+      console.log('[v0] Deleting holiday:', id)
+      const res = await fetch(`/api/leave/holidays/${id}`, { method: 'DELETE' })
 
       if (!res.ok) {
-        throw new Error("Failed to delete holiday")
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to delete holiday')
       }
 
-      setSuccessMessage("Holiday deleted successfully")
-      loadAllData()
-      setTimeout(() => setSuccessMessage(null), 3000)
+      setSuccess('Holiday deleted successfully')
+      await loadAllData()
+      setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
-      console.error("[v0] Error deleting holiday:", err)
-      setError(err instanceof Error ? err.message : "Failed to delete holiday")
+      const errorMsg = err instanceof Error ? err.message : 'Error deleting holiday'
+      console.error('[v0] Holiday delete error:', errorMsg)
+      setError(errorMsg)
     }
   }
 
-  // Leave type handlers
+  // ============ LEAVE TYPE HANDLERS ============
   const handleAddLeaveType = () => {
     setEditingLeaveType(null)
     setLeaveTypeForm({
-      leave_type_key: "",
-      leave_type_label: "",
+      leave_type_key: '',
+      leave_type_label: '',
       entitlement_days: 0,
       is_active: true,
     })
-    setShowLeaveTypeModal(true)
+    setShowLeaveTypeDialog(true)
   }
 
   const handleEditLeaveType = (leaveType: LeaveType) => {
@@ -182,158 +210,260 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
       entitlement_days: leaveType.entitlement_days,
       is_active: leaveType.is_active,
     })
-    setShowLeaveTypeModal(true)
+    setShowLeaveTypeDialog(true)
   }
 
   const handleSaveLeaveType = async () => {
-    if (!leaveTypeForm.leave_type_label || leaveTypeForm.entitlement_days <= 0) {
-      setError("Please fill in all leave type fields with valid values")
-      return
-    }
-
     try {
-      setSubmittingLeaveType(true)
+      if (!leaveTypeForm.leave_type_key || !leaveTypeForm.leave_type_label || leaveTypeForm.entitlement_days < 0) {
+        setError('Please fill in all fields with valid values')
+        return
+      }
+
+      setSavingLeaveType(true)
       setError(null)
 
-      const method = editingLeaveType ? "PUT" : "POST"
       const url = editingLeaveType
         ? `/api/leave/leave-types/${editingLeaveType.id}`
-        : "/api/leave/leave-types"
+        : '/api/leave/leave-types'
+
+      console.log('[v0] Saving leave type:', { editingLeaveType, form: leaveTypeForm })
 
       const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
+        method: editingLeaveType ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(leaveTypeForm),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save leave type")
+        throw new Error(data.error || 'Failed to save leave type')
       }
 
-      setSuccessMessage(`Leave type ${editingLeaveType ? "updated" : "added"} successfully`)
-      setShowLeaveTypeModal(false)
-      loadAllData()
-
-      setTimeout(() => setSuccessMessage(null), 3000)
+      setSuccess(`Leave type ${editingLeaveType ? 'updated' : 'created'} successfully`)
+      setShowLeaveTypeDialog(false)
+      await loadAllData()
+      setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
-      console.error("[v0] Error saving leave type:", err)
-      setError(err instanceof Error ? err.message : "Failed to save leave type")
+      const errorMsg = err instanceof Error ? err.message : 'Error saving leave type'
+      console.error('[v0] Leave type save error:', errorMsg)
+      setError(errorMsg)
     } finally {
-      setSubmittingLeaveType(false)
+      setSavingLeaveType(false)
     }
   }
 
   const handleDeleteLeaveType = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this leave type?")) return
+    if (!confirm('Delete this leave type?')) return
 
     try {
-      setError(null)
-      const res = await fetch(`/api/leave/leave-types/${id}`, { method: "DELETE" })
+      console.log('[v0] Deleting leave type:', id)
+      const res = await fetch(`/api/leave/leave-types/${id}`, { method: 'DELETE' })
 
       if (!res.ok) {
-        throw new Error("Failed to delete leave type")
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to delete leave type')
       }
 
-      setSuccessMessage("Leave type deleted successfully")
-      loadAllData()
-      setTimeout(() => setSuccessMessage(null), 3000)
+      setSuccess('Leave type deleted successfully')
+      await loadAllData()
+      setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
-      console.error("[v0] Error deleting leave type:", err)
-      setError(err instanceof Error ? err.message : "Failed to delete leave type")
+      const errorMsg = err instanceof Error ? err.message : 'Error deleting leave type'
+      console.error('[v0] Leave type delete error:', errorMsg)
+      setError(errorMsg)
+    }
+  }
+
+  // ============ STAFF REQUEST HANDLERS ============
+  const handleApproveRequest = async (id: string) => {
+    try {
+      setApprovingRequest(id)
+      console.log('[v0] Approving request:', id)
+
+      const res = await fetch(`/api/leave/requests/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to approve request')
+      }
+
+      setSuccess('Request approved successfully')
+      await loadAllData()
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error approving request'
+      console.error('[v0] Approve error:', errorMsg)
+      setError(errorMsg)
+    } finally {
+      setApprovingRequest(null)
+    }
+  }
+
+  const handleRejectRequest = async (id: string) => {
+    try {
+      setApprovingRequest(id)
+      console.log('[v0] Rejecting request:', id)
+
+      const res = await fetch(`/api/leave/requests/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to reject request')
+      }
+
+      setSuccess('Request rejected successfully')
+      await loadAllData()
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error rejecting request'
+      console.error('[v0] Reject error:', errorMsg)
+      setError(errorMsg)
+    } finally {
+      setApprovingRequest(null)
     }
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-green-500/20 rounded-full mb-4">
-            <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <p className="text-slate-300">Loading HR Leave Admin Dashboard...</p>
+      <div className="flex items-center justify-center min-h-screen bg-slate-900">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-green-500 mx-auto" />
+          <p className="text-slate-400">Loading HR Leave Admin...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-900 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">HR Leave Office Admin</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-white">HR Leave Office Admin</h1>
           <p className="text-slate-400">Manage holidays, leave types, and review staff requests</p>
         </div>
 
         {/* Alerts */}
         {error && (
-          <Alert className="mb-6 border-red-500 bg-red-500/10">
+          <Alert className="bg-red-500/10 border-red-500">
             <AlertCircle className="h-4 w-4 text-red-500" />
             <AlertDescription className="text-red-400">{error}</AlertDescription>
           </Alert>
         )}
 
-        {successMessage && (
-          <Alert className="mb-6 border-green-500 bg-green-500/10">
+        {success && (
+          <Alert className="bg-green-500/10 border-green-500">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <AlertDescription className="text-green-400">{successMessage}</AlertDescription>
+            <AlertDescription className="text-green-400">{success}</AlertDescription>
           </Alert>
         )}
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border border-slate-700">
-            <TabsTrigger value="holidays" className="flex items-center gap-2 data-[state=active]:bg-green-600">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3 bg-slate-800">
+            <TabsTrigger value="holidays" className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
-              <span className="hidden sm:inline">Holidays</span>
+              Holidays
             </TabsTrigger>
-            <TabsTrigger value="deferrments" className="flex items-center gap-2 data-[state=active]:bg-green-600">
-              <ArrowRight className="w-4 h-4" />
-              <span className="hidden sm:inline">Deferrments</span>
+            <TabsTrigger value="leave-types" className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4" />
+              Leave Types
             </TabsTrigger>
-            <TabsTrigger value="recalls" className="flex items-center gap-2 data-[state=active]:bg-green-600">
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Recalls</span>
+            <TabsTrigger value="staff-requests" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Staff Requests
             </TabsTrigger>
           </TabsList>
 
-          {/* Holidays Tab */}
+          {/* HOLIDAYS TAB */}
           <TabsContent value="holidays" className="mt-6">
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-slate-800 border-slate-700">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-white">Public Holidays</CardTitle>
                   <CardDescription>Manage Ghana public holidays</CardDescription>
                 </div>
-                <Button
-                  onClick={handleAddHoliday}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Holiday
-                </Button>
+                <Dialog open={showHolidayDialog} onOpenChange={setShowHolidayDialog}>
+                  <DialogTrigger asChild>
+                    <Button onClick={handleAddHoliday} className="bg-green-600 hover:bg-green-700">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Holiday
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-slate-800 border-slate-700">
+                    <DialogHeader>
+                      <DialogTitle className="text-white">
+                        {editingHoliday ? 'Edit Holiday' : 'Add Holiday'}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {editingHoliday ? 'Update holiday details' : 'Add a new public holiday'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-slate-300">Date (YYYY-MM-DD)</Label>
+                        <Input
+                          type="date"
+                          value={holidayForm.holiday_date}
+                          onChange={(e) => setHolidayForm({ ...holidayForm, holiday_date: e.target.value })}
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Holiday Name</Label>
+                        <Input
+                          value={holidayForm.holiday_name}
+                          onChange={(e) => setHolidayForm({ ...holidayForm, holiday_name: e.target.value })}
+                          placeholder="e.g., Christmas Day"
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-4">
+                        <Button
+                          onClick={handleSaveHoliday}
+                          disabled={savingHoliday}
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                        >
+                          {savingHoliday ? 'Saving...' : 'Save'}
+                        </Button>
+                        <Button
+                          onClick={() => setShowHolidayDialog(false)}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <CardContent>
                 {holidays.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Calendar className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400">No holidays configured yet</p>
-                  </div>
+                  <p className="text-slate-400 py-8 text-center">No holidays configured</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-slate-700">
                           <th className="text-left py-3 px-4 text-slate-300">Date</th>
-                          <th className="text-left py-3 px-4 text-slate-300">Holiday Name</th>
+                          <th className="text-left py-3 px-4 text-slate-300">Name</th>
                           <th className="text-right py-3 px-4 text-slate-300">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {holidays.map((holiday) => (
-                          <tr key={holiday.id} className="border-b border-slate-700 hover:bg-slate-700/30">
+                          <tr key={holiday.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
                             <td className="py-3 px-4 text-slate-200">{holiday.holiday_date}</td>
                             <td className="py-3 px-4 text-slate-200">{holiday.holiday_name}</td>
                             <td className="py-3 px-4 text-right space-x-2">
@@ -341,7 +471,7 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleEditHoliday(holiday)}
-                                className="text-blue-400 hover:bg-blue-400/20"
+                                className="text-blue-400 hover:bg-blue-900/20"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </Button>
@@ -349,7 +479,7 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleDeleteHoliday(holiday.id)}
-                                className="text-red-400 hover:bg-red-400/20"
+                                className="text-red-400 hover:bg-red-900/20"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -364,91 +494,223 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
             </Card>
           </TabsContent>
 
-          {/* Deferrments Tab */}
-          <TabsContent value="deferrments" className="mt-6">
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">Leave Deferrments</CardTitle>
-                <CardDescription>Manage leave deferrment requests</CardDescription>
+          {/* LEAVE TYPES TAB */}
+          <TabsContent value="leave-types" className="mt-6">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-white">Leave Types</CardTitle>
+                  <CardDescription>Manage leave type configurations</CardDescription>
+                </div>
+                <Dialog open={showLeaveTypeDialog} onOpenChange={setShowLeaveTypeDialog}>
+                  <DialogTrigger asChild>
+                    <Button onClick={handleAddLeaveType} className="bg-green-600 hover:bg-green-700">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Leave Type
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-slate-800 border-slate-700">
+                    <DialogHeader>
+                      <DialogTitle className="text-white">
+                        {editingLeaveType ? 'Edit Leave Type' : 'Add Leave Type'}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {editingLeaveType ? 'Update leave type configuration' : 'Create a new leave type'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-slate-300">Type Key</Label>
+                        <Input
+                          value={leaveTypeForm.leave_type_key}
+                          onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, leave_type_key: e.target.value })}
+                          placeholder="e.g., annual"
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Type Label</Label>
+                        <Input
+                          value={leaveTypeForm.leave_type_label}
+                          onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, leave_type_label: e.target.value })}
+                          placeholder="e.g., Annual Leave"
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Entitlement Days</Label>
+                        <Input
+                          type="number"
+                          value={leaveTypeForm.entitlement_days}
+                          onChange={(e) =>
+                            setLeaveTypeForm({
+                              ...leaveTypeForm,
+                              entitlement_days: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={leaveTypeForm.is_active}
+                          onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, is_active: e.target.checked })}
+                          className="rounded"
+                        />
+                        <Label className="text-slate-300">Active</Label>
+                      </div>
+                      <div className="flex gap-2 pt-4">
+                        <Button
+                          onClick={handleSaveLeaveType}
+                          disabled={savingLeaveType}
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                        >
+                          {savingLeaveType ? 'Saving...' : 'Save'}
+                        </Button>
+                        <Button
+                          onClick={() => setShowLeaveTypeDialog(false)}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <CardContent>
-                {deferrments.length === 0 ? (
-                  <div className="text-center py-12">
-                    <ArrowRight className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400">No deferrments pending</p>
-                  </div>
+                {leaveTypes.length === 0 ? (
+                  <p className="text-slate-400 py-8 text-center">No leave types configured</p>
                 ) : (
-                  <div className="space-y-4">
-                    {deferrments.map((defer) => (
-                      <Card key={defer.id} className="bg-slate-700/50 border-slate-600">
-                        <CardContent className="pt-4">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                              <p className="text-sm text-slate-400">Employee</p>
-                              <p className="text-white font-semibold">{defer.employee_name}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Leave Type</p>
-                              <p className="text-white">{defer.leave_type}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Deferral Year</p>
-                              <p className="text-white">{defer.deferral_year}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-400">Status</p>
-                              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/20 text-yellow-400">
-                                {defer.status}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-700">
+                          <th className="text-left py-3 px-4 text-slate-300">Key</th>
+                          <th className="text-left py-3 px-4 text-slate-300">Label</th>
+                          <th className="text-left py-3 px-4 text-slate-300">Days</th>
+                          <th className="text-left py-3 px-4 text-slate-300">Status</th>
+                          <th className="text-right py-3 px-4 text-slate-300">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaveTypes.map((lt) => (
+                          <tr key={lt.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+                            <td className="py-3 px-4 text-slate-200">{lt.leave_type_key}</td>
+                            <td className="py-3 px-4 text-slate-200">{lt.leave_type_label}</td>
+                            <td className="py-3 px-4 text-slate-200">{lt.entitlement_days}</td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  lt.is_active
+                                    ? 'bg-green-900/30 text-green-400'
+                                    : 'bg-red-900/30 text-red-400'
+                                }`}
+                              >
+                                {lt.is_active ? 'Active' : 'Inactive'}
                               </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                            </td>
+                            <td className="py-3 px-4 text-right space-x-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditLeaveType(lt)}
+                                className="text-blue-400 hover:bg-blue-900/20"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteLeaveType(lt.id)}
+                                className="text-red-400 hover:bg-red-900/20"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Recalls Tab */}
-          <TabsContent value="recalls" className="mt-6">
-            <Card className="bg-slate-800/50 border-slate-700">
+          {/* STAFF REQUESTS TAB */}
+          <TabsContent value="staff-requests" className="mt-6">
+            <Card className="bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-white">Leave Recalls</CardTitle>
-                <CardDescription>Manage leave recall requests</CardDescription>
+                <CardTitle className="text-white">Staff Leave Requests</CardTitle>
+                <CardDescription>Review and approve/reject staff leave requests</CardDescription>
               </CardHeader>
               <CardContent>
-                {recalls.length === 0 ? (
-                  <div className="text-center py-12">
-                    <ArrowLeft className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400">No recalls pending</p>
-                  </div>
+                {staffRequests.length === 0 ? (
+                  <p className="text-slate-400 py-8 text-center">No staff requests</p>
                 ) : (
                   <div className="space-y-4">
-                    {recalls.map((recall) => (
-                      <Card key={recall.id} className="bg-slate-700/50 border-slate-600">
-                        <CardContent className="pt-4">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {staffRequests.map((req) => (
+                      <Card key={req.id} className="bg-slate-700/50 border-slate-600">
+                        <CardContent className="pt-6">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                             <div>
                               <p className="text-sm text-slate-400">Employee</p>
-                              <p className="text-white font-semibold">{recall.employee_name}</p>
+                              <p className="text-white font-semibold">{req.employee_name}</p>
                             </div>
                             <div>
                               <p className="text-sm text-slate-400">Leave Type</p>
-                              <p className="text-white">{recall.leave_type}</p>
+                              <p className="text-white">{req.leave_type}</p>
                             </div>
                             <div>
-                              <p className="text-sm text-slate-400">Recall Date</p>
-                              <p className="text-white">{recall.recall_date}</p>
+                              <p className="text-sm text-slate-400">Period</p>
+                              <p className="text-white text-sm">
+                                {req.start_date} to {req.end_date}
+                              </p>
                             </div>
                             <div>
                               <p className="text-sm text-slate-400">Status</p>
-                              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400">
-                                {recall.status}
+                              <span
+                                className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                  req.status === 'approved'
+                                    ? 'bg-green-900/30 text-green-400'
+                                    : req.status === 'rejected'
+                                    ? 'bg-red-900/30 text-red-400'
+                                    : 'bg-yellow-900/30 text-yellow-400'
+                                }`}
+                              >
+                                {req.status}
                               </span>
                             </div>
                           </div>
+                          {req.reason && (
+                            <div className="mb-4">
+                              <p className="text-sm text-slate-400">Reason</p>
+                              <p className="text-slate-300">{req.reason}</p>
+                            </div>
+                          )}
+                          {req.status === 'pending' && (
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => handleApproveRequest(req.id)}
+                                disabled={approvingRequest === req.id}
+                                className="bg-green-600 hover:bg-green-700"
+                                size="sm"
+                              >
+                                {approvingRequest === req.id ? 'Processing...' : 'Approve'}
+                              </Button>
+                              <Button
+                                onClick={() => handleRejectRequest(req.id)}
+                                disabled={approvingRequest === req.id}
+                                variant="destructive"
+                                size="sm"
+                              >
+                                {approvingRequest === req.id ? 'Processing...' : 'Reject'}
+                              </Button>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -458,139 +720,6 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
             </Card>
           </TabsContent>
         </Tabs>
-
-        {/* Holiday Modal */}
-        {showHolidayModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md bg-slate-800 border-slate-700">
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <CardTitle className="text-white">
-                  {editingHoliday ? "Edit Holiday" : "Add Holiday"}
-                </CardTitle>
-                <button
-                  onClick={() => setShowHolidayModal(false)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Date (YYYY-MM-DD)</label>
-                  <Input
-                    type="date"
-                    value={holidayForm.holiday_date}
-                    onChange={(e) => setHolidayForm({ ...holidayForm, holiday_date: e.target.value })}
-                    className="bg-slate-700 border-slate-600 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Holiday Name</label>
-                  <Input
-                    value={holidayForm.holiday_name}
-                    onChange={(e) => setHolidayForm({ ...holidayForm, holiday_name: e.target.value })}
-                    placeholder="e.g., Christmas Day"
-                    className="bg-slate-700 border-slate-600 text-white"
-                  />
-                </div>
-                <div className="flex gap-2 pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowHolidayModal(false)}
-                    className="flex-1 border-slate-600 text-slate-300"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSaveHoliday}
-                    disabled={submittingHoliday}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    {submittingHoliday ? "Saving..." : "Save"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Leave Type Modal */}
-        {showLeaveTypeModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md bg-slate-800 border-slate-700">
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <CardTitle className="text-white">
-                  {editingLeaveType ? "Edit Leave Type" : "Add Leave Type"}
-                </CardTitle>
-                <button
-                  onClick={() => setShowLeaveTypeModal(false)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Leave Type Key</label>
-                  <Input
-                    value={leaveTypeForm.leave_type_key}
-                    onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, leave_type_key: e.target.value })}
-                    placeholder="e.g., annual_leave"
-                    disabled={!!editingLeaveType}
-                    className="bg-slate-700 border-slate-600 text-white disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Leave Type Label</label>
-                  <Input
-                    value={leaveTypeForm.leave_type_label}
-                    onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, leave_type_label: e.target.value })}
-                    placeholder="e.g., Annual Leave"
-                    className="bg-slate-700 border-slate-600 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Entitlement Days</label>
-                  <Input
-                    type="number"
-                    value={leaveTypeForm.entitlement_days}
-                    onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, entitlement_days: parseInt(e.target.value) })}
-                    placeholder="e.g., 21"
-                    className="bg-slate-700 border-slate-600 text-white"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is_active"
-                    checked={leaveTypeForm.is_active}
-                    onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, is_active: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-700 border-slate-600"
-                  />
-                  <label htmlFor="is_active" className="text-sm font-medium text-slate-300">
-                    Active
-                  </label>
-                </div>
-                <div className="flex gap-2 pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowLeaveTypeModal(false)}
-                    className="flex-1 border-slate-600 text-slate-300"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSaveLeaveType}
-                    disabled={submittingLeaveType}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    {submittingLeaveType ? "Saving..." : "Save"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </div>
   )
