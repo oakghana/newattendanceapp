@@ -7,7 +7,6 @@ import { Progress } from "@/components/ui/progress"
 import {
   Clock,
   Calendar,
-  Users,
   TrendingUp,
   UserCheck,
   AlertCircle,
@@ -364,14 +363,14 @@ export default async function DashboardPage() {
 
           {/* Leave & Notifications Section */}
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Leave Management */}
+            {/* Leave Administration */}
             <Card className="bg-gradient-to-br from-white/90 to-white/50 dark:from-slate-900/90 dark:to-slate-800/50 backdrop-blur-xl border-white/20 dark:border-slate-700/20 shadow-xl">
               <CardHeader className="pb-6">
                 <CardTitle className="text-xl font-bold flex items-center gap-3">
                   <Calendar className="h-6 w-6 text-orange-600" />
-                  Leave Hub
+                  Leave Administration
                 </CardTitle>
-                <CardDescription className="text-lg">Apply for leave and follow your updates</CardDescription>
+                <CardDescription className="text-lg">Manage leave requests and plan your time off</CardDescription>
               </CardHeader>
               <CardContent>
                 {profile?.role !== "staff" ? (
@@ -381,12 +380,12 @@ export default async function DashboardPage() {
                     </div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Leave Administration</h3>
                     <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-sm mx-auto">
-                      View and manage all leave requests from your team members
+                      Review and manage team leave requests with smart approval tracking
                     </p>
                     <Button asChild size="lg" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg hover:shadow-xl transition-all duration-300">
                       <Link href="/dashboard/leave-management">
-                        <Users className="h-5 w-5 mr-2" />
-                        Manage Leave Requests
+                        <Calendar className="h-5 w-5 mr-2" />
+                        Open Leave Administration
                       </Link>
                     </Button>
                   </div>
@@ -397,7 +396,7 @@ export default async function DashboardPage() {
                     </div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">My Leave Requests</h3>
                     <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-sm mx-auto">
-                      Submit your leave request for manager approval
+                      Submit and track your leave requests with real-time updates
                     </p>
                     <div className="flex items-center justify-center">
                       <RequestLeaveButtonWrapper />

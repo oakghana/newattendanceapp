@@ -21,6 +21,7 @@ function isHrAnalyticsRole(role: string | null | undefined) {
 }
 
 interface LeaveManagementModuleClientProps {
+  userId: string
   userRole: string | null
   userDepartment: string | null
   userFirstName: string | null
@@ -31,9 +32,11 @@ interface LeaveManagementModuleClientProps {
   hasHodLinkage: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
+  initialApprovedStaffRequests?: any[]
 }
 
 export function LeaveManagementModuleClient({
+  userId,
   userRole,
   userDepartment,
   userFirstName,
@@ -44,33 +47,43 @@ export function LeaveManagementModuleClient({
   hasHodLinkage,
   initialStaffRequests,
   initialManagerNotifications,
+  initialApprovedStaffRequests = [],
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
   const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
 
   return (
-    <div className="space-y-6">
-      <Tabs defaultValue="leave-management" className="space-y-6">
-        <TabsList className="flex h-auto w-full flex-nowrap gap-2 overflow-x-auto rounded-3xl border border-blue-100 bg-blue-50/60 p-2 shadow-sm">
-          <TabsTrigger value="leave-management" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white shrink-0">
-            <LayoutPanelTop className="h-4 w-4" /> Leave Management
+    <div className="space-y-6 w-full">
+      <Tabs defaultValue="leave-management" className="space-y-4 w-full">
+        <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-blue-100 bg-blue-50/60 p-2 shadow-sm overflow-x-auto sm:overflow-visible">
+          <TabsTrigger value="leave-management" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
+            <LayoutPanelTop className="h-3 w-3 sm:h-4 sm:w-4" /> 
+            <span className="hidden sm:inline">Leave Management</span>
+            <span className="sm:hidden">Requests</span>
           </TabsTrigger>
-          <TabsTrigger value="leave-planning" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white shrink-0">
-            <CalendarRange className="h-4 w-4" /> Leave & HR Leave
+          <TabsTrigger value="leave-planning" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
+            <CalendarRange className="h-3 w-3 sm:h-4 sm:w-4" /> 
+            <span className="hidden sm:inline">Leave & HR Leave</span>
+            <span className="sm:hidden">Planning</span>
           </TabsTrigger>
           {showAnalytics && (
-            <TabsTrigger value="hr-analytics" className="gap-2 rounded-2xl border border-purple-200 bg-white px-5 py-3 text-purple-800 hover:bg-purple-50 data-[state=active]:border-purple-600 data-[state=active]:bg-purple-600 data-[state=active]:text-white shrink-0">
-              <TrendingUp className="h-4 w-4" /> Leave Analytics
+            <TabsTrigger value="hr-analytics" className="gap-1 sm:gap-2 rounded-2xl border border-purple-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-purple-800 hover:bg-purple-50 data-[state=active]:border-purple-600 data-[state=active]:bg-purple-600 data-[state=active]:text-white min-w-fit">
+              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" /> 
+              <span className="hidden sm:inline">Leave Analytics</span>
+              <span className="sm:hidden">Analytics</span>
             </TabsTrigger>
           )}
-          <TabsTrigger value="insights" className="gap-2 rounded-2xl border border-blue-200 bg-white px-5 py-3 text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white shrink-0">
-            <BarChart3 className="h-4 w-4" /> Balance & Calendar
+          <TabsTrigger value="insights" className="gap-1 sm:gap-2 rounded-2xl border border-blue-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-blue-800 hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white min-w-fit">
+            <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" /> 
+            <span className="hidden sm:inline">Balance & Calendar</span>
+            <span className="sm:hidden">Balance</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="leave-management" className="space-y-6">
+        <TabsContent value="leave-management" className="space-y-4 sm:space-y-6 w-full">
           <LeaveManagementClient
+            userId={userId}
             userRole={userRole}
             userDepartment={userDepartment}
             userFirstName={userFirstName}
@@ -79,10 +92,11 @@ export function LeaveManagementModuleClient({
             inactivityDays={inactivityDays}
             initialStaffRequests={initialStaffRequests}
             initialManagerNotifications={initialManagerNotifications}
+            initialApprovedStaffRequests={initialApprovedStaffRequests}
           />
         </TabsContent>
 
-        <TabsContent value="leave-planning" className="space-y-6">
+        <TabsContent value="leave-planning" className="space-y-4 sm:space-y-6 w-full">
           <LeavePlanningClient
             profile={{
               role: userRole,
@@ -93,15 +107,19 @@ export function LeaveManagementModuleClient({
         </TabsContent>
 
         {showAnalytics && (
-          <TabsContent value="hr-analytics" className="space-y-6">
+          <TabsContent value="hr-analytics" className="space-y-4 sm:space-y-6 w-full">
             <HrLeaveAnalyticsPanel />
           </TabsContent>
         )}
 
-        <TabsContent value="insights" className="space-y-6">
-          <div className="grid gap-6 xl:grid-cols-2">
-            <LeaveBalanceWidget />
-            <TeamCalendarView isHrOffice={isHrOffice} />
+        <TabsContent value="insights" className="space-y-4 sm:space-y-6 w-full">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 w-full">
+            <div className="w-full">
+              <LeaveBalanceWidget />
+            </div>
+            <div className="w-full">
+              <TeamCalendarView isHrOffice={isHrOffice} />
+            </div>
           </div>
         </TabsContent>
       </Tabs>

@@ -27,6 +27,7 @@ export default async function LeaveManagementPage() {
 
   let staffRequests = []
   let managerNotifications = []
+  let approvedStaffRequests = [] // NEW: For HOD/RM deferment/recall operations
   let hasHodLinkage = false
 
   try {
@@ -45,7 +46,7 @@ export default async function LeaveManagementPage() {
   {
     const { data: requests } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at")
+      .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, adjusted_start_date, adjusted_end_date, hod_decision")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
@@ -58,6 +59,9 @@ export default async function LeaveManagementPage() {
       leave_type: request.leave_type_key || "annual",
       status: request.status,
       created_at: request.created_at,
+      adjusted_start_date: request.adjusted_start_date,
+      adjusted_end_date: request.adjusted_end_date,
+      hod_decision: request.hod_decision,
     }))
   }
 
@@ -175,9 +179,81 @@ export default async function LeaveManagementPage() {
 
   }
 
+  // Fetch approved leaves from staff for HOD/RM to perform deferment/recall
+  if (canReviewLeave && profile.department_id) {
+    // Get all staff in this HOD/RM's department
+    const { data: deptStaff } = await admin
+      .from("user_profiles")
+      .select("id")
+      .eq("department_id", profile.department_id)
+
+    const staffIds = (deptStaff || []).map((s: any) => s.id)
+
+    if (staffIds.length > 0) {
+      // Fetch approved leaves
+      const { data: approvedLeaves } = await admin
+        .from("leave_plan_requests")
+        .select(`
+          id,
+          user_id,
+          preferred_start_date,
+          preferred_end_date,
+          leave_type_key,
+          reason,
+          status,
+          created_at
+        `)
+        .in("user_id", staffIds)
+        .in("status", ["approved", "hr_approved"])
+        .order("preferred_start_date", { ascending: true })
+
+      // Fetch user profiles separately to get names, ranks, locations
+      const { data: staffProfiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, assigned_location_id")
+        .in("id", staffIds)
+
+      // Create a map for quick lookup
+      const profileMap = new Map((staffProfiles || []).map((p: any) => [p.id, p]))
+
+      // Fetch locations if needed
+      const locationIds = new Set((staffProfiles || []).map((p: any) => p.assigned_location_id).filter(Boolean))
+      const { data: locations } = locationIds.size > 0 
+        ? await admin
+            .from("geofence_locations")
+            .select("id, name")
+            .in("id", Array.from(locationIds))
+        : { data: [] }
+      
+      const locationMap = new Map((locations || []).map((l: any) => [l.id, l.name]))
+
+      approvedStaffRequests = (approvedLeaves || []).map((req: any) => {
+        const staffProfile = profileMap.get(req.user_id) || {}
+        const locationName = staffProfile.assigned_location_id 
+          ? locationMap.get(staffProfile.assigned_location_id) 
+          : null
+
+        return {
+          id: String(req.id),
+          user_id: String(req.user_id),
+          start_date: req.preferred_start_date,
+          end_date: req.preferred_end_date,
+          reason: req.reason || "",
+          leave_type: req.leave_type_key || "annual",
+          status: req.status,
+          created_at: req.created_at,
+          user_name: `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim() || "Staff",
+          rank: staffProfile.position || undefined,
+          location: locationName || undefined,
+        }
+      })
+    }
+  }
+
   return (
     <div className="leave-theme">
       <LeaveManagementModuleClient
+        userId={user.id}
         userRole={profile.role}
         userDepartment={profile.department_id}
         userFirstName={(profile as any)?.first_name || null}
@@ -188,6 +264,7 @@ export default async function LeaveManagementPage() {
         hasHodLinkage={hasHodLinkage}
         initialStaffRequests={staffRequests}
         initialManagerNotifications={managerNotifications}
+        initialApprovedStaffRequests={approvedStaffRequests}
       />
     </div>
   )

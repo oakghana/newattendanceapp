@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { format } from "date-fns"
 import {
   ArrowUpRight,
@@ -9,10 +9,12 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ClipboardList,
   Copy,
+  Download,
   FileClock,
-  Info,
   Loader2,
+  Plus,
   Sparkles,
   XCircle,
 } from "lucide-react"
@@ -38,6 +40,11 @@ interface LeaveRequest {
   created_at: string
   user_name?: string
   department?: string
+  location?: string
+  rank?: string
+  adjusted_start_date?: string
+  adjusted_end_date?: string
+  hod_decision?: string
 }
 
 interface LeaveNotification {
@@ -54,6 +61,7 @@ interface LeaveNotification {
 }
 
 interface LeaveManagementClientProps {
+  userId: string
   userRole: string
   userDepartment: string | null
   userFirstName: string | null
@@ -62,6 +70,7 @@ interface LeaveManagementClientProps {
   inactivityDays: number
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
+  initialApprovedStaffRequests?: LeaveRequest[]
 }
 
 interface HrMemoTemplate {
@@ -78,6 +87,7 @@ interface HrMemoTemplate {
 }
 
 export function LeaveManagementClient({
+  userId,
   userRole,
   userDepartment,
   userFirstName,
@@ -86,6 +96,7 @@ export function LeaveManagementClient({
   inactivityDays,
   initialStaffRequests,
   initialManagerNotifications,
+  initialApprovedStaffRequests = [],
 }: LeaveManagementClientProps) {
     const formatDateSafe = (value?: string | null) => {
       if (!value) return "-"
@@ -127,6 +138,16 @@ export function LeaveManagementClient({
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
   const [selectedTab, setSelectedTab] = useState("my-requests")
+  const [defermentRequests, setDefermentRequests] = useState<any[]>([])
+  const [recallRequests, setRecallRequests] = useState<any[]>([])
+  const [isSubmittingDeferment, setIsSubmittingDeferment] = useState(false)
+  const [isSubmittingRecall, setIsSubmittingRecall] = useState(false)
+  const [selectedApprovedForDeferment, setSelectedApprovedForDeferment] = useState<string | null>(null)
+  const [deferralYear, setDeferralYear] = useState<string>("")
+  const [defermentReason, setDefermentReason] = useState<string>("")
+  const [recallDateInput, setRecallDateInput] = useState<string>("")
+  const [recallReasonInput, setRecallReasonInput] = useState<string>("")
+  const [selectedApprovedForRecall, setSelectedApprovedForRecall] = useState<string | null>(null)
   const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -146,6 +167,9 @@ export function LeaveManagementClient({
     cc_recipients: "",
     category: "approval",
   })
+  const [isExportingAnnualLeave, setIsExportingAnnualLeave] = useState(false)
+  const [staffApprovedMemos, setStaffApprovedMemos] = useState<any[]>([])
+  const [isLoadingApprovedMemos, setIsLoadingApprovedMemos] = useState(false)
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -153,6 +177,71 @@ export function LeaveManagementClient({
       toast({ title: `${label} copied`, description: "Template copied to clipboard." })
     } catch {
       toast({ title: "Copy failed", description: "Please copy manually.", variant: "destructive" })
+    }
+  }
+
+  // ─── Export Annual Leave Handler ───
+  const exportAnnualLeaveToExcel = async () => {
+    try {
+      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+      const isAuthorized = ["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin", "hr_leave_office"].includes(normalizedRole)
+
+      if (!isAuthorized) {
+        toast({ title: "Access Denied", description: "Only HOD/RM and HR can export annual leave.", variant: "destructive" })
+        return
+      }
+
+      setIsExportingAnnualLeave(true)
+
+      const response = await fetch(`/api/leave/export-annual?user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(userRole)}`)
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Export failed")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Annual_Leave_Export_${new Date().toISOString().split("T")[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(link)
+
+      toast({ title: "Export Successful", description: "Annual leave data exported to Excel." })
+    } catch (error) {
+      console.error("[v0] Export error:", error)
+      toast({ title: "Export Failed", description: error instanceof Error ? error.message : "Could not export annual leave.", variant: "destructive" })
+    } finally {
+      setIsExportingAnnualLeave(false)
+    }
+  }
+
+  // ─── Fetch Approved Memos for HOD/RM Staff ───
+  const fetchStaffApprovedMemos = async () => {
+    try {
+      const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+      const isAuthorized = ["department_head", "regional_manager"].includes(normalizedRole)
+
+      if (!isAuthorized) return
+
+      setIsLoadingApprovedMemos(true)
+
+      const response = await fetch(`/api/leave/staff-approved-memos?user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(userRole)}&user_department=${encodeURIComponent(userDepartment || "")}`)
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch approved memos")
+      }
+
+      const data = await response.json()
+      setStaffApprovedMemos(data.memos || [])
+    } catch (error) {
+      console.error("[v0] Fetch approved memos error:", error)
+      setStaffApprovedMemos([])
+    } finally {
+      setIsLoadingApprovedMemos(false)
     }
   }
 
@@ -349,7 +438,7 @@ export function LeaveManagementClient({
 
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -394,7 +483,7 @@ export function LeaveManagementClient({
 
   const handleDismiss = async (notificationId: string, reason: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"].includes(normalized)
+    const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_leave_office"].includes(normalized)
     if (!canManageLeave) {
       showUnderReviewToast()
       return
@@ -448,24 +537,126 @@ export function LeaveManagementClient({
     }
   }
 
-  const pendingRequests = staffRequests.filter((r) => pendingStatuses.has(String(r.status || "")))
-  const approvedRequests = staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
-  const pendingNotifications = managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending")
-  const adminAllPending = pendingNotifications
-  const adminStaffQueue = pendingNotifications.filter((n) => {
-    const role = String(n.requester_role || "").toLowerCase()
-    return ["staff", "nsp", "intern", "it-admin", "it_admin", "contract"].includes(role)
-  })
-  const adminHodQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "department_head")
-  const adminRegionalQueue = pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager")
-  const adminDelayedQueue = pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays)
+  const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
+  const approvedRequests = useMemo(() => {
+    // For HOD/RM: use staff's approved leaves for deferment/recall
+    const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const isHodRm = ["regional_manager", "department_head", "admin", "hr_officer"].includes(roleNorm)
+    
+    if (isHodRm && initialApprovedStaffRequests && initialApprovedStaffRequests.length > 0) {
+      return initialApprovedStaffRequests
+    }
+    
+    // For staff: use their own approved leaves
+    return staffRequests.filter((r) => approvedStatuses.has(String(r.status || "")))
+  }, [staffRequests, initialApprovedStaffRequests, userRole])
+  
+  const pendingNotifications = useMemo(() => managerNotifications.filter((n) => String(n.review_decision || "pending") === "pending"), [managerNotifications])
+  const adminAllPending = useMemo(() => pendingNotifications, [pendingNotifications])
+  const adminStaffQueue = useMemo(() => 
+    pendingNotifications.filter((n) => {
+      const role = String(n.requester_role || "").toLowerCase()
+      return ["staff", "nsp", "intern", "it-admin", "it_admin", "contract"].includes(role)
+    }), [pendingNotifications])
+  const adminHodQueue = useMemo(() => pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "department_head"), [pendingNotifications])
+  const adminRegionalQueue = useMemo(() => pendingNotifications.filter((n) => String(n.requester_role || "").toLowerCase() === "regional_manager"), [pendingNotifications])
+  const adminDelayedQueue = useMemo(() => pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays), [pendingNotifications, inactivityDays])
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
   const isManagerView = ["admin", "regional_manager", "department_head", "it_admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
   const isAdminView = normalizedRole === "admin"
-  const canViewHrTemplates = ["admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
-  const canEditHrTemplates = ["admin", "manager_hr", "director_hr", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
+
+  // ─── Deferment Handler ───
+  const submitDefermentRequest = async () => {
+    try {
+      if (!selectedApprovedForDeferment || !deferralYear) {
+        toast({ title: "Validation Error", description: "Please select a leave request and deferral year", variant: "destructive" })
+        return
+      }
+
+      if (!/^\d{4}$/.test(deferralYear)) {
+        toast({ title: "Validation Error", description: "Deferral year must be in YYYY format", variant: "destructive" })
+        return
+      }
+
+      setIsSubmittingDeferment(true)
+
+      const response = await fetch("/api/leave/deferment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leave_plan_request_id: selectedApprovedForDeferment,
+          deferral_year: deferralYear,
+          reason: defermentReason || null,
+          user_id: userId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit deferment request")
+      }
+
+      toast({ title: "Success", description: "Deferment request submitted successfully" })
+      setSelectedApprovedForDeferment(null)
+      setDeferralYear("")
+      setDefermentReason("")
+    } catch (error) {
+      console.error("[v0] Deferment error:", error)
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to submit deferment", variant: "destructive" })
+    } finally {
+      setIsSubmittingDeferment(false)
+    }
+  }
+
+  // ─── Recall Handler ───
+  const submitRecallRequest = async () => {
+    try {
+      if (!selectedApprovedForRecall || !recallDateInput) {
+        toast({ title: "Validation Error", description: "Please select a leave request and recall date", variant: "destructive" })
+        return
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(recallDateInput)) {
+        toast({ title: "Validation Error", description: "Recall date must be in YYYY-MM-DD format", variant: "destructive" })
+        return
+      }
+
+      setIsSubmittingRecall(true)
+
+      const response = await fetch("/api/leave/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leave_plan_request_id: selectedApprovedForRecall,
+          recall_date: recallDateInput,
+          reason: recallReasonInput || null,
+          user_id: userId,
+          user_role: userRole,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit recall request")
+      }
+
+      toast({ title: "Success", description: "Recall request submitted successfully" })
+      setSelectedApprovedForRecall(null)
+      setRecallDateInput("")
+      setRecallReasonInput("")
+    } catch (error) {
+      console.error("[v0] Recall error:", error)
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to submit recall", variant: "destructive" })
+    } finally {
+      setIsSubmittingRecall(false)
+    }
+  }
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -498,6 +689,14 @@ export function LeaveManagementClient({
 
     void loadTemplates()
   }, [canViewHrTemplates, toast])
+
+  // Fetch approved memos for HOD/RM
+  useEffect(() => {
+    const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
+    if (["department_head", "regional_manager"].includes(normalizedRole)) {
+      fetchStaffApprovedMemos()
+    }
+  }, [userId, userRole, userDepartment])
 
   const runTemplateAction = async (templateKey: string, action: "duplicate" | "deactivate" | "activate") => {
     setTemplateActionKey(`${action}:${templateKey}`)
@@ -753,6 +952,26 @@ export function LeaveManagementClient({
         </Alert>
       )}
 
+      {/* HR Officer Leave Approval History */}
+      {normalizedRole === "hr_officer" && (
+        <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-slate-200 bg-[linear-gradient(135deg,_#fef3ff_0%,_#fefbff_55%,_#faf5ff_100%)] pb-4">
+            <div>
+              <CardTitle className="text-xl text-slate-900">Leave Approval History</CardTitle>
+              <CardDescription className="mt-1 max-w-2xl text-slate-600">
+                Review staff leave history, approval details from HOD/Manager, leave types, duration, and remarks for your HR decision.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 p-5">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-600">Loading staff leave approval history...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* HR Memo Templates - Hidden from HR Officer */}
       {canViewHrTemplates && (
         <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardHeader className="border-b border-slate-200 bg-[linear-gradient(135deg,_#eef6ff_0%,_#f8fbff_55%,_#eefaf5_100%)] pb-4">
@@ -1104,62 +1323,152 @@ export function LeaveManagementClient({
         </Card>
       )}
 
-      {/* STAFF TABS SECTION - Always visible for leave application */}
-      <div className="space-y-4 mt-6 p-4 bg-white rounded-xl shadow-lg border-2 border-emerald-500">
-        <h3 className="text-lg font-bold text-emerald-700 mb-4">Leave Application Actions</h3>
-        {/* Simple Tab Navigation - Always visible for staff users */}
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => setSelectedTab("my-requests")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
-              selectedTab === "my-requests"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            My Requests ({staffRequests.length})
-          </button>
-          <Link href="/dashboard/leave-planning">
-            <button className="px-6 py-3 font-bold rounded-lg transition-all flex items-center gap-2 shadow-md bg-emerald-600 text-white hover:bg-emerald-700">
-              <Calendar className="h-5 w-5" />
-              Apply for Leave
-            </button>
-          </Link>
-          <button
-            onClick={() => setSelectedTab("approved")}
-            className={`px-6 py-3 font-bold rounded-lg transition-all shadow-md ${
-              selectedTab === "approved"
-                ? "bg-green-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            Approved ({approvedRequests.length})
-          </button>
-        </div>
+      {/* Export Annual Leave Card - HOD/RM/HR Only */}
+      {["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
+        <Card className="border border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50/50">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg font-bold text-purple-900 flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              Export Annual Leave Requests
+            </CardTitle>
+            <CardDescription className="text-purple-700">Download all staff annual leave requests for your department/region as an Excel file</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={exportAnnualLeaveToExcel}
+              disabled={isExportingAnnualLeave}
+              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+            >
+              {isExportingAnnualLeave ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export to Excel
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* STAFF TABS SECTION - Leave Application Actions */}
+      <div className="space-y-6">
+        <Card className="border border-slate-200 bg-gradient-to-br from-white to-slate-50/50 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-3">
+              <ClipboardList className="h-5 w-5 text-blue-600" />
+              Leave Application Actions
+            </CardTitle>
+            <CardDescription className="text-slate-600">Manage your leave requests and submissions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => setSelectedTab("my-requests")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "my-requests"
+                    ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "my-requests" ? "default" : "outline"}
+              >
+                <Calendar className="h-4 w-4" />
+                My Requests ({staffRequests.length})
+              </Button>
+              <Button
+                asChild
+                className="gap-2 rounded-xl px-6 py-2 font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700 transition-all"
+              >
+                <Link href="/dashboard/leave-planning">
+                  <Plus className="h-4 w-4" />
+                  Apply for Leave
+                </Link>
+              </Button>
+              <Button
+                onClick={() => setSelectedTab("approved")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "approved"
+                    ? "bg-emerald-600 text-white shadow-md hover:bg-emerald-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "approved" ? "default" : "outline"}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Approved ({approvedRequests.length})
+              </Button>
+              <Button
+                onClick={() => setSelectedTab("deferrments")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "deferrments"
+                    ? "bg-amber-600 text-white shadow-md hover:bg-amber-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "deferrments" ? "default" : "outline"}
+              >
+                <Calendar className="h-4 w-4" />
+                Deferrments
+              </Button>
+              <Button
+                onClick={() => setSelectedTab("recalls")}
+                className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                  selectedTab === "recalls"
+                    ? "bg-rose-600 text-white shadow-md hover:bg-rose-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                }`}
+                variant={selectedTab === "recalls" ? "default" : "outline"}
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                Recalls
+              </Button>
+              {isManagerView && (
+                <Button
+                  onClick={() => setSelectedTab("approved-memos")}
+                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                    selectedTab === "approved-memos"
+                      ? "bg-teal-600 text-white shadow-md hover:bg-teal-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                  variant={selectedTab === "approved-memos" ? "default" : "outline"}
+                >
+                  <Download className="h-4 w-4" />
+                  Approved Memos
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Tab Content */}
-        <div>
+        <div className="space-y-4">
           {selectedTab === "my-requests" && (
             <>
               {staffRequests.length === 0 ? (
-                <Card className="border border-dashed border-slate-300 bg-slate-50/80">
-                  <CardContent className="py-14 text-center">
-                    <Info className="mx-auto mb-4 h-12 w-12 text-cyan-500/70" />
-                    <p className="mb-1 font-medium text-slate-800">No leave requests yet</p>
-                    <p className="mb-6 text-sm text-slate-500">Click below to submit your first leave request.</p>
+                <Card className="border border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50/50">
+                  <CardContent className="py-12 text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100/80 mb-4">
+                      <Calendar className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <p className="mb-1 font-semibold text-slate-800 text-lg">No leave requests yet</p>
+                    <p className="mb-6 text-sm text-slate-600">You haven&apos;t submitted any leave requests. Click the button below to apply for leave.</p>
                     <Button
-                      onClick={() => setSelectedTab("apply-leave")}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+                      asChild
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold"
                     >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      Apply for Leave
+                      <Link href="/dashboard/leave-planning">
+                        <Plus className="h-4 w-4" />
+                        Apply for Leave
+                      </Link>
                     </Button>
                   </CardContent>
                 </Card>
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {staffRequests.map((request) => (
-                    <LeaveRequestCard key={request.id} request={request} canEdit={editableStatuses.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} />
+                    <LeaveRequestCard key={request.id} request={request} canEdit={editableStatuses.has(String(request.status || ""))} onEdit={() => openEditRequest(request)} toast={toast} />
                   ))}
                 </div>
               )}
@@ -1178,11 +1487,231 @@ export function LeaveManagementClient({
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
                   {approvedRequests.map((request) => (
-                    <LeaveRequestCard key={request.id} request={request} emphasizeApproved />
+                    <LeaveRequestCard key={request.id} request={request} emphasizeApproved toast={toast} />
                   ))}
                 </div>
               )}
             </>
+          )}
+
+          {selectedTab === "deferrments" && (
+            <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
+              <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Defer Your Approved Leave
+                </CardTitle>
+                <CardDescription className="text-amber-100">Defer your approved leave to a future leave year</CardDescription>
+              </CardHeader>
+              <CardContent className="py-6">
+                {approvedRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                    <p className="font-medium text-slate-700">No approved leave to defer</p>
+                    <p className="text-sm text-slate-500 mt-2">You must have approved leave requests to create a deferment</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">Select Approved Leave Request</Label>
+                        <select
+                          id="defer_request"
+                          value={selectedApprovedForDeferment || ""}
+                          onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
+                        >
+                          <option value="">-- Choose a leave request --</option>
+                          {approvedRequests.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
+                        <Input
+                          id="deferral_year"
+                          type="text"
+                          placeholder="2027"
+                          value={deferralYear}
+                          onChange={(e) => setDeferralYear(e.target.value)}
+                          maxLength={4}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">Reason (Optional)</Label>
+                        <Textarea
+                          id="deferment_reason"
+                          placeholder="Explain why you want to defer this leave..."
+                          value={defermentReason}
+                          onChange={(e) => setDefermentReason(e.target.value)}
+                          rows={3}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={submitDefermentRequest}
+                        disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear}
+                        className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                      >
+                        {isSubmittingDeferment ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Deferment Request"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedTab === "recalls" && (
+            <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
+              <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowUpRight className="h-5 w-5" />
+                  Recall Your Leave
+                </CardTitle>
+                <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
+              </CardHeader>
+              <CardContent className="py-6">
+                {!isManagerView ? (
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
+                  </Alert>
+                ) : approvedRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
+                    <p className="font-medium text-slate-700">No approved leave to recall</p>
+                    <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_request" className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
+                        <select
+                          id="recall_request"
+                          value={selectedApprovedForRecall || ""}
+                          onChange={(e) => setSelectedApprovedForRecall(e.target.value || null)}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
+                        >
+                          <option value="">-- Choose a leave request --</option>
+                          {approvedRequests.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_date" className="text-sm font-semibold text-slate-700">Recall Date (YYYY-MM-DD)</Label>
+                        <Input
+                          id="recall_date"
+                          type="date"
+                          value={recallDateInput}
+                          onChange={(e) => setRecallDateInput(e.target.value)}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_reason" className="text-sm font-semibold text-slate-700">Reason for Recall</Label>
+                        <Textarea
+                          id="recall_reason"
+                          placeholder="Explain the reason for recalling this leave..."
+                          value={recallReasonInput}
+                          onChange={(e) => setRecallReasonInput(e.target.value)}
+                          rows={3}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={submitRecallRequest}
+                        disabled={isSubmittingRecall || !selectedApprovedForRecall || !recallDateInput}
+                        className="w-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                      >
+                        {isSubmittingRecall ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Recall Request"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedTab === "approved-memos" && isManagerView && (
+            <Card className="border border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50/50">
+              <CardHeader className="border-b border-teal-200 bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5" />
+                  Approved Leave Memos
+                </CardTitle>
+                <CardDescription className="text-teal-100">Download signed approval memos for your staff's approved leave requests</CardDescription>
+              </CardHeader>
+              <CardContent className="py-6">
+                {isLoadingApprovedMemos ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+                  </div>
+                ) : staffApprovedMemos.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Download className="mx-auto mb-4 h-12 w-12 text-teal-400" />
+                    <p className="font-medium text-slate-700">No approved memos available</p>
+                    <p className="text-sm text-slate-500 mt-2">Your staff have no approved leave requests yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {staffApprovedMemos.map((memo: any) => (
+                      <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-900">{memo.staff_name}</p>
+                            <p className="text-xs text-slate-500 mt-1">{memo.email}</p>
+                            <p className="text-sm text-slate-700 mt-2">{memo.leave_type} Leave</p>
+                            <p className="text-xs text-slate-600 mt-1">{new Date(memo.start_date).toLocaleDateString()} to {new Date(memo.end_date).toLocaleDateString()}</p>
+                            <p className="text-xs text-slate-500 mt-1">Location: {memo.location}</p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <Button
+                              size="sm"
+                              className="bg-teal-600 hover:bg-teal-700 text-white"
+                              onClick={() => {
+                                // Download memo
+                                window.open(memo.memo_url, "_blank")
+                              }}
+                            >
+                              <Download className="h-3.5 w-3.5 mr-1" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
 
         {isManagerView && selectedTab === "pending-approvals" && (
@@ -1309,12 +1838,18 @@ function LeaveRequestCard({
   emphasizeApproved = false,
   canEdit = false,
   onEdit,
+  toast,
 }: {
   request: LeaveRequest
   emphasizeApproved?: boolean
   canEdit?: boolean
   onEdit?: () => void
+  toast?: ReturnType<typeof useToast>["toast"]
 }) {
+  const [respondingToHod, setRespondingToHod] = useState(false)
+  const [counterStartDate, setCounterStartDate] = useState("")
+  const [counterEndDate, setCounterEndDate] = useState("")
+  const [counterReason, setCounterReason] = useState("")
   const normalizedStatus = String(request.status || "").toLowerCase()
   const isApproved = ["approved", "hr_approved"].includes(normalizedStatus)
   const isPending = [
@@ -1328,6 +1863,65 @@ function LeaveRequestCard({
     "hr_office_forwarded",
   ].includes(normalizedStatus)
 
+  // Check if HOD has requested changes - check both hod_decision field and if dates are adjusted
+  const hasHodChanges = (request as any)?.hod_decision === "pending_staff_response" || 
+                        Boolean((request as any)?.adjusted_start_date && (request as any)?.adjusted_end_date)
+  const hodSuggestedStart = (request as any)?.adjusted_start_date
+  const hodSuggestedEnd = (request as any)?.adjusted_end_date
+
+  const handleAcceptHodChanges = async () => {
+    try {
+      const response = await fetch("/api/leave/respond-to-hod-changes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leaveRequestId: request.id,
+          action: "accept",
+        }),
+      })
+      
+      if (response.ok) {
+        toast?.({ title: "Accepted", description: "HOD date changes accepted successfully" })
+        setRespondingToHod(false)
+        window.location.reload()
+      }
+    } catch (error) {
+      toast?.({ title: "Error", description: "Failed to accept changes", variant: "destructive" })
+    }
+  }
+
+  const handleSubmitCounterOffer = async () => {
+    if (!counterStartDate || !counterEndDate) {
+      toast?.({ title: "Error", description: "Please provide counter-offer dates", variant: "destructive" })
+      return
+    }
+
+    try {
+      const response = await fetch("/api/leave/respond-to-hod-changes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leaveRequestId: request.id,
+          action: "counter",
+          counterStartDate,
+          counterEndDate,
+          reason: counterReason,
+        }),
+      })
+      
+      if (response.ok) {
+        toast?.({ title: "Submitted", description: "Counter-offer submitted to HOD for approval" })
+        setRespondingToHod(false)
+        setCounterStartDate("")
+        setCounterEndDate("")
+        setCounterReason("")
+        window.location.reload()
+      }
+    } catch (error) {
+      toast?.({ title: "Error", description: "Failed to submit counter-offer", variant: "destructive" })
+    }
+  }
+
   const statusTone =
     isApproved
       ? "border-emerald-200 bg-emerald-50/60"
@@ -1339,13 +1933,27 @@ function LeaveRequestCard({
     <Card className={`overflow-hidden border shadow-sm ${emphasizeApproved ? "border-emerald-200 bg-emerald-50/70" : statusTone}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
+          <div className="flex-1">
+            <div className="flex flex-col gap-1 mb-2">
+              <CardTitle className="text-lg text-slate-900">{formatLeaveType(request.leave_type)} Leave</CardTitle>
+              {(request.user_name || request.rank || request.location) && (
+                <div className="text-sm text-slate-600 flex flex-wrap items-center gap-2">
+                  {request.user_name && <span className="font-medium text-slate-700">{request.user_name}</span>}
+                  {request.rank && <span>• {request.rank}</span>}
+                  {request.location && <span>• {request.location}</span>}
+                </div>
+              )}
+            </div>
             <CardDescription className="mt-1 line-clamp-2">{request.reason}</CardDescription>
           </div>
-          <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
-            {formatLeaveType(request.status)}
-          </Badge>
+          <div className="flex gap-2">
+            {hasHodChanges && (
+              <Badge className="bg-amber-600 text-white hover:bg-amber-600">HOD Changes Requested</Badge>
+            )}
+            <Badge className={isApproved ? "bg-emerald-600 text-white hover:bg-emerald-600" : isPending ? "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50" : "bg-rose-600 text-white hover:bg-rose-600"}>
+              {formatLeaveType(request.status)}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1359,7 +1967,91 @@ function LeaveRequestCard({
             <p className="mt-1 font-semibold text-slate-900">{format(new Date(request.end_date), "MMM dd, yyyy")}</p>
           </div>
         </div>
-        {canEdit && onEdit && (
+
+        {/* HOD Suggested Changes */}
+        {hasHodChanges && hodSuggestedStart && hodSuggestedEnd && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <p className="text-sm font-semibold text-amber-900 mb-2">HOD Suggested Dates</p>
+            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+              <div className="rounded border border-amber-200 bg-white p-2">
+                <p className="text-xs text-amber-700 font-medium">Start</p>
+                <p className="font-semibold text-amber-900">{format(new Date(hodSuggestedStart), "MMM dd, yyyy")}</p>
+              </div>
+              <div className="rounded border border-amber-200 bg-white p-2">
+                <p className="text-xs text-amber-700 font-medium">End</p>
+                <p className="font-semibold text-amber-900">{format(new Date(hodSuggestedEnd), "MMM dd, yyyy")}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HOD Response UI */}
+        {hasHodChanges && !respondingToHod && (
+          <div className="flex gap-2">
+            <Button
+              onClick={handleAcceptHodChanges}
+              size="sm"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              Accept Changes
+            </Button>
+            <Button
+              onClick={() => setRespondingToHod(true)}
+              size="sm"
+              variant="outline"
+              className="flex-1"
+            >
+              Counter-Offer
+            </Button>
+          </div>
+        )}
+
+        {/* Counter-Offer Form */}
+        {hasHodChanges && respondingToHod && (
+          <div className="space-y-3 border-t pt-3">
+            <p className="text-sm font-semibold text-slate-700">Suggest Alternative Dates</p>
+            <input
+              type="date"
+              value={counterStartDate}
+              onChange={(e) => setCounterStartDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              placeholder="Start Date"
+            />
+            <input
+              type="date"
+              value={counterEndDate}
+              onChange={(e) => setCounterEndDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              placeholder="End Date"
+            />
+            <textarea
+              value={counterReason}
+              onChange={(e) => setCounterReason(e.target.value)}
+              placeholder="Reason for counter-offer (optional)"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              rows={2}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSubmitCounterOffer}
+                size="sm"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Submit Counter
+              </Button>
+              <Button
+                onClick={() => setRespondingToHod(false)}
+                size="sm"
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {canEdit && onEdit && !hasHodChanges && (
           <Button variant="outline" size="sm" onClick={onEdit} className="w-full">
             Edit Before Review
           </Button>

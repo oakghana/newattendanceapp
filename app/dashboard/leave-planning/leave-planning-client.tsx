@@ -27,6 +27,8 @@ import {
   HR_OFFICE_PENDING_STATUSES,
   HR_APPROVER_PENDING_STATUSES,
   STAFF_EDITABLE_STATUSES,
+  getWeekendsAndHolidaysInRange,
+  calculateWorkingDays,
 } from "@/lib/leave-planning"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 import { useToast } from "@/hooks/use-toast"
@@ -171,12 +173,18 @@ function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
 
 function getLeaveYearPeriodOptions(referenceDate: Date = new Date(), forwardCount = 10) {
   const active = getActiveLeaveYearPeriod(referenceDate)
-  const [startYearRaw] = active.split("/")
-  const startYear = Number(startYearRaw)
+  const [startYearRaw, endYearRaw] = active.split("/")
+  let endYear = Number(endYearRaw)
+  
+  // Ensure we never show 2025 or earlier - minimum is 2026
+  if (endYear < 2026) {
+    endYear = 2026
+  }
+  
   const options: string[] = []
   for (let i = 0; i <= forwardCount; i += 1) {
-    const y = startYear + i
-    options.push(`${y}/${y + 1}`)
+    const year = endYear + i
+    options.push(`${year}`)
   }
   return options
 }
@@ -978,8 +986,9 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  const [leaveType, setLeaveType] = useState("annual")
+  const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
+  const [partLeaveDays, setPartLeaveDays] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
@@ -992,6 +1001,8 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [typedSignature, setTypedSignature] = useState("")
   const [uploadedSigUrl, setUploadedSigUrl] = useState<string | null>(null)
   const [drawnSigUrl, setDrawnSigUrl] = useState<string | null>(null)
+  const [holidays, setHolidays] = useState<Array<{ holiday_date: string; holiday_name: string }>>([])
+  const [holidaysLoading, setHolidaysLoading] = useState(false)
 
   const defaultStaffSignature = useMemo(() => {
     const fullName = [String(profile.firstName || "").trim(), String(profile.lastName || "").trim()]
@@ -1036,7 +1047,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────────────────────────────────────────────────────────
+  // ── Computed ────���────────────────────────────────────────────────�������������──
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1142,6 +1153,21 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       setTemplateOptions([...getBuiltinHrTemplateOptions(), ...remoteTemplates])
     } catch {
       setTemplateOptions(getBuiltinHrTemplateOptions())
+    }
+  }, [])
+
+  const loadHolidays = useCallback(async () => {
+    try {
+      setHolidaysLoading(true)
+      const res = await fetch("/api/leave/holidays", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) return
+      setHolidays(Array.isArray(json.holidays) ? json.holidays : [])
+    } catch (e) {
+      console.error("[v0] Failed to load holidays:", e)
+      setHolidays([])
+    } finally {
+      setHolidaysLoading(false)
     }
   }, [])
 
@@ -1343,6 +1369,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     void loadData()
     void loadPolicy()
     void loadTemplateOptions()
+    void loadHolidays()
   }, [loadData, loadPolicy, loadTemplateOptions])
 
   useEffect(() => {
@@ -1413,7 +1440,15 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
 
   // ── Derived lists ────────────────────────────────────────────────────
-  const myRequests: any[] = useMemo(() => data ? (data.myRequests || data.requests || []) : [], [data])
+  const myRequests: any[] = useMemo(() => {
+    if (!data) return []
+    const requests = data.myRequests || data.requests || []
+    
+    // Role-based visibility filtering
+    // All roles can see: requests that are theirs or for review/approval
+    // The backend already filters based on the user, so just return the data
+    return requests
+  }, [data])
 
   const hodAssignedReviews: any[] = useMemo(() => {
     if (!data) return []
@@ -1617,8 +1652,20 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
   // ── Actions ──────────────────────────────────────────────────────────
 
   const submitPlan = async () => {
-    if (!startDate || !endDate) {
-      toast({ title: "Missing dates", description: "Please select start and end dates.", variant: "destructive" })
+    if (!leaveType) {
+      toast({ title: "Missing leave type", description: "Please select a leave type.", variant: "destructive" })
+      return
+    }
+    if (!startDate) {
+      toast({ title: "Missing date", description: "Please select a start date.", variant: "destructive" })
+      return
+    }
+    if (leaveType === "annual" && !endDate) {
+      toast({ title: "Missing end date", description: "Annual leave requires both start and end dates.", variant: "destructive" })
+      return
+    }
+    if (leaveType === "part_leave" && !partLeaveDays) {
+      toast({ title: "Missing days", description: "Please specify the number of days for part leave.", variant: "destructive" })
       return
     }
     if (!activeSig.text && !activeSig.dataUrl) {
@@ -1628,6 +1675,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     setSubmitting(true)
     setError(null)
     try {
+      const autoResumptionDate = computeReturnToWorkDate(endDate)
       const res = await fetch("/api/leave/planning", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -1635,9 +1683,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
           id: editingId,
           leave_year_period: leaveYearPeriod,
           preferred_start_date: startDate,
-          preferred_end_date: endDate,
+          preferred_end_date: leaveType === "annual" ? endDate : startDate,
           leave_type: leaveType,
           reason,
+          resumption_date: autoResumptionDate,
+          part_leave_days: leaveType === "part_leave" ? Number(partLeaveDays) : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
           user_signature_data_url: activeSig.dataUrl,
@@ -1662,7 +1712,7 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       }
       toast({
         title: editingId ? "Leave request updated" : "Leave request submitted",
-        description: `Return-to-work: ${computeReturnToWorkDate(endDate)}`,
+        description: leaveType === "annual" ? `Return-to-work: ${computeReturnToWorkDate(endDate)}` : "Request submitted for HR approval",
       })
       setStartDate(""); setEndDate(""); setReason(""); setEditingId(null)
       setLeaveYearPeriod(getDefaultSelectedLeaveYearPeriod())
@@ -1865,10 +1915,10 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
-  // ── Render ──────────────────────────────────────────────────────────
+  // ── Render ────��─────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ── Header Banner ──────────────────────────────────────────── */}
+      {/* ─��� Header Banner ──────�����───────────────────────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -1971,6 +2021,23 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                 <p className="text-xs text-slate-500">Leave Year Period: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
+                {/* October Planning Reminder Alert */}
+                <div className="border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg px-4 py-3.5">
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <AlertCircle className="h-5 w-5 text-amber-600 font-bold" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-bold text-amber-900 mb-1">
+                        Annual Leave Planning Reminder:
+                      </h4>
+                      <p className="text-sm text-amber-800 leading-relaxed">
+                        In September, all staff must submit their annual leave requests for the October cocoa season cycle. This allows HOD/Regional Managers time to review and approve all leave days by the start of October. Plan ahead to avoid operational disruptions.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
@@ -1985,11 +2052,11 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-slate-500">
-                      Current cycle auto-detected: <strong>{activeLeaveYearPeriod}</strong> (October to September).
+                      Current year: <strong>{activeLeaveYearPeriod}</strong>
                     </p>
                     {inOctoberPlanningWindow && (
-                      <p className="text-xs text-amber-700">
-                        First week of October: staff should submit annual leave for the next leave period.
+                      <p className="text-xs text-amber-700 font-medium">
+                        ⚠️ First week of October: staff should submit annual leave for the next leave period.
                       </p>
                     )}
                   </div>
@@ -2015,22 +2082,29 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 </div>
 
-                <div className={editingId ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
+                <div className={leaveType === "annual" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Start Date</Label>
                     <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10" />
                   </div>
-                  {editingId && (
+                  {leaveType === "annual" && (
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">End Date</Label>
-                      <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10" />
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                        End Date <span className="text-red-500">*</span>
+                      </Label>
+                      <Input 
+                        type="date" 
+                        value={endDate} 
+                        onChange={(e) => setEndDate(e.target.value)} 
+                        className="h-10"
+                        required
+                      />
+                      {!endDate && (
+                        <p className="text-xs text-amber-600">End date is required for annual leave</p>
+                      )}
                     </div>
                   )}
                 </div>
-
-                {!editingId && (
-                  <p className="text-xs text-slate-500">End date is hidden for new requests. HR Leave Office will review and finalize the leave range.</p>
-                )}
 
                 {sameMonthConflict && (
                   <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-700">
@@ -2041,16 +2115,84 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                   </div>
                 )}
 
-                {startDate && endDate && (
-                  <div className="flex flex-wrap gap-3">
-                    <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-green-700 font-medium">Days Requested</p>
-                      <p className="text-2xl font-bold text-green-800">{computedDays}</p>
+                {leaveType === "annual" && startDate && endDate && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-3">
+                      <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
+                        <p className="text-xs text-green-700 font-medium">Days Requested</p>
+                        <p className="text-2xl font-bold text-green-800">{computedDays}</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center">
+                        <p className="text-xs text-slate-600 font-medium">Return to Work</p>
+                        <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
+                      </div>
                     </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-slate-600 font-medium">Return to Work</p>
-                      <p className="text-base font-semibold text-slate-800">{computeReturnToWorkDate(endDate)}</p>
-                    </div>
+
+                    {/* Weekends and Holidays Breakdown */}
+                    {(() => {
+                      const holidayDates = holidays.map((h) => h.holiday_date)
+                      const holidayMap = holidays.reduce(
+                        (acc, h) => {
+                          acc[h.holiday_date] = h.holiday_name
+                          return acc
+                        },
+                        {} as Record<string, string>
+                      )
+                      const workingDaysData = calculateWorkingDays(startDate, endDate, holidayDates)
+                      const weekendHolidayList = getWeekendsAndHolidaysInRange(startDate, endDate, holidayDates, holidayMap)
+
+                      return (
+                        <div className="border border-slate-200 rounded-lg bg-slate-50 p-4 space-y-3">
+                          <h4 className="font-semibold text-sm text-slate-700">Leave Period Breakdown</h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                            <div className="bg-white rounded px-2 py-2 border border-slate-200">
+                              <p className="text-xs text-slate-600">Total Days</p>
+                              <p className="text-lg font-bold text-slate-800">{workingDaysData.totalDays}</p>
+                            </div>
+                            <div className="bg-blue-50 rounded px-2 py-2 border border-blue-200">
+                              <p className="text-xs text-blue-600">Weekends</p>
+                              <p className="text-lg font-bold text-blue-800">{workingDaysData.weekendDays}</p>
+                            </div>
+                            <div className="bg-red-50 rounded px-2 py-2 border border-red-200">
+                              <p className="text-xs text-red-600">Holidays</p>
+                              <p className="text-lg font-bold text-red-800">{workingDaysData.holidayDays}</p>
+                            </div>
+                            <div className="bg-green-50 rounded px-2 py-2 border border-green-200">
+                              <p className="text-xs text-green-600">Working Days</p>
+                              <p className="text-lg font-bold text-green-800">{workingDaysData.workingDays}</p>
+                            </div>
+                          </div>
+
+                          {weekendHolidayList.length > 0 && (
+                            <div className="text-xs space-y-1 mt-2 pt-2 border-t border-slate-200">
+                              <p className="font-medium text-slate-700">Non-working days in this period:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {weekendHolidayList.map((item, idx) => {
+                                  const dateStr = item.date.toLocaleDateString("en-US", { 
+                                    month: "short", 
+                                    day: "numeric",
+                                    weekday: "short"
+                                  })
+                                  const label = item.type === "holiday" ? `🎉 ${item.name} (${dateStr})` : `📅 ${dateStr}`
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className={`inline-block px-2 py-1 rounded text-xs ${
+                                        item.type === "holiday"
+                                          ? "bg-red-100 text-red-700"
+                                          : "bg-blue-100 text-blue-700"
+                                      }`}
+                                    >
+                                      {label}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
 
@@ -2754,6 +2896,75 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
                                   onChange={(e) => setOfficeAdjEnd((p) => ({ ...p, [req.id]: e.target.value }))} className="h-9" />
                               </div>
                             </div>
+
+                            {/* Instant Weekend and Holiday Detection */}
+                            {adjStart && adjEnd && (() => {
+                              const holidayDates = holidays.map((h) => h.holiday_date)
+                              const holidayMap = holidays.reduce(
+                                (acc, h) => {
+                                  acc[h.holiday_date] = h.holiday_name
+                                  return acc
+                                },
+                                {} as Record<string, string>
+                              )
+                              const workingDaysData = calculateWorkingDays(adjStart, adjEnd, holidayDates)
+                              const weekendHolidayList = getWeekendsAndHolidaysInRange(adjStart, adjEnd, holidayDates, holidayMap)
+
+                              return (
+                                <div className="border border-slate-200 rounded-lg bg-slate-50 p-3 space-y-2">
+                                  <p className="text-xs font-semibold text-slate-700">Adjusted Period Breakdown</p>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                                    <div className="bg-white rounded px-2 py-1.5 border border-slate-200">
+                                      <p className="text-slate-600 font-medium">Total</p>
+                                      <p className="text-base font-bold text-slate-800">{workingDaysData.totalDays}</p>
+                                    </div>
+                                    <div className="bg-blue-50 rounded px-2 py-1.5 border border-blue-200">
+                                      <p className="text-blue-600 font-medium">Weekends</p>
+                                      <p className="text-base font-bold text-blue-800">{workingDaysData.weekendDays}</p>
+                                    </div>
+                                    <div className="bg-red-50 rounded px-2 py-1.5 border border-red-200">
+                                      <p className="text-red-600 font-medium">Holidays</p>
+                                      <p className="text-base font-bold text-red-800">{workingDaysData.holidayDays}</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded px-2 py-1.5 border border-green-200">
+                                      <p className="text-green-600 font-medium">Working Days</p>
+                                      <p className="text-base font-bold text-green-800">{workingDaysData.workingDays}</p>
+                                    </div>
+                                  </div>
+                                  {weekendHolidayList.length > 0 && (
+                                    <div className="text-xs space-y-1 pt-2 border-t border-slate-200">
+                                      <p className="font-medium text-slate-700">Non-working days:</p>
+                                      <div className="flex flex-wrap gap-1">
+                                        {weekendHolidayList.slice(0, 8).map((item, idx) => {
+                                          const dateStr = item.date.toLocaleDateString("en-US", { 
+                                            month: "short", 
+                                            day: "numeric"
+                                          })
+                                          const label = item.type === "holiday" ? `${item.name} (${dateStr})` : dateStr
+                                          return (
+                                            <span
+                                              key={idx}
+                                              className={`inline-block px-1.5 py-0.5 rounded text-xs whitespace-nowrap ${
+                                                item.type === "holiday"
+                                                  ? "bg-red-100 text-red-700"
+                                                  : "bg-blue-100 text-blue-700"
+                                              }`}
+                                            >
+                                              {label}
+                                            </span>
+                                          )
+                                        })}
+                                        {weekendHolidayList.length > 8 && (
+                                          <span className="inline-block px-1.5 py-0.5 text-xs text-slate-600">
+                                            +{weekendHolidayList.length - 8} more
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
 
                             {/* Day adjustment breakdown */}
                             <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">

@@ -18,6 +18,7 @@ import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
 import { Eye, EyeOff } from "lucide-react"
 import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
+import { isHrLeaveOfficeRole, isHrApproverRole, isManagerRole } from "@/lib/leave-planning"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
 
 const DEVICE_SHARING_WARNING_STORAGE_KEY = "qcc_pending_device_sharing_warning"
@@ -87,7 +88,7 @@ export default function LoginPage() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("is_active, first_name, last_name, password_changed_at")
+        .select("is_active, first_name, last_name, password_changed_at, role")
         .eq("id", userId)
         .single()
 
@@ -104,6 +105,7 @@ export default function LoginPage() {
         approved: data.is_active,
         name: `${data.first_name} ${data.last_name}`,
         passwordChangedAt: data.password_changed_at || null,
+        role: data.role,
         error: data.is_active ? null : "Your account is pending admin approval. Please wait for activation.",
       }
       } catch (error) {
@@ -310,19 +312,25 @@ export default function LoginPage() {
 
         // Fire-and-forget login log — don't await so it doesn't block redirect
         logLoginActivity(data.user.id, "login_success", true, "password")
+
+        // Clear attendance and geolocation cache
+        clearAttendanceCache()
+        clearGeolocationCache()
+
+        showSuccess("Login successful! Redirecting...", "Welcome Back")
+
+        // Determine dashboard based on user role
+        let dashboardUrl = "/dashboard/attendance" // Default for staff
+        if (isHrLeaveOfficeRole(approvalCheck.role) || isHrApproverRole(approvalCheck.role) || isManagerRole(approvalCheck.role)) {
+          dashboardUrl = "/dashboard/leave-management"
+        }
+
+        // Wait longer for Supabase to properly set and persist cookies
+        setTimeout(() => {
+          // Force a full page reload to ensure cookies are read on the new page
+          window.location.href = dashboardUrl
+        }, 800)
       }
-
-      // Clear attendance and geolocation cache
-      clearAttendanceCache()
-      clearGeolocationCache()
-
-      showSuccess("Login successful! Redirecting...", "Welcome Back")
-
-      // Wait longer for Supabase to properly set and persist cookies
-      setTimeout(() => {
-        // Force a full page reload to ensure cookies are read on the new page
-        window.location.href = "/dashboard/attendance"
-      }, 800)
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
       if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
@@ -548,15 +556,21 @@ export default function LoginPage() {
         }
 
         await logLoginActivity(data.user.id, "otp_login_success", true, "otp")
+
+        console.log("[v0] OTP verification successful")
+        showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
+
+        // Determine dashboard based on user role
+        let dashboardUrl = "/dashboard/attendance" // Default for staff
+        if (isHrLeaveOfficeRole(approvalCheck.role) || isHrApproverRole(approvalCheck.role) || isManagerRole(approvalCheck.role)) {
+          dashboardUrl = "/dashboard/leave-management"
+        }
+
+        // Wait longer for Supabase to properly set and persist cookies
+        setTimeout(() => {
+          window.location.href = dashboardUrl
+        }, 800)
       }
-
-      console.log("[v0] OTP verification successful")
-      showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
-
-      // Wait longer for Supabase to properly set and persist cookies
-      setTimeout(() => {
-        window.location.href = "/dashboard/attendance"
-      }, 800)
     } catch (error: unknown) {
       showFieldError("OTP Code", error instanceof Error ? error.message : "Invalid OTP code")
     } finally {
@@ -582,7 +596,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2 slide-up">
-              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">QCC HR APPS👋</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">LEAVE/ATTENDANCE/LOAN APP 👋</CardTitle>
               <CardDescription className="text-xs sm:text-sm text-muted-foreground">
                 Akwaaba! Sign in with your Staff Number, Email or use OTP to get started.
               </CardDescription>

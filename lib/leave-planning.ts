@@ -163,3 +163,90 @@ export function getWorkflowStage(status: string): number {
   if (status === "hr_approved" || status === "hr_rejected") return 4
   return 1
 }
+
+export interface DateWithType {
+  date: Date
+  type: "weekend" | "holiday"
+  name?: string
+}
+
+/**
+ * Detects all weekends and holidays within a date range
+ * @param startDate - Start of the leave period (YYYY-MM-DD)
+ * @param endDate - End of the leave period (YYYY-MM-DD)
+ * @param holidays - Array of holiday dates in YYYY-MM-DD format
+ * @param holidayNames - Map of holiday dates to their names
+ * @returns Array of dates with their type (weekend or holiday)
+ */
+export function getWeekendsAndHolidaysInRange(
+  startDate: string,
+  endDate: string,
+  holidays: string[] = [],
+  holidayNames: Record<string, string> = {}
+): DateWithType[] {
+  const result: DateWithType[] = []
+
+  if (!startDate || !endDate) return result
+
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return result
+  }
+
+  // Normalize holiday dates for quick lookup
+  const holidaySet = new Set(holidays.map((h) => h.split("T")[0]))
+
+  const current = new Date(start)
+  while (current <= end) {
+    const dateStr = current.toISOString().split("T")[0]
+    const dayOfWeek = current.getDay()
+
+    // Check if weekend (Saturday = 6, Sunday = 0)
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      result.push({
+        date: new Date(current),
+        type: "weekend",
+      })
+    } else if (holidaySet.has(dateStr)) {
+      // Check if holiday
+      result.push({
+        date: new Date(current),
+        type: "holiday",
+        name: holidayNames[dateStr] || "Holiday",
+      })
+    }
+
+    current.setDate(current.getDate() + 1)
+  }
+
+  return result
+}
+
+/**
+ * Calculates working days (excluding weekends and holidays)
+ * @param startDate - Start of the leave period (YYYY-MM-DD)
+ * @param endDate - End of the leave period (YYYY-MM-DD)
+ * @param holidays - Array of holiday dates in YYYY-MM-DD format
+ * @returns Object with total days, weekends, holidays, and working days
+ */
+export function calculateWorkingDays(
+  startDate: string,
+  endDate: string,
+  holidays: string[] = []
+): { totalDays: number; weekendDays: number; holidayDays: number; workingDays: number } {
+  const totalDays = calculateRequestedDays(startDate, endDate)
+  const weekendHolidayItems = getWeekendsAndHolidaysInRange(startDate, endDate, holidays)
+
+  const weekendDays = weekendHolidayItems.filter((item) => item.type === "weekend").length
+  const holidayDays = weekendHolidayItems.filter((item) => item.type === "holiday").length
+  const workingDays = Math.max(0, totalDays - weekendDays - holidayDays)
+
+  return {
+    totalDays,
+    weekendDays,
+    holidayDays,
+    workingDays,
+  }
+}

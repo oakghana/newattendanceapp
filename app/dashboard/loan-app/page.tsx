@@ -371,9 +371,24 @@ function getUserLoanTier(position?: string | null, role?: string | null): "junio
   const normalizedPosition = String(position || "").toLowerCase()
   const normalizedRole = String(role || "").toLowerCase()
 
-  if (/manager|director|head|regional/.test(normalizedPosition) || /manager|director/.test(normalizedRole)) return "manager"
-  if (/senior|\bsr\b|sr\./.test(normalizedPosition) || /senior|sr\b|sr\./.test(normalizedRole)) return "senior"
-  if (/junior|\bjr\b/.test(normalizedPosition) || /junior|\bjr\b/.test(normalizedRole)) return "junior"
+  // Manager tier: manager, director, head, regional, admin
+  if (/manager|director|head|regional|admin|executive/.test(normalizedPosition) || 
+      /manager|director|admin/.test(normalizedRole)) {
+    return "manager"
+  }
+  
+  // Senior tier: officer, senior, sr., sr, supervisor, superintendent, principal
+  if (/officer|senior|\bsr\b|sr\.|supervisor|superintendent|principal|chief/.test(normalizedPosition) || 
+      /senior|sr\b|sr\./.test(normalizedRole)) {
+    return "senior"
+  }
+  
+  // Junior tier: junior, jr., clerk, assistant, artisan, apprentice, trainee
+  if (/junior|\bjr\b|clerk|assistant|artisan|apprentice|trainee|technician/.test(normalizedPosition) || 
+      /junior|\bjr\b/.test(normalizedRole)) {
+    return "junior"
+  }
+  
   return null
 }
 
@@ -391,7 +406,12 @@ function loanTypeGroupKey(loanType: LoanType) {
 
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
-  if (!userTier || !loanTier) return true
+  
+  // If no user tier or no loan tier restriction, include it
+  if (!userTier || !loanTier) {
+    return true
+  }
+  
   return loanTier === userTier
 }
 
@@ -1401,10 +1421,7 @@ export default function LoanAppPage() {
       setData(result)
       setWarning(result.degraded ? result.warning || "Loan module is in degraded mode." : null)
 
-      const allowedLoanTypes = result.loanTypes || []
-      if (allowedLoanTypes.length > 0 && !loanTypeKey) {
-        setLoanTypeKey(allowedLoanTypes[0].loan_key)
-      }
+      // Don't auto-set loan type - let user select with placeholder hint
     } catch (e: any) {
       toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
     } finally {
@@ -1435,7 +1452,7 @@ export default function LoanAppPage() {
     setSupportingDocumentUrl(null)
     setSupportingDocumentName("")
     setSalaryAdvanceMonths(null)
-    if (filteredLoanTypes.length) setLoanTypeKey(filteredLoanTypes[0].loan_key)
+    setLoanTypeKey("") // Clear to show placeholder hint
   }
 
   useEffect(() => {
@@ -1446,13 +1463,7 @@ export default function LoanAppPage() {
   }, [selectedLoanType, lookupData?.loanTypes])
 
   useEffect(() => {
-    if (!loanTypeKey && filteredLoanTypes.length > 0) {
-      setLoanTypeKey(filteredLoanTypes[0].loan_key)
-      return
-    }
-    if (loanTypeKey && filteredLoanTypes.length > 0 && !filteredLoanTypes.find((l) => l.loan_key === loanTypeKey)) {
-      setLoanTypeKey(filteredLoanTypes[0].loan_key)
-    }
+    // Don't auto-select loan type - let user choose with placeholder hint
   }, [loanTypeKey, filteredLoanTypes])
 
   useEffect(() => {

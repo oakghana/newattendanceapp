@@ -40,7 +40,21 @@ export function computeLeaveDays(startDate: string, endDate: string): number {
   const start = new Date(startDate)
   const end = new Date(endDate)
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0
-  return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  
+  // Calculate working days (exclude weekends - Saturday=6, Sunday=0)
+  let workingDays = 0
+  const current = new Date(start)
+  
+  while (current <= end) {
+    const dayOfWeek = current.getDay()
+    // Only count Monday (1) to Friday (5)
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      workingDays++
+    }
+    current.setDate(current.getDate() + 1)
+  }
+  
+  return workingDays
 }
 
 export function computeReturnToWorkDate(endDate: string): string {
