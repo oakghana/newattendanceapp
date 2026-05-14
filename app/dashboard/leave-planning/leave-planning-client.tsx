@@ -1265,6 +1265,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     leaveTypeLabel: string
     entitlementDays: number
     sortOrder: number
+    isEnabled?: boolean
   }) => {
     setLeaveTypeSavingKey(payload.leaveTypeKey)
     try {
@@ -1277,7 +1278,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           leaveTypeKey: payload.leaveTypeKey,
           leaveTypeLabel: payload.leaveTypeLabel,
           entitlementDays: payload.entitlementDays,
-          isEnabled: true,
+          isEnabled: payload.isEnabled ?? true,
           sortOrder: payload.sortOrder,
         }),
       })
@@ -1318,6 +1319,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       leaveTypeLabel: label,
       entitlementDays,
       sortOrder: index >= 0 ? index + 1 : 100,
+      isEnabled: draft.isActive !== false,
     })
   }, [leaveTypeDrafts, leaveTypes, saveLeaveTypePolicy, toast])
 
@@ -1355,6 +1357,85 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeLabel("")
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
+
+  // ─── Holiday CRUD Functions ─────────────────────────────────────────
+  const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
+  const [newHolidayDate, setNewHolidayDate] = useState("")
+  const [newHolidayName, setNewHolidayName] = useState("")
+  const [holidaySavingId, setHolidaySavingId] = useState<string | null>(null)
+  const [holidayError, setHolidayError] = useState<string | null>(null)
+  const [holidaySuccess, setHolidaySuccess] = useState<string | null>(null)
+
+  const saveHoliday = useCallback(async (oldDate: string | null, newDate: string, newName: string) => {
+    if (!newDate || !newName.trim()) {
+      setHolidayError("Please provide both date and holiday name")
+      setTimeout(() => setHolidayError(null), 3000)
+      return
+    }
+
+    const holidayId = oldDate || newDate
+    setHolidaySavingId(holidayId)
+    try {
+      const res = await fetch("/api/leave/holidays", {
+        method: oldDate ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(oldDate ? { old_date: oldDate, holiday_date: newDate, holiday_name: newName } : { holiday_date: newDate, holiday_name: newName }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error || "Failed to save holiday")
+      }
+
+      setHolidaySuccess(`Holiday ${oldDate ? "updated" : "added"} successfully`)
+      setTimeout(() => setHolidaySuccess(null), 3000)
+      
+      // Update holidays list
+      if (oldDate) {
+        setHolidays((prev) => prev.filter((h) => h.holiday_date !== oldDate).concat({ holiday_date: newDate, holiday_name: newName }).sort((a, b) => a.holiday_date.localeCompare(b.holiday_date)))
+      } else {
+        setHolidays((prev) => [...prev, { holiday_date: newDate, holiday_name: newName }].sort((a, b) => a.holiday_date.localeCompare(b.holiday_date)))
+      }
+      
+      setHolidayDrafts((prev) => {
+        const updated = { ...prev }
+        delete updated[holidayId]
+        return updated
+      })
+      
+      if (!oldDate) {
+        setNewHolidayDate("")
+        setNewHolidayName("")
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save holiday"
+      setHolidayError(msg)
+      setTimeout(() => setHolidayError(null), 3000)
+    } finally {
+      setHolidaySavingId(null)
+    }
+  }, [])
+
+  const deleteHoliday = useCallback(async (date: string) => {
+    setHolidaySavingId(date)
+    try {
+      const res = await fetch(`/api/leave/holidays?date=${date}`, { method: "DELETE" })
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error || "Failed to delete holiday")
+      }
+
+      setHolidaySuccess("Holiday deleted successfully")
+      setTimeout(() => setHolidaySuccess(null), 3000)
+      setHolidays((prev) => prev.filter((h) => h.holiday_date !== date))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete holiday"
+      setHolidayError(msg)
+      setTimeout(() => setHolidayError(null), 3000)
+    } finally {
+      setHolidaySavingId(null)
+    }
+  }, [])
 
   useEffect(() => {
     // Staff requests should default to typed signature using their profile name.
@@ -2555,6 +2636,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 {canManageLeaveTypePolicy && (
                   <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Leave Policy</TabsTrigger>
                 )}
+                {canManageLeaveTypePolicy && (
+                  <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Holidays</TabsTrigger>
+                )}
                 {canViewLeaveAnalytics && (
                   <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
                 )}
@@ -2728,7 +2812,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           return (
                             <div
                               key={leaveTypeOption.leaveTypeKey}
-                              className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-[1fr_140px_auto]"
+                              className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-[1fr_140px_80px_auto]"
                             >
                               <Input
                                 value={draft.leaveTypeLabel}
@@ -2754,6 +2838,17 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 }))}
                                 placeholder="Days"
                               />
+                              <div className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2">
+                                <div className="relative w-10 h-6 bg-slate-300 rounded-full cursor-pointer transition-colors" style={{backgroundColor: draft.isActive !== false ? '#10b981' : '#d1d5db'}} onClick={() => setLeaveTypeDrafts((prev) => ({
+                                  ...prev,
+                                  [leaveTypeOption.leaveTypeKey]: {
+                                    ...(prev[leaveTypeOption.leaveTypeKey] || draft),
+                                    isActive: draft.isActive === false ? true : false,
+                                  },
+                                }))}>
+                                  <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all" style={{left: draft.isActive !== false ? '18px' : '2px'}} />
+                                </div>
+                              </div>
                               <Button
                                 size="sm"
                                 className="bg-emerald-700 hover:bg-emerald-800"
@@ -2762,8 +2857,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               >
                                 {isSaving ? "Saving..." : "Save"}
                               </Button>
-                              <p className="text-[11px] text-slate-400 md:col-span-3">
-                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1}
+                              <p className="text-[11px] text-slate-400 md:col-span-4">
+                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1} · Status: {draft.isActive !== false ? 'Active' : 'Inactive'}
                               </p>
                             </div>
                           )
@@ -2803,6 +2898,80 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     </CardContent>
                   </Card>
                 </TabsContent>
+              )}
+
+              {canManageLeaveTypePolicy && (
+              <TabsContent value="holidays" className="space-y-6">
+                <Card className="border border-blue-200 bg-white shadow-sm">
+                  <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b border-blue-200">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                        <CalendarDays className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <CardTitle>Public Holidays Management</CardTitle>
+                        <p className="text-sm text-slate-500 mt-1">Add, edit, or delete holidays that are deducted from leave calculations.</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    {holidayError && <Alert variant="destructive"><AlertDescription>{holidayError}</AlertDescription></Alert>}
+                    {holidaySuccess && <Alert><AlertDescription className="text-green-700">{holidaySuccess}</AlertDescription></Alert>}
+
+                    <div className="rounded-xl border border-dashed border-blue-300 bg-blue-50/40 p-4 space-y-3">
+                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Add New Holiday</p>
+                      <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                        <Input type="date" value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} placeholder="Holiday date" />
+                        <Input value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} placeholder="Holiday name (e.g. Christmas)" />
+                        <Button size="sm" className="bg-blue-700 hover:bg-blue-800" disabled={Boolean(holidaySavingId)} onClick={() => void saveHoliday(null, newHolidayDate, newHolidayName)}>
+                          {holidaySavingId === newHolidayDate ? "Adding..." : "Add"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-slate-700">Current Holidays ({holidays.length})</p>
+                      {holidays.length === 0 ? (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">No holidays configured yet</div>
+                      ) : (
+                        <div className="grid gap-2 max-h-96 overflow-y-auto">
+                          {holidays.map((holiday) => {
+                            const draft = holidayDrafts[holiday.holiday_date]
+                            const isEditing = !!draft
+                            return (
+                              <div key={holiday.holiday_date} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-[1fr_1fr_80px_auto_auto]">
+                                {isEditing ? (
+                                  <>
+                                    <Input type="date" value={draft.date} onChange={(e) => setHolidayDrafts((prev) => ({ ...prev, [holiday.holiday_date]: { ...draft, date: e.target.value } }))} />
+                                    <Input value={draft.name} onChange={(e) => setHolidayDrafts((prev) => ({ ...prev, [holiday.holiday_date]: { ...draft, name: e.target.value } }))} />
+                                    <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={Boolean(holidaySavingId)} onClick={() => void saveHoliday(holiday.holiday_date, draft.date, draft.name)}>
+                                      Save
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => setHolidayDrafts((prev) => { const updated = { ...prev }; delete updated[holiday.holiday_date]; return updated })}>
+                                      Cancel
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="text-sm font-medium text-slate-900">{holiday.holiday_name}</div>
+                                    <div className="text-xs text-slate-500">{holiday.holiday_date}</div>
+                                    <Button size="sm" variant="outline" disabled={Boolean(holidaySavingId)} onClick={() => setHolidayDrafts((prev) => ({ ...prev, [holiday.holiday_date]: { date: holiday.holiday_date, name: holiday.holiday_name } }))}>
+                                      Edit
+                                    </Button>
+                                    <Button size="sm" variant="destructive" disabled={Boolean(holidaySavingId)} onClick={() => void deleteHoliday(holiday.holiday_date)}>
+                                      {holidaySavingId === holiday.holiday_date ? "..." : "Delete"}
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
               )}
 
               <TabsContent value="operations">
