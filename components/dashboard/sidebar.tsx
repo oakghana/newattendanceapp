@@ -105,13 +105,6 @@ const navigationItems = [
     category: "admin",
   },
   {
-    title: "HR Leave Office",
-    href: "/dashboard/hr-leave-admin",
-    icon: Calendar,
-    roles: ["admin", "hr_leave_office"],
-    category: "admin",
-  },
-  {
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,

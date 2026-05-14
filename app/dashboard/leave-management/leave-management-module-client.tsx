@@ -1,12 +1,13 @@
 "use client"
 
-import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp } from "lucide-react"
+import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp, Gift } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
+import { OutstandingLeavePanel } from "./outstanding-leave-panel"
 import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
@@ -67,6 +68,13 @@ export function LeaveManagementModuleClient({
             <span className="hidden sm:inline">Leave & HR Leave</span>
             <span className="sm:hidden">Planning</span>
           </TabsTrigger>
+          {isHrLeaveOfficeRole(userRole) && (
+            <TabsTrigger value="outstanding-leave" className="gap-1 sm:gap-2 rounded-2xl border border-green-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-green-800 hover:bg-green-50 data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white min-w-fit">
+              <Gift className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Outstanding Leave</span>
+              <span className="sm:hidden">Outstanding</span>
+            </TabsTrigger>
+          )}
           {showAnalytics && (
             <TabsTrigger value="hr-analytics" className="gap-1 sm:gap-2 rounded-2xl border border-purple-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-purple-800 hover:bg-purple-50 data-[state=active]:border-purple-600 data-[state=active]:bg-purple-600 data-[state=active]:text-white min-w-fit">
               <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" /> 
@@ -105,6 +113,12 @@ export function LeaveManagementModuleClient({
             }}
           />
         </TabsContent>
+
+        {isHrLeaveOfficeRole(userRole) && (
+          <TabsContent value="outstanding-leave" className="space-y-4 sm:space-y-6 w-full">
+            <OutstandingLeavePanel />
+          </TabsContent>
+        )}
 
         {showAnalytics && (
           <TabsContent value="hr-analytics" className="space-y-4 sm:space-y-6 w-full">
