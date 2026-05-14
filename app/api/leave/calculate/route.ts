@@ -9,24 +9,23 @@ import {
   validateLeaveDates,
   getEntitlementDays,
 } from '@/lib/leave-calculation-service';
+import { createAdminClient } from '@/lib/supabase/server';
 import { format } from 'date-fns';
 
 // GET public holidays from database
 async function getPublicHolidays(leaveYearPeriod: string): Promise<Date[]> {
   try {
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-      process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    );
-
-    const { data, error } = await supabase
+    const admin = await createAdminClient();
+    const { data, error } = await admin
       .from('ghana_public_holidays')
       .select('holiday_date')
       .gte('holiday_date', `${leaveYearPeriod}-01-01`)
       .lte('holiday_date', `${leaveYearPeriod}-12-31`);
 
-    if (error) throw error;
+    if (error) {
+      console.error('[v0] Supabase error fetching holidays:', error);
+      return [];
+    }
 
     return (data || []).map((h: any) => new Date(h.holiday_date));
   } catch (error) {
