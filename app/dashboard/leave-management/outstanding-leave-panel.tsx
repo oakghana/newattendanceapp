@@ -1,28 +1,10 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Gift, Users, Calendar, RefreshCw, Search, Plus, X } from "lucide-react"
+import { Gift, Users, Calendar, RefreshCw, Search } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog"
-
-interface StaffOption {
-  id: string
-  employee_id: string
-  first_name: string
-  last_name: string
-  department_name: string
-}
 
 interface OutstandingLeave {
   id: string
@@ -48,106 +30,24 @@ export function OutstandingLeavePanel() {
   const [yearFilter, setYearFilter] = useState("2025/2026")
   const [loading, setLoading] = useState(false)
 
-  // Add/Edit modal state
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [staffList, setStaffList] = useState<StaffOption[]>([])
-  const [staffSearch, setStaffSearch] = useState("")
-  const [selectedStaff, setSelectedStaff] = useState<StaffOption | null>(null)
-  const [formData, setFormData] = useState({
-    leave_year_period: "2025/2026",
-    opening_balance: 0,
-    entitlement_days: 21,
-    used_this_period: 0,
-    carryover_to_next_year: 0,
-    max_carryover_allowed: 5,
-    notes: "",
-  })
-  const [saving, setSaving] = useState(false)
-
-  // Load staff list for the dropdown
+  // Load outstanding leave data
   useEffect(() => {
-    const loadStaff = async () => {
+    const loadData = async () => {
+      setLoading(true)
       try {
-        const res = await fetch("/api/staff/list")
+        const res = await fetch("/api/leave/hr-admin/outstanding")
         if (res.ok) {
           const data = await res.json()
-          setStaffList(data.staff || [])
+          setOutstandingLeave(data.data || [])
         }
       } catch (err) {
-        console.error("[v0] Failed to load staff list:", err)
+        console.error("[v0] Failed to load outstanding leave:", err)
+      } finally {
+        setLoading(false)
       }
     }
-    loadStaff()
-  }, [])
-
-  // Load outstanding leave data
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/leave/hr-admin/outstanding")
-      if (res.ok) {
-        const data = await res.json()
-        setOutstandingLeave(data.data || [])
-      }
-    } catch (err) {
-      console.error("[v0] Failed to load outstanding leave:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
     loadData()
   }, [])
-
-  // Filter staff list by search
-  const filteredStaffList = useMemo(() => {
-    if (!staffSearch) return staffList.slice(0, 20)
-    const term = staffSearch.toLowerCase()
-    return staffList
-      .filter(
-        (s) =>
-          s.first_name?.toLowerCase().includes(term) ||
-          s.last_name?.toLowerCase().includes(term) ||
-          s.employee_id?.toLowerCase().includes(term)
-      )
-      .slice(0, 20)
-  }, [staffList, staffSearch])
-
-  // Save outstanding leave record
-  const handleSave = async () => {
-    if (!selectedStaff) return
-    setSaving(true)
-    try {
-      const res = await fetch("/api/leave/hr-admin/outstanding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: selectedStaff.id,
-          ...formData,
-        }),
-      })
-      if (res.ok) {
-        setShowAddModal(false)
-        setSelectedStaff(null)
-        setStaffSearch("")
-        setFormData({
-          leave_year_period: "2025/2026",
-          opening_balance: 0,
-          entitlement_days: 21,
-          used_this_period: 0,
-          carryover_to_next_year: 0,
-          max_carryover_allowed: 5,
-          notes: "",
-        })
-        loadData() // Refresh the list
-      }
-    } catch (err) {
-      console.error("[v0] Failed to save outstanding leave:", err)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   // Filter and paginate
   const filtered = useMemo(() => {
@@ -238,28 +138,18 @@ export function OutstandingLeavePanel() {
               </CardTitle>
               <CardDescription>Track unused Annual Leave and carryover balances</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => setShowAddModal(true)}
-                className="bg-green-600 hover:bg-green-700 text-white"
-                size="sm"
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Add Record
-              </Button>
-              <select
-                value={yearFilter}
-                onChange={(e) => {
-                  setYearFilter(e.target.value)
-                  setPage(1)
-                }}
-                className="px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white text-sm"
-              >
-                <option value="2024/2025">2024/2025</option>
-                <option value="2025/2026">2025/2026</option>
-                <option value="2026/2027">2026/2027</option>
-              </select>
-            </div>
+            <select
+              value={yearFilter}
+              onChange={(e) => {
+                setYearFilter(e.target.value)
+                setPage(1)
+              }}
+              className="px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white text-sm"
+            >
+              <option value="2024/2025">2024/2025</option>
+              <option value="2025/2026">2025/2026</option>
+              <option value="2026/2027">2026/2027</option>
+            </select>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -385,143 +275,6 @@ export function OutstandingLeavePanel() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Add Outstanding Leave Dialog */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Gift className="w-5 h-5 text-green-400" />
-              Add Outstanding Leave Record
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Record unused leave balance for a staff member. This data will be visible in HR review decisions.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Staff Selection */}
-            <div className="space-y-2">
-              <Label className="text-slate-300">Select Staff Member</Label>
-              {selectedStaff ? (
-                <div className="flex items-center justify-between bg-slate-700 rounded-lg p-3">
-                  <div>
-                    <p className="font-medium">{selectedStaff.first_name} {selectedStaff.last_name}</p>
-                    <p className="text-xs text-slate-400">{selectedStaff.employee_id} - {selectedStaff.department_name}</p>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedStaff(null)}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Search by name or employee ID..."
-                    value={staffSearch}
-                    onChange={(e) => setStaffSearch(e.target.value)}
-                    className="bg-slate-700 border-slate-600"
-                  />
-                  {staffSearch && filteredStaffList.length > 0 && (
-                    <div className="bg-slate-700 rounded-lg border border-slate-600 max-h-40 overflow-y-auto">
-                      {filteredStaffList.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => {
-                            setSelectedStaff(s)
-                            setStaffSearch("")
-                          }}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-600 border-b border-slate-600 last:border-b-0"
-                        >
-                          <p className="font-medium text-sm">{s.first_name} {s.last_name}</p>
-                          <p className="text-xs text-slate-400">{s.employee_id}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Leave Year Period */}
-            <div className="space-y-2">
-              <Label className="text-slate-300">Leave Year Period</Label>
-              <select
-                value={formData.leave_year_period}
-                onChange={(e) => setFormData((f) => ({ ...f, leave_year_period: e.target.value }))}
-                className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white"
-              >
-                <option value="2024/2025">2024/2025</option>
-                <option value="2025/2026">2025/2026</option>
-                <option value="2026/2027">2026/2027</option>
-              </select>
-            </div>
-
-            {/* Numeric fields in a grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-slate-300 text-xs">Entitlement Days</Label>
-                <Input
-                  type="number"
-                  value={formData.entitlement_days}
-                  onChange={(e) => setFormData((f) => ({ ...f, entitlement_days: Number(e.target.value) }))}
-                  className="bg-slate-700 border-slate-600"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-300 text-xs">Opening Balance</Label>
-                <Input
-                  type="number"
-                  value={formData.opening_balance}
-                  onChange={(e) => setFormData((f) => ({ ...f, opening_balance: Number(e.target.value) }))}
-                  className="bg-slate-700 border-slate-600"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-300 text-xs">Used This Period</Label>
-                <Input
-                  type="number"
-                  value={formData.used_this_period}
-                  onChange={(e) => setFormData((f) => ({ ...f, used_this_period: Number(e.target.value) }))}
-                  className="bg-slate-700 border-slate-600"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-300 text-xs">Carryover Days</Label>
-                <Input
-                  type="number"
-                  value={formData.carryover_to_next_year}
-                  onChange={(e) => setFormData((f) => ({ ...f, carryover_to_next_year: Number(e.target.value) }))}
-                  className="bg-slate-700 border-slate-600"
-                />
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label className="text-slate-300">Notes (Optional)</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Additional notes about this balance record..."
-                className="bg-slate-700 border-slate-600 min-h-[60px]"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddModal(false)} className="border-slate-600">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={!selectedStaff || saving}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              {saving ? "Saving..." : "Save Record"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
