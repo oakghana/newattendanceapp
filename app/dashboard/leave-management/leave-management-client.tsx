@@ -119,7 +119,6 @@ export function LeaveManagementClient({
     const editableStatuses = new Set([
       "pending",
       "pending_manager_review",
-      "pending_hod_review",
       "manager_changes_requested",
       "manager_rejected",
       "hod_changes_requested",

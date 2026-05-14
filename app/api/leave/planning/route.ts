@@ -358,6 +358,42 @@ async function findDuplicateLeaveRequest(
   }
 }
 
+async function findSameYearSameTypeRequest(
+  admin: any,
+  userId: string,
+  leaveTypeKey: string,
+  leaveYearPeriod: string,
+  excludeRequestId?: string,
+) {
+  // Fetch all active requests of this leave type for this user in the same fiscal year
+  let query = admin
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, preferred_start_date, preferred_end_date, status, leave_year_period, submitted_at")
+    .eq("user_id", userId)
+    .eq("is_archived", false)
+    .eq("leave_type_key", leaveTypeKey)
+    .eq("leave_year_period", leaveYearPeriod)
+    .in("status", [...DUPLICATE_BLOCKING_STATUSES])
+
+  if (excludeRequestId) {
+    query = query.neq("id", excludeRequestId)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  if (!Array.isArray(data) || data.length === 0) return null
+
+  // Return the first existing request (staff cannot have same leave type twice in same fiscal year)
+  return {
+    id: data[0].id,
+    leave_type_key: data[0].leave_type_key,
+    preferred_start_date: data[0].preferred_start_date,
+    preferred_end_date: data[0].preferred_end_date,
+    status: data[0].status,
+  }
+}
+
 async function findSameMonthSameTypeRequest(
   admin: any,
   userId: string,
@@ -1049,6 +1085,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check for same leave type in the same fiscal year
+    const sameYearRequest = await findSameYearSameTypeRequest(
+      admin,
+      user.id,
+      leaveTypeKey,
+      selectedLeaveYearPeriod,
+    )
+    if (sameYearRequest) {
+      return NextResponse.json(
+        {
+          error: `You cannot request ${leaveTypeKey.replace(/_/g, " ")} more than once in the fiscal year ${selectedLeaveYearPeriod}. You already have an active request from ${sameYearRequest.preferred_start_date} to ${sameYearRequest.preferred_end_date} (Status: ${sameYearRequest.status}).`,
+          code: "SAME_YEAR_SAME_LEAVE_TYPE",
+          existing: sameYearRequest,
+        },
+        { status: 409 },
+      )
+    }
+
     const overlapSuggestion = await findOverlapSuggestion(
       admin,
       user.id,
@@ -1325,6 +1379,25 @@ export async function PUT(request: NextRequest) {
           error: `You already have an active ${leaveTypeKey.replace(/_/g, " ")} request for ${monthName} (${sameMonthRequestEdit.start_date} to ${sameMonthRequestEdit.end_date}). Only one request per leave type per month is allowed.`,
           code: "SAME_MONTH_LEAVE_REQUEST",
           existing: sameMonthRequestEdit,
+        },
+        { status: 409 },
+      )
+    }
+
+    // Check for same leave type in the same fiscal year (excluding current request being edited)
+    const sameYearRequestEdit = await findSameYearSameTypeRequest(
+      admin,
+      user.id,
+      leaveTypeKey,
+      selectedLeaveYearPeriod,
+      id,
+    )
+    if (sameYearRequestEdit) {
+      return NextResponse.json(
+        {
+          error: `You cannot request ${leaveTypeKey.replace(/_/g, " ")} more than once in the fiscal year ${selectedLeaveYearPeriod}. You already have an active request from ${sameYearRequestEdit.preferred_start_date} to ${sameYearRequestEdit.preferred_end_date} (Status: ${sameYearRequestEdit.status}).`,
+          code: "SAME_YEAR_SAME_LEAVE_TYPE",
+          existing: sameYearRequestEdit,
         },
         { status: 409 },
       )
