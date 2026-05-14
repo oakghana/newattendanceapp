@@ -60,9 +60,9 @@ export async function POST(request: NextRequest) {
       .from("leave_deferment_requests")
       .insert({
         leave_plan_request_id,
-        deferral_year,
+        requested_deferment_year: parseInt(deferral_year),
         reason: reason || null,
-        created_by: user_id,
+        user_id: user_id,
         created_at: new Date().toISOString(),
         status: "pending",
       })

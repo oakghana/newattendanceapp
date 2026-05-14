@@ -88,8 +88,9 @@ export async function POST(request: NextRequest) {
       .insert({
         leave_plan_request_id,
         recall_date,
-        reason: reason || null,
-        created_by: user_id,
+        recall_reason: reason || null,
+        initiated_by_user_id: user_id,
+        staff_user_id: leaveRequest.user_id,
         status: "pending",
         created_at: new Date().toISOString(),
       })
