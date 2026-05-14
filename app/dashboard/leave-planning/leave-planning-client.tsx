@@ -1188,10 +1188,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       const query = hrOfficeShowArchived ? "?includeArchived=true" : ""
       const res = await fetch(`/api/leave/planning${query}`, { cache: "no-store" })
       const json = await res.json()
+      console.log("[v0] Planning API response:", { mode: json.mode, hasOutstandingMap: !!json.outstandingLeaveMap, outstandingMap: json.outstandingLeaveMap })
       if (!res.ok) throw new Error(json.error || "Failed to load data")
       setData(json)
       setHrOfficeLastRefresh(new Date().toISOString())
     } catch (e) {
+      console.error("[v0] Load data error:", e)
       setError(e instanceof Error ? e.message : "Failed to load data")
     } finally {
       setLoading(false)
@@ -1448,7 +1450,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ─── Holiday CRUD Functions ───────��─────────────────────────────────
+  // ─── Holiday CRUD Functions ───────���─────────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1725,8 +1727,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     // Enhance requests with outstanding leave data if available
     return requests.map((r: any) => {
       // For annual leave, try to get outstanding leave from the data
-      if (String(r.leave_type_key || "").toLowerCase() === "annual" && data.outstandingLeaveMap) {
-        const outstanding = data.outstandingLeaveMap[String(r.user_id || "")]
+      if (String(r.leave_type_key || "").toLowerCase() === "annual") {
+        const outstandingMap = data.outstandingLeaveMap || {}
+        const outstanding = outstandingMap[String(r.user_id || "")]
+        console.log("[v0] Request for user", r.user_id, "- Outstanding map:", outstandingMap, "- Found:", outstanding)
         if (outstanding && outstanding > 0) {
           return { ...r, outstanding_leave_days: outstanding }
         }

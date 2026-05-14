@@ -700,15 +700,20 @@ export async function GET(request: NextRequest) {
 
       // Fetch outstanding leave balances for all staff with pending requests
       const staffIds = Array.from(new Set((requests || []).map((r: any) => r.user_id).filter(Boolean)))
-      const { data: outstandingRecords } = await admin
+      console.log("[v0] API: Fetching outstanding balances for staff IDs:", staffIds)
+      const { data: outstandingRecords, error: outstandingError } = await admin
         .from("outstanding_leave_balances")
         .select("user_id, carryover_to_next_year")
         .in("user_id", staffIds)
+      
+      console.log("[v0] API: Outstanding records fetched:", { count: outstandingRecords?.length, error: outstandingError, sample: outstandingRecords?.[0] })
       
       const outstandingLeaveMap = new Map<string, number>()
       ;(outstandingRecords || []).forEach((record: any) => {
         outstandingLeaveMap.set(String(record.user_id), Number(record.carryover_to_next_year || 0))
       })
+
+      console.log("[v0] API: Outstanding leave map:", Object.fromEntries(outstandingLeaveMap))
 
       return NextResponse.json({
         mode: "hr_office",
