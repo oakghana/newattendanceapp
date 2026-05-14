@@ -128,7 +128,9 @@ function pickBestSignature(rows: any[]): any | null {
 /** Returns the official subject heading per leave type (no "RE:" prefix). */
 function getMemoSubject(leaveTypeKey: string, leavePeriod: string, draftSubject?: string | null): string {
   if (draftSubject && draftSubject.trim()) return draftSubject.trim()
-  const yearPart = String(leavePeriod || "2026/2027").split("/")[0]
+  // Use current year (2026) for annual leave memos instead of the leave period start year
+  const currentYear = new Date().getFullYear()
+  const yearPart = String(currentYear)
   const map: Record<string, string> = {
     annual:           `ANNUAL LEAVE ADVICE FOR ${yearPart}`,
     casual:           "CASUAL LEAVE",
