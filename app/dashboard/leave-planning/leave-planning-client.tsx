@@ -1133,11 +1133,14 @@ export function LeavePlanningClient({ profile }: LeavePlanningClientProps) {
       const json = await res.json()
       if (!res.ok) return
       setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
-      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes) ? json.leaveTypes : []
+      // Filter only active leave types, excluding inactive ones
+      const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes)
+        ? json.leaveTypes.filter((t: any) => t.is_active !== false)
+        : []
       const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
       setLeaveTypes(hasPartLeave ? types : [
         ...types,
-        { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027" },
+        { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", is_active: true },
       ])
     } catch { /* silent */ }
   }, [])
