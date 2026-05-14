@@ -71,6 +71,7 @@ interface LeaveManagementClientProps {
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
   initialApprovedStaffRequests?: LeaveRequest[]
+  initialNationwideLeaveRequests?: any[]
 }
 
 interface HrMemoTemplate {
@@ -97,6 +98,7 @@ export function LeaveManagementClient({
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
+  initialNationwideLeaveRequests = [],
 }: LeaveManagementClientProps) {
     const formatDateSafe = (value?: string | null) => {
       if (!value) return "-"
@@ -130,6 +132,7 @@ export function LeaveManagementClient({
   const { toast } = useToast()
   const [staffRequests, setStaffRequests] = useState<LeaveRequest[]>(initialStaffRequests)
   const [managerNotifications] = useState<LeaveNotification[]>(initialManagerNotifications)
+  const [nationwideLeaveRequests, setNationwideLeaveRequests] = useState<any[]>(initialNationwideLeaveRequests || [])
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [, setDismissalReason] = useState("")
   const [editingRequest, setEditingRequest] = useState<LeaveRequest | null>(null)

@@ -33,6 +33,7 @@ interface LeaveManagementModuleClientProps {
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
   initialApprovedStaffRequests?: any[]
+  initialNationwideLeaveRequests?: any[]
 }
 
 export function LeaveManagementModuleClient({
@@ -48,6 +49,7 @@ export function LeaveManagementModuleClient({
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
+  initialNationwideLeaveRequests = [],
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
   const normalizedRole = normalizeRole(userRole)
@@ -93,6 +95,7 @@ export function LeaveManagementModuleClient({
             initialStaffRequests={initialStaffRequests}
             initialManagerNotifications={initialManagerNotifications}
             initialApprovedStaffRequests={initialApprovedStaffRequests}
+            initialNationwideLeaveRequests={initialNationwideLeaveRequests}
           />
         </TabsContent>
 

@@ -28,6 +28,7 @@ export default async function LeaveManagementPage() {
   let staffRequests = []
   let managerNotifications = []
   let approvedStaffRequests = [] // NEW: For HOD/RM deferment/recall operations
+  let nationwideLeaveRequests = [] // NEW: For HR Executive nationwide view
   let hasHodLinkage = false
 
   try {
@@ -250,6 +251,59 @@ export default async function LeaveManagementPage() {
     }
   }
 
+  // Fetch nationwide leave requests for HR Executives (manager_hr, director_hr)
+  if (["manager_hr", "director_hr"].includes(roleNorm)) {
+    const { data: allLeaveRequests } = await admin
+      .from("leave_plan_requests")
+      .select(`
+        id,
+        user_id,
+        preferred_start_date,
+        preferred_end_date,
+        leave_type_key,
+        reason,
+        status,
+        created_at,
+        hod_decision,
+        hod_remarks
+      `)
+      .in("status", ["pending_hod_review", "pending_hr_review", "hod_approved", "approved", "hr_approved", "deferred", "recalled"])
+      .order("created_at", { ascending: false })
+
+    // Fetch user profiles for all requesters
+    const requesterIds = Array.from(new Set((allLeaveRequests || []).map((req: any) => String(req.user_id || "")).filter(Boolean)))
+    
+    let requesterProfiles: any[] = []
+    if (requesterIds.length > 0) {
+      const { data } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, department_id, assigned_location_id, departments(name, code)")
+        .in("id", requesterIds)
+      requesterProfiles = data || []
+    }
+
+    const profileMap = new Map(requesterProfiles.map((p: any) => [p.id, p]))
+
+    nationwideLeaveRequests = (allLeaveRequests || []).map((req: any) => {
+      const staffProfile = profileMap.get(req.user_id) || {}
+      return {
+        id: String(req.id),
+        user_id: String(req.user_id),
+        start_date: req.preferred_start_date,
+        end_date: req.preferred_end_date,
+        reason: req.reason || "",
+        leave_type: req.leave_type_key || "annual",
+        status: req.status,
+        created_at: req.created_at,
+        user_name: `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim() || "Staff",
+        position: staffProfile.position || undefined,
+        department: staffProfile.departments?.name || undefined,
+        hod_decision: req.hod_decision,
+        hod_remarks: req.hod_remarks,
+      }
+    })
+  }
+
   return (
     <div className="leave-theme">
       <LeaveManagementModuleClient
@@ -265,6 +319,7 @@ export default async function LeaveManagementPage() {
         initialStaffRequests={staffRequests}
         initialManagerNotifications={managerNotifications}
         initialApprovedStaffRequests={approvedStaffRequests}
+        initialNationwideLeaveRequests={nationwideLeaveRequests}
       />
     </div>
   )
