@@ -1,142 +1,187 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useEffect } from 'react'
+import { AlertCircle, CheckCircle2, Plus, Edit2, Trash2, Calendar, Search, ChevronUp, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, CheckCircle2, Plus, Edit2, Trash2, Calendar, BookOpen, Loader2 } from 'lucide-react'
 
+// Types
 interface Holiday {
   id: string
   holiday_date: string
   holiday_name: string
 }
 
-interface LeaveType {
+interface Recall {
   id: string
-  leave_type_key: string
-  leave_type_label: string
-  entitlement_days: number
-  is_active: boolean
+  employee_id: string
+  employee_name: string
+  leave_type: string
+  recall_date: string
+  status: string
+  department?: string
 }
 
-export function HRLeaveAdminClient() {
-  // Tab state
+interface Deferment {
+  id: string
+  employee_id: string
+  employee_name: string
+  leave_type: string
+  deferral_year: string
+  status: string
+  department?: string
+}
+
+type SortField = 'name' | 'date' | 'type' | 'status'
+type SortOrder = 'asc' | 'desc'
+
+export default function HRLeaveAdminClient() {
+  // Shared states
   const [activeTab, setActiveTab] = useState('holidays')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  // Holiday states
+  // Holidays states
   const [holidays, setHolidays] = useState<Holiday[]>([])
-  const [showHolidayDialog, setShowHolidayDialog] = useState(false)
+  const [showHolidayModal, setShowHolidayModal] = useState(false)
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null)
   const [holidayForm, setHolidayForm] = useState({ holiday_date: '', holiday_name: '' })
-  const [savingHoliday, setSavingHoliday] = useState(false)
+  const [submittingHoliday, setSubmittingHoliday] = useState(false)
 
-  // Leave type states
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
-  const [showLeaveTypeDialog, setShowLeaveTypeDialog] = useState(false)
-  const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(null)
-  const [leaveTypeForm, setLeaveTypeForm] = useState({
-    leave_type_key: '',
-    leave_type_label: '',
-    entitlement_days: 0,
-    is_active: true,
-  })
-  const [savingLeaveType, setSavingLeaveType] = useState(false)
+  // Recalls states
+  const [recalls, setRecalls] = useState<Recall[]>([])
+  const [recallsPage, setRecallsPage] = useState(1)
+  const [recallsSearch, setRecallsSearch] = useState('')
+  const [recallsSort, setRecallsSort] = useState<{ field: SortField; order: SortOrder }>({ field: 'name', order: 'asc' })
+  const itemsPerPage = 10
 
-  // Load all data
-  const loadAllData = useCallback(async () => {
+  // Deferments states
+  const [deferments, setDeferments] = useState<Deferment[]>([])
+  const [deferPage, setDeferPage] = useState(1)
+  const [deferSearch, setDeferSearch] = useState('')
+  const [deferSort, setDeferSort] = useState<{ field: SortField; order: SortOrder }>({ field: 'name', order: 'asc' })
+
+  // Load all data on mount
+  useEffect(() => {
+    loadAllData()
+  }, [])
+
+  const loadAllData = async () => {
     try {
       setLoading(true)
       setError(null)
-      console.log('[v0] Starting to load all HR admin data...')
+      console.log('[v0] Loading HR Leave Admin data...')
 
       // Load holidays
-      console.log('[v0] Fetching holidays...')
       const holidaysRes = await fetch('/api/leave/holidays')
-      if (!holidaysRes.ok) throw new Error(`Failed to load holidays: ${holidaysRes.status}`)
-      const holidaysData = await holidaysRes.json()
-      setHolidays(holidaysData.holidays || [])
-      console.log('[v0] Holidays loaded:', holidaysData.holidays?.length)
+      if (holidaysRes.ok) {
+        const data = await holidaysRes.json()
+        setHolidays(data.holidays || [])
+        console.log('[v0] Holidays loaded:', data.holidays?.length)
+      } else {
+        console.warn('[v0] Failed to load holidays:', holidaysRes.status)
+      }
 
-      // Load leave types
-      console.log('[v0] Fetching leave types...')
-      const typesRes = await fetch('/api/leave/leave-types')
-      if (!typesRes.ok) throw new Error(`Failed to load leave types: ${typesRes.status}`)
-      const typesData = await typesRes.json()
-      setLeaveTypes(typesData.leaveTypes || [])
-      console.log('[v0] Leave types loaded:', typesData.leaveTypes?.length)
+      // Load recalls
+      const recallsRes = await fetch('/api/leave/hr-admin/recalls')
+      if (recallsRes.ok) {
+        const data = await recallsRes.json()
+        setRecalls(Array.isArray(data) ? data : data.recalls || [])
+        console.log('[v0] Recalls loaded:', (Array.isArray(data) ? data : data.recalls)?.length)
+      } else {
+        console.warn('[v0] Failed to load recalls:', recallsRes.status)
+      }
+
+      // Load deferments
+      const deferRes = await fetch('/api/leave/hr-admin/deferrments')
+      if (deferRes.ok) {
+        const data = await deferRes.json()
+        setDeferments(Array.isArray(data) ? data : data.deferrments || [])
+        console.log('[v0] Deferments loaded:', (Array.isArray(data) ? data : data.deferrments)?.length)
+      } else {
+        console.warn('[v0] Failed to load deferments:', deferRes.status)
+      }
 
       setLoading(false)
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load data'
-      console.error('[v0] Load error:', errorMsg)
-      setError(errorMsg)
+      const msg = err instanceof Error ? err.message : 'Failed to load data'
+      console.error('[v0] Load error:', msg)
+      setError(msg)
       setLoading(false)
     }
-  }, [])
+  }
 
-  useEffect(() => {
-    loadAllData()
-  }, [loadAllData])
-
-  // ============ HOLIDAY HANDLERS ============
+  // ============ HOLIDAYS HANDLERS ============
   const handleAddHoliday = () => {
     setEditingHoliday(null)
     setHolidayForm({ holiday_date: '', holiday_name: '' })
-    setShowHolidayDialog(true)
+    setShowHolidayModal(true)
   }
 
   const handleEditHoliday = (holiday: Holiday) => {
     setEditingHoliday(holiday)
     setHolidayForm({ holiday_date: holiday.holiday_date, holiday_name: holiday.holiday_name })
-    setShowHolidayDialog(true)
+    setShowHolidayModal(true)
   }
 
   const handleSaveHoliday = async () => {
     try {
       if (!holidayForm.holiday_date || !holidayForm.holiday_name) {
-        setError('Please fill in all holiday fields')
+        setError('Please fill in all fields')
         return
       }
 
-      setSavingHoliday(true)
-      setError(null)
+      setSubmittingHoliday(true)
+      console.log('[v0] Saving holiday:', editingHoliday?.id ? 'Update' : 'Create')
 
-      const url = editingHoliday
-        ? `/api/leave/holidays/${editingHoliday.id}`
-        : '/api/leave/holidays'
+      if (editingHoliday) {
+        // Update
+        const res = await fetch(`/api/leave/holidays/${editingHoliday.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(holidayForm),
+        })
 
-      console.log('[v0] Saving holiday:', { editingHoliday, form: holidayForm })
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.error || 'Failed to update holiday')
+        }
+      } else {
+        // Create
+        const res = await fetch('/api/leave/holidays', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(holidayForm),
+        })
 
-      const res = await fetch(url, {
-        method: editingHoliday ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(holidayForm),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to save holiday')
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.error || 'Failed to add holiday')
+        }
       }
 
-      setSuccess(`Holiday ${editingHoliday ? 'updated' : 'created'} successfully`)
-      setShowHolidayDialog(false)
+      setSuccess('Holiday saved successfully')
+      setShowHolidayModal(false)
       await loadAllData()
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error saving holiday'
-      console.error('[v0] Holiday save error:', errorMsg)
-      setError(errorMsg)
+      const msg = err instanceof Error ? err.message : 'Error saving holiday'
+      console.error('[v0] Save error:', msg)
+      setError(msg)
     } finally {
-      setSavingHoliday(false)
+      setSubmittingHoliday(false)
     }
   }
 
@@ -156,402 +201,521 @@ export function HRLeaveAdminClient() {
       await loadAllData()
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error deleting holiday'
-      console.error('[v0] Holiday delete error:', errorMsg)
-      setError(errorMsg)
+      const msg = err instanceof Error ? err.message : 'Error deleting holiday'
+      console.error('[v0] Delete error:', msg)
+      setError(msg)
     }
   }
 
-  // ============ LEAVE TYPE HANDLERS ============
-  const handleAddLeaveType = () => {
-    setEditingLeaveType(null)
-    setLeaveTypeForm({
-      leave_type_key: '',
-      leave_type_label: '',
-      entitlement_days: 0,
-      is_active: true,
+  // ============ RECALLS HANDLERS ============
+  const filterAndSortRecalls = () => {
+    let filtered = recalls.filter((r) =>
+      r.employee_name.toLowerCase().includes(recallsSearch.toLowerCase()) ||
+      r.leave_type.toLowerCase().includes(recallsSearch.toLowerCase()) ||
+      r.department?.toLowerCase().includes(recallsSearch.toLowerCase())
+    )
+
+    filtered.sort((a, b) => {
+      let aVal, bVal
+
+      if (recallsSort.field === 'name') {
+        aVal = a.employee_name
+        bVal = b.employee_name
+      } else if (recallsSort.field === 'type') {
+        aVal = a.leave_type
+        bVal = b.leave_type
+      } else if (recallsSort.field === 'date') {
+        aVal = a.recall_date
+        bVal = b.recall_date
+      } else {
+        aVal = a.status
+        bVal = b.status
+      }
+
+      return recallsSort.order === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal))
     })
-    setShowLeaveTypeDialog(true)
+
+    return filtered
   }
 
-  const handleEditLeaveType = (leaveType: LeaveType) => {
-    setEditingLeaveType(leaveType)
-    setLeaveTypeForm({
-      leave_type_key: leaveType.leave_type_key,
-      leave_type_label: leaveType.leave_type_label,
-      entitlement_days: leaveType.entitlement_days,
-      is_active: leaveType.is_active,
+  const handleRecallsSort = (field: SortField) => {
+    setRecallsSort({
+      field,
+      order: recallsSort.field === field && recallsSort.order === 'asc' ? 'desc' : 'asc',
     })
-    setShowLeaveTypeDialog(true)
   }
 
-  const handleSaveLeaveType = async () => {
-    try {
-      if (!leaveTypeForm.leave_type_key || !leaveTypeForm.leave_type_label || leaveTypeForm.entitlement_days < 0) {
-        setError('Please fill in all fields with valid values')
-        return
+  const filteredRecalls = filterAndSortRecalls()
+  const recallsTotal = Math.ceil(filteredRecalls.length / itemsPerPage)
+  const recallsPaginated = filteredRecalls.slice((recallsPage - 1) * itemsPerPage, recallsPage * itemsPerPage)
+
+  // ============ DEFERMENTS HANDLERS ============
+  const filterAndSortDeferments = () => {
+    let filtered = deferments.filter((d) =>
+      d.employee_name.toLowerCase().includes(deferSearch.toLowerCase()) ||
+      d.leave_type.toLowerCase().includes(deferSearch.toLowerCase()) ||
+      d.department?.toLowerCase().includes(deferSearch.toLowerCase())
+    )
+
+    filtered.sort((a, b) => {
+      let aVal, bVal
+
+      if (deferSort.field === 'name') {
+        aVal = a.employee_name
+        bVal = b.employee_name
+      } else if (deferSort.field === 'type') {
+        aVal = a.leave_type
+        bVal = b.leave_type
+      } else if (deferSort.field === 'date') {
+        aVal = a.deferral_year
+        bVal = b.deferral_year
+      } else {
+        aVal = a.status
+        bVal = b.status
       }
 
-      setSavingLeaveType(true)
-      setError(null)
+      return deferSort.order === 'asc' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal))
+    })
 
-      const url = editingLeaveType
-        ? `/api/leave/leave-types/${editingLeaveType.id}`
-        : '/api/leave/leave-types'
-
-      console.log('[v0] Saving leave type:', { editingLeaveType, form: leaveTypeForm })
-
-      const res = await fetch(url, {
-        method: editingLeaveType ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(leaveTypeForm),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to save leave type')
-      }
-
-      setSuccess(`Leave type ${editingLeaveType ? 'updated' : 'created'} successfully`)
-      setShowLeaveTypeDialog(false)
-      await loadAllData()
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error saving leave type'
-      console.error('[v0] Leave type save error:', errorMsg)
-      setError(errorMsg)
-    } finally {
-      setSavingLeaveType(false)
-    }
+    return filtered
   }
 
-  const handleDeleteLeaveType = async (id: string) => {
-    if (!confirm('Delete this leave type?')) return
-
-    try {
-      console.log('[v0] Deleting leave type:', id)
-      const res = await fetch(`/api/leave/leave-types/${id}`, { method: 'DELETE' })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to delete leave type')
-      }
-
-      setSuccess('Leave type deleted successfully')
-      await loadAllData()
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error deleting leave type'
-      console.error('[v0] Leave type delete error:', errorMsg)
-      setError(errorMsg)
-    }
+  const handleDefermentSort = (field: SortField) => {
+    setDeferSort({
+      field,
+      order: deferSort.field === field && deferSort.order === 'asc' ? 'desc' : 'asc',
+    })
   }
 
+  const filteredDeferments = filterAndSortDeferments()
+  const deferTotal = Math.ceil(filteredDeferments.length / itemsPerPage)
+  const defermentsPaginated = filteredDeferments.slice((deferPage - 1) * itemsPerPage, deferPage * itemsPerPage)
+
+  // ============ RENDER ============
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-900">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-12 h-12 animate-spin text-green-500 mx-auto" />
-          <p className="text-slate-400">Loading HR Leave Admin...</p>
-        </div>
+      <div className="flex items-center justify-center h-96">
+        <p className="text-slate-400">Loading data...</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-white">HR Leave Office Admin</h1>
-          <p className="text-slate-400">Manage Ghana public holidays and leave types</p>
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-white">HR Leave Office Admin</h1>
+        <p className="text-slate-400">Manage holidays, recalls, and deferments</p>
+      </div>
 
-        {/* Alerts */}
-        {error && (
-          <Alert className="bg-red-500/10 border-red-500">
-            <AlertCircle className="h-4 w-4 text-red-500" />
-            <AlertDescription className="text-red-400">{error}</AlertDescription>
-          </Alert>
-        )}
+      {/* Error/Success Messages */}
+      {error && (
+        <Card className="bg-red-900/20 border-red-700">
+          <CardContent className="pt-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-200">{error}</p>
+              <Button variant="ghost" size="sm" onClick={() => setError(null)} className="mt-2">
+                Dismiss
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-        {success && (
-          <Alert className="bg-green-500/10 border-green-500">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <AlertDescription className="text-green-400">{success}</AlertDescription>
-          </Alert>
-        )}
+      {success && (
+        <Card className="bg-green-900/20 border-green-700">
+          <CardContent className="pt-6 flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+            <p className="text-green-200">{success}</p>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 bg-slate-800">
-            <TabsTrigger value="holidays" className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Holidays
-            </TabsTrigger>
-            <TabsTrigger value="leave-types" className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              Leave Types
-            </TabsTrigger>
-          </TabsList>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3 bg-slate-800">
+          <TabsTrigger value="holidays" className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            Holidays
+          </TabsTrigger>
+          <TabsTrigger value="recalls" className="flex items-center gap-2">
+            Recalls
+          </TabsTrigger>
+          <TabsTrigger value="deferments" className="flex items-center gap-2">
+            Deferments
+          </TabsTrigger>
+        </TabsList>
 
-          {/* HOLIDAYS TAB */}
-          <TabsContent value="holidays" className="mt-6">
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader className="flex flex-row items-center justify-between">
+        {/* HOLIDAYS TAB */}
+        <TabsContent value="holidays" className="mt-6">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-white">Public Holidays</CardTitle>
                   <CardDescription>Manage Ghana public holidays</CardDescription>
                 </div>
-                <Dialog open={showHolidayDialog} onOpenChange={setShowHolidayDialog}>
-                  <DialogTrigger asChild>
-                    <Button onClick={handleAddHoliday} className="bg-green-600 hover:bg-green-700">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Holiday
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="bg-slate-800 border-slate-700">
-                    <DialogHeader>
-                      <DialogTitle className="text-white">
-                        {editingHoliday ? 'Edit Holiday' : 'Add Holiday'}
-                      </DialogTitle>
-                      <DialogDescription>
-                        {editingHoliday ? 'Update holiday details' : 'Add a new public holiday'}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label className="text-slate-300">Date (YYYY-MM-DD)</Label>
-                        <Input
-                          type="date"
-                          value={holidayForm.holiday_date}
-                          onChange={(e) => setHolidayForm({ ...holidayForm, holiday_date: e.target.value })}
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-slate-300">Holiday Name</Label>
-                        <Input
-                          value={holidayForm.holiday_name}
-                          onChange={(e) => setHolidayForm({ ...holidayForm, holiday_name: e.target.value })}
-                          placeholder="e.g., Christmas Day"
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <Button
-                          onClick={handleSaveHoliday}
-                          disabled={savingHoliday}
-                          className="flex-1 bg-green-600 hover:bg-green-700"
-                        >
-                          {savingHoliday ? 'Saving...' : 'Save'}
-                        </Button>
-                        <Button
-                          onClick={() => setShowHolidayDialog(false)}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </CardHeader>
-              <CardContent>
-                {holidays.length === 0 ? (
-                  <p className="text-slate-400 py-8 text-center">No holidays configured</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-700">
-                          <th className="text-left py-3 px-4 text-slate-300">Date</th>
-                          <th className="text-left py-3 px-4 text-slate-300">Name</th>
-                          <th className="text-right py-3 px-4 text-slate-300">Actions</th>
+                <Button onClick={handleAddHoliday} className="bg-green-600 hover:bg-green-700">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Holiday
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {holidays.length === 0 ? (
+                <p className="text-slate-400 py-8 text-center">No holidays configured</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        <th className="text-left py-3 px-4 text-slate-300 font-semibold">Date</th>
+                        <th className="text-left py-3 px-4 text-slate-300 font-semibold">Name</th>
+                        <th className="text-right py-3 px-4 text-slate-300 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {holidays.map((holiday) => (
+                        <tr key={holiday.id} className="border-b border-slate-700 hover:bg-slate-700/30">
+                          <td className="py-3 px-4 text-white">{holiday.holiday_date}</td>
+                          <td className="py-3 px-4 text-white">{holiday.holiday_name}</td>
+                          <td className="py-3 px-4 text-right flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditHoliday(holiday)}
+                              className="text-blue-400 hover:text-blue-300"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteHoliday(holiday.id)}
+                              className="text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {holidays.map((holiday) => (
-                          <tr key={holiday.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
-                            <td className="py-3 px-4 text-slate-200">{holiday.holiday_date}</td>
-                            <td className="py-3 px-4 text-slate-200">{holiday.holiday_name}</td>
-                            <td className="py-3 px-4 text-right space-x-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleEditHoliday(holiday)}
-                                className="text-blue-400 hover:bg-blue-900/20"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteHoliday(holiday.id)}
-                                className="text-red-400 hover:bg-red-900/20"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* LEAVE TYPES TAB */}
-          <TabsContent value="leave-types" className="mt-6">
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-white">Leave Types</CardTitle>
-                  <CardDescription>Manage leave type configurations</CardDescription>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <Dialog open={showLeaveTypeDialog} onOpenChange={setShowLeaveTypeDialog}>
-                  <DialogTrigger asChild>
-                    <Button onClick={handleAddLeaveType} className="bg-green-600 hover:bg-green-700">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Leave Type
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="bg-slate-800 border-slate-700">
-                    <DialogHeader>
-                      <DialogTitle className="text-white">
-                        {editingLeaveType ? 'Edit Leave Type' : 'Add Leave Type'}
-                      </DialogTitle>
-                      <DialogDescription>
-                        {editingLeaveType ? 'Update leave type configuration' : 'Create a new leave type'}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label className="text-slate-300">Type Key</Label>
-                        <Input
-                          value={leaveTypeForm.leave_type_key}
-                          onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, leave_type_key: e.target.value })}
-                          placeholder="e.g., annual"
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-slate-300">Type Label</Label>
-                        <Input
-                          value={leaveTypeForm.leave_type_label}
-                          onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, leave_type_label: e.target.value })}
-                          placeholder="e.g., Annual Leave"
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-slate-300">Entitlement Days</Label>
-                        <Input
-                          type="number"
-                          value={leaveTypeForm.entitlement_days}
-                          onChange={(e) =>
-                            setLeaveTypeForm({
-                              ...leaveTypeForm,
-                              entitlement_days: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={leaveTypeForm.is_active}
-                          onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, is_active: e.target.checked })}
-                          className="rounded"
-                        />
-                        <Label className="text-slate-300">Active</Label>
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <Button
-                          onClick={handleSaveLeaveType}
-                          disabled={savingLeaveType}
-                          className="flex-1 bg-green-600 hover:bg-green-700"
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* RECALLS TAB */}
+        <TabsContent value="recalls" className="mt-6">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white">Leave Recalls</CardTitle>
+              <CardDescription>Manage leave recall requests across the country</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder="Search by employee, leave type, or department..."
+                  value={recallsSearch}
+                  onChange={(e) => {
+                    setRecallsSearch(e.target.value)
+                    setRecallsPage(1)
+                  }}
+                  className="pl-10 bg-slate-700 border-slate-600 text-white"
+                />
+              </div>
+
+              {/* Table */}
+              {recallsPaginated.length === 0 ? (
+                <p className="text-slate-400 py-8 text-center">No recalls found</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleRecallsSort('name')}
                         >
-                          {savingLeaveType ? 'Saving...' : 'Save'}
-                        </Button>
-                        <Button
-                          onClick={() => setShowLeaveTypeDialog(false)}
-                          variant="outline"
-                          className="flex-1"
+                          <div className="flex items-center gap-2">
+                            Employee
+                            {recallsSort.field === 'name' && (
+                              recallsSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleRecallsSort('type')}
                         >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </CardHeader>
-              <CardContent>
-                {leaveTypes.length === 0 ? (
-                  <p className="text-slate-400 py-8 text-center">No leave types configured</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-700">
-                          <th className="text-left py-3 px-4 text-slate-300">Key</th>
-                          <th className="text-left py-3 px-4 text-slate-300">Label</th>
-                          <th className="text-left py-3 px-4 text-slate-300">Days</th>
-                          <th className="text-left py-3 px-4 text-slate-300">Status</th>
-                          <th className="text-right py-3 px-4 text-slate-300">Actions</th>
+                          <div className="flex items-center gap-2">
+                            Leave Type
+                            {recallsSort.field === 'type' && (
+                              recallsSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                        <th className="text-left py-3 px-4 text-slate-300 font-semibold">Department</th>
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleRecallsSort('date')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Recall Date
+                            {recallsSort.field === 'date' && (
+                              recallsSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleRecallsSort('status')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Status
+                            {recallsSort.field === 'status' && (
+                              recallsSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recallsPaginated.map((recall) => (
+                        <tr key={recall.id} className="border-b border-slate-700 hover:bg-slate-700/30">
+                          <td className="py-3 px-4 text-white">{recall.employee_name}</td>
+                          <td className="py-3 px-4 text-white">{recall.leave_type}</td>
+                          <td className="py-3 px-4 text-slate-300">{recall.department || 'N/A'}</td>
+                          <td className="py-3 px-4 text-white">{recall.recall_date}</td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                recall.status === 'approved'
+                                  ? 'bg-green-900/30 text-green-400'
+                                  : recall.status === 'rejected'
+                                  ? 'bg-red-900/30 text-red-400'
+                                  : 'bg-yellow-900/30 text-yellow-400'
+                              }`}
+                            >
+                              {recall.status}
+                            </span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {leaveTypes.map((lt) => (
-                          <tr key={lt.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
-                            <td className="py-3 px-4 text-slate-200">{lt.leave_type_key}</td>
-                            <td className="py-3 px-4 text-slate-200">{lt.leave_type_label}</td>
-                            <td className="py-3 px-4 text-slate-200">{lt.entitlement_days}</td>
-                            <td className="py-3 px-4">
-                              <span
-                                className={`px-2 py-1 rounded text-xs font-semibold ${
-                                  lt.is_active
-                                    ? 'bg-green-900/30 text-green-400'
-                                    : 'bg-red-900/30 text-red-400'
-                                }`}
-                              >
-                                {lt.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right space-x-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleEditLeaveType(lt)}
-                                className="text-blue-400 hover:bg-blue-900/20"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteLeaveType(lt.id)}
-                                className="text-red-400 hover:bg-red-900/20"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {recallsTotal > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-slate-400">
+                    Page {recallsPage} of {recallsTotal} ({filteredRecalls.length} total)
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRecallsPage(Math.max(1, recallsPage - 1))}
+                      disabled={recallsPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRecallsPage(Math.min(recallsTotal, recallsPage + 1))}
+                      disabled={recallsPage === recallsTotal}
+                    >
+                      Next
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* DEFERMENTS TAB */}
+        <TabsContent value="deferments" className="mt-6">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white">Leave Deferments</CardTitle>
+              <CardDescription>Manage leave deferment requests across the country</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder="Search by employee, leave type, or department..."
+                  value={deferSearch}
+                  onChange={(e) => {
+                    setDeferSearch(e.target.value)
+                    setDeferPage(1)
+                  }}
+                  className="pl-10 bg-slate-700 border-slate-600 text-white"
+                />
+              </div>
+
+              {/* Table */}
+              {defermentsPaginated.length === 0 ? (
+                <p className="text-slate-400 py-8 text-center">No deferments found</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleDefermentSort('name')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Employee
+                            {deferSort.field === 'name' && (
+                              deferSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleDefermentSort('type')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Leave Type
+                            {deferSort.field === 'type' && (
+                              deferSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                        <th className="text-left py-3 px-4 text-slate-300 font-semibold">Department</th>
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleDefermentSort('date')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Deferral Year
+                            {deferSort.field === 'date' && (
+                              deferSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="text-left py-3 px-4 text-slate-300 font-semibold cursor-pointer hover:text-white"
+                          onClick={() => handleDefermentSort('status')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Status
+                            {deferSort.field === 'status' && (
+                              deferSort.order === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                            )}
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {defermentsPaginated.map((deferment) => (
+                        <tr key={deferment.id} className="border-b border-slate-700 hover:bg-slate-700/30">
+                          <td className="py-3 px-4 text-white">{deferment.employee_name}</td>
+                          <td className="py-3 px-4 text-white">{deferment.leave_type}</td>
+                          <td className="py-3 px-4 text-slate-300">{deferment.department || 'N/A'}</td>
+                          <td className="py-3 px-4 text-white">{deferment.deferral_year}</td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                deferment.status === 'approved'
+                                  ? 'bg-green-900/30 text-green-400'
+                                  : deferment.status === 'rejected'
+                                  ? 'bg-red-900/30 text-red-400'
+                                  : 'bg-yellow-900/30 text-yellow-400'
+                              }`}
+                            >
+                              {deferment.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {deferTotal > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-slate-400">
+                    Page {deferPage} of {deferTotal} ({filteredDeferments.length} total)
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDeferPage(Math.max(1, deferPage - 1))}
+                      disabled={deferPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDeferPage(Math.min(deferTotal, deferPage + 1))}
+                      disabled={deferPage === deferTotal}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Holiday Modal */}
+      <Dialog open={showHolidayModal} onOpenChange={setShowHolidayModal}>
+        <DialogContent className="bg-slate-800 border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="text-white">{editingHoliday ? 'Edit Holiday' : 'Add Holiday'}</DialogTitle>
+            <DialogDescription>
+              {editingHoliday ? 'Update holiday details' : 'Add a new public holiday'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-300">Date (YYYY-MM-DD)</Label>
+              <Input
+                type="date"
+                value={holidayForm.holiday_date}
+                onChange={(e) => setHolidayForm({ ...holidayForm, holiday_date: e.target.value })}
+                className="bg-slate-700 border-slate-600 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-300">Holiday Name</Label>
+              <Input
+                value={holidayForm.holiday_name}
+                onChange={(e) => setHolidayForm({ ...holidayForm, holiday_name: e.target.value })}
+                placeholder="e.g., Christmas"
+                className="bg-slate-700 border-slate-600 text-white"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowHolidayModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveHoliday} disabled={submittingHoliday} className="bg-green-600 hover:bg-green-700">
+              {submittingHoliday ? 'Saving...' : 'Save Holiday'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
