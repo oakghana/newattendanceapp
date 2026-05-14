@@ -64,10 +64,33 @@ export function OutstandingLeavePanel() {
   })
   const [saving, setSaving] = useState(false)
 
+  // Hardcoded Cocoa Board regions/locations
+  const COCOA_REGIONS = [
+    { id: "all",             name: "All Regions / Locations" },
+    { id: "greater_accra",   name: "Greater Accra" },
+    { id: "ashanti",         name: "Ashanti Region" },
+    { id: "western_north",   name: "Western North" },
+    { id: "western_south",   name: "Western South" },
+    { id: "central",         name: "Central Region" },
+    { id: "volta",           name: "Volta Region" },
+    { id: "brong_ahafo",     name: "Brong Ahafo Region" },
+    { id: "tema_port",       name: "Tema Port" },
+    { id: "kaase_port",      name: "Kaase Port" },
+    { id: "takoradi_port",   name: "Takoradi Port" },
+  ]
+
   // Report generation state
   const [regions, setRegions] = useState<RegionOption[]>([])
   const [selectedRegion, setSelectedRegion] = useState<string>("all")
+  const [reportPeriod, setReportPeriod] = useState<"monthly" | "weekly" | "quarterly">("monthly")
   const [reportMonth, setReportMonth] = useState<string>(new Date().toISOString().slice(0, 7))
+  const [reportWeek, setReportWeek] = useState<string>(new Date().toISOString().slice(0, 10))
+  const [reportQuarter, setReportQuarter] = useState<string>(() => {
+    const month = new Date().getMonth() + 1
+    const year = new Date().getFullYear()
+    const q = Math.ceil(month / 3)
+    return `Q${q} ${year}`
+  })
   const [generatingReport, setGeneratingReport] = useState(false)
 
   // Load staff list and regions for add form
@@ -162,23 +185,41 @@ export function OutstandingLeavePanel() {
       .slice(0, 50) // Show up to 50 results
   }, [staffList, staffSearch])
 
-  // Generate monthly leave report
+  // Compute human-readable period label for filename / display
+  const periodLabel = (() => {
+    if (reportPeriod === "monthly") {
+      return new Date(reportMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    }
+    if (reportPeriod === "weekly") {
+      return `Week of ${new Date(reportWeek).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })}`
+    }
+    return reportQuarter
+  })()
+
+  const regionLabel = COCOA_REGIONS.find(r => r.id === selectedRegion)?.name || "All Regions"
+
+  // Generate leave report (monthly / weekly / quarterly)
   const generateReport = async () => {
     setGeneratingReport(true)
     try {
       const params = new URLSearchParams({
-        month: reportMonth,
+        period: reportPeriod,
         year_period: yearFilter,
-        ...(selectedRegion !== "all" && { region_id: selectedRegion }),
+        ...(selectedRegion !== "all" && { region: selectedRegion }),
+        // Period-specific date params
+        ...(reportPeriod === "monthly"   && { month: reportMonth }),
+        ...(reportPeriod === "weekly"    && { week_start: reportWeek }),
+        ...(reportPeriod === "quarterly" && { quarter: reportQuarter }),
       })
-      
+
       const res = await fetch(`/api/leave/reports/monthly?${params.toString()}`)
       if (res.ok) {
         const blob = await res.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `leave-report-${reportMonth}${selectedRegion !== "all" ? `-region-${selectedRegion}` : ""}.csv`
+        const regionSlug = selectedRegion !== "all" ? `-${selectedRegion}` : ""
+        a.download = `leave-report-${reportPeriod}${regionSlug}-${reportMonth || reportWeek || reportQuarter.replace(" ", "_")}.csv`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -621,23 +662,76 @@ export function OutstandingLeavePanel() {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-amber-400" />
-                Generate Monthly Leave Report
+                Generate Leave Report
               </CardTitle>
               <CardDescription>
-                Generate and download monthly leave reports. Filter by region for location-specific reports.
+                Download leave reports by period and Cocoa Board region. Output is CSV (Excel compatible).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Month Selection */}
+
+              {/* Row 1 — Report Period selector */}
+              <div className="space-y-2">
+                <Label className="text-slate-300">Report Period</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {(["monthly", "weekly", "quarterly"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setReportPeriod(p)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors capitalize ${
+                        reportPeriod === p
+                          ? "bg-amber-600 border-amber-500 text-white"
+                          : "bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Row 2 — Date picker (changes based on period) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300">Report Month</Label>
-                  <Input
-                    type="month"
-                    value={reportMonth}
-                    onChange={(e) => setReportMonth(e.target.value)}
-                    className="bg-slate-700 border-slate-600"
-                  />
+                  {reportPeriod === "monthly" && (
+                    <>
+                      <Label className="text-slate-300">Select Month</Label>
+                      <Input
+                        type="month"
+                        value={reportMonth}
+                        onChange={(e) => setReportMonth(e.target.value)}
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </>
+                  )}
+                  {reportPeriod === "weekly" && (
+                    <>
+                      <Label className="text-slate-300">Select Week Start Date</Label>
+                      <Input
+                        type="date"
+                        value={reportWeek}
+                        onChange={(e) => setReportWeek(e.target.value)}
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </>
+                  )}
+                  {reportPeriod === "quarterly" && (
+                    <>
+                      <Label className="text-slate-300">Select Quarter</Label>
+                      <select
+                        value={reportQuarter}
+                        onChange={(e) => setReportQuarter(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
+                      >
+                        {[2024, 2025, 2026].flatMap((yr) =>
+                          ["Q1", "Q2", "Q3", "Q4"].map((q) => (
+                            <option key={`${q} ${yr}`} value={`${q} ${yr}`}>{q} {yr}</option>
+                          ))
+                        )}
+                      </select>
+                    </>
+                  )}
                 </div>
 
                 {/* Leave Year Period */}
@@ -653,34 +747,47 @@ export function OutstandingLeavePanel() {
                     <option value="2026/2027">2026/2027</option>
                   </select>
                 </div>
-
-                {/* Region Filter */}
-                <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" /> Region/Location
-                  </Label>
-                  <select
-                    value={selectedRegion}
-                    onChange={(e) => setSelectedRegion(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
-                  >
-                    <option value="all">All Regions</option>
-                    {regions.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
-              {/* Report Preview Info */}
-              <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600">
-                <h4 className="font-medium text-white mb-2">Report Details</h4>
-                <ul className="text-sm text-slate-300 space-y-1">
-                  <li>- Monthly leave summary for: <strong>{new Date(reportMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong></li>
-                  <li>- Leave Year: <strong>{yearFilter}</strong></li>
-                  <li>- Region: <strong>{selectedRegion === "all" ? "All Regions" : regions.find(r => r.id === selectedRegion)?.name || "Selected Region"}</strong></li>
-                  <li>- Format: CSV (Excel compatible)</li>
-                </ul>
+              {/* Row 3 — Cocoa Board Region/Location dropdown */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> Cocoa Board Region / Location
+                </Label>
+                <select
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-white h-10"
+                >
+                  {COCOA_REGIONS.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Report Preview summary */}
+              <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600 space-y-1">
+                <h4 className="font-medium text-white mb-2">Report Summary</h4>
+                <p className="text-sm text-slate-300">
+                  <span className="text-slate-400">Period type:</span>{" "}
+                  <strong className="text-white capitalize">{reportPeriod}</strong>
+                </p>
+                <p className="text-sm text-slate-300">
+                  <span className="text-slate-400">Period:</span>{" "}
+                  <strong className="text-white">{periodLabel}</strong>
+                </p>
+                <p className="text-sm text-slate-300">
+                  <span className="text-slate-400">Leave year:</span>{" "}
+                  <strong className="text-white">{yearFilter}</strong>
+                </p>
+                <p className="text-sm text-slate-300">
+                  <span className="text-slate-400">Location:</span>{" "}
+                  <strong className="text-white">{regionLabel}</strong>
+                </p>
+                <p className="text-sm text-slate-300">
+                  <span className="text-slate-400">Format:</span>{" "}
+                  <strong className="text-white">CSV (Excel compatible)</strong>
+                </p>
               </div>
 
               {/* Generate Button */}
@@ -691,7 +798,7 @@ export function OutstandingLeavePanel() {
                   className="bg-amber-600 hover:bg-amber-700 gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  {generatingReport ? "Generating..." : "Generate & Download Report"}
+                  {generatingReport ? "Generating..." : `Generate ${reportPeriod.charAt(0).toUpperCase() + reportPeriod.slice(1)} Report`}
                 </Button>
               </div>
             </CardContent>
