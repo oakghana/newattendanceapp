@@ -983,10 +983,6 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrOfficeTab, setHrOfficeTab] = useState("operations")
   const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
   const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
-  const [operationsSubTab, setOperationsSubTab] = useState("leave-apps")
-  const [defermentRequests, setDefermentRequests] = useState<any[]>([])
-  const [recallRequests, setRecallRequests] = useState<any[]>([])
-  const [operationsLoading, setOperationsLoading] = useState(false)
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
   const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
   const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
@@ -1052,7 +1048,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
-  // ── HR Approver ──────────────────�����──────────────────────────────────
+  // ── HR Approver ──────────────────����──────────────────────────────────
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
@@ -1544,46 +1540,6 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       cancelled = true
     }
   }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
-
-  // Fetch deferment and recall requests for HR Leave Office operations tab
-  useEffect(() => {
-    if (!canViewLeaveAnalytics) return // Only HR can view
-    if (activeTab !== "hr-office") return
-    if (hrOfficeTab !== "operations") return
-
-    let cancelled = false
-    const loadOperationsData = async () => {
-      setOperationsLoading(true)
-      try {
-        // Fetch pending deferment requests
-        const defermentRes = await fetch(`/api/leave/deferment?status=pending`, { cache: "no-store" })
-        if (!defermentRes.ok) throw new Error("Failed to fetch deferments")
-        const defermentData = await defermentRes.json()
-        if (!cancelled) setDefermentRequests(Array.isArray(defermentData) ? defermentData : defermentData.deferments || [])
-
-        // Fetch pending recall requests
-        const recallRes = await fetch(`/api/leave/recall?status=pending`, { cache: "no-store" })
-        if (!recallRes.ok) throw new Error("Failed to fetch recalls")
-        const recallData = await recallRes.json()
-        if (!cancelled) setRecallRequests(Array.isArray(recallData) ? recallData : recallData.recalls || [])
-      } catch (e) {
-        if (!cancelled) {
-          toast({
-            title: "Failed to load operations data",
-            description: e instanceof Error ? e.message : "Failed to load deferment and recall requests",
-            variant: "destructive",
-          })
-        }
-      } finally {
-        if (!cancelled) setOperationsLoading(false)
-      }
-    }
-
-    void loadOperationsData()
-    return () => {
-      cancelled = true
-    }
-  }, [activeTab, hrOfficeTab, canViewLeaveAnalytics, toast])
 
   // ─����� Derived lists ──���─────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => {
@@ -3030,53 +2986,32 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
               )}
 
               <TabsContent value="operations">
-                <div className="space-y-4">
-                  {/* Operations Sub-tabs */}
-                  <Tabs value={operationsSubTab} onValueChange={setOperationsSubTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 mb-4">
-                      <TabsTrigger value="leave-apps" className="text-sm">Leave Apps</TabsTrigger>
-                      <TabsTrigger value="deferments" className="text-sm">
-                        Deferments
-                        {defermentRequests.length > 0 && (
-                          <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800">{defermentRequests.length}</Badge>
-                        )}
-                      </TabsTrigger>
-                      <TabsTrigger value="recalls" className="text-sm">
-                        Recalls
-                        {recallRequests.length > 0 && (
-                          <Badge variant="secondary" className="ml-2 bg-rose-100 text-rose-800">{recallRequests.length}</Badge>
-                        )}
-                      </TabsTrigger>
-                    </TabsList>
-
-                    {/* Leave Applications Tab */}
-                    <TabsContent value="leave-apps" className="mt-0">
-                      {hrOfficeFilteredQueue.length === 0 ? (
-                        <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
-                          <ClipboardList className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                          <p className="font-medium">No leave requests match your current HR Office filters</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {hrOfficeVisibleRows.map((req: any) => {
-                      const isExpanded = officeExpanded === req.id
-                      const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
-                      const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
-                      const holidayD = Number(officeHolidayDays[req.id] || 0)
-                      const travelD = Number(officeTravelDays[req.id] || 0)
-                      const priorD = Number(officePriorDays[req.id] || 0)
-                      const baseDays = adjStart && adjEnd
-                        ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
-                        : req.requested_days
-                      const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
-                      const generatedReason = [
-                        holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
-                        priorD > 0 ? `${priorD} prior leave day(s) deducted` : "",
-                        travelD > 0 ? `${travelD} travelling day(s) added` : "",
-                      ].filter(Boolean).join("; ")
-                          return (
-                        <Card key={req.id} className="group border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50/30 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-                          <CardContent className="p-5">
+                {hrOfficeFilteredQueue.length === 0 ? (
+                  <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                    <ClipboardList className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                    <p className="font-medium">No requests match your current HR Office filters</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {hrOfficeVisibleRows.map((req: any) => {
+                  const isExpanded = officeExpanded === req.id
+                  const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
+                  const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
+                  const holidayD = Number(officeHolidayDays[req.id] || 0)
+                  const travelD = Number(officeTravelDays[req.id] || 0)
+                  const priorD = Number(officePriorDays[req.id] || 0)
+                  const baseDays = adjStart && adjEnd
+                    ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
+                    : req.requested_days
+                  const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
+                  const generatedReason = [
+                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
+                    priorD > 0 ? `${priorD} prior leave day(s) deducted` : "",
+                    travelD > 0 ? `${travelD} travelling day(s) added` : "",
+                  ].filter(Boolean).join("; ")
+                      return (
+                    <Card key={req.id} className="group border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50/30 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+                      <CardContent className="p-5">
                         <div className="flex items-start justify-between mb-3">
                           <div>
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
@@ -3396,84 +3331,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     )}
                   </div>
                 )}
-                    </TabsContent>
-
-                    {/* Deferments Tab */}
-                    <TabsContent value="deferments" className="mt-0">
-                      {operationsLoading ? (
-                        <div className="text-center py-12"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></div>
-                      ) : defermentRequests.length === 0 ? (
-                        <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
-                          <Calendar className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                          <p className="font-medium">No pending deferment requests</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {defermentRequests.map((req: any) => (
-                            <Card key={req.id} className="border-amber-200 bg-gradient-to-br from-white to-amber-50/30">
-                              <CardContent className="p-4">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div>
-                                    <p className="font-semibold text-slate-900">{req.user_name || "Staff Member"}</p>
-                                    <p className="text-xs text-slate-600">{req.leave_type || "Leave"} | Submitted: {new Date(req.created_at).toLocaleDateString()}</p>
-                                  </div>
-                                  <Badge className="bg-amber-100 text-amber-800">Pending</Badge>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-                                  <div><span className="text-slate-600">Original:</span> {new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</div>
-                                  <div><span className="text-slate-600">Defer to:</span> {req.deferral_year}</div>
-                                </div>
-                                {req.deferment_reason && <p className="text-sm text-slate-700 mb-3 bg-white p-2 rounded border border-amber-100">{req.deferment_reason}</p>}
-                                <div className="flex gap-2">
-                                  <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
-                                  <Button size="sm" variant="outline" className="flex-1">Decline</Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      )}
-                    </TabsContent>
-
-                    {/* Recalls Tab */}
-                    <TabsContent value="recalls" className="mt-0">
-                      {operationsLoading ? (
-                        <div className="text-center py-12"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></div>
-                      ) : recallRequests.length === 0 ? (
-                        <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
-                          <ArrowUpRight className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                          <p className="font-medium">No pending recall requests</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {recallRequests.map((req: any) => (
-                            <Card key={req.id} className="border-rose-200 bg-gradient-to-br from-white to-rose-50/30">
-                              <CardContent className="p-4">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div>
-                                    <p className="font-semibold text-slate-900">{req.user_name || "Staff Member"}</p>
-                                    <p className="text-xs text-slate-600">{req.leave_type || "Leave"} | Recall Date: {new Date(req.recall_date).toLocaleDateString()}</p>
-                                  </div>
-                                  <Badge className="bg-rose-100 text-rose-800">Pending</Badge>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-                                  <div><span className="text-slate-600">Leave Period:</span> {new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</div>
-                                  <div><span className="text-slate-600">Resume Date:</span> {new Date(req.recall_date).toLocaleDateString()}</div>
-                                </div>
-                                {req.recall_reason && <p className="text-sm text-slate-700 mb-3 bg-white p-2 rounded border border-rose-100">{req.recall_reason}</p>}
-                                <div className="flex gap-2">
-                                  <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
-                                  <Button size="sm" variant="outline" className="flex-1">Decline</Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      )}
-                    </TabsContent>
-                  </Tabs>
-                </div>
               </TabsContent>
+            </Tabs>
+          </TabsContent>
 
           {/* ── HR Final Approval ─────────────────────────────────────── */}
           <TabsContent value="hr-approve">
@@ -3812,6 +3672,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
               )}
             </div>
           </TabsContent>
+          )}
         </Tabs>
       )}
     </div>
