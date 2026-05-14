@@ -150,7 +150,8 @@ export async function POST(request: NextRequest) {
         adjusted_start_date,
         adjusted_end_date,
         adjustment_reason: trimmedReason,
-        outstanding_leave_days_added: Number(outstanding_leave_days_added || 0),
+        // Note: outstanding_leave_days_added is not a column in leave_plan_requests
+        // It is tracked separately in outstanding_leave_balances table
         holiday_days_deducted: Number(holiday_days_deducted || 0),
         travelling_days_added: Number(travelling_days_added || 0),
         prior_leave_days_deducted: Number(prior_leave_days_deducted || 0),
@@ -219,9 +220,10 @@ export async function POST(request: NextRequest) {
       message: "Leave request reviewed and forwarded to HR Approvers.",
       adjusted_days: computedAdjustedDays,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("[hr-office] POST error:", error)
-    const msg = error instanceof Error ? error.message : String(error)
+    // Handle Supabase errors (which have .message property) and regular errors
+    const msg = error?.message || (error instanceof Error ? error.message : JSON.stringify(error))
     return NextResponse.json({ error: `Failed to process HR office review: ${msg}` }, { status: 500 })
   }
 }
