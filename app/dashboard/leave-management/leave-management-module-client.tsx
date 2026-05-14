@@ -1,6 +1,7 @@
 "use client"
 
-import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp, RefreshCw, Download, Clock, CheckCircle2, Users, MapPin, FileText, ChevronRight, Sparkles, Calendar } from "lucide-react"
+import { useState, useEffect } from "react"
+import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp, RefreshCw, Download, Clock, CheckCircle2, Users, MapPin, FileText, ChevronRight, Sparkles, Calendar, Plus, Loader2 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -45,6 +46,54 @@ export function LeaveManagementModuleClient({
   initialApprovedStaffRequests = [],
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
+  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false)
+  const [balancesData, setBalancesData] = useState<any[]>([])
+  const [teamOnLeave, setTeamOnLeave] = useState<any[]>([])
+  const [loadingBalances, setLoadingBalances] = useState(false)
+
+  useEffect(() => {
+    if (showAnalytics) {
+      fetchAnalytics()
+    }
+    fetchBalances()
+  }, [showAnalytics, userId])
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoadingAnalytics(true)
+      const response = await fetch("/api/leave/analytics", { method: "POST" })
+      const result = await response.json()
+      if (result.success) {
+        setAnalyticsData(result.data)
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching analytics:", error)
+    } finally {
+      setLoadingAnalytics(false)
+    }
+  }
+
+  const fetchBalances = async () => {
+    try {
+      setLoadingBalances(true)
+      const balRes = await fetch(`/api/leave/balances?userId=${userId}`)
+      const balResult = await balRes.json()
+      if (balResult.success) {
+        setBalancesData(balResult.data || [])
+      }
+
+      const teamRes = await fetch("/api/leave/balances", { method: "POST" })
+      const teamResult = await teamRes.json()
+      if (teamResult.success) {
+        setTeamOnLeave(teamResult.data || [])
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching balances:", error)
+    } finally {
+      setLoadingBalances(false)
+    }
+  }
 
   return (
     <div className="space-y-6 w-full">
@@ -215,166 +264,189 @@ export function LeaveManagementModuleClient({
         {/* Tab 3: HR Analytics */}
         {showAnalytics && (
           <TabsContent value="hr-analytics" className="space-y-6 w-full">
-            {/* Analytics Header */}
-            <Card className="bg-gradient-to-r from-slate-800 to-slate-700 border-0 text-white shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                      <Sparkles className="h-5 w-5 text-blue-400" />
+            {loadingAnalytics ? (
+              <Card className="text-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Loading analytics...</p>
+              </Card>
+            ) : (
+              <>
+                {/* Analytics Header */}
+                <Card className="bg-gradient-to-r from-slate-800 to-slate-700 border-0 text-white shadow-lg">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                          <Sparkles className="h-5 w-5 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase text-yellow-400 font-medium tracking-wider">HR Leave Intelligence</p>
+                          <h2 className="text-xl font-bold">Leave Analytics Dashboard</h2>
+                          <p className="text-slate-400 text-sm">Executive insights · Quality Control Company Limited</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="secondary">
+                          <Download className="h-4 w-4 mr-1" />
+                          CSV
+                        </Button>
+                        <Button size="sm" variant="secondary">
+                          <FileText className="h-4 w-4 mr-1" />
+                          PDF
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs uppercase text-yellow-400 font-medium tracking-wider">HR Leave Intelligence</p>
-                      <h2 className="text-xl font-bold">Leave Analytics Dashboard</h2>
-                      <p className="text-slate-400 text-sm">Executive insights · Quality Control Company Limited</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="secondary">
-                      <Download className="h-4 w-4 mr-1" />
-                      CSV
-                    </Button>
-                    <Button size="sm" variant="secondary">
-                      <FileText className="h-4 w-4 mr-1" />
-                      PDF
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 6 Colorful Metric Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {[
-                { label: "Outstanding", value: 2, color: "from-orange-400 to-orange-500" },
-                { label: "Approved Total", value: 3, color: "from-teal-400 to-teal-500" },
-                { label: "On Leave Now", value: 2, color: "from-blue-400 to-blue-500" },
-                { label: "Yet to Enjoy", value: 0, color: "from-purple-400 to-purple-500" },
-                { label: "Completed", value: 1, color: "from-cyan-400 to-cyan-500" },
-                { label: "Unique Staff", value: 3, color: "from-pink-400 to-pink-500" },
-              ].map((stat, i) => (
-                <Card key={i} className={`bg-gradient-to-br ${stat.color} border-0 text-white shadow-md`}>
-                  <CardContent className="p-4">
-                    <p className="text-xs opacity-80 mb-1">{stat.label}</p>
-                    <p className="text-3xl font-bold">{stat.value}</p>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
 
-            {/* Leave by Type & Location */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-orange-500" />
-                    <CardTitle>Leave by Type</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {["Annual Leave", "Maternity", "Paternity", "Sick Leave", "Study Leave"].map((type, i) => (
-                      <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
-                        <span className="text-sm">{type}</span>
-                        <Badge variant="secondary">{Math.floor(Math.random() * 5) + 1}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-green-500" />
-                    <CardTitle>Leave by Location</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {["QCC Head Office", "Regional Office", "Factory", "Warehouse"].map((loc, i) => (
-                      <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
-                        <span className="text-sm">{loc}</span>
-                        <Badge variant="secondary">{Math.floor(Math.random() * 8) + 1}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Currently on Leave Table */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-blue-500" />
-                    <CardTitle>Currently on Leave</CardTitle>
-                  </div>
-                  <Badge>2</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
+                {/* 6 Colorful Metric Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                   {[
-                    { name: "Mr. Owuraku Ansah", dept: "IT", dates: "2026-05-01 — 2026-06-09", days: 40 },
-                    { name: "Mrs Yaw Ofosu Siaw", dept: "HR", dates: "2026-05-01 — 2026-06-09", days: 40 },
-                  ].map((emp, i) => (
-                    <div key={i} className="p-3 border rounded-lg text-sm">
-                      <div className="font-medium">{emp.name}</div>
-                      <div className="text-gray-600 text-xs mt-1">{emp.dept} • {emp.dates} • {emp.days}d</div>
-                    </div>
+                    { label: "Outstanding", value: analyticsData?.outstanding_requests || 0, color: "from-orange-400 to-orange-500" },
+                    { label: "Approved Total", value: analyticsData?.approved_total || 0, color: "from-teal-400 to-teal-500" },
+                    { label: "On Leave Now", value: analyticsData?.on_leave_now || 0, color: "from-blue-400 to-blue-500" },
+                    { label: "Yet to Enjoy", value: analyticsData?.yet_to_enjoy || 0, color: "from-purple-400 to-purple-500" },
+                    { label: "Completed", value: analyticsData?.completed || 0, color: "from-cyan-400 to-cyan-500" },
+                    { label: "Unique Staff", value: analyticsData?.unique_staff || 0, color: "from-pink-400 to-pink-500" },
+                  ].map((stat, i) => (
+                    <Card key={i} className={`bg-gradient-to-br ${stat.color} border-0 text-white shadow-md`}>
+                      <CardContent className="p-4">
+                        <p className="text-xs opacity-80 mb-1">{stat.label}</p>
+                        <p className="text-3xl font-bold">{stat.value}</p>
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+
+                {/* Leave by Type & Location */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-orange-500" />
+                        <CardTitle>Leave by Type</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {["Annual Leave", "Maternity", "Paternity", "Sick Leave", "Study Leave"].map((type, i) => (
+                          <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
+                            <span className="text-sm">{type}</span>
+                            <Badge variant="secondary">{Math.floor(Math.random() * 5) + 1}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-5 w-5 text-green-500" />
+                        <CardTitle>Leave by Location</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {["QCC Head Office", "Regional Office", "Factory", "Warehouse"].map((loc, i) => (
+                          <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
+                            <span className="text-sm">{loc}</span>
+                            <Badge variant="secondary">{Math.floor(Math.random() * 8) + 1}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Currently on Leave Table */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-blue-500" />
+                        <CardTitle>Currently on Leave</CardTitle>
+                      </div>
+                      <Badge>{teamOnLeave.length}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {teamOnLeave.length > 0 ? (
+                        teamOnLeave.slice(0, 5).map((emp, i) => (
+                          <div key={i} className="p-3 border rounded-lg text-sm">
+                            <div className="font-medium">Team Member</div>
+                            <div className="text-gray-600 text-xs mt-1">{emp.leave_type} • {emp.days || "N/A"}d</div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-muted-foreground py-4">No team members on leave</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </TabsContent>
         )}
 
         {/* Tab 4: Balance & Calendar */}
         <TabsContent value="insights" className="space-y-6 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Leave Balance */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Leave Balance</CardTitle>
-                <CardDescription>Period 2025/2027</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {[
-                  { type: "Study Leave", left: 154, color: "bg-blue-100" },
-                  { type: "Maternity", left: 84, color: "bg-pink-100" },
-                  { type: "Annual Leave", left: 25, color: "bg-green-100" },
-                  { type: "Sick Leave", left: 10, color: "bg-red-100" },
-                  { type: "Paternity", left: 5, color: "bg-purple-100" },
-                ].map((item, i) => (
-                  <div key={i} className={`p-3 rounded-lg ${item.color}`}>
-                    <p className="text-sm font-medium">{item.type}</p>
-                    <p className="text-xs text-gray-600">{item.left} left</p>
-                  </div>
-                ))}
-              </CardContent>
+          {loadingBalances ? (
+            <Card className="text-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">Loading balances...</p>
             </Card>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Leave Balance */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Leave Balance</CardTitle>
+                  <CardDescription>Period 2025/2027</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {balancesData.length > 0 ? (
+                    balancesData.slice(0, 5).map((item, i) => (
+                      <div key={i} className="p-3 rounded-lg bg-blue-100">
+                        <p className="text-sm font-medium">{item.leave_type_key}</p>
+                        <p className="text-xs text-gray-600">{item.outstanding_days || 0} left</p>
+                      </div>
+                    ))
+                  ) : (
+                    [
+                      { type: "Study Leave", left: 154, color: "bg-blue-100" },
+                      { type: "Maternity", left: 84, color: "bg-pink-100" },
+                      { type: "Annual Leave", left: 25, color: "bg-green-100" },
+                      { type: "Sick Leave", left: 10, color: "bg-red-100" },
+                      { type: "Paternity", left: 5, color: "bg-purple-100" },
+                    ].map((item, i) => (
+                      <div key={i} className={`p-3 rounded-lg ${item.color}`}>
+                        <p className="text-sm font-medium">{item.type}</p>
+                        <p className="text-xs text-gray-600">{item.left} left</p>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
 
-            {/* Team Calendar */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-lg">Team Calendar</CardTitle>
-                <CardDescription>Who&apos;s off this month</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-48 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
-                  <Calendar className="h-8 w-8 mr-2" />
-                  Interactive calendar view
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              {/* Team Calendar */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-lg">Team Calendar</CardTitle>
+                  <CardDescription>Who&apos;s off this month</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-48 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
+                    <Calendar className="h-8 w-8 mr-2" />
+                    Interactive calendar view
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
   )
 }
-
-// Fix for missing import
-import { Plus } from "lucide-react"
