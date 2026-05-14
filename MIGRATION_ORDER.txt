@@ -1,0 +1,119 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                     MIGRATION EXECUTION ORDER                                  ║
+║                          RUN IN THIS ORDER                                     ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ 1️⃣  MIGRATION 062: Outstanding Leave Tracking                                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ File:        scripts/062_outstanding_leave_tracking.sql                        │
+│ Purpose:     Create outstanding_leave_balances table                           │
+│ Size:        2.6 KB                                                             │
+│ Time:        < 1 second                                                         │
+│ Risk:        None (new table)                                                   │
+│ Status:      ✅ REQUIRED - RUN FIRST                                            │
+│                                                                                 │
+│ Creates:     - Table: outstanding_leave_balances                               │
+│              - RLS Policies (4)                                                 │
+│              - Indexes (2)                                                      │
+│              - Trigger (1)                                                      │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ 2️⃣  MIGRATION 063: Enhance Leave Policy Catalog                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ File:        scripts/063_enhance_leave_policy_catalog.sql                      │
+│ Purpose:     Add staff category columns to leave_policy_catalog                │
+│ Size:        1.5 KB                                                             │
+│ Time:        < 1 second                                                         │
+│ Risk:        None (adds columns with defaults)                                  │
+│ Status:      ✅ REQUIRED - RUN SECOND                                           │
+│                                                                                 │
+│ Adds:        - staff_category                                                   │
+│              - calculation_method                                               │
+│              - allow_carryover                                                  │
+│              - max_carryover_days                                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ 3️⃣  MIGRATION 064: Extend Leave Plan Requests                                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ File:        scripts/064_extend_leave_plan_requests.sql                        │
+│ Purpose:     Add calculation and balance fields to leave_plan_requests         │
+│ Size:        2.1 KB                                                             │
+│ Time:        < 1 second                                                         │
+│ Risk:        None (adds columns with defaults)                                  │
+│ Status:      ✅ REQUIRED - RUN THIRD                                            │
+│                                                                                 │
+│ Adds:        - staff_category                                                   │
+│              - entitlement_days_used                                            │
+│              - year_outstanding_balance                                         │
+│              - is_carry_over_leave                                              │
+│              - calculation_summary                                              │
+│              - auto_calculated_end_date                                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ 4️⃣  MIGRATION 065: Migrate Leave Data                                           │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ File:        scripts/065_migrate_leave_data.sql                                │
+│ Purpose:     Populate outstanding_leave_balances from historical data          │
+│ Size:        2.7 KB                                                             │
+│ Time:        2-5 seconds (depends on data volume)                              │
+│ Risk:        Low (insert and update only, no deletions)                        │
+│ Status:      ✅ REQUIRED - RUN FOURTH                                           │
+│                                                                                 │
+│ Does:        - Populate outstanding_leave_balances                             │
+│              - Update entitlement_days_used                                     │
+│              - Backfill auto_calculated_end_date                                │
+│              - Create audit log entry                                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ 5️⃣  MIGRATION 066: Create Regional Loan Office Role                             │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ File:        scripts/066_create_regional_loan_office_role.sql                  │
+│ Purpose:     Create new regional_loan_office role and permissions              │
+│ Size:        3.5 KB                                                             │
+│ Time:        < 1 second                                                         │
+│ Risk:        Low (new role and table only)                                      │
+│ Status:      ✅ REQUIRED - RUN FIFTH                                            │
+│                                                                                 │
+│ Creates:     - Role: regional_loan_office                                       │
+│              - Table: regional_loan_office_locations                            │
+│              - RLS Policies (2)                                                 │
+│              - Indexes (3)                                                      │
+│              - Audit log entry                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                          SUMMARY                                               ║
+╠════════════════════════════════════════════════════════════════════════════════╣
+║ Total Migrations:     5                                                        ║
+║ Total Files:          5 SQL files in /scripts/                                 ║
+║ Total Time:           ~10-15 seconds                                           ║
+║ Setup Time:           5-10 minutes (copying/pasting)                           ║
+║ Rollback Time:        < 5 seconds                                              ║
+║ Risk Level:           LOW (all additive changes)                               ║
+║ Status:               ✅ Ready to Execute                                       ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+HOW TO RUN:
+───────────
+
+1. Open Supabase Dashboard
+2. Go to SQL Editor → New Query
+3. Copy entire script from scripts/062_outstanding_leave_tracking.sql
+4. Paste and click RUN
+5. Wait for "Success" message
+6. Repeat steps 3-5 for migrations 063, 064, 065, 066 in order
+
+IMPORTANT: RUN IN EXACT ORDER 062 → 063 → 064 → 065 → 066
+
+If any migration fails, check MIGRATION_EXECUTION_GUIDE.md for troubleshooting.
+
+✅ All scripts are ready in /scripts/ folder
+✅ All code is backward compatible
+✅ All changes can be rolled back if needed
+✅ RLS policies protect sensitive data
+✅ Audit logs track all changes
