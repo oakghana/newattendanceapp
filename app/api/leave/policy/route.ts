@@ -75,13 +75,14 @@ export async function GET() {
     const periodMap = new Map(periods.map((p) => [p.value, { ...p, active: p.value === activePeriodFromDb }]))
 
     const leaveTypes = rows
-      .filter((r: any) => r.leave_year_period === activePeriodFromDb && r.is_enabled)
+      .filter((r: any) => r.leave_year_period === activePeriodFromDb)
       .map((r: any) => ({
         leaveTypeKey: r.leave_type_key,
         leaveTypeLabel: r.leave_type_label,
         entitlementDays: r.entitlement_days,
         leaveYearPeriod: r.leave_year_period,
-        isEnabled: r.is_enabled,
+        is_enabled: r.is_enabled,
+        is_active: r.is_enabled,
       }))
 
     return NextResponse.json({
