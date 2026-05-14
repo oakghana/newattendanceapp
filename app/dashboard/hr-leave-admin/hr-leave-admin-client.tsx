@@ -328,14 +328,10 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 bg-slate-800/50 border border-slate-700">
+          <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700">
             <TabsTrigger value="holidays" className="flex items-center gap-2 data-[state=active]:bg-green-600">
               <Calendar className="w-4 h-4" />
               <span className="hidden sm:inline">Holidays</span>
-            </TabsTrigger>
-            <TabsTrigger value="leave-types" className="flex items-center gap-2 data-[state=active]:bg-green-600">
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Leave Types</span>
             </TabsTrigger>
             <TabsTrigger value="memos" className="flex items-center gap-2 data-[state=active]:bg-green-600">
               <FileText className="w-4 h-4" />
@@ -410,80 +406,6 @@ export function HRLeaveAdminClient({ profile }: HRLeaveAdminClientProps) {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Leave Types Tab */}
-          <TabsContent value="leave-types" className="mt-6">
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-white">Leave Types</CardTitle>
-                  <CardDescription>Configure and manage leave types</CardDescription>
-                </div>
-                <Button
-                  onClick={handleAddLeaveType}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Leave Type
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {leaveTypes.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400">No leave types configured yet</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {leaveTypes.map((leaveType) => (
-                      <Card key={leaveType.id} className="bg-slate-700/50 border-slate-600">
-                        <CardContent className="pt-4">
-                          <div className="mb-3">
-                            <p className="text-sm text-slate-400">Type</p>
-                            <p className="text-white font-semibold">{leaveType.leave_type_label}</p>
-                          </div>
-                          <div className="mb-3">
-                            <p className="text-sm text-slate-400">Entitlement Days</p>
-                            <p className="text-white">{leaveType.entitlement_days}</p>
-                          </div>
-                          <div className="mb-4">
-                            <p className="text-sm text-slate-400">Status</p>
-                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                              leaveType.is_active
-                                ? "bg-green-500/20 text-green-400"
-                                : "bg-red-500/20 text-red-400"
-                            }`}>
-                              {leaveType.is_active ? "Active" : "Inactive"}
-                            </span>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleEditLeaveType(leaveType)}
-                              className="flex-1 text-blue-400 hover:bg-blue-400/20"
-                            >
-                              <Edit2 className="w-4 h-4 mr-1" />
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteLeaveType(leaveType.id)}
-                              className="flex-1 text-red-400 hover:bg-red-400/20"
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Delete
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
                   </div>
                 )}
               </CardContent>

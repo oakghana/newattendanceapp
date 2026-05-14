@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     } = await admin.auth.getUser()
 
     if (!user) {
+      console.log("[v0] No authenticated user found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -58,12 +59,18 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    const userRole = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isHrLeaveOffice = ["hr_leave_office", "hr_office", "admin"].includes(userRole)
+    const rawRole = profile?.role || ""
+    const userRole = String(rawRole).toLowerCase().replace(/[\s-]+/g, "_")
+    
+    console.log("[v0] Holiday POST - Raw role:", rawRole, "Normalized:", userRole)
+
+    // Check if user has permission - include all valid roles
+    const isHrLeaveOffice = ["hr_leave_office", "hr_office", "admin", "director_hr", "manager_hr"].includes(userRole)
 
     if (!isHrLeaveOffice) {
+      console.log("[v0] User not authorized. Role:", userRole, "Allowed roles:", ["hr_leave_office", "hr_office", "admin", "director_hr", "manager_hr"])
       return NextResponse.json(
-        { error: "Only HR Leave Office can add public holidays" },
+        { error: "Only HR Leave Office staff can add public holidays" },
         { status: 403 }
       )
     }
@@ -98,6 +105,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    console.log("[v0] Holiday added successfully:", newHoliday?.[0]?.holiday_date)
     return NextResponse.json({
       success: true,
       holiday: newHoliday?.[0],
