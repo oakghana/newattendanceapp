@@ -2185,7 +2185,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         Annual Leave Planning Reminder:
                       </h4>
                       <p className="text-sm text-amber-800 leading-relaxed">
-                        In September, all staff must submit their annual leave requests for the October cocoa season cycle. This allows HOD/Regional Managers time to review and approve all leave days by the start of October. Plan ahead to avoid operational disruptions.
+                        In October, all staff are expected to submit their annual leave requests for the cocoa season cycle. This gives HODs and Regional Managers enough time to review and approve leave before the period progresses. Kindly plan ahead to keep operations running smoothly.
                       </p>
                     </div>
                   </div>
