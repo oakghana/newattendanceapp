@@ -52,6 +52,7 @@ export default function HRLeaveAdminClient({ profile }: { profile?: { id: string
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [componentError, setComponentError] = useState<string | null>(null)
 
   // Holidays states
   const [holidays, setHolidays] = useState<Holiday[]>([])
@@ -318,6 +319,34 @@ export default function HRLeaveAdminClient({ profile }: { profile?: { id: string
     )
   }
 
+  if (componentError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white">HR Leave Office Admin</h1>
+          <p className="text-slate-400">Manage holidays, recalls, and deferments</p>
+        </div>
+        <Card className="bg-red-900/20 border-red-700">
+          <CardContent className="pt-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-200 font-semibold mb-2">Component Error</p>
+              <p className="text-red-200 text-sm">{componentError}</p>
+              <Button variant="ghost" size="sm" onClick={() => {
+                setComponentError(null)
+                location.reload()
+              }} className="mt-3 text-red-400 hover:text-red-300">
+                Reload Page
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  try {
+  // Render component
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -736,4 +765,29 @@ export default function HRLeaveAdminClient({ profile }: { profile?: { id: string
       </Dialog>
     </div>
   )
+  } catch (err) {
+    console.error('[v0] Render error:', err)
+    const errorMsg = err instanceof Error ? err.message : 'Unknown rendering error'
+    setComponentError(errorMsg)
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white">HR Leave Office Admin</h1>
+          <p className="text-slate-400">Manage holidays, recalls, and deferments</p>
+        </div>
+        <Card className="bg-red-900/20 border-red-700">
+          <CardContent className="pt-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-200 font-semibold mb-2">Rendering Error</p>
+              <p className="text-red-200 text-sm">{errorMsg}</p>
+              <Button variant="ghost" size="sm" onClick={() => location.reload()} className="mt-3 text-red-400 hover:text-red-300">
+                Reload Page
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 }

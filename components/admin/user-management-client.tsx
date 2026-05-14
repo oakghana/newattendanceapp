@@ -453,6 +453,13 @@ export default function UserManagementClient({
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="regional_manager">Regional Manager</SelectItem>
                       <SelectItem value="department_head">Dept Head</SelectItem>
+                      <SelectItem value="it-admin">IT-Admin</SelectItem>
+                      <SelectItem value="audit_staff">Audit Staff</SelectItem>
+                      <SelectItem value="accounts">Accounts</SelectItem>
+                      <SelectItem value="loan_office">Loan Office</SelectItem>
+                      <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
+                      <SelectItem value="manager_hr">Manager HR</SelectItem>
+                      <SelectItem value="director_hr">Director HR</SelectItem>
                       <SelectItem value="staff">Staff</SelectItem>
                       <SelectItem value="nsp">NSP</SelectItem>
                       <SelectItem value="intern">Intern</SelectItem>

@@ -1,7 +1,7 @@
 "use client"
 
 // ============================================================
-// Leave Planning Client — V2 Redesign (4-stage workflow)
+// Leave Planning Client - V2 Redesign (4-stage workflow)
 // Staff → HOD Review → HR Leave Office → HR Approval + Memo
 // ============================================================
 
@@ -100,7 +100,7 @@ interface RegistrySignature {
   signature_data_url: string | null
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// - Helpers -
 
 type SignatureMode = "typed" | "upload" | "draw"
 
@@ -132,15 +132,15 @@ async function readAsDataUrl(file: File): Promise<string> {
 }
 
 function fmtDate(val?: string | null) {
-  if (!val) return "—"
+  if (!val) return "-"
   try {
     return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "short", year: "numeric" })
   } catch { return val }
 }
 
 function fmtName(user?: any) {
-  if (!user) return "—"
-  return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.employee_id || "—"
+  if (!user) return "-"
+  return [user.first_name, user.last_name].filter(Boolean).join(" ") || user.employee_id || "-"
 }
 
 function leaveTypeLabelShort(key: string) {
@@ -215,9 +215,9 @@ function pickSavedLeaveSignature(signatures: RegistrySignature[]): RegistrySigna
   return leaveSignatures[0] || null
 }
 
-// ─── Corporate Memo Template Builder ────────────────────────────────────────
+// - Corporate Memo Template Builder -
 function fmtLongDate(val?: string | null) {
-  if (!val) return "—"
+  if (!val) return "-"
   try {
     return new Date(val).toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
   } catch {
@@ -226,7 +226,7 @@ function fmtLongDate(val?: string | null) {
 }
 
 function fmtFormalDate(val?: string | null) {
-  if (!val) return "—"
+  if (!val) return "-"
   try {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
@@ -240,7 +240,7 @@ function fmtFormalDate(val?: string | null) {
 }
 
 function fmtFormalDateWithWeekday(val?: string | null) {
-  if (!val) return "—"
+  if (!val) return "-"
   try {
     const d = new Date(val)
     if (Number.isNaN(d.getTime())) return String(val)
@@ -308,8 +308,8 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     approved_days: effectiveDays,
     approved_months: String(approvedMonths),
     approved_months_text: `${approvedMonths} (${approvedMonths}) month${approvedMonths === 1 ? "" : "s"}`,
-    return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "—",
-    return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "—",
+    return_to_work_date: returnDateIso ? fmtLongDate(returnDateIso) : "-",
+    return_to_work_date_formal: returnDateIso ? fmtFormalDateWithWeekday(returnDateIso) : "-",
     leave_year_period: String(req.leave_year_period || getActiveLeaveYearPeriod()),
     outstanding_leave_days: String(outstandingLeaveDays),
     travelling_days_balance_sentence: travellingDays > 0 ? ` plus ${travellingDays} travelling day(s)` : "",
@@ -514,7 +514,7 @@ function buildMemoTemplate(req: any): { subject: string; body: string; cc: strin
     templateKey: fallbackTemplate.template_key,
   }
 }
-// ────────────────────────────────────────────────────────────────────────────
+// -
 
 function getCurrentMonthRange() {
   const now = new Date()
@@ -628,7 +628,7 @@ async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName:
   doc.save(fileName)
 }
 
-// ─── Stage Progress Indicator ────────────────────────────────────────────────
+// - Stage Progress Indicator -
 function WorkflowStages({ status }: { status: string }) {
   const stages = [
     { label: "Submitted", Icon: Send },
@@ -681,7 +681,7 @@ function WorkflowStages({ status }: { status: string }) {
   )
 }
 
-// ─── InfoPill ────────────────────────────────────────────────────────────────
+// - InfoPill -
 function InfoPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg p-2 text-center border ${highlight ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -856,7 +856,7 @@ const EMPTY_HR_ANALYTICS = {
   monthly_leave_counts: [],
   records: [],
 }
-// ─── Leave Request Card ───────────────────────────────────────────────────────
+// - Leave Request Card -
 function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   req: any; onEdit?: () => void; onDelete?: () => void; onViewMemo?: () => void; canEdit: boolean
 }) {
@@ -869,7 +869,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="font-semibold text-slate-800 text-sm">
-              {leaveTypeLabelShort(req.leave_type_key)} — {req.leave_year_period}
+              {leaveTypeLabelShort(req.leave_type_key)} - {req.leave_year_period}
             </p>
             <p className="text-xs text-slate-500 mt-0.5">
               {fmtDate(effectiveStart)} → {fmtDate(effectiveEnd)}
@@ -917,7 +917,21 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
               <Download className="w-3 h-3 mr-1" /> Download Memo
             </Button>
           )}
-          {canEdit && onEdit && (
+          {req.status === "hod_changes_requested" && onEdit && (
+            <>
+              <Button size="sm" variant="outline"
+                className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={onEdit}>
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Accept Changes
+              </Button>
+              <Button size="sm" variant="outline"
+                className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={onEdit}>
+                Counter-Offer
+              </Button>
+            </>
+          )}
+          {canEdit && req.status !== "hod_changes_requested" && onEdit && (
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onEdit}>
               <Pencil className="w-3 h-3 mr-1" /> Edit
             </Button>
@@ -935,7 +949,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// - Main Component -
 export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -953,7 +967,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const canSelfApply = isStaff || isHod || isAdmin ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "accounts"].includes(normalizedRole)
 
-  // ── Data ────────────────────────────────────────────────────────────
+  // - Data -
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -983,7 +997,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
-  // ── Submit form ─────────────────────────────────────────────────────
+  // - Submit form -
   const [editingId, setEditingId] = useState<string | null>(null)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -1013,14 +1027,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return fullName || "Staff Signature"
   }, [profile.firstName, profile.lastName])
 
-  // ── HOD review ──────────────────────────────────────────────────────
+  // - HOD review -
   const [hodAction, setHodAction] = useState<Record<string, "approve" | "reject" | "recommend_change">>({})
   const [hodNote, setHodNote] = useState<Record<string, string>>({})
   const [hodAdjStart, setHodAdjStart] = useState<Record<string, string>>({})
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────────────────────────────
+  // - HR Leave Office -
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -1034,7 +1048,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
 
-  // ── HR Approver ─────────────────────────────────────────────────────
+  // - HR Approver -
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
   const [hrSigMode, setHrSigMode] = useState<SignatureMode>("typed")
   const [hrSigTyped, setHrSigTyped] = useState("")
@@ -1048,7 +1062,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────���────────────────────────────────────────────────�������������──
+  // - Computed -
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1068,7 +1082,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const leaveYearPeriodOptions = useMemo(() => getLeaveYearPeriodOptions(), [])
   const inOctoberPlanningWindow = useMemo(() => isOctoberPlanningWindow(), [])
 
-  // ── Real-time same-month conflict warning ────────────────────────────
+  // - Real-time same-month conflict warning -
   const sameMonthConflict = useMemo(() => {
     if (!startDate || !leaveType || !data?.myRequests) return null
     const newStart = new Date(startDate)
@@ -1110,7 +1124,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }) || null
   }, [startDate, leaveType, data?.myRequests, editingId])
 
-  // ── Loaders ─────────────────────────────────────────────────────────
+  // - Loaders -
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -1134,10 +1148,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       const json = await res.json()
       if (!res.ok) return
       setPolicyActivePeriod(String(json.activePeriod || "2026/2027"))
-      // Filter only active leave types, excluding inactive ones and Sick Leave
+      // Include all leave types (active and inactive), excluding only Sick Leave
       const types: LeaveTypeOption[] = Array.isArray(json.leaveTypes)
         ? json.leaveTypes.filter((t: any) => 
-            t.is_active !== false && 
             t.leaveTypeKey !== "sick_leave" && 
             String(t.leaveTypeLabel || "").toLowerCase() !== "sick leave"
           )
@@ -1265,6 +1278,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     leaveTypeLabel: string
     entitlementDays: number
     sortOrder: number
+    isEnabled?: boolean
   }) => {
     setLeaveTypeSavingKey(payload.leaveTypeKey)
     try {
@@ -1277,7 +1291,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           leaveTypeKey: payload.leaveTypeKey,
           leaveTypeLabel: payload.leaveTypeLabel,
           entitlementDays: payload.entitlementDays,
-          isEnabled: true,
+          isEnabled: payload.isEnabled ?? true,
           sortOrder: payload.sortOrder,
         }),
       })
@@ -1318,6 +1332,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       leaveTypeLabel: label,
       entitlementDays,
       sortOrder: index >= 0 ? index + 1 : 100,
+      isEnabled: draft.isActive !== false,
     })
   }, [leaveTypeDrafts, leaveTypes, saveLeaveTypePolicy, toast])
 
@@ -1355,6 +1370,85 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeLabel("")
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
+
+  // - Holiday CRUD Functions -
+  const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
+  const [newHolidayDate, setNewHolidayDate] = useState("")
+  const [newHolidayName, setNewHolidayName] = useState("")
+  const [holidaySavingId, setHolidaySavingId] = useState<string | null>(null)
+  const [holidayError, setHolidayError] = useState<string | null>(null)
+  const [holidaySuccess, setHolidaySuccess] = useState<string | null>(null)
+
+  const saveHoliday = useCallback(async (oldDate: string | null, newDate: string, newName: string) => {
+    if (!newDate || !newName.trim()) {
+      setHolidayError("Please provide both date and holiday name")
+      setTimeout(() => setHolidayError(null), 3000)
+      return
+    }
+
+    const holidayId = oldDate || newDate
+    setHolidaySavingId(holidayId)
+    try {
+      const res = await fetch("/api/leave/holidays", {
+        method: oldDate ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(oldDate ? { old_date: oldDate, holiday_date: newDate, holiday_name: newName } : { holiday_date: newDate, holiday_name: newName }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error || "Failed to save holiday")
+      }
+
+      setHolidaySuccess(`Holiday ${oldDate ? "updated" : "added"} successfully`)
+      setTimeout(() => setHolidaySuccess(null), 3000)
+      
+      // Update holidays list
+      if (oldDate) {
+        setHolidays((prev) => prev.filter((h) => h.holiday_date !== oldDate).concat({ holiday_date: newDate, holiday_name: newName }).sort((a, b) => a.holiday_date.localeCompare(b.holiday_date)))
+      } else {
+        setHolidays((prev) => [...prev, { holiday_date: newDate, holiday_name: newName }].sort((a, b) => a.holiday_date.localeCompare(b.holiday_date)))
+      }
+      
+      setHolidayDrafts((prev) => {
+        const updated = { ...prev }
+        delete updated[holidayId]
+        return updated
+      })
+      
+      if (!oldDate) {
+        setNewHolidayDate("")
+        setNewHolidayName("")
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save holiday"
+      setHolidayError(msg)
+      setTimeout(() => setHolidayError(null), 3000)
+    } finally {
+      setHolidaySavingId(null)
+    }
+  }, [])
+
+  const deleteHoliday = useCallback(async (date: string) => {
+    setHolidaySavingId(date)
+    try {
+      const res = await fetch(`/api/leave/holidays?date=${date}`, { method: "DELETE" })
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error || "Failed to delete holiday")
+      }
+
+      setHolidaySuccess("Holiday deleted successfully")
+      setTimeout(() => setHolidaySuccess(null), 3000)
+      setHolidays((prev) => prev.filter((h) => h.holiday_date !== date))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete holiday"
+      setHolidayError(msg)
+      setTimeout(() => setHolidayError(null), 3000)
+    } finally {
+      setHolidaySavingId(null)
+    }
+  }, [])
 
   useEffect(() => {
     // Staff requests should default to typed signature using their profile name.
@@ -1447,7 +1541,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
   }, [activeTab, analyticsRange.end, analyticsRange.start, canViewLeaveAnalytics, hrOfficeTab, toast])
 
-  // ── Derived lists ────────────────────────────────────────────────────
+  // - Derived lists -
   const myRequests: any[] = useMemo(() => {
     if (!data) return []
     const requests = data.myRequests || data.requests || []
@@ -1505,7 +1599,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
     return (data.requests || []).filter((r: any) =>
-      ["hod_approved", "manager_confirmed", ...(HR_APPROVER_PENDING_STATUSES as string[])].includes(String(r?.status || "")),
+      ["hod_approved", "manager_confirmed", "hr_office_forwarded"].includes(String(r?.status || "")),
     )
   }, [data])
 
@@ -1657,7 +1751,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return data.analytics
   }, [analyticsData, data])
 
-  // ── Actions ──────────────────────────────────────────────────────────
+  // - Actions -
 
   const submitPlan = async () => {
     if (!leaveType) {
@@ -1790,7 +1884,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const rsn = officeReason[requestId]
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
     if (!rsn || rsn.trim().length < 5) {
-      toast({ title: "Reason required", description: "Provide a detailed reason — it will appear in the memo.", variant: "destructive" })
+      toast({ title: "Reason required", description: "Provide a detailed reason - it will appear in the memo.", variant: "destructive" })
       return
     }
 
@@ -1866,7 +1960,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Approval failed")
       toast({
-        title: action === "approve" ? "Leave approved — memo ready" : "Leave rejected",
+        title: action === "approve" ? "Leave approved - memo ready" : "Leave rejected",
         description: action === "approve" ? "Staff can now download their leave memo." : undefined,
       })
       setHrExpandedId(null)
@@ -1911,7 +2005,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
   }
 
-  // ── Tab config ────────────────────────────────────────────────────────
+  // - Tab config -
   const tabs = useMemo(() => {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
     if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
@@ -1923,10 +2017,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
-  // ── Render ────��─────────────────────────────────────────────────────
+  // - Render -
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─��� Header Banner ──────�����───────────────────────────────────── */}
+      {/* - Header Banner - */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -1989,7 +2083,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             ))}
           </TabsList>
 
-          {/* ── My Leaves ─────────────────────────────────────────────── */}
+          {/* - My Leaves - */}
           <TabsContent value="my-leaves">
             {myRequests.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -2019,7 +2113,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             )}
           </TabsContent>
 
-          {/* ── Apply for Leave ───────────────────────────────────────── */}
+          {/* - Apply for Leave - */}
           <TabsContent value="apply">
             <Card className="border-0 shadow-md">
               <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b pb-4">
@@ -2242,7 +2336,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Card>
           </TabsContent>
 
-          {/* ── HOD Review ──────────────────────────────────────────────── */}
+          {/* - HOD Review - */}
           <TabsContent value="hod-review">
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -2284,7 +2378,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <div>
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
                             <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "—")} · {String(req.user?.employee_id || "")}
+                              {String(req.user?.departments?.name || "-")} · {String(req.user?.employee_id || "")}
                             </p>
                           </div>
                           <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
@@ -2389,13 +2483,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             )}
           </TabsContent>
 
-          {/* ── HR Leave Office ───────────────────────────────────────── */}
+          {/* - HR Leave Office - */}
           <TabsContent value="hr-office">
             <div className="mb-4 space-y-3">
               <Alert className="border-blue-200 bg-blue-50">
                 <ClipboardList className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="text-xs text-blue-800 ml-1">
-                  Review HOD-approved leave requests. You may adjust days — add travelling days, deduct public holidays or
+                  Review HOD-approved leave requests. You may adjust days - add travelling days, deduct public holidays or
                   prior partial leave enjoyed. All adjustments and reasons will appear in the staff&apos;s official leave memo.
                 </AlertDescription>
               </Alert>
@@ -2470,7 +2564,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <Clock3 className="h-3.5 w-3.5" />
-                  Last refresh: {hrOfficeLastRefresh ? fmtDate(hrOfficeLastRefresh) : "—"}
+                  Last refresh: {hrOfficeLastRefresh ? fmtDate(hrOfficeLastRefresh) : "-"}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -2547,16 +2641,16 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
               </div>
             </div>
             <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
-              <TabsList className={`grid h-auto w-full ${
-                canViewLeaveAnalytics && canManageLeaveTypePolicy ? "grid-cols-3" :
-                (canViewLeaveAnalytics || canManageLeaveTypePolicy) ? "grid-cols-2" : "grid-cols-1"
-              } rounded-xl border border-slate-200 bg-slate-50 p-1.5`}>
-                <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Operations</TabsTrigger>
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+                <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Operations</TabsTrigger>
                 {canManageLeaveTypePolicy && (
-                  <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Leave Policy</TabsTrigger>
+                  <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Leave Policy</TabsTrigger>
+                )}
+                {canManageLeaveTypePolicy && (
+                  <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Holidays</TabsTrigger>
                 )}
                 {canViewLeaveAnalytics && (
-                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
+                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Analytics</TabsTrigger>
                 )}
               </TabsList>
 
@@ -2722,13 +2816,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           const draft = leaveTypeDrafts[leaveTypeOption.leaveTypeKey] || {
                             leaveTypeLabel: leaveTypeOption.leaveTypeLabel,
                             entitlementDays: String(leaveTypeOption.entitlementDays || 0),
+                            isActive: leaveTypeOption.is_active !== false,
                           }
                           const isSaving = leaveTypeSavingKey === leaveTypeOption.leaveTypeKey
 
                           return (
                             <div
                               key={leaveTypeOption.leaveTypeKey}
-                              className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-[1fr_140px_auto]"
+                              className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-[1fr_140px_80px_auto]"
                             >
                               <Input
                                 value={draft.leaveTypeLabel}
@@ -2754,6 +2849,17 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 }))}
                                 placeholder="Days"
                               />
+                              <div className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2">
+                                <div className="relative w-10 h-6 bg-slate-300 rounded-full cursor-pointer transition-colors" style={{backgroundColor: draft.isActive !== false ? '#10b981' : '#d1d5db'}} onClick={() => setLeaveTypeDrafts((prev) => ({
+                                  ...prev,
+                                  [leaveTypeOption.leaveTypeKey]: {
+                                    ...(prev[leaveTypeOption.leaveTypeKey] || draft),
+                                    isActive: draft.isActive === false ? true : false,
+                                  },
+                                }))}>
+                                  <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all" style={{left: draft.isActive !== false ? '18px' : '2px'}} />
+                                </div>
+                              </div>
                               <Button
                                 size="sm"
                                 className="bg-emerald-700 hover:bg-emerald-800"
@@ -2762,8 +2868,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               >
                                 {isSaving ? "Saving..." : "Save"}
                               </Button>
-                              <p className="text-[11px] text-slate-400 md:col-span-3">
-                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1}
+                              <p className="text-[11px] text-slate-400 md:col-span-4">
+                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1} · Status: {draft.isActive !== false ? 'Active' : 'Inactive'}
                               </p>
                             </div>
                           )
@@ -2805,6 +2911,80 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 </TabsContent>
               )}
 
+              {canManageLeaveTypePolicy && (
+              <TabsContent value="holidays" className="space-y-6">
+                <Card className="border border-blue-200 bg-white shadow-sm">
+                  <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b border-blue-200">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                        <CalendarDays className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <CardTitle>Public Holidays Management</CardTitle>
+                        <p className="text-sm text-slate-500 mt-1">Add, edit, or delete holidays that are deducted from leave calculations.</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    {holidayError && <Alert variant="destructive"><AlertDescription>{holidayError}</AlertDescription></Alert>}
+                    {holidaySuccess && <Alert><AlertDescription className="text-green-700">{holidaySuccess}</AlertDescription></Alert>}
+
+                    <div className="rounded-xl border border-dashed border-blue-300 bg-blue-50/40 p-4 space-y-3">
+                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Add New Holiday</p>
+                      <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                        <Input type="date" value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} placeholder="Holiday date" />
+                        <Input value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} placeholder="Holiday name (e.g. Christmas)" />
+                        <Button size="sm" className="bg-blue-700 hover:bg-blue-800" disabled={Boolean(holidaySavingId)} onClick={() => void saveHoliday(null, newHolidayDate, newHolidayName)}>
+                          {holidaySavingId === newHolidayDate ? "Adding..." : "Add"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-slate-700">Current Holidays ({holidays.length})</p>
+                      {holidays.length === 0 ? (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">No holidays configured yet</div>
+                      ) : (
+                        <div className="grid gap-2 max-h-96 overflow-y-auto">
+                          {holidays.map((holiday) => {
+                            const draft = holidayDrafts[holiday.holiday_date]
+                            const isEditing = !!draft
+                            return (
+                              <div key={holiday.holiday_date} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-[1fr_1fr_80px_auto_auto]">
+                                {isEditing ? (
+                                  <>
+                                    <Input type="date" value={draft.date} onChange={(e) => setHolidayDrafts((prev) => ({ ...prev, [holiday.holiday_date]: { ...draft, date: e.target.value } }))} />
+                                    <Input value={draft.name} onChange={(e) => setHolidayDrafts((prev) => ({ ...prev, [holiday.holiday_date]: { ...draft, name: e.target.value } }))} />
+                                    <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={Boolean(holidaySavingId)} onClick={() => void saveHoliday(holiday.holiday_date, draft.date, draft.name)}>
+                                      Save
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => setHolidayDrafts((prev) => { const updated = { ...prev }; delete updated[holiday.holiday_date]; return updated })}>
+                                      Cancel
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="text-sm font-medium text-slate-900">{holiday.holiday_name}</div>
+                                    <div className="text-xs text-slate-500">{holiday.holiday_date}</div>
+                                    <Button size="sm" variant="outline" disabled={Boolean(holidaySavingId)} onClick={() => setHolidayDrafts((prev) => ({ ...prev, [holiday.holiday_date]: { date: holiday.holiday_date, name: holiday.holiday_name } }))}>
+                                      Edit
+                                    </Button>
+                                    <Button size="sm" variant="destructive" disabled={Boolean(holidaySavingId)} onClick={() => void deleteHoliday(holiday.holiday_date)}>
+                                      {holidaySavingId === holiday.holiday_date ? "..." : "Delete"}
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              )}
+
               <TabsContent value="operations">
                 {hrOfficeFilteredQueue.length === 0 ? (
                   <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -2836,7 +3016,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <div>
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
                             <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "—")} ·{" "}
+                              {String(req.user?.departments?.name || "-")} ·{" "}
                               {leaveTypeLabelShort(req.leave_type_key)} · HOD approved {fmtDate(req.hod_reviewed_at)}
                             </p>
                           </div>
@@ -2848,7 +3028,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Original Start" value={fmtDate(req.preferred_start_date)} />
                           <InfoPill label="Original End" value={fmtDate(req.preferred_end_date)} />
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
-                          <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
+                          <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "-"} />
                         </div>
                         {req.manager_recommendation && (
                           <p className="text-xs text-slate-600 bg-amber-50 p-2 rounded border border-amber-200 mb-3">
@@ -2857,9 +3037,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         )}
                         <div className="mb-3 flex flex-wrap gap-2">
                           <Badge className="border border-slate-200 bg-white text-slate-700">Requested: {req.requested_days} day(s)</Badge>
-                          <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "—"} day(s)</Badge>
+                          <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "-"} day(s)</Badge>
                         </div>
                         <Button size="sm" variant="outline"
+                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
                           onClick={() => {
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
@@ -2878,13 +3059,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
                             }
                           }}
-                          className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50">
+                          className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">
                           {isExpanded ? "▲ Collapse" : "▼ Adjust & Forward"}
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="ml-2 h-8 text-xs border-slate-300"
+                          disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
+                          className="ml-2 h-8 text-xs border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleArchiveRequest(req.id, !hrOfficeShowArchived)}
                         >
                           {hrOfficeShowArchived ? "Restore to Active" : "Archive Request"}
@@ -2980,7 +3162,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-red-700">
-                                    <Minus className="w-3 h-3" /> Deduct — Public Holidays
+                                    <Minus className="w-3 h-3" /> Deduct - Public Holidays
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officeHolidayDays[req.id] || "0"}
@@ -2989,7 +3171,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-red-700">
-                                    <Minus className="w-3 h-3" /> Deduct — Prior Leave Enjoyed
+                                    <Minus className="w-3 h-3" /> Deduct - Prior Leave Enjoyed
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officePriorDays[req.id] || "0"}
@@ -2998,7 +3180,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-emerald-700">
-                                    <Plus className="w-3 h-3" /> Add — Travelling Days
+                                    <Plus className="w-3 h-3" /> Add - Travelling Days
                                   </Label>
                                   <Input type="number" min="0"
                                     value={officeTravelDays[req.id] || "0"}
@@ -3077,7 +3259,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 <Input
                                   value={officeMemoSubject[req.id] || ""}
                                   onChange={(e) => setOfficeMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="RE: APPLICATION FOR ANNUAL LEAVE — 2026/2027"
+                                  placeholder="RE: APPLICATION FOR ANNUAL LEAVE - 2026/2027"
                                   className="h-9 bg-white"
                                 />
                               </div>
@@ -3147,7 +3329,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Tabs>
           </TabsContent>
 
-          {/* ── HR Final Approval ─────────────────────────────────────── */}
+          {/* - HR Final Approval - */}
           <TabsContent value="hr-approve">
             {hrApproverQueue.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -3259,7 +3441,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <div>
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
                             <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "—")} · {leaveTypeLabelShort(req.leave_type_key)}
+                              {String(req.user?.departments?.name || "-")} · {leaveTypeLabelShort(req.leave_type_key)}
                             </p>
                           </div>
                           <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
@@ -3270,7 +3452,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Start" value={fmtDate(effectiveStart)} />
                           <InfoPill label="End" value={fmtDate(effectiveEnd)} />
                           <InfoPill label="Days" value={String(effectiveDays)} highlight />
-                          <InfoPill label="Year" value={req.leave_year_period || "—"} />
+                          <InfoPill label="Year" value={req.leave_year_period || "-"} />
                         </div>
                         {req.adjustment_reason && (
                           <Alert className="mb-3 py-2 border-blue-200 bg-blue-50">
@@ -3455,8 +3637,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                             </p>
                             <p className="text-xs text-slate-500">
                               {String(req?.leave_type_key || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
-                              {" · "}{req?.preferred_start_date} — {req?.preferred_end_date}
-                              {" · "}{req?.adjusted_days || req?.requested_days || "—"} day(s)
+                              {" · "}{req?.preferred_start_date} - {req?.preferred_end_date}
+                              {" · "}{req?.adjusted_days || req?.requested_days || "-"} day(s)
                             </p>
                             {req?.user?.departments?.name && (
                               <p className="text-xs text-slate-400">{req.user.departments.name}</p>

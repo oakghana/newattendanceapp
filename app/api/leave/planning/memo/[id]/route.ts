@@ -163,7 +163,9 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
   const startFormal = fmtFormalDate(effectiveStart)
   const endFormal = fmtFormalDate(effectiveEnd)
   const returnFormal = fmtFormalDateWithWeekday(returnDateIso)
-  const yearPart = String(lr.leave_year_period || "2026/2027")
+  // Use current year for annual leave period, not the stored leave_year_period which may be outdated
+  const currentYear = new Date().getFullYear()
+  const yearPart = leaveType === "annual" ? String(currentYear) : String(lr.leave_year_period || `${currentYear}/${currentYear + 1}`)
   const calYear = yearPart.split("/")[0]
   const travellingDays = Number(lr.travelling_days_added || 0)
   const entitlementDays = Number(lr.entitlement_days || 0)

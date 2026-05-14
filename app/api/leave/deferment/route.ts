@@ -56,13 +56,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Create deferment request
+    const defermentPeriod = `${deferral_year}/2027` // Format as "2026/2027"
     const { data, error } = await supabase
       .from("leave_deferment_requests")
       .insert({
         leave_plan_request_id,
-        deferral_year,
+        requested_deferment_year: parseInt(deferral_year),
+        requested_deferment_period: defermentPeriod,
         reason: reason || null,
-        created_by: user_id,
+        user_id: user_id,
         created_at: new Date().toISOString(),
         status: "pending",
       })
@@ -70,9 +72,14 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error("[v0] Deferment creation error:", error)
+      console.error("[v0] Deferment creation error:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      })
       return NextResponse.json(
-        { error: "Failed to create deferment request" },
+        { error: error.message || "Failed to create deferment request", details: error.details },
         { status: 500 }
       )
     }

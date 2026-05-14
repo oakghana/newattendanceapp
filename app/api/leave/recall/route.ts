@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     // Get the leave request details
     const { data: leaveRequest, error: leaveError } = await supabase
       .from("leave_plan_requests")
-      .select("id, user_id, start_date, end_date, status, employee_id, user_name")
+      .select("id, user_id, preferred_start_date, preferred_end_date, status")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Check if leave is currently active or upcoming
     const now = new Date()
     const recallDateObj = new Date(recall_date)
-    const endDateObj = new Date(leaveRequest.end_date)
+    const endDateObj = new Date(leaveRequest.preferred_end_date)
 
     if (recallDateObj >= endDateObj) {
       return NextResponse.json(
@@ -88,8 +88,9 @@ export async function POST(request: NextRequest) {
       .insert({
         leave_plan_request_id,
         recall_date,
-        reason: reason || null,
-        created_by: user_id,
+        recall_reason: reason || null,
+        initiated_by_user_id: user_id,
+        staff_user_id: leaveRequest.user_id,
         status: "pending",
         created_at: new Date().toISOString(),
       })
@@ -97,8 +98,16 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
-      console.error("[v0] Recall insert error:", insertError)
-      return NextResponse.json({ error: "Failed to create recall request" }, { status: 500 })
+      console.error("[v0] Recall insert error:", {
+        message: insertError.message,
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint
+      })
+      return NextResponse.json({ 
+        error: insertError.message || "Failed to create recall request",
+        details: insertError.details 
+      }, { status: 500 })
     }
 
     return NextResponse.json(

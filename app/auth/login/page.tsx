@@ -595,10 +595,13 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2 slide-up">
-              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">LEAVE/ATTENDANCE/LOAN APP 👋</CardTitle>
-              <CardDescription className="text-xs sm:text-sm text-muted-foreground">
-                Akwaaba! Sign in with your Staff Number, Email or use OTP to get started.
+            <div className="space-y-1 slide-up">
+              <div className="text-center mb-3">
+                <p className="text-sm text-primary font-medium mb-2">Akwaaba! 👋</p>
+              </div>
+              <CardTitle className="text-lg sm:text-xl font-bold text-primary tracking-wide line-clamp-2">LEAVE | ATTENDANCE | LOAN APP</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+                Sign in with your Staff Number, Email or use OTP to get started.
               </CardDescription>
             </div>
           </CardHeader>
@@ -669,12 +672,6 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    onClick={(e) => {
-                      console.log("[v0] Sign-in button clicked directly")
-                      console.log("[v0] Button disabled state:", isLoading)
-                      console.log("[v0] Identifier:", identifier)
-                      console.log("[v0] Password length:", password.length)
-                    }}
                     className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
                     disabled={isLoading}
                   >
