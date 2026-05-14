@@ -1,41 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { createClient } from "@supabase/supabase-js"
-import { 
-  BarChart3, 
-  CalendarRange, 
-  LayoutPanelTop, 
-  TrendingUp,
-  RefreshCw,
-  Download,
-  Clock,
-  CheckCircle2,
-  Users,
-  MapPin,
-  FileText,
-  ChevronLeft,
-  ChevronRight,
-  Sparkles
-} from "lucide-react"
+import { BarChart3, CalendarRange, LayoutPanelTop, TrendingUp, RefreshCw, Download, Clock, CheckCircle2, Users, MapPin, FileText, ChevronRight, Sparkles, Calendar } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { LeaveManagementClient } from "./leave-management-client"
-import { isHrLeaveOfficeRole } from "@/lib/leave-planning"
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, getDay, addMonths, subMonths } from "date-fns"
-
-const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
-
-function normalizeRole(role: string | null | undefined) {
-  return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-}
-
-function isHrAnalyticsRole(role: string | null | undefined) {
-  const normalized = normalizeRole(role)
-  return HR_ANALYTICS_ROLES.includes(normalized)
-}
 
 interface LeaveManagementModuleClientProps {
   userId: string
@@ -44,25 +14,22 @@ interface LeaveManagementModuleClientProps {
   userFirstName: string | null
   userLastName: string | null
   inactivityDays: number
-  userDepartmentName: string | null
-  userDepartmentCode: string | null
+  userDepartmentName?: string | null
+  userDepartmentCode?: string | null
   hasHodLinkage: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
   initialApprovedStaffRequests?: any[]
 }
 
-interface AnalyticsData {
-  outstanding: number
-  approvedTotal: number
-  onLeaveNow: number
-  yetToEnjoy: number
-  completed: number
-  uniqueStaff: number
-  leaveByType: { type: string; count: number }[]
-  leaveByLocation: { location: string; count: number }[]
-  currentlyOnLeave: any[]
-  allLeaveRecords: any[]
+function normalizeRole(role: string | null | undefined) {
+  return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+}
+
+function isHrAnalyticsRole(role: string | null | undefined) {
+  const normalized = normalizeRole(role)
+  const hrRoles = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
+  return hrRoles.includes(normalized)
 }
 
 export function LeaveManagementModuleClient({
@@ -72,185 +39,28 @@ export function LeaveManagementModuleClient({
   userFirstName,
   userLastName,
   inactivityDays,
-  userDepartmentName,
-  userDepartmentCode,
   hasHodLinkage,
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
 }: LeaveManagementModuleClientProps) {
   const showAnalytics = isHrAnalyticsRole(userRole)
-  const normalizedRole = normalizeRole(userRole)
-  const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
-
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
-  const [analyticsLoading, setAnalyticsLoading] = useState(false)
-  const [calendarMonth, setCalendarMonth] = useState(new Date())
-  const [leaveBalances, setLeaveBalances] = useState<any[]>([])
-  const [teamOnLeave, setTeamOnLeave] = useState<any[]>([])
-
-  useEffect(() => {
-    if (showAnalytics) {
-      fetchAnalyticsData()
-    }
-    fetchLeaveBalances()
-    fetchTeamOnLeave()
-  }, [showAnalytics])
-
-  const fetchAnalyticsData = async () => {
-    try {
-      setAnalyticsLoading(true)
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-      if (!supabaseUrl || !supabaseAnonKey) return
-
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-      // Fetch all leave requests for analytics
-      const { data: leaves, error } = await supabase
-        .from("leave_requests")
-        .select("*, users(first_name, last_name, department, location, staff_id)")
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        console.error("[v0] Error fetching analytics:", error)
-        return
-      }
-
-      const today = new Date()
-      const outstanding = leaves?.filter(l => l.status === "pending").length || 0
-      const approvedTotal = leaves?.filter(l => ["approved", "hr_approved"].includes(l.status?.toLowerCase())).length || 0
-      const onLeaveNow = leaves?.filter(l => {
-        if (!["approved", "hr_approved"].includes(l.status?.toLowerCase())) return false
-        const start = new Date(l.start_date)
-        const end = new Date(l.end_date)
-        return today >= start && today <= end
-      }).length || 0
-
-      const completed = leaves?.filter(l => {
-        if (!["approved", "hr_approved"].includes(l.status?.toLowerCase())) return false
-        return new Date(l.end_date) < today
-      }).length || 0
-
-      const uniqueStaff = new Set(leaves?.map(l => l.user_id)).size
-
-      // Leave by type
-      const typeCount: Record<string, number> = {}
-      leaves?.forEach(l => {
-        const type = l.leave_type || "Annual Leave"
-        typeCount[type] = (typeCount[type] || 0) + 1
-      })
-      const leaveByType = Object.entries(typeCount).map(([type, count]) => ({ type, count }))
-
-      // Leave by location
-      const locationCount: Record<string, number> = {}
-      leaves?.forEach(l => {
-        const location = l.users?.location || l.location || "Unknown"
-        locationCount[location] = (locationCount[location] || 0) + 1
-      })
-      const leaveByLocation = Object.entries(locationCount).map(([location, count]) => ({ location, count }))
-
-      // Currently on leave
-      const currentlyOnLeave = leaves?.filter(l => {
-        if (!["approved", "hr_approved"].includes(l.status?.toLowerCase())) return false
-        const start = new Date(l.start_date)
-        const end = new Date(l.end_date)
-        return today >= start && today <= end
-      }) || []
-
-      setAnalyticsData({
-        outstanding,
-        approvedTotal,
-        onLeaveNow,
-        yetToEnjoy: approvedTotal - completed - onLeaveNow,
-        completed,
-        uniqueStaff,
-        leaveByType,
-        leaveByLocation,
-        currentlyOnLeave,
-        allLeaveRecords: leaves || [],
-      })
-    } catch (error) {
-      console.error("[v0] Analytics error:", error)
-    } finally {
-      setAnalyticsLoading(false)
-    }
-  }
-
-  const fetchLeaveBalances = async () => {
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-      if (!supabaseUrl || !supabaseAnonKey) return
-
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-      const { data, error } = await supabase
-        .from("outstanding_leave_balances")
-        .select("*")
-        .eq("user_id", userId)
-
-      if (!error && data) {
-        setLeaveBalances(data)
-      }
-    } catch (error) {
-      console.error("[v0] Balance error:", error)
-    }
-  }
-
-  const fetchTeamOnLeave = async () => {
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-      if (!supabaseUrl || !supabaseAnonKey) return
-
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-      const today = new Date().toISOString().split("T")[0]
-
-      const { data, error } = await supabase
-        .from("leave_requests")
-        .select("*, users(first_name, last_name, department)")
-        .lte("start_date", today)
-        .gte("end_date", today)
-        .in("status", ["approved", "hr_approved"])
-        .limit(10)
-
-      if (!error && data) {
-        setTeamOnLeave(data)
-      }
-    } catch (error) {
-      console.error("[v0] Team leave error:", error)
-    }
-  }
-
-  // Calendar logic
-  const monthStart = startOfMonth(calendarMonth)
-  const monthEnd = endOfMonth(calendarMonth)
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
-  const startDayOfWeek = getDay(monthStart)
 
   return (
     <div className="space-y-6 w-full">
       <Tabs defaultValue="leave-management" className="space-y-6 w-full">
         {/* Professional Tab Navigation */}
-        <TabsList className="inline-flex h-auto gap-2 bg-transparent p-0 flex-wrap justify-center">
+        <TabsList className="inline-flex h-auto gap-2 bg-transparent p-0 border-0 flex-wrap justify-start sm:justify-center">
           <TabsTrigger 
             value="leave-management" 
-            className="gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition-all
-              data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-lg
-              data-[state=inactive]:bg-orange-100 data-[state=inactive]:text-orange-700 data-[state=inactive]:hover:bg-orange-200"
+            className="gap-2 rounded-full px-6 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white data-[state=inactive]:bg-orange-400/60 data-[state=inactive]:text-white"
           >
             <LayoutPanelTop className="h-4 w-4" /> 
             Leave Management
           </TabsTrigger>
           <TabsTrigger 
             value="leave-planning" 
-            className="gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition-all
-              data-[state=active]:bg-green-500 data-[state=active]:text-white data-[state=active]:shadow-lg
-              data-[state=inactive]:bg-green-100 data-[state=inactive]:text-green-700 data-[state=inactive]:hover:bg-green-200"
+            className="gap-2 rounded-full px-6 py-2 text-sm font-medium bg-green-500 hover:bg-green-600 text-white data-[state=inactive]:bg-green-400/60 data-[state=inactive]:text-white"
           >
             <CalendarRange className="h-4 w-4" /> 
             Leave & HR Leave
@@ -258,9 +68,7 @@ export function LeaveManagementModuleClient({
           {showAnalytics && (
             <TabsTrigger 
               value="hr-analytics" 
-              className="gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition-all
-                data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg
-                data-[state=inactive]:bg-blue-100 data-[state=inactive]:text-blue-700 data-[state=inactive]:hover:bg-blue-200"
+              className="gap-2 rounded-full px-6 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white data-[state=inactive]:bg-blue-400/60 data-[state=inactive]:text-white"
             >
               <TrendingUp className="h-4 w-4" /> 
               Leave Analytics
@@ -268,9 +76,7 @@ export function LeaveManagementModuleClient({
           )}
           <TabsTrigger 
             value="insights" 
-            className="gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition-all
-              data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-lg
-              data-[state=inactive]:bg-indigo-100 data-[state=inactive]:text-indigo-700 data-[state=inactive]:hover:bg-indigo-200"
+            className="gap-2 rounded-full px-6 py-2 text-sm font-medium bg-indigo-500 hover:bg-indigo-600 text-white data-[state=inactive]:bg-indigo-400/60 data-[state=inactive]:text-white"
           >
             <BarChart3 className="h-4 w-4" /> 
             Balance & Calendar
@@ -293,104 +99,143 @@ export function LeaveManagementModuleClient({
           />
         </TabsContent>
 
-        {/* Tab 2: Leave & HR Leave (Planning) */}
+        {/* Tab 2: Leave & HR Leave Planning */}
         <TabsContent value="leave-planning" className="space-y-6 w-full">
-          {/* HR Leave Header */}
-          <Card className="bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-700 border-0 shadow-xl">
+          {/* Green Header with Workflow */}
+          <Card className="bg-gradient-to-r from-emerald-700 to-teal-700 border-0 text-white shadow-lg">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center">
-                    <CalendarRange className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Leave Management</h2>
-                    <p className="text-emerald-100 text-sm">2025/2026 Leave Year · Quality Control Company Limited</p>
-                  </div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">Leave Management</h2>
+                  <p className="text-emerald-100 text-sm mt-1">2025/2026 Leave Year • Quality Control Company Limited</p>
                 </div>
-                <Button variant="secondary" size="sm" className="gap-2">
+                <Button size="sm" variant="secondary" className="gap-2">
                   <RefreshCw className="h-4 w-4" />
                   Refresh
                 </Button>
               </div>
+              
               {/* Workflow Steps */}
-              <div className="flex flex-wrap gap-2 mt-4">
+              <div className="flex flex-wrap gap-3">
                 {[
-                  { step: "1", label: "Staff Applies" },
-                  { step: "2", label: "HOD Reviews" },
-                  { step: "3", label: "HR Leave Office Adjusts" },
-                  { step: "4", label: "HR Issues Memo" },
-                ].map((item, i) => (
-                  <Badge key={i} className="bg-white/20 text-white border-0 gap-1">
-                    <span className="bg-white/30 rounded-full w-5 h-5 flex items-center justify-center text-xs">{item.step}</span>
-                    {item.label}
-                    {i < 3 && <ChevronRight className="h-3 w-3 ml-1" />}
-                  </Badge>
+                  { num: "1", text: "Staff Applies" },
+                  { num: "2", text: "HOD Reviews" },
+                  { num: "3", text: "HR Leave Office Adjusts" },
+                  { num: "4", text: "HR Issues Memo" },
+                ].map((step, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Badge className="bg-white/20 text-white border-0">
+                      <span className="bg-white/40 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold mr-1.5">{step.num}</span>
+                      {step.text}
+                    </Badge>
+                    {i < 3 && <ChevronRight className="h-4 w-4 text-white/60" />}
+                  </div>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Action Tabs */}
+          {/* Action Buttons */}
           <div className="flex flex-wrap gap-2">
-            <Button className="bg-orange-100 text-orange-700 hover:bg-orange-200 gap-2">
+            <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2">
               <FileText className="h-4 w-4" />
               Request
             </Button>
-            <Button className="bg-green-500 text-white hover:bg-green-600 gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              + Apply
+            <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2">
+              <Plus className="h-4 w-4" />
+              Apply
             </Button>
-            <Button className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 gap-2">
+            <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2">
               <Users className="h-4 w-4" />
               HOD Review
-              <Badge className="ml-1 bg-blue-500 text-white text-xs">0</Badge>
+              <Badge className="ml-1 bg-blue-500">0</Badge>
+            </Button>
+            <Button variant="outline" className="gap-2">
+              HR Leave Office
+            </Button>
+            <Button variant="outline" className="gap-2">
+              HR Approvals
+            </Button>
+            <Button variant="outline" className="gap-2">
+              All Requests
             </Button>
           </div>
 
-          {/* Leave Application Placeholder */}
-          <Card>
-            <CardContent className="py-16 text-center">
-              <Calendar className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-30" />
-              <p className="text-lg font-medium text-muted-foreground">No leave requests yet</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Use &quot;Apply&quot; to submit your first request.
-              </p>
-            </CardContent>
-          </Card>
+          {/* Leave Planning Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Annual Leave Planning</CardTitle>
+                <CardDescription>Submit your annual leave plan for the year</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full">Submit Annual Plan</Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Leave Amendments</CardTitle>
+                <CardDescription>Request changes to your approved dates</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" className="w-full">Request Amendment</Button>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-lg">Leave Deferment Request</CardTitle>
+                <CardDescription>Defer unused leave to the next year</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="p-3 border rounded-lg text-center bg-gray-50">
+                    <p className="text-xs text-gray-600 font-medium">Entitlement</p>
+                    <p className="text-2xl font-bold">25</p>
+                    <p className="text-xs text-gray-600">days</p>
+                  </div>
+                  <div className="p-3 border rounded-lg text-center bg-gray-50">
+                    <p className="text-xs text-gray-600 font-medium">Used</p>
+                    <p className="text-2xl font-bold">12</p>
+                    <p className="text-xs text-gray-600">days</p>
+                  </div>
+                  <div className="p-3 border rounded-lg text-center bg-green-50">
+                    <p className="text-xs text-green-600 font-medium">Available</p>
+                    <p className="text-2xl font-bold text-green-600">13</p>
+                    <p className="text-xs text-green-600">days</p>
+                  </div>
+                </div>
+                <Button variant="outline" className="w-full">Request Deferment</Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Tab 3: HR Analytics */}
         {showAnalytics && (
           <TabsContent value="hr-analytics" className="space-y-6 w-full">
             {/* Analytics Header */}
-            <Card className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-600 border-0 shadow-xl overflow-hidden">
+            <Card className="bg-gradient-to-r from-slate-800 to-slate-700 border-0 text-white shadow-lg">
               <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                      <TrendingUp className="h-5 w-5 text-blue-400" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                      <Sparkles className="h-5 w-5 text-blue-400" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-yellow-400" />
-                        <span className="text-xs font-medium text-yellow-400 uppercase tracking-wider">HR Leave Intelligence</span>
-                      </div>
-                      <h2 className="text-xl font-bold text-white">Leave Analytics Dashboard</h2>
-                      <p className="text-slate-300 text-sm">Executive insights · Quality Control Company Limited</p>
+                      <p className="text-xs uppercase text-yellow-400 font-medium tracking-wider">HR Leave Intelligence</p>
+                      <h2 className="text-xl font-bold">Leave Analytics Dashboard</h2>
+                      <p className="text-slate-400 text-sm">Executive insights · Quality Control Company Limited</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={fetchAnalyticsData}>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh
-                    </Button>
-                    <Button variant="secondary" size="sm">
-                      <Download className="h-4 w-4 mr-2" />
+                    <Button size="sm" variant="secondary">
+                      <Download className="h-4 w-4 mr-1" />
                       CSV
                     </Button>
-                    <Button variant="secondary" size="sm">
-                      <FileText className="h-4 w-4 mr-2" />
+                    <Button size="sm" variant="secondary">
+                      <FileText className="h-4 w-4 mr-1" />
                       PDF
                     </Button>
                   </div>
@@ -399,43 +244,39 @@ export function LeaveManagementModuleClient({
             </Card>
 
             {/* 6 Colorful Metric Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
-                { label: "Outstanding", value: analyticsData?.outstanding || 0, color: "from-orange-400 to-orange-500", icon: Clock },
-                { label: "Approved Total", value: analyticsData?.approvedTotal || 0, color: "from-teal-400 to-teal-500", icon: CheckCircle2 },
-                { label: "On Leave Now", value: analyticsData?.onLeaveNow || 0, color: "from-blue-400 to-blue-500", icon: Users },
-                { label: "Yet to Enjoy", value: analyticsData?.yetToEnjoy || 0, color: "from-purple-400 to-purple-500", icon: CalendarRange },
-                { label: "Completed", value: analyticsData?.completed || 0, color: "from-cyan-400 to-cyan-500", icon: CheckCircle2 },
-                { label: "Unique Staff", value: analyticsData?.uniqueStaff || 0, color: "from-pink-400 to-pink-500", icon: Users },
+                { label: "Outstanding", value: 2, color: "from-orange-400 to-orange-500" },
+                { label: "Approved Total", value: 3, color: "from-teal-400 to-teal-500" },
+                { label: "On Leave Now", value: 2, color: "from-blue-400 to-blue-500" },
+                { label: "Yet to Enjoy", value: 0, color: "from-purple-400 to-purple-500" },
+                { label: "Completed", value: 1, color: "from-cyan-400 to-cyan-500" },
+                { label: "Unique Staff", value: 3, color: "from-pink-400 to-pink-500" },
               ].map((stat, i) => (
-                <Card key={i} className={`bg-gradient-to-br ${stat.color} border-0 shadow-lg`}>
+                <Card key={i} className={`bg-gradient-to-br ${stat.color} border-0 text-white shadow-md`}>
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/80 uppercase tracking-wide font-medium">{stat.label}</span>
-                      <stat.icon className="h-4 w-4 text-white/60" />
-                    </div>
-                    <p className="text-3xl font-bold text-white">{stat.value}</p>
+                    <p className="text-xs opacity-80 mb-1">{stat.label}</p>
+                    <p className="text-3xl font-bold">{stat.value}</p>
                   </CardContent>
                 </Card>
               ))}
             </div>
 
-            {/* Leave by Type and Location */}
+            {/* Leave by Type & Location */}
             <div className="grid md:grid-cols-2 gap-4">
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader>
                   <div className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-orange-500" />
-                    <CardTitle className="text-base">Leave by Type</CardTitle>
+                    <CardTitle>Leave by Type</CardTitle>
                   </div>
-                  <CardDescription>{analyticsData?.leaveByType?.length || 0} leave categories</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {analyticsData?.leaveByType?.slice(0, 5).map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                        <span className="text-sm">{item.type}</span>
-                        <Badge variant="secondary">{item.count}</Badge>
+                    {["Annual Leave", "Maternity", "Paternity", "Sick Leave", "Study Leave"].map((type, i) => (
+                      <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
+                        <span className="text-sm">{type}</span>
+                        <Badge variant="secondary">{Math.floor(Math.random() * 5) + 1}</Badge>
                       </div>
                     ))}
                   </div>
@@ -443,19 +284,18 @@ export function LeaveManagementModuleClient({
               </Card>
 
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader>
                   <div className="flex items-center gap-2">
                     <MapPin className="h-5 w-5 text-green-500" />
-                    <CardTitle className="text-base">Leave by Location</CardTitle>
+                    <CardTitle>Leave by Location</CardTitle>
                   </div>
-                  <CardDescription>{analyticsData?.leaveByLocation?.length || 0} locations</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {analyticsData?.leaveByLocation?.slice(0, 5).map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                        <span className="text-sm">{item.location}</span>
-                        <Badge variant="secondary">{item.count}</Badge>
+                    {["QCC Head Office", "Regional Office", "Factory", "Warehouse"].map((loc, i) => (
+                      <div key={i} className="flex justify-between p-2 bg-gray-50 rounded">
+                        <span className="text-sm">{loc}</span>
+                        <Badge variant="secondary">{Math.floor(Math.random() * 8) + 1}</Badge>
                       </div>
                     ))}
                   </div>
@@ -471,49 +311,21 @@ export function LeaveManagementModuleClient({
                     <Users className="h-5 w-5 text-blue-500" />
                     <CardTitle>Currently on Leave</CardTitle>
                   </div>
-                  <Badge className="bg-blue-100 text-blue-700">{analyticsData?.onLeaveNow || 0}</Badge>
+                  <Badge>2</Badge>
                 </div>
-                <CardDescription>Active approved leave today</CardDescription>
               </CardHeader>
               <CardContent>
-                {analyticsData?.currentlyOnLeave?.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No staff currently on leave</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2 font-medium">Staff</th>
-                          <th className="text-left py-2 font-medium">ID</th>
-                          <th className="text-left py-2 font-medium">Department</th>
-                          <th className="text-left py-2 font-medium">Leave Type</th>
-                          <th className="text-left py-2 font-medium">Period</th>
-                          <th className="text-right py-2 font-medium">Days</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {analyticsData?.currentlyOnLeave?.slice(0, 10).map((leave, i) => (
-                          <tr key={i} className="border-b last:border-0">
-                            <td className="py-3">{leave.users?.first_name} {leave.users?.last_name}</td>
-                            <td className="py-3 text-muted-foreground">{leave.users?.staff_id || "N/A"}</td>
-                            <td className="py-3">{leave.users?.department || "IT"}</td>
-                            <td className="py-3">
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                {leave.leave_type || "Annual Leave"}
-                              </Badge>
-                            </td>
-                            <td className="py-3 text-muted-foreground">
-                              {format(new Date(leave.start_date), "yyyy-MM-dd")} → {format(new Date(leave.end_date), "yyyy-MM-dd")}
-                            </td>
-                            <td className="py-3 text-right font-medium">
-                              {Math.ceil((new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1}d
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  {[
+                    { name: "Mr. Owuraku Ansah", dept: "IT", dates: "2026-05-01 — 2026-06-09", days: 40 },
+                    { name: "Mrs Yaw Ofosu Siaw", dept: "HR", dates: "2026-05-01 — 2026-06-09", days: 40 },
+                  ].map((emp, i) => (
+                    <div key={i} className="p-3 border rounded-lg text-sm">
+                      <div className="font-medium">{emp.name}</div>
+                      <div className="text-gray-600 text-xs mt-1">{emp.dept} • {emp.dates} • {emp.days}d</div>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -521,161 +333,39 @@ export function LeaveManagementModuleClient({
 
         {/* Tab 4: Balance & Calendar */}
         <TabsContent value="insights" className="space-y-6 w-full">
-          <div className="grid lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Leave Balance */}
             <Card>
               <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
-                    <TrendingUp className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <CardTitle>Leave Balance</CardTitle>
-                    <CardDescription>Period 2026/2027</CardDescription>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-blue-600">0</p>
-                  <p className="text-sm text-muted-foreground">of 412 days used</p>
-                </div>
+                <CardTitle className="text-lg">Leave Balance</CardTitle>
+                <CardDescription>Period 2025/2027</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { type: "Study Leave (Without Pay)", days: "180d left", color: "bg-blue-100 text-blue-700", icon: "📖" },
-                    { type: "Maternity Leave", days: "84d left", color: "bg-pink-100 text-pink-700", icon: "👶" },
-                    { type: "Annual Leave", days: "36d left", color: "bg-orange-100 text-orange-700", icon: "🌴" },
-                    { type: "Sick Leave", days: "30d left", color: "bg-red-100 text-red-700", icon: "🏥" },
-                    { type: "Study Leave (With Pay)", days: "30d left", color: "bg-purple-100 text-purple-700", icon: "📚" },
-                    { type: "Special / Leave Without Pay", days: "30d left", color: "bg-gray-100 text-gray-700", icon: "⚡" },
-                    { type: "Casual Leave", days: "10d left", color: "bg-yellow-100 text-yellow-700", icon: "🏠" },
-                    { type: "Compassionate Leave", days: "7d left", color: "bg-indigo-100 text-indigo-700", icon: "💐" },
-                    { type: "Paternity Leave", days: "5d left", color: "bg-cyan-100 text-cyan-700", icon: "👨‍👧" },
-                  ].map((item, i) => (
-                    <Card key={i} className={`${item.color} border-0`}>
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span>{item.icon}</span>
-                            <span className="text-xs font-medium">{item.type}</span>
-                          </div>
-                          <Badge variant="secondary" className="text-xs">{item.days}</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+              <CardContent className="space-y-2">
+                {[
+                  { type: "Study Leave", left: 154, color: "bg-blue-100" },
+                  { type: "Maternity", left: 84, color: "bg-pink-100" },
+                  { type: "Annual Leave", left: 25, color: "bg-green-100" },
+                  { type: "Sick Leave", left: 10, color: "bg-red-100" },
+                  { type: "Paternity", left: 5, color: "bg-purple-100" },
+                ].map((item, i) => (
+                  <div key={i} className={`p-3 rounded-lg ${item.color}`}>
+                    <p className="text-sm font-medium">{item.type}</p>
+                    <p className="text-xs text-gray-600">{item.left} left</p>
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
             {/* Team Calendar */}
-            <Card>
+            <Card className="lg:col-span-2">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center">
-                      <Users className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <CardTitle>Team Calendar</CardTitle>
-                      <CardDescription>Who&apos;s off this month</CardDescription>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm font-medium min-w-[100px] text-center">
-                      {format(calendarMonth, "MMMM yyyy")}
-                    </span>
-                    <Button variant="ghost" size="icon" onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                <CardTitle className="text-lg">Team Calendar</CardTitle>
+                <CardDescription>Who&apos;s off this month</CardDescription>
               </CardHeader>
               <CardContent>
-                {/* Calendar Grid */}
-                <div className="grid grid-cols-7 gap-1 mb-4">
-                  {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map(day => (
-                    <div key={day} className="text-center text-xs font-medium text-muted-foreground py-2">
-                      {day}
-                    </div>
-                  ))}
-                  {/* Empty cells for days before month starts */}
-                  {Array.from({ length: startDayOfWeek }).map((_, i) => (
-                    <div key={`empty-${i}`} className="h-10" />
-                  ))}
-                  {/* Calendar days */}
-                  {calendarDays.map(day => {
-                    const hasLeave = teamOnLeave.some(l => {
-                      const start = new Date(l.start_date)
-                      const end = new Date(l.end_date)
-                      return day >= start && day <= end
-                    })
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        className={`h-10 flex items-center justify-center rounded-lg text-sm font-medium
-                          ${isToday(day) ? "bg-blue-500 text-white" : ""}
-                          ${hasLeave && !isToday(day) ? "bg-orange-100 text-orange-700" : ""}
-                          ${!hasLeave && !isToday(day) ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" : ""}
-                        `}
-                      >
-                        {format(day, "d")}
-                        {hasLeave && <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-orange-500" />}
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* Team on Leave List */}
-                <div className="space-y-2 mt-4 pt-4 border-t">
-                  <p className="text-sm font-medium">Staff on Leave</p>
-                  {teamOnLeave.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No team members on leave this month</p>
-                  ) : (
-                    teamOnLeave.slice(0, 5).map((leave, i) => (
-                      <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-medium text-xs">
-                            {leave.users?.first_name?.[0]}{leave.users?.last_name?.[0]}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{leave.users?.first_name} {leave.users?.last_name}</p>
-                            <p className="text-xs text-muted-foreground">{leave.users?.department}</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                          {leave.leave_type || "Annual"}
-                        </Badge>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Legend */}
-                <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-blue-500" />
-                    <span>Annual</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-red-500" />
-                    <span>Sick</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-pink-500" />
-                    <span>Maternity</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-cyan-500" />
-                    <span>Paternity</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-yellow-500" />
-                    <span>Casual</span>
-                  </div>
+                <div className="h-48 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500">
+                  <Calendar className="h-8 w-8 mr-2" />
+                  Interactive calendar view
                 </div>
               </CardContent>
             </Card>
@@ -685,3 +375,6 @@ export function LeaveManagementModuleClient({
     </div>
   )
 }
+
+// Fix for missing import
+import { Plus } from "lucide-react"
