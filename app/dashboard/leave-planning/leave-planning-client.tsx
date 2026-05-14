@@ -2548,12 +2548,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </div>
             <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
               <TabsList className={`grid h-auto w-full ${
-                canViewLeaveAnalytics && canManageLeaveTypePolicy ? "grid-cols-3" :
-                (canViewLeaveAnalytics || canManageLeaveTypePolicy) ? "grid-cols-2" : "grid-cols-1"
+                canViewLeaveAnalytics && canManageLeaveTypePolicy ? "grid-cols-4" :
+                (canViewLeaveAnalytics || canManageLeaveTypePolicy) ? "grid-cols-3" : "grid-cols-2"
               } rounded-xl border border-slate-200 bg-slate-50 p-1.5`}>
                 <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Operations</TabsTrigger>
                 {canManageLeaveTypePolicy && (
                   <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Leave Policy</TabsTrigger>
+                )}
+                {canManageLeaveTypePolicy && (
+                  <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Holidays</TabsTrigger>
                 )}
                 {canViewLeaveAnalytics && (
                   <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Analytics & Graphics</TabsTrigger>
@@ -2803,6 +2806,60 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     </CardContent>
                   </Card>
                 </TabsContent>
+              )}
+
+              {canManageLeaveTypePolicy && (
+              <TabsContent value="holidays" className="space-y-6">
+                <Card className="border border-blue-200 bg-gradient-to-br from-blue-50/60 to-white shadow-sm">
+                  <CardContent className="p-6 space-y-5">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl bg-blue-100 p-2.5 text-blue-700">
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10m7 8a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v10z" /></svg>
+                      </div>
+                      <div>
+                        <p className="text-base font-semibold text-slate-900">Manage Public Holidays</p>
+                        <p className="text-sm text-slate-500 mt-0.5">Add, edit, or delete public holidays that will be deducted from leave calculations.</p>
+                      </div>
+                    </div>
+
+                    {holidayError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{holidayError}</div>}
+                    {holidaySuccess && <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">{holidaySuccess}</div>}
+
+                    <div className="rounded-xl border border-dashed border-blue-300 bg-blue-50/40 p-4 space-y-3">
+                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Add New Holiday</p>
+                      <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                        <Input type="date" value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} placeholder="Holiday date" />
+                        <Input value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} placeholder="Holiday name" />
+                        <Button size="sm" className="bg-blue-700 hover:bg-blue-800" disabled={Boolean(holidaySavingDate)} onClick={() => void addHoliday()}>
+                          {holidaySavingDate === newHolidayDate ? "Adding..." : "Add"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-slate-700">Current Holidays ({holidays.length})</p>
+                      {holidays.length === 0 ? (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">No holidays configured yet</div>
+                      ) : (
+                        <div className="grid gap-2 max-h-96 overflow-y-auto">
+                          {holidays.map((holiday) => (
+                            <div key={holiday.holiday_date} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid md:grid-cols-[1fr_1fr_auto_auto]">
+                              <div className="text-sm font-medium text-slate-900">{holiday.holiday_name}</div>
+                              <div className="text-xs text-slate-500">{holiday.holiday_date}</div>
+                              <Button size="sm" variant="outline" disabled={Boolean(holidaySavingDate)} onClick={() => { setNewHolidayDate(holiday.holiday_date); setNewHolidayName(holiday.holiday_name); setEditingHolidayDate(holiday.holiday_date) }}>
+                                Edit
+                              </Button>
+                              <Button size="sm" variant="destructive" disabled={Boolean(holidaySavingDate)} onClick={() => void deleteHoliday(holiday.holiday_date)}>
+                                {holidaySavingDate === holiday.holiday_date ? "Deleting..." : "Delete"}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
               )}
 
               <TabsContent value="operations">
