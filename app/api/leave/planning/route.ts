@@ -698,11 +698,49 @@ export async function GET(request: NextRequest) {
 
       const analytics = await fetchHrOfficeAnalytics(admin)
 
+      // Fetch outstanding leave balances for all staff with pending requests
+      // Get current and previous leave year periods
+      const { data: policyData } = await admin
+        .from("leave_policy_catalog")
+        .select("leave_year_period")
+        .eq("is_active_period", true)
+        .limit(1)
+        .single()
+      
+      const currentYearPeriod = policyData?.leave_year_period || "2026/2027"
+      const staffIds = Array.from(new Set((requests || []).map((r: any) => r.user_id).filter(Boolean)))
+      
+      console.log("[v0] API: Current leave year:", currentYearPeriod, "Fetching outstanding for staff IDs:", staffIds.slice(0, 5))
+      
+      // Fetch outstanding balances for current AND previous year (in case staff data is from different periods)
+      const { data: outstandingRecords, error: outstandingError } = await admin
+        .from("outstanding_leave_balances")
+        .select("user_id, carryover_to_next_year, leave_year_period")
+        .in("user_id", staffIds)
+        .order("created_at", { ascending: false })
+      
+      console.log("[v0] API: Outstanding records fetched:", { count: outstandingRecords?.length, error: outstandingError })
+      
+      // Build map using most recent record for each user
+      const outstandingLeaveMap = new Map<string, number>()
+      const processedUsers = new Set<string>()
+      ;(outstandingRecords || []).forEach((record: any) => {
+        const userId = String(record.user_id)
+        if (!processedUsers.has(userId)) {
+          outstandingLeaveMap.set(userId, Number(record.carryover_to_next_year || 0))
+          processedUsers.add(userId)
+          console.log(`[v0] API: User ${userId.substring(0, 8)}... has ${record.carryover_to_next_year} carryover (period: ${record.leave_year_period})`)
+        }
+      })
+
+      console.log("[v0] API: Outstanding map created with", outstandingLeaveMap.size, "users")
+
       return NextResponse.json({
         mode: "hr_office",
         requests: requests || [],
         myRequests: myRequests || [],
         analytics,
+        outstandingLeaveMap: Object.fromEntries(outstandingLeaveMap),
       })
     }
 
@@ -1033,17 +1071,11 @@ export async function POST(request: NextRequest) {
     }
     const entitlementDays = entitlementResult.entitlementDays
 
-    if (entitlementDays !== null && requestedDays > entitlementDays) {
-      return NextResponse.json(
-        {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
-          code: "LEAVE_ENTITLEMENT_EXCEEDED",
-          entitlement_days: entitlementDays,
-          requested_days: requestedDays,
-        },
-        { status: 400 },
-      )
-    }
+    // Track if entitlement is exceeded - still allow save but flag for HR review
+    const entitlementExceeded = entitlementDays !== null && requestedDays > entitlementDays
+    const entitlementWarning = entitlementExceeded
+      ? `ENTITLEMENT EXCEEDED: Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s). HR Leave Office must adjust.`
+      : null
 
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range." }, { status: 400 })
@@ -1157,6 +1189,8 @@ export async function POST(request: NextRequest) {
         user_signature_hologram_code: buildHologramCode("USR"),
         memo_generated: true,
         memo_generated_at: new Date().toISOString(),
+        // Flag for HR Leave Office if entitlement exceeded
+        adjustment_reason: entitlementWarning,
       })
       .select("*")
       .single()
@@ -1334,17 +1368,11 @@ export async function PUT(request: NextRequest) {
     }
     const entitlementDays = entitlementResult.entitlementDays
 
-    if (entitlementDays !== null && requestedDays > entitlementDays) {
-      return NextResponse.json(
-        {
-          error: `Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s) for this leave type. HR Leave Office may adjust the final leave days with a reason after review.`,
-          code: "LEAVE_ENTITLEMENT_EXCEEDED",
-          entitlement_days: entitlementDays,
-          requested_days: requestedDays,
-        },
-        { status: 400 },
-      )
-    }
+    // Track if entitlement is exceeded - still allow save but flag for HR review
+    const entitlementExceededOnUpdate = entitlementDays !== null && requestedDays > entitlementDays
+    const entitlementWarningOnUpdate = entitlementExceededOnUpdate
+      ? `ENTITLEMENT EXCEEDED: Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s). HR Leave Office must adjust.`
+      : null
 
     const duplicateRequest = await findDuplicateLeaveRequest(
       admin,
@@ -1414,6 +1442,8 @@ export async function PUT(request: NextRequest) {
       status: "pending_manager_review",
       manager_recommendation: null,
       updated_at: new Date().toISOString(),
+      // Flag for HR Leave Office if entitlement exceeded
+      adjustment_reason: entitlementWarningOnUpdate,
     }
 
     if (user_signature_mode !== undefined) updatePayload.user_signature_mode = user_signature_mode || "typed"

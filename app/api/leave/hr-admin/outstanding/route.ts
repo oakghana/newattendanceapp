@@ -49,17 +49,39 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error("[v0] Error fetching outstanding balances:", error)
-      // Try simpler query without join
+      console.error("[v0] Error fetching outstanding balances with join:", error)
+      // Try simpler query without join and then manually fetch user profiles
       const { data: simpleData, error: simpleError } = await supabase
         .from("outstanding_leave_balances")
         .select("*")
         .order("created_at", { ascending: false })
 
       if (simpleError) throw simpleError
-      return NextResponse.json({ data: simpleData, success: true })
+      
+      // Fetch user profiles separately for each record
+      const userIds = [...new Set((simpleData || []).map((d: any) => d.user_id).filter(Boolean))]
+      const { data: profiles } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, department_id, departments(name)")
+        .in("id", userIds)
+      
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]))
+      
+      const transformedSimple = (simpleData || []).map((item: any) => {
+        const profile = profileMap.get(item.user_id)
+        return {
+          ...item,
+          staff_name: profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown" : "Unknown",
+          employee_id: profile?.employee_id || "N/A",
+          department_name: profile?.departments?.name || "Unassigned",
+        }
+      })
+      
+      return NextResponse.json({ data: transformedSimple, success: true })
     }
 
+    console.log("[v0] Outstanding balances raw data sample:", data?.[0])
+    
     // Transform data to include staff names
     const transformedData = (data || []).map((item: any) => ({
       ...item,

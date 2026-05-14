@@ -918,7 +918,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
               <Download className="w-3 h-3 mr-1" /> Download Memo
             </Button>
           )}
-          {req.status === "hod_changes_requested" && onEdit && (
+          {req.status === "hod_changes_requested" && !req.hr_office_forwarded && onEdit && (
             <>
               <Button size="sm" variant="outline"
                 className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
@@ -1054,6 +1054,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeHolidayDays, setOfficeHolidayDays] = useState<Record<string, string>>({})
   const [officeTravelDays, setOfficeTravelDays] = useState<Record<string, string>>({})
   const [officePriorDays, setOfficePriorDays] = useState<Record<string, string>>({})
+  const [officeOutstandingDays, setOfficeOutstandingDays] = useState<Record<string, string>>({})
   const [officeReason, setOfficeReason] = useState<Record<string, string>>({})
   const [officeMemoSubject, setOfficeMemoSubject] = useState<Record<string, string>>({})
   const [officeMemoBody, setOfficeMemoBody] = useState<Record<string, string>>({})
@@ -1187,10 +1188,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       const query = hrOfficeShowArchived ? "?includeArchived=true" : ""
       const res = await fetch(`/api/leave/planning${query}`, { cache: "no-store" })
       const json = await res.json()
+      console.log("[v0] Planning API response:", { mode: json.mode, hasOutstandingMap: !!json.outstandingLeaveMap, outstandingMap: json.outstandingLeaveMap })
       if (!res.ok) throw new Error(json.error || "Failed to load data")
       setData(json)
       setHrOfficeLastRefresh(new Date().toISOString())
     } catch (e) {
+      console.error("[v0] Load data error:", e)
       setError(e instanceof Error ? e.message : "Failed to load data")
     } finally {
       setLoading(false)
@@ -1245,6 +1248,27 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     } finally {
       setHolidaysLoading(false)
     }
+  }, [])
+
+  const fetchOutstandingLeaveForStaff = useCallback(async (userId: string, leaveTypeKey: string, leaveYearPeriod: string) => {
+    // Only fetch outstanding leave for annual leave type
+    if (leaveTypeKey !== "annual") return null
+    
+    try {
+      const res = await fetch(`/api/leave/hr-admin/outstanding?userId=${userId}&leaveYearPeriod=${leaveYearPeriod}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) return null
+      const json = await res.json()
+      const records = Array.isArray(json.data) ? json.data : []
+      // Return the carryover_to_next_year from outstanding leave balance (if exists)
+      if (records.length > 0) {
+        return String(Math.max(0, records[0].carryover_to_next_year || 0))
+      }
+    } catch (e) {
+      console.error("[v0] Failed to fetch outstanding leave:", e)
+    }
+    return null
   }, [])
 
   const loadHrSignatureRegistry = useCallback(async () => {
@@ -1426,7 +1450,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ─── Holiday CRUD Functions ─────────────────────────────────────────
+  // ─── Holiday CRUD Functions ───────���─────────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1696,9 +1720,23 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
-    return (data.requests || []).filter((r: any) =>
+    const requests = (data.requests || []).filter((r: any) =>
       (HR_OFFICE_PENDING_STATUSES as string[]).includes(String(r?.status || "")),
     )
+    
+    // Enhance requests with outstanding leave data if available
+    return requests.map((r: any) => {
+      // For annual leave, try to get outstanding leave from the data
+      if (String(r.leave_type_key || "").toLowerCase() === "annual") {
+        const outstandingMap = data.outstandingLeaveMap || {}
+        const outstanding = outstandingMap[String(r.user_id || "")]
+        console.log("[v0] Request for user", r.user_id, "- Outstanding map:", outstandingMap, "- Found:", outstanding)
+        if (outstanding && outstanding > 0) {
+          return { ...r, outstanding_leave_days: outstanding }
+        }
+      }
+      return r
+    })
   }, [data])
 
   const hrOfficeFilteredQueue: any[] = useMemo(() => {
@@ -1943,13 +1981,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const holidayDeducted = Number(officeHolidayDays[requestId] || 0)
     const priorDeducted = Number(officePriorDays[requestId] || 0)
     const travelAdded = Number(officeTravelDays[requestId] || 0)
+    const outstandingAdded = Number(officeOutstandingDays[requestId] || 0)
     const baseDays = adjStart && adjEnd ? computeLeaveDays(adjStart, adjEnd) : 0
-    const finalDays = Math.max(0, baseDays - holidayDeducted - priorDeducted + travelAdded)
+    const finalDays = Math.max(0, baseDays + outstandingAdded - holidayDeducted - priorDeducted + travelAdded)
 
     const confirmForward = window.confirm(
       `Please confirm the adjusted leave values before forwarding:\n\n` +
       `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
       `Base Days: ${baseDays}\n` +
+      `${outstandingAdded > 0 ? `+ Outstanding Days: ${outstandingAdded}\n` : ""}` +
       `- Public Holidays: ${holidayDeducted}\n` +
       `- Prior Leave Enjoyed: ${priorDeducted}\n` +
       `+ Travelling Days: ${travelAdded}\n` +
@@ -1970,6 +2010,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           adjusted_start_date: adjStart,
           adjusted_end_date: adjEnd,
           adjustment_reason: rsn,
+          outstanding_leave_days_added: Number(officeOutstandingDays[requestId] || 0),
           holiday_days_deducted: Number(officeHolidayDays[requestId] || 0),
           travelling_days_added: Number(officeTravelDays[requestId] || 0),
           prior_leave_days_deducted: Number(officePriorDays[requestId] || 0),
@@ -3018,18 +3059,20 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   const isExpanded = officeExpanded === req.id
                   const adjStart = officeAdjStart[req.id] || req.preferred_start_date || ""
                   const adjEnd = officeAdjEnd[req.id] || req.preferred_end_date || ""
-                  const holidayD = Number(officeHolidayDays[req.id] || 0)
-                  const travelD = Number(officeTravelDays[req.id] || 0)
-                  const priorD = Number(officePriorDays[req.id] || 0)
-                  const baseDays = adjStart && adjEnd
-                    ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
-                    : req.requested_days
-                  const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
-                  const generatedReason = [
-                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
-                    priorD > 0 ? `${priorD} prior leave day(s) deducted` : "",
-                    travelD > 0 ? `${travelD} travelling day(s) added` : "",
-                  ].filter(Boolean).join("; ")
+                                  const holidayD = Number(officeHolidayDays[req.id] || 0)
+                                  const travelD = Number(officeTravelDays[req.id] || 0)
+                                  const priorD = Number(officePriorDays[req.id] || 0)
+                                  const outstandingD = Number(officeOutstandingDays[req.id] || 0)
+                                  const baseDays = adjStart && adjEnd
+                                    ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
+                                    : req.requested_days
+                                  const finalDays = Math.max(0, baseDays + outstandingD - holidayD - priorD + travelD)
+                                  const generatedReason = [
+                                    outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
+                                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
+                                    priorD > 0 ? `${priorD} prior leave day(s) deducted` : "",
+                                    travelD > 0 ? `${travelD} travelling day(s) added` : "",
+                                  ].filter(Boolean).join("; ")
                       return (
                     <Card key={req.id} className="group border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50/30 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
                       <CardContent className="p-5">
@@ -3051,6 +3094,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
                           <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
                         </div>
+                        {/* Entitlement Exceeded Warning */}
+                        {req.adjustment_reason?.includes("ENTITLEMENT EXCEEDED") && (
+                          <div className="flex items-start gap-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-300 mb-3">
+                            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                            <span>
+                              <strong>Action Required:</strong> {req.adjustment_reason?.replace("ENTITLEMENT EXCEEDED: ", "")}
+                            </span>
+                          </div>
+                        )}
                         {req.manager_recommendation && (
                           <p className="text-xs text-slate-600 bg-amber-50 p-2 rounded border border-amber-200 mb-3">
                             <strong>HOD Recommendation:</strong> {req.manager_recommendation}
@@ -3059,10 +3111,16 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         <div className="mb-3 flex flex-wrap gap-2">
                           <Badge className="border border-slate-200 bg-white text-slate-700">Requested: {req.requested_days} day(s)</Badge>
                           <Badge className="border border-slate-200 bg-white text-slate-700">Entitlement: {req.entitlement_days || "—"} day(s)</Badge>
+                          {/* Show outstanding/carryover leave for annual leave type */}
+                          {String(req.leave_type_key || "").toLowerCase() === "annual" && req.outstanding_leave_days !== undefined && req.outstanding_leave_days > 0 && (
+                            <Badge className="border border-green-300 bg-green-50 text-green-700">
+                              Available Carryover: {req.outstanding_leave_days} day(s)
+                            </Badge>
+                          )}
                         </div>
                         <Button size="sm" variant="outline"
                           disabled={!((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
-                          onClick={() => {
+                          onClick={async () => {
                             setOfficeExpanded(isExpanded ? null : req.id)
                             if (!isExpanded) {
                               const matchingTemplate = templateOptions.find((template) => template.template_key === getDefaultMemoTemplateKey(String(req.leave_type_key || "annual"))) || templateOptions.find((template) => {
@@ -3078,6 +3136,18 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || renderedTemplate.subject || memoTpl.subject }))
                               setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || renderedTemplate.body || memoTpl.body }))
                               setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
+                              
+                              // Fetch outstanding leave for annual leave type
+                              if (String(req.leave_type_key || "").toLowerCase() === "annual") {
+                                const outstanding = await fetchOutstandingLeaveForStaff(
+                                  String(req.user_id || req.user?.id || ""),
+                                  String(req.leave_type_key || ""),
+                                  req.leave_year_period || activeLeaveYearPeriod
+                                )
+                                if (outstanding) {
+                                  setOfficeOutstandingDays((p) => ({ ...p, [req.id]: outstanding }))
+                                }
+                              }
                             }
                           }}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -3185,7 +3255,19 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                             {/* Day adjustment breakdown */}
                             <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
                               <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Day Adjustment Breakdown</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className={`grid ${String(req.leave_type_key || "").toLowerCase() === "annual" ? "grid-cols-1 sm:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"} gap-3`}>
+                                {/* Outstanding Leave — only for Annual Leave */}
+                                {String(req.leave_type_key || "").toLowerCase() === "annual" && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs flex items-center gap-1 text-green-700">
+                                      <Plus className="w-3 h-3" /> Add — Outstanding Days
+                                    </Label>
+                                    <Input type="number" min="0"
+                                      value={officeOutstandingDays[req.id] || "0"}
+                                      onChange={(e) => setOfficeOutstandingDays((p) => ({ ...p, [req.id]: e.target.value }))}
+                                      className="h-9 text-green-700 font-semibold" />
+                                  </div>
+                                )}
                                 <div className="space-y-1">
                                   <Label className="text-xs flex items-center gap-1 text-red-700">
                                     <Minus className="w-3 h-3" /> Deduct — Public Holidays
@@ -3217,6 +3299,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               <div className="flex items-center justify-between bg-white rounded-lg p-3 border border-slate-200 mt-2">
                                 <span className="text-sm text-slate-600">
                                   Base: {baseDays}d
+                                  {outstandingD > 0 && <span className="text-green-600"> + {outstandingD}</span>}
                                   {holidayD > 0 && <span className="text-red-600"> − {holidayD}</span>}
                                   {priorD > 0 && <span className="text-red-600"> − {priorD}</span>}
                                   {travelD > 0 && <span className="text-emerald-600"> + {travelD}</span>}

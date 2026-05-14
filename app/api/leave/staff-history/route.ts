@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
         leave_year_period,
         created_at,
         hod_reviewed_at,
-        hr_reviewed_at,
         manager_recommendation,
         hr_office_remarks
       `)
