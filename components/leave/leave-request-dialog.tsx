@@ -20,9 +20,12 @@ import {
   Umbrella,
   Baby,
   Search,
+  Zap,
+  Info,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
+import { format } from "date-fns"
 
 interface LeaveRequestDialogProps {
   open: boolean
@@ -86,12 +89,14 @@ function stepIndex(step: Step, hasDoc: boolean) {
 export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedLeave, onSubmit }: LeaveRequestDialogProps) {
   const [step, setStep] = useState<Step>("type")
   const [loading, setLoading] = useState(false)
+  const [calculatingEndDate, setCalculatingEndDate] = useState(false)
   const [leaveTypeOptions, setLeaveTypeOptions] = useState(DEFAULT_LEAVE_TYPES)
   const [leaveSearchQuery, setLeaveSearchQuery] = useState("")
   const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isHalfDay, setIsHalfDay] = useState(false)
   const [halfDayPeriod, setHalfDayPeriod] = useState<"morning" | "afternoon">("morning")
+  const [calculationSummary, setCalculationSummary] = useState<any>(null)
   const [formData, setFormData] = useState<LeaveRequestData>({
     startDate: new Date(),
     endDate: new Date(),
@@ -125,6 +130,43 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
       void loadPolicy()
     }
   }, [open])
+
+  // Auto-calculate end date when start date changes and leave type is annual
+  const calculateEndDateAuto = async (startDate: Date, leaveType: string) => {
+    if (leaveType !== "annual") return // Only for annual leave
+    
+    setCalculatingEndDate(true)
+    try {
+      const leaveYearPeriod = activePeriod.split("/")[0] // e.g., "2026"
+      const response = await fetch("/api/leave/calculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startDate: startDate.toISOString().split("T")[0],
+          leaveType: leaveType,
+          leaveYearPeriod: leaveYearPeriod,
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          const calculatedEndDate = new Date(result.calculation.endDate)
+          setFormData((prev) => ({
+            ...prev,
+            endDate: calculatedEndDate,
+            entitlementDays_used: result.calculation.daysCount,
+          }))
+          setCalculationSummary(result.calculation.summary)
+          console.log("[v0] Auto-calculated end date:", result.calculation.endDate)
+        }
+      }
+    } catch (error) {
+      console.error("[v0] Error calculating end date:", error)
+    } finally {
+      setCalculatingEndDate(false)
+    }
+  }
 
   const handleSubmit = async () => {
     setLoading(true)
@@ -381,16 +423,27 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
               <div className="space-y-3">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Start Date</label>
-                  <input
-                    type="date"
-                    value={formData.startDate.toISOString().split("T")[0]}
-                    onChange={(e) => {
-                      const d = new Date(e.target.value)
-                      setFormData((p) => ({ ...p, startDate: d, endDate: isHalfDay ? d : p.endDate < d ? d : p.endDate }))
-                    }}
-                    min={new Date().toISOString().split("T")[0]}
-                    className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={formData.startDate.toISOString().split("T")[0]}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value)
+                        setFormData((p) => ({ ...p, startDate: d, endDate: isHalfDay ? d : p.endDate < d ? d : p.endDate }))
+                        if (formData.leaveType === "annual") {
+                          void calculateEndDateAuto(d, formData.leaveType)
+                        }
+                      }}
+                      min={new Date().toISOString().split("T")[0]}
+                      className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    {calculatingEndDate && formData.leaveType === "annual" && (
+                      <div className="absolute right-3 top-2.5 flex items-center gap-1">
+                        <Zap className="h-4 w-4 text-amber-500 animate-pulse" />
+                        <span className="text-xs text-amber-600">Calculating...</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {!isHalfDay && (
                   <div>
@@ -421,6 +474,24 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                   </p>
                 </div>
               </div>
+
+              {/* Calculation summary for annual leave */}
+              {formData.leaveType === "annual" && calculationSummary && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700 p-4 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-blue-900 dark:text-blue-100">
+                      <p className="font-semibold mb-1">Leave Calculation</p>
+                      <ul className="text-xs space-y-1 opacity-90">
+                        <li>• Business days: <span className="font-medium">{calculationSummary.businessDays}</span></li>
+                        <li>• Weekends: <span className="font-medium">{calculationSummary.weekendDays}</span></li>
+                        <li>• Public holidays: <span className="font-medium">{calculationSummary.holidayDays}</span></li>
+                        <li>• Return to work: <span className="font-medium">{format(new Date(formData.endDate.getTime() + 24 * 60 * 60 * 1000), 'MMM dd, yyyy')}</span></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

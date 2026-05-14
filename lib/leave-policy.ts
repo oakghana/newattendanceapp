@@ -63,3 +63,62 @@ export function computeReturnToWorkDate(endDate: string): string {
   date.setDate(date.getDate() + 1)
   return date.toISOString().split("T")[0]
 }
+
+/**
+ * Enhanced: Get entitlement days by category
+ * Supports staff category-based entitlements (Junior, Senior, Manager)
+ */
+export function getEntitlementByCategory(
+  staffCategory: string | null,
+  leaveType: string,
+  baseEntitlement: number = 21
+): number {
+  // Category-based multipliers (example - customize based on org policy)
+  const categoryMultipliers: Record<string, number> = {
+    junior: 0.8,
+    senior: 1.0,
+    manager: 1.2,
+    all_staff: 1.0,
+  }
+
+  const normalizedCategory = (staffCategory || "all_staff").toLowerCase()
+  const multiplier = categoryMultipliers[normalizedCategory] || 1.0
+
+  return Math.round(baseEntitlement * multiplier)
+}
+
+/**
+ * Enhanced: Validate leave dates with business logic
+ */
+export function validateLeaveRequest(startDate: Date, endDate: Date): { valid: boolean; error?: string } {
+  if (!startDate || !endDate) {
+    return { valid: false, error: "Start and end dates are required" }
+  }
+
+  if (startDate > endDate) {
+    return { valid: false, error: "Start date cannot be after end date" }
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  if (startDate < today) {
+    return { valid: false, error: "Cannot request leave in the past" }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Enhanced: Get yearly carryover allowance
+ */
+export function getYearlyCarryoverAllowance(leaveType: string): number {
+  const carryoverPolicies: Record<string, number> = {
+    annual_leave: 5,
+    casual_leave: 3,
+    study_with_pay: 0,
+  }
+
+  return carryoverPolicies[leaveType] || 0
+}
+
