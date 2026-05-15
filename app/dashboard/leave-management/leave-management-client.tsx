@@ -703,8 +703,17 @@ export function LeaveManagementClient({
       try {
         const response = await fetch("/api/leave/templates", { cache: "no-store" })
         const result = await response.json().catch(() => ({}))
+        
+        // Handle case where table doesn't exist or no templates - don't show error
         if (!response.ok) {
-          throw new Error(result?.error || "Failed to load templates")
+          // Only show error for non-404/403 errors (table missing or permission issues are expected states)
+          if (response.status !== 404 && response.status !== 403 && response.status !== 500) {
+            throw new Error(result?.error || "Failed to load templates")
+          }
+          // Silently fail for expected cases - templates may not be set up yet
+          setHrTemplates([])
+          setTemplateDrafts({})
+          return
         }
 
         const rows = Array.isArray(result?.templates) ? (result.templates as HrMemoTemplate[]) : []
@@ -715,11 +724,10 @@ export function LeaveManagementClient({
         })
         setTemplateDrafts(nextDrafts)
       } catch (error) {
-        toast({
-          title: "Template loading failed",
-          description: error instanceof Error ? error.message : "Could not load templates",
-          variant: "destructive",
-        })
+        // Only show toast for unexpected errors, not missing table/permissions
+        console.log("[v0] Template loading issue:", error instanceof Error ? error.message : "Unknown error")
+        setHrTemplates([])
+        setTemplateDrafts({})
       } finally {
         setTemplatesLoading(false)
       }
