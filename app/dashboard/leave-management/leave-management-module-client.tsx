@@ -172,7 +172,7 @@ export function LeaveManagementModuleClient({
         {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
           <TabsContent value="carryover-audit" className="space-y-4 sm:space-y-6 w-full">
             <div className="space-y-6">
-              <CarryoverApprovalDashboard />
+              <CarryoverApprovalDashboard userId={userId} userRole={userRole || undefined} />
               <AuditComplianceDashboard />
             </div>
           </TabsContent>
