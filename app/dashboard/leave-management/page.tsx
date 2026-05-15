@@ -267,6 +267,7 @@ export default async function LeaveManagementPage() {
         userId={user.id}
         userRole={profile.role}
         userDepartment={profile.department_id}
+        userLocation={profile.assigned_location_id}
         userFirstName={(profile as any)?.first_name || null}
         userLastName={(profile as any)?.last_name || null}
         inactivityDays={Math.max(1, inactivityDays)}
