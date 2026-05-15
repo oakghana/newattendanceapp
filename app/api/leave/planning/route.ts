@@ -666,7 +666,7 @@ export async function GET(request: NextRequest) {
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
-    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ──
+    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ���─
     if (isHrOffice && !isHrApprover) {
       let officeQuery = admin
         .from("leave_plan_requests")
@@ -782,7 +782,8 @@ export async function GET(request: NextRequest) {
     // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
     const isAdmin = role === "admin"
     console.log("[v0] HOD Review check - role:", role, "isAdmin:", isAdmin, "isHr:", isHr, "isHodRole:", isHodRole(role))
-    if ((isHodRole(role) || isAdmin) && !isHr) {
+    // Admin always sees HOD reviews; other HOD roles only if they're not HR
+    if ((isAdmin || (isHodRole(role) && !isHr))) {
       let nonArchivedReviews: any[] = []
 
       // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)
@@ -810,7 +811,7 @@ export async function GET(request: NextRequest) {
               last_name,
               employee_id,
               departments(name, code),
-              geofence_locations(name)
+              geofence_locations!user_profiles_assigned_location_id_fkey(name)
             )
           `)
           .in("status", ["pending_hod_review", "hod_pending", "submitted", "pending"])
@@ -859,7 +860,7 @@ export async function GET(request: NextRequest) {
                 last_name,
                 employee_id,
                 departments(name, code),
-                geofence_locations(name)
+                geofence_locations!user_profiles_assigned_location_id_fkey(name)
               )
             )
           `)
