@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseKey)
     const { searchParams } = new URL(request.url)
     const leaveYearPeriod = searchParams.get("leaveYearPeriod")
+    const userId = searchParams.get("userId")
 
     // Fetch outstanding leave balances with user profile info
     let query = supabase
@@ -45,16 +46,30 @@ export async function GET(request: NextRequest) {
     if (leaveYearPeriod) {
       query = query.eq("leave_year_period", leaveYearPeriod)
     }
+    
+    // Filter by specific user if provided
+    if (userId) {
+      query = query.eq("user_id", userId)
+    }
 
     const { data, error } = await query
 
     if (error) {
       console.error("[v0] Error fetching outstanding balances with join:", error)
       // Try simpler query without join and then manually fetch user profiles
-      const { data: simpleData, error: simpleError } = await supabase
+      let simpleQuery = supabase
         .from("outstanding_leave_balances")
         .select("*")
         .order("created_at", { ascending: false })
+      
+      if (leaveYearPeriod) {
+        simpleQuery = simpleQuery.eq("leave_year_period", leaveYearPeriod)
+      }
+      if (userId) {
+        simpleQuery = simpleQuery.eq("user_id", userId)
+      }
+      
+      const { data: simpleData, error: simpleError } = await simpleQuery
 
       if (simpleError) throw simpleError
       

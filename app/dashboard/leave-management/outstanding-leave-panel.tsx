@@ -320,46 +320,46 @@ export function OutstandingLeavePanel() {
     <div className="space-y-6 w-full">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-900/40 to-blue-800/20 border-blue-700">
+        <Card className="bg-gradient-to-br from-blue-600 to-blue-700 border-blue-500 shadow-lg">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <Users className="w-8 h-8 text-blue-400" />
+              <Users className="w-8 h-8 text-white/90" />
               <div>
-                <p className="text-2xl font-bold text-white">{summary.totalStaff}</p>
-                <p className="text-xs text-blue-300">Staff with Balances</p>
+                <p className="text-3xl font-bold text-white">{summary.totalStaff}</p>
+                <p className="text-sm font-semibold text-white/90 mt-1">Staff with Balances</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-amber-900/40 to-amber-800/20 border-amber-700">
+        <Card className="bg-gradient-to-br from-amber-500 to-amber-600 border-amber-400 shadow-lg">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <Calendar className="w-8 h-8 text-amber-400" />
+              <Calendar className="w-8 h-8 text-white/90" />
               <div>
-                <p className="text-2xl font-bold text-white">{summary.totalUnused}</p>
-                <p className="text-xs text-amber-300">Total Unused Days</p>
+                <p className="text-3xl font-bold text-white">{summary.totalUnused}</p>
+                <p className="text-sm font-semibold text-white/90 mt-1">Total Unused Days</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-green-900/40 to-green-800/20 border-green-700">
+        <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 border-emerald-400 shadow-lg">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <Gift className="w-8 h-8 text-green-400" />
+              <Gift className="w-8 h-8 text-white/90" />
               <div>
-                <p className="text-2xl font-bold text-white">{summary.totalCarryover}</p>
-                <p className="text-xs text-green-300">Total Carryover Days</p>
+                <p className="text-3xl font-bold text-white">{summary.totalCarryover}</p>
+                <p className="text-sm font-semibold text-white/90 mt-1">Total Carryover Days</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-purple-900/40 to-purple-800/20 border-purple-700">
+        <Card className="bg-gradient-to-br from-purple-500 to-purple-600 border-purple-400 shadow-lg">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <RefreshCw className="w-8 h-8 text-purple-400" />
+              <RefreshCw className="w-8 h-8 text-white/90" />
               <div>
-                <p className="text-2xl font-bold text-white">{summary.avgUtilization}%</p>
-                <p className="text-xs text-purple-300">Avg Utilization</p>
+                <p className="text-3xl font-bold text-white">{summary.avgUtilization}%</p>
+                <p className="text-sm font-semibold text-white/90 mt-1">Avg Utilization</p>
               </div>
             </div>
           </CardContent>
