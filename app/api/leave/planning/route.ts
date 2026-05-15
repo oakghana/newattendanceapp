@@ -811,7 +811,7 @@ export async function GET(request: NextRequest) {
               last_name,
               employee_id,
               departments(name, code),
-              geofence_locations(name)
+              geofence_locations!user_profiles_assigned_location_id_fkey(name)
             )
           `)
           .in("status", ["pending_hod_review", "hod_pending", "submitted", "pending"])
@@ -860,7 +860,7 @@ export async function GET(request: NextRequest) {
                 last_name,
                 employee_id,
                 departments(name, code),
-                geofence_locations(name)
+                geofence_locations!user_profiles_assigned_location_id_fkey(name)
               )
             )
           `)
