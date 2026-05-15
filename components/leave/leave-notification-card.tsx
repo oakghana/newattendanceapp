@@ -115,7 +115,7 @@ export function LeaveNotificationCard({
         )}
 
         {/* Approval Information Section */}
-        {notification.status === "approved" && (
+        {(notification.hr_office_reviewer_name || notification.hr_approver_name || notification.hod_approver_name) && (
           <div className="space-y-3 pt-3 border-t border-muted/30">
             {notification.hr_office_reviewer_name && notification.hr_office_reviewed_at && (
               <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3 border border-green-200 dark:border-green-900">

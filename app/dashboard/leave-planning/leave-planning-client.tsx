@@ -21,6 +21,7 @@ import {
   isHrApproverRole,
   isHrLeaveOfficeRole,
   isManagerRole,
+  isHodRole,
   isStaffRole,
   getStatusLabel,
   getStatusColor,
@@ -958,9 +959,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
   const isStaff = isStaffRole(normalizedRole)
-  const isHod = isManagerRole(normalizedRole) &&
-    !isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) &&
-    !isHrLeaveOfficeRole(normalizedRole)
+  const isHod = isHodRole(normalizedRole) && !isHrLeaveOfficeRole(normalizedRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
@@ -1049,7 +1048,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────���──────────────���────────
+  // ── HR Leave Office ─────────────────────────���──────────────����────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -1505,7 +1504,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ─── Holiday CRUD Functions ───────���─────────────────────────────────
+  // ���── Holiday CRUD Functions ───────���─────────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1904,7 +1903,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return data.analytics
   }, [analyticsData, data])
 
-  // ── Actions ──────────────────────────────────────────────────────────
+  // ── Actions ─────────────────────────────────────────���────────────────
 
   const submitPlan = async () => {
     if (!leaveType) {
