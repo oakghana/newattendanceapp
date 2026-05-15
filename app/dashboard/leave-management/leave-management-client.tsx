@@ -1858,7 +1858,7 @@ export function LeaveManagementClient({
                                   <option value="">-- Choose a leave request --</option>
                                   {approvedRequests.map((req) => (
                                     <option key={req.id} value={req.id}>
-                                      {(req.user_name || req.first_name ? `${req.first_name} ${req.last_name}`.trim() : "Staff")} {req.leave_type && `- ${req.leave_type}`} {req.start_date && `(${new Date(req.start_date).toLocaleDateString()} to ${new Date(req.end_date).toLocaleDateString()})`}
+                                      {req.user_name || "Staff"} - {req.leave_type} ({new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()})
                                     </option>
                                   ))}
                                 </select>
