@@ -8,6 +8,8 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ClipboardList,
   Copy,
@@ -15,6 +17,7 @@ import {
   FileClock,
   Loader2,
   Plus,
+  Search,
   Sparkles,
   XCircle,
 } from "lucide-react"
@@ -169,6 +172,30 @@ export function LeaveManagementClient({
   const [isExportingAnnualLeave, setIsExportingAnnualLeave] = useState(false)
   const [staffApprovedMemos, setStaffApprovedMemos] = useState<any[]>([])
   const [isLoadingApprovedMemos, setIsLoadingApprovedMemos] = useState(false)
+  
+  // Pagination and search state for Leave Application Actions sections
+  const [memosSearchQuery, setMemosSearchQuery] = useState("")
+  const [memosCurrentPage, setMemosCurrentPage] = useState(1)
+  const memosPageSize = 5
+  
+  // Filter and paginate approved memos
+  const filteredMemos = useMemo(() => {
+    if (!memosSearchQuery.trim()) return staffApprovedMemos
+    const query = memosSearchQuery.toLowerCase()
+    return staffApprovedMemos.filter((memo: any) =>
+      (memo.staff_name || "").toLowerCase().includes(query) ||
+      (memo.email || "").toLowerCase().includes(query) ||
+      (memo.leave_type || "").toLowerCase().includes(query) ||
+      (memo.location || "").toLowerCase().includes(query)
+    )
+  }, [staffApprovedMemos, memosSearchQuery])
+  
+  const paginatedMemos = useMemo(() => {
+    const startIndex = (memosCurrentPage - 1) * memosPageSize
+    return filteredMemos.slice(startIndex, startIndex + memosPageSize)
+  }, [filteredMemos, memosCurrentPage, memosPageSize])
+  
+  const memosTotalPages = Math.ceil(filteredMemos.length / memosPageSize)
 
   const copyTemplate = async (value: string, label: string) => {
     try {
@@ -1754,7 +1781,7 @@ export function LeaveManagementClient({
                   <Download className="h-5 w-5" />
                   Approved Leave Memos
                 </CardTitle>
-                <CardDescription className="text-teal-100">Download signed approval memos for your staff's approved leave requests</CardDescription>
+                <CardDescription className="text-teal-100">Download signed approval memos for your staff&apos;s approved leave requests</CardDescription>
               </CardHeader>
               <CardContent className="py-6">
                 {isLoadingApprovedMemos ? (
@@ -1768,33 +1795,104 @@ export function LeaveManagementClient({
                     <p className="text-sm text-slate-500 mt-2">Your staff have no approved leave requests yet</p>
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {staffApprovedMemos.map((memo: any) => (
-                      <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-slate-900">{memo.staff_name}</p>
-                            <p className="text-xs text-slate-500 mt-1">{memo.email}</p>
-                            <p className="text-sm text-slate-700 mt-2">{memo.leave_type} Leave</p>
-                            <p className="text-xs text-slate-600 mt-1">{new Date(memo.start_date).toLocaleDateString()} to {new Date(memo.end_date).toLocaleDateString()}</p>
-                            <p className="text-xs text-slate-500 mt-1">Location: {memo.location}</p>
-                          </div>
-                          <div className="flex gap-2 flex-shrink-0">
-                            <Button
-                              size="sm"
-                              className="bg-teal-600 hover:bg-teal-700 text-white"
-                              onClick={() => {
-                                // Download memo
-                                window.open(memo.memo_url, "_blank")
-                              }}
-                            >
-                              <Download className="h-3.5 w-3.5 mr-1" />
-                              Download
-                            </Button>
-                          </div>
-                        </div>
+                  <div className="space-y-4">
+                    {/* Search Field */}
+                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                      <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search by name, email, leave type..."
+                          value={memosSearchQuery}
+                          onChange={(e) => {
+                            setMemosSearchQuery(e.target.value)
+                            setMemosCurrentPage(1) // Reset to first page on search
+                          }}
+                          className="w-full pl-10 pr-4 py-2 border border-teal-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+                        />
                       </div>
-                    ))}
+                      <p className="text-sm text-slate-600">
+                        Showing {paginatedMemos.length} of {filteredMemos.length} memos
+                      </p>
+                    </div>
+                    
+                    {/* Memos List */}
+                    <div className="space-y-3">
+                      {paginatedMemos.length === 0 ? (
+                        <div className="text-center py-8">
+                          <Search className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+                          <p className="text-slate-500">No memos match your search</p>
+                        </div>
+                      ) : (
+                        paginatedMemos.map((memo: any) => (
+                          <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-slate-900">{memo.staff_name}</p>
+                                <p className="text-xs text-slate-500 mt-1">{memo.email}</p>
+                                <p className="text-sm text-slate-700 mt-2">{memo.leave_type} Leave</p>
+                                <p className="text-xs text-slate-600 mt-1">{new Date(memo.start_date).toLocaleDateString()} to {new Date(memo.end_date).toLocaleDateString()}</p>
+                                <p className="text-xs text-slate-500 mt-1">Location: {memo.location}</p>
+                              </div>
+                              <div className="flex gap-2 flex-shrink-0">
+                                <Button
+                                  size="sm"
+                                  className="bg-teal-600 hover:bg-teal-700 text-white"
+                                  onClick={() => {
+                                    // Download memo
+                                    window.open(memo.memo_url, "_blank")
+                                  }}
+                                >
+                                  <Download className="h-3.5 w-3.5 mr-1" />
+                                  Download
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    
+                    {/* Pagination Controls */}
+                    {memosTotalPages > 1 && (
+                      <div className="flex items-center justify-between pt-4 border-t border-teal-100">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMemosCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={memosCurrentPage === 1}
+                          className="gap-1"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="flex items-center gap-2">
+                          {Array.from({ length: memosTotalPages }, (_, i) => i + 1).map(page => (
+                            <button
+                              key={page}
+                              onClick={() => setMemosCurrentPage(page)}
+                              className={`h-8 w-8 rounded-full text-sm font-medium transition-colors ${
+                                page === memosCurrentPage
+                                  ? "bg-teal-600 text-white"
+                                  : "text-slate-600 hover:bg-teal-100"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          ))}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMemosCurrentPage(p => Math.min(memosTotalPages, p + 1))}
+                          disabled={memosCurrentPage === memosTotalPages}
+                          className="gap-1"
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
