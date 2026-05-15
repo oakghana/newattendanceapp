@@ -379,7 +379,7 @@ export function LeaveManagementClient({
       return
     }
 
-    if (!window.confirm("⚠️ WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
+    if (!window.confirm("⚠�� WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
       return
     }
 
@@ -575,9 +575,9 @@ export function LeaveManagementClient({
 
   const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
   const approvedRequests = useMemo(() => {
-    // For HOD/RM: use staff's approved leaves for deferment/recall
+    // For HOD/RM and HR Executives: use staff's approved leaves for deferment/recall
     const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isHodRm = ["regional_manager", "department_head", "admin", "hr_officer"].includes(roleNorm)
+    const isHodRm = ["regional_manager", "department_head", "admin", "hr_officer", "director_hr", "manager_hr"].includes(roleNorm)
     
     if (isHodRm && initialApprovedStaffRequests && initialApprovedStaffRequests.length > 0) {
       return initialApprovedStaffRequests
