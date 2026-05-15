@@ -379,7 +379,7 @@ export function LeaveManagementClient({
       return
     }
 
-    if (!window.confirm("⚠️ WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
+    if (!window.confirm("⚠�� WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
       return
     }
 
@@ -1858,23 +1858,33 @@ export function LeaveManagementClient({
                                   <option value="">-- Choose a leave request --</option>
                                   {approvedRequests.map((req) => (
                                     <option key={req.id} value={req.id}>
-                                      {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                                      {(req.user_name || req.first_name ? `${req.first_name} ${req.last_name}`.trim() : "Staff")} {req.leave_type && `- ${req.leave_type}`} {req.start_date && `(${new Date(req.start_date).toLocaleDateString()} to ${new Date(req.end_date).toLocaleDateString()})`}
                                     </option>
                                   ))}
                                 </select>
                               </div>
 
                               <div className="space-y-3">
-                                <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
+                                <Label htmlFor="deferral_start" className="text-sm font-semibold text-slate-700">Deferment Start Date <span className="text-red-500">*</span></Label>
                                 <Input
-                                  id="deferral_year"
-                                  type="text"
-                                  placeholder="2027"
+                                  id="deferral_start"
+                                  type="date"
                                   value={deferralYear}
                                   onChange={(e) => setDeferralYear(e.target.value)}
-                                  maxLength={4}
                                   className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
                                 />
+                                <p className="text-xs text-slate-500">When do you want to defer this leave to?</p>
+                              </div>
+
+                              <div className="space-y-3">
+                                <Label htmlFor="deferral_end" className="text-sm font-semibold text-slate-700">Deferment End Date <span className="text-slate-400">(Optional)</span></Label>
+                                <Input
+                                  id="deferral_end"
+                                  type="date"
+                                  placeholder="Leave blank if same as start date"
+                                  className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                />
+                                <p className="text-xs text-slate-500">End date if deferring to a period</p>
                               </div>
 
                               <div className="space-y-3">
