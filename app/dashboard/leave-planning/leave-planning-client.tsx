@@ -914,6 +914,30 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             <strong>HR note:</strong> {req.hr_approval_note}
           </p>
         )}
+        {/* Approver Information */}
+        {(req.hod_approver_name || req.hr_office_reviewer_name || req.hr_approver_name) && (
+          <div className="mt-3 p-2 bg-slate-50 rounded border border-slate-200 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Approval Trail</p>
+            {req.hod_approver_name && (
+              <p className="text-xs text-slate-700">
+                <span className="font-medium">HOD:</span> {req.hod_approver_name}
+                {req.hod_approved_at && <span className="text-slate-500 ml-1">({fmtDate(req.hod_approved_at)})</span>}
+              </p>
+            )}
+            {req.hr_office_reviewer_name && (
+              <p className="text-xs text-slate-700">
+                <span className="font-medium">HR Office:</span> {req.hr_office_reviewer_name}
+                {req.hr_office_reviewed_at && <span className="text-slate-500 ml-1">({fmtDate(req.hr_office_reviewed_at)})</span>}
+              </p>
+            )}
+            {req.hr_approver_name && (
+              <p className="text-xs text-slate-700">
+                <span className="font-medium">HR Executive:</span> {req.hr_approver_name}
+                {req.hr_approved_at && <span className="text-slate-500 ml-1">({fmtDate(req.hr_approved_at)})</span>}
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex gap-2 mt-3 justify-end flex-wrap">
           {req.status === "hr_approved" && req.memo_token && onViewMemo && (
             <Button size="sm" variant="outline"
