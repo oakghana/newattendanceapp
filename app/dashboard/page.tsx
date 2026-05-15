@@ -18,8 +18,7 @@ import {
   CheckCircle2,
   BarChart3,
   Zap,
-  Star,
-  Users
+  Star
 } from "lucide-react"
 import Link from "next/link"
 import RequestLeaveButtonWrapper from "@/components/leave/request-leave-button-client"
