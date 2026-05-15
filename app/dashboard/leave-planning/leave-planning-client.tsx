@@ -1019,7 +1019,6 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   } | null>(null)
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
-  const [partLeaveDays, setPartLeaveDays] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
@@ -1893,10 +1892,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       return
     }
     // End date is now auto-calculated, no manual validation needed
-    if (leaveType === "part_leave" && !partLeaveDays) {
-      toast({ title: "Missing days", description: "Please specify the number of days for part leave.", variant: "destructive" })
-      return
-    }
+    // part_leave_days is auto-derived from computedDays, no manual input required
     if (!activeSig.text && !activeSig.dataUrl) {
       toast({ title: "Signature required", description: "Please provide your signature.", variant: "destructive" })
       return
@@ -1916,7 +1912,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           leave_type: leaveType,
           reason,
           resumption_date: autoResumptionDate,
-          part_leave_days: leaveType === "part_leave" ? Number(partLeaveDays) : null,
+          part_leave_days: leaveType === "part_leave" ? (computedDays || null) : null,
           user_signature_mode: signatureMode,
           user_signature_text: activeSig.text,
           user_signature_data_url: activeSig.dataUrl,
