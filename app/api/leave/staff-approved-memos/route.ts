@@ -28,15 +28,94 @@ export async function GET(request: NextRequest) {
 
     const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
     const isHodOrRm = ["department_head", "regional_manager"].includes(normalizedRole)
+    const isHrExecutive = ["director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)
 
-    if (!isHodOrRm) {
+    if (!isHodOrRm && !isHrExecutive) {
       return NextResponse.json(
-        { error: "Only HOD/RM can view approved memos" },
+        { error: "Only HOD/RM or HR Executives can view approved memos" },
         { status: 403 }
       )
     }
 
     let staffIds: string[] = []
+
+    // HR Executives see ALL approved memos across the organization
+    if (isHrExecutive) {
+      // Fetch all approved requests without staff filter
+      const { data: approvedRequests, error: requestError } = await supabase
+        .from("leave_plan_requests")
+        .select(`
+          id,
+          user_id,
+          preferred_start_date,
+          preferred_end_date,
+          adjusted_start_date,
+          adjusted_end_date,
+          leave_type_key,
+          reason,
+          status,
+          created_at,
+          adjusted_days,
+          requested_days,
+          hr_approver_name,
+          hr_approved_at,
+          hr_office_reviewer_name,
+          hr_office_reviewed_at
+        `)
+        .in("status", ["approved", "hr_approved"])
+        .order("hr_approved_at", { ascending: false, nullsFirst: false })
+        .limit(200)
+
+      if (requestError) {
+        throw new Error(requestError.message)
+      }
+
+      if (!approvedRequests || approvedRequests.length === 0) {
+        return NextResponse.json({ memos: [] })
+      }
+
+      // Get all user IDs from requests
+      const userIds = [...new Set(approvedRequests.map((r: any) => r.user_id))]
+
+      // Fetch user profiles
+      const { data: profilesData, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, email, employee_id, department_id, assigned_location_id, departments(name)")
+        .in("id", userIds)
+
+      if (profileError) {
+        console.error("[v0] Profile fetch error:", profileError)
+      }
+
+      const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]))
+
+      const memos = (approvedRequests || []).map((req: any) => {
+        const profile = profileMap.get(req.user_id) || {}
+        return {
+          id: String(req.id),
+          user_id: String(req.user_id),
+          staff_name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
+          employee_id: profile.employee_id || "N/A",
+          email: profile.email || "N/A",
+          department: profile.departments?.name || "N/A",
+          location: "Not Assigned",
+          address: "N/A",
+          leave_type: req.leave_type_key || "annual",
+          start_date: req.adjusted_start_date || req.preferred_start_date,
+          end_date: req.adjusted_end_date || req.preferred_end_date,
+          days: req.adjusted_days || req.requested_days || 0,
+          reason: req.reason || "",
+          status: req.status,
+          created_at: req.created_at,
+          hr_approver_name: req.hr_approver_name,
+          hr_approved_at: req.hr_approved_at,
+          hr_office_reviewer_name: req.hr_office_reviewer_name,
+          hr_office_reviewed_at: req.hr_office_reviewed_at,
+        }
+      })
+
+      return NextResponse.json({ memos })
+    }
 
     // Get staff under this HOD/RM
     if (normalizedRole === "department_head" && userDepartment) {

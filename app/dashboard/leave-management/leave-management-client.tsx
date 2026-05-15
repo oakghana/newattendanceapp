@@ -255,11 +255,11 @@ export function LeaveManagementClient({
     }
   }
 
-  // ─── Fetch Approved Memos for HOD/RM Staff ───
+  // ─── Fetch Approved Memos for HOD/RM Staff and HR Executives ───
   const fetchStaffApprovedMemos = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "regional_manager"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "regional_manager", "director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)
 
       if (!isAuthorized) return
 
@@ -743,10 +743,10 @@ export function LeaveManagementClient({
     void loadTemplates()
   }, [canViewHrTemplates, toast])
 
-  // Fetch approved memos for HOD/RM
+  // Fetch approved memos for HOD/RM and HR Executives
   useEffect(() => {
     const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-    if (["department_head", "regional_manager"].includes(normalizedRole)) {
+    if (["department_head", "regional_manager", "director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)) {
       fetchStaffApprovedMemos()
     }
   }, [userId, userRole, userDepartment])

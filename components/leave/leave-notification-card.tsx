@@ -15,6 +15,15 @@ export interface LeaveNotification {
   status: "pending" | "approved" | "rejected"
   created_at: string
   can_dismiss: boolean
+  // Approval information
+  hr_approver_name?: string
+  hr_approver_id?: string
+  hr_approved_at?: string
+  hr_approval_note?: string
+  hr_office_reviewer_name?: string
+  hr_office_reviewer_id?: string
+  hr_office_reviewed_at?: string
+  submitted_at?: string
 }
 
 interface LeaveNotificationCardProps {
@@ -102,6 +111,65 @@ export function LeaveNotificationCard({
           <div className="bg-muted/30 rounded-lg p-3 border border-muted/50">
             <p className="text-xs text-muted-foreground font-medium mb-1">Reason</p>
             <p className="text-sm text-foreground">{notification.reason}</p>
+          </div>
+        )}
+
+        {/* Approval Information Section */}
+        {notification.status === "approved" && (
+          <div className="space-y-3 pt-3 border-t border-muted/30">
+            {notification.hr_office_reviewer_name && notification.hr_office_reviewed_at && (
+              <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3 border border-green-200 dark:border-green-900">
+                <p className="text-xs text-muted-foreground font-medium mb-1">HR Leave Office Review</p>
+                <p className="text-sm font-semibold text-green-700 dark:text-green-300">
+                  {notification.hr_office_reviewer_name}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Date(notification.hr_office_reviewed_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            )}
+
+            {notification.hr_approver_name && notification.hr_approved_at && (
+              <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-900">
+                <p className="text-xs text-muted-foreground font-medium mb-1">HR Executive Approval</p>
+                <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  {notification.hr_approver_name}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Date(notification.hr_approved_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+                {notification.hr_approval_note && (
+                  <p className="text-xs text-foreground mt-2 italic">{notification.hr_approval_note}</p>
+                )}
+              </div>
+            )}
+
+            {notification.submitted_at && !notification.hr_approver_name && (
+              <div className="bg-slate-50 dark:bg-slate-900/20 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-muted-foreground font-medium mb-1">Submission Date</p>
+                <p className="text-xs text-foreground">
+                  {new Date(notification.submitted_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

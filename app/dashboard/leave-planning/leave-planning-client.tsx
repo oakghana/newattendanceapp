@@ -1049,7 +1049,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────���──────────────��────────
+  // ── HR Leave Office ─────────────────────────���──────────────���────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -1063,6 +1063,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officeMemoCc, setOfficeMemoCc] = useState<Record<string, string>>({})
   const [officeTemplateKey, setOfficeTemplateKey] = useState<Record<string, string>>({})
   const [officeSubmitting, setOfficeSubmitting] = useState<string | null>(null)
+  // HR Executive selector for forwarding
+  const [hrExecutives, setHrExecutives] = useState<Array<{ id: string; name: string; role: string; role_label: string }>>([])
+  const [selectedHrExecutive, setSelectedHrExecutive] = useState<Record<string, string>>({})
+  const [loadingHrExecutives, setLoadingHrExecutives] = useState(false)
 
   // ── HR Approver ──────────────────������──────────────────────────────────
   const [hrNote, setHrNote] = useState<Record<string, string>>({})
@@ -1282,6 +1286,22 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       setHolidays([])
     } finally {
       setHolidaysLoading(false)
+    }
+  }, [])
+
+  // Load HR Executives for forwarding selector
+  const loadHrExecutives = useCallback(async () => {
+    try {
+      setLoadingHrExecutives(true)
+      const res = await fetch("/api/leave/hr-executives", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) return
+      setHrExecutives(Array.isArray(json.executives) ? json.executives : [])
+    } catch (e) {
+      console.error("[v0] Failed to load HR executives:", e)
+      setHrExecutives([])
+    } finally {
+      setLoadingHrExecutives(false)
     }
   }, [])
 
@@ -1586,7 +1606,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     void loadPolicy()
     void loadTemplateOptions()
     void loadHolidays()
-  }, [loadData, loadPolicy, loadTemplateOptions])
+    // Load HR executives only for HR Leave Office users
+    if (isHrOffice) {
+      void loadHrExecutives()
+    }
+  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives])
 
   useEffect(() => {
     if (!isHrApprover && !isAdmin) return
@@ -2001,7 +2025,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
   }
 
-  const submitHrOfficeReview = async (requestId: string) => {
+  const submitHrOfficeReview = async (requestId: string, forwardToHrExecutiveId?: string) => {
     const adjStart = officeAdjStart[requestId]
     const adjEnd = officeAdjEnd[requestId]
     const rsn = officeReason[requestId]
@@ -2018,6 +2042,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const baseDays = adjStart && adjEnd ? computeLeaveDays(adjStart, adjEnd) : 0
     const finalDays = Math.max(0, baseDays + outstandingAdded - holidayDeducted - priorDeducted + travelAdded)
 
+    // Get selected HR executive name for confirmation
+    const selectedExec = hrExecutives.find(e => e.id === forwardToHrExecutiveId)
+    const execName = selectedExec ? `${selectedExec.name} (${selectedExec.role_label})` : "HR Approvers"
+
     const confirmForward = window.confirm(
       `Please confirm the adjusted leave values before forwarding:\n\n` +
       `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
@@ -2028,6 +2056,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       `+ Travelling Days: ${travelAdded}\n` +
       `Final Days to Approvers: ${finalDays}\n\n` +
       `Reason: ${rsn.trim()}\n\n` +
+      `Forward To: ${execName}\n\n` +
       `Click OK to confirm accuracy and forward to HR Approvers.`,
     )
 
@@ -2051,6 +2080,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           memo_draft_subject: officeMemoSubject[requestId] || null,
           memo_draft_body: officeMemoBody[requestId] || null,
           memo_draft_cc: officeMemoCc[requestId] || null,
+          forwarded_to_hr_approver_id: forwardToHrExecutiveId || null,
         }),
       })
       const json = await res.json()
@@ -3519,6 +3549,29 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                   className="resize-none text-sm bg-white"
                                 />
                               </div>
+                              {/* HR Executive Selector */}
+                              <div className="space-y-1">
+                                <Label className="text-xs font-medium text-blue-700">Forward To (HR Executive) *</Label>
+                                <Select
+                                  value={selectedHrExecutive[req.id] || ""}
+                                  onValueChange={(val) => setSelectedHrExecutive((p) => ({ ...p, [req.id]: val }))}
+                                >
+                                  <SelectTrigger className="h-9 bg-white border-blue-200">
+                                    <SelectValue placeholder={loadingHrExecutives ? "Loading..." : "Select HR Executive to forward to"} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {hrExecutives.length === 0 && !loadingHrExecutives && (
+                                      <SelectItem value="none" disabled>No HR Executives available</SelectItem>
+                                    )}
+                                    {hrExecutives.map((exec) => (
+                                      <SelectItem key={exec.id} value={exec.id}>
+                                        {exec.name} ({exec.role_label})
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">Select which HR Executive should review and approve this leave request</p>
+                              </div>
                             </div>
 
                             <Button onClick={() => {
@@ -3526,9 +3579,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 toast({ title: "Remarks Required", description: "Please provide remarks before forwarding to HR Approvers", variant: "destructive" })
                                 return
                               }
-                              submitHrOfficeReview(req.id)
+                              if (!selectedHrExecutive[req.id]) {
+                                toast({ title: "HR Executive Required", description: "Please select an HR Executive to forward this request to", variant: "destructive" })
+                                return
+                              }
+                              submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || !officeMemoBody[req.id]?.trim()}
+                              disabled={officeSubmitting === req.id || !officeMemoBody[req.id]?.trim() || !selectedHrExecutive[req.id]}
                               className="bg-blue-700 hover:bg-blue-800 text-white">
                               {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
                             </Button>
