@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(Number(searchParams.get('offset')) || 0, 0)
 
     // Query outstanding_leave_balances which contains the actual carryover data
+    // The column is 'carryover_to_next_year', not 'carryover_days'
     let query = supabase
       .from('outstanding_leave_balances')
       .select(`
@@ -28,25 +29,17 @@ export async function GET(request: NextRequest) {
           first_name,
           last_name,
           employee_id,
+          department_id,
+          assigned_location_id,
           departments (name),
-          locations (name)
+          locations:assigned_location_id (name)
         )
       `, { count: 'exact' })
-      .gt('carryover_days', 0) // Only records with carryover
+      .gt('carryover_to_next_year', 0) // Only records with carryover - correct column name
       .order('created_at', { ascending: false })
 
     if (leaveYear) {
       query = query.eq('leave_year_period', leaveYear)
-    }
-
-    // Filter by approval status if not ALL
-    if (status !== 'ALL') {
-      if (status === 'PENDING') {
-        query = query.eq('hr_approved', false)
-      } else if (status === 'APPROVED') {
-        query = query.eq('hr_approved', true)
-      }
-      // REJECTED not applicable for outstanding_leave_balances
     }
 
     const { data, count, error } = await query.range(offset, offset + limit - 1)
@@ -65,10 +58,10 @@ export async function GET(request: NextRequest) {
       staff_id: record.user_id,
       leave_year: record.leave_year_period,
       leave_type_key: 'annual',
-      balance_available: record.outstanding_days || 0,
-      max_carryover_allowed: 30, // Default policy max
-      requested_carryover_days: record.carryover_days || 0,
-      status: record.hr_approved ? 'APPROVED' : 'PENDING',
+      balance_available: record.opening_balance || 0,
+      max_carryover_allowed: record.max_carryover_allowed || 30,
+      requested_carryover_days: record.carryover_to_next_year || 0, // Use correct column
+      status: 'PENDING', // All outstanding balances are considered pending for review
       requested_at: record.created_at,
       approval_note: record.notes || '',
       staff: {
@@ -90,8 +83,22 @@ export async function GET(request: NextRequest) {
       filteredData = filteredData.filter((r: any) => r.staff.department === department)
     }
 
+    // Filter by status
+    if (status !== 'ALL') {
+      filteredData = filteredData.filter((r: any) => r.status === status)
+    }
+
+    // Calculate stats
+    const stats = {
+      pending: filteredData.filter((r: any) => r.status === 'PENDING').length,
+      approved: filteredData.filter((r: any) => r.status === 'APPROVED').length,
+      rejected: filteredData.filter((r: any) => r.status === 'REJECTED').length,
+      totalDays: filteredData.reduce((sum: number, r: any) => sum + r.requested_carryover_days, 0),
+    }
+
     return NextResponse.json({
       carryover_requests: filteredData,
+      stats,
       total: count || 0,
       limit,
       offset,

@@ -34,7 +34,8 @@ export function CarryoverApprovalDashboard() {
   const [loading, setLoading] = useState(true)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
-  const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING')
+  const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('ALL')
+  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, totalDays: 0 })
   const { toast } = useToast()
 
   useEffect(() => {
@@ -48,6 +49,9 @@ export function CarryoverApprovalDashboard() {
       const res = await fetch(`/api/leave/carryover/pending?${status}&limit=100`)
       const data = await res.json()
       setCarryoverRequests(data.carryover_requests || [])
+      if (data.stats) {
+        setStats(data.stats)
+      }
     } catch (error) {
       console.error('[v0] Failed to fetch carryover requests:', error)
       toast({
@@ -163,7 +167,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-amber-700">
-              {carryoverRequests.filter(r => r.status === 'PENDING').length}
+              {stats.pending}
             </div>
           </CardContent>
         </Card>
@@ -174,7 +178,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-700">
-              {carryoverRequests.filter(r => r.status === 'APPROVED').length}
+              {stats.approved}
             </div>
           </CardContent>
         </Card>
@@ -185,7 +189,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-700">
-              {carryoverRequests.filter(r => r.status === 'REJECTED').length}
+              {stats.rejected}
             </div>
           </CardContent>
         </Card>
@@ -196,7 +200,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-700">
-              {carryoverRequests.reduce((sum, r) => sum + r.requested_carryover_days, 0)}
+              {stats.totalDays}
             </div>
           </CardContent>
         </Card>
