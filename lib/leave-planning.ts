@@ -129,7 +129,9 @@ export function summarizeManagerReviewStatus(decisions: LeavePlanReviewDecision[
   if (decisions.length === 0) return "pending_hod_review"
   if (decisions.some((d) => d === "rejected")) return "hod_rejected"
   if (decisions.some((d) => d === "recommend_change")) return "hod_changes_requested"
-  if (decisions.every((d) => d === "approved")) return "hod_approved"
+  // Changed: Mark as approved if AT LEAST ONE reviewer has approved (not requiring all)
+  // This handles cases where multiple reviewers are assigned but only one needs to approve
+  if (decisions.some((d) => d === "approved")) return "hod_approved"
   return "pending_hod_review"
 }
 
