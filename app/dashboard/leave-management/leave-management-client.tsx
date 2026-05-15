@@ -67,6 +67,7 @@ interface LeaveManagementClientProps {
   userId: string
   userRole: string
   userDepartment: string | null
+  userLocation: string | null
   userFirstName: string | null
   userLastName: string | null
   hasHodLinkage: boolean
@@ -93,6 +94,7 @@ export function LeaveManagementClient({
   userId,
   userRole,
   userDepartment,
+  userLocation,
   userFirstName,
   userLastName,
   hasHodLinkage,
@@ -780,12 +782,20 @@ export function LeaveManagementClient({
   }, [userId, userRole])
 
   // Fetch ALL deferment and recall requests (for viewing all requests)
+  // Role-based: HR/Admin see all, HOD/RM see their dept/region, normal staff see only their own
   useEffect(() => {
     const fetchAllDefermentAndRecallRequests = async () => {
       if (defermentSubTab !== "all" && recallSubTab !== "all") return
+      if (!userId) return
       setIsLoadingAllRequests(true)
       try {
-        const res = await fetch(`/api/leave/deferment-recall/all`, { cache: "no-store" })
+        const params = new URLSearchParams({
+          user_id: userId,
+          user_role: userRole || "",
+          user_department: userDepartment || "",
+          user_location: userLocation || ""
+        })
+        const res = await fetch(`/api/leave/deferment-recall/all?${params.toString()}`, { cache: "no-store" })
         if (res.ok) {
           const data = await res.json()
           setAllDefermentRequests(data.deferments || [])
@@ -799,7 +809,7 @@ export function LeaveManagementClient({
     }
     
     void fetchAllDefermentAndRecallRequests()
-  }, [defermentSubTab, recallSubTab])
+  }, [defermentSubTab, recallSubTab, userId, userRole, userDepartment, userLocation])
 
   // Fetch user's own recall and deferment requests (for My Requests tab)
   useEffect(() => {

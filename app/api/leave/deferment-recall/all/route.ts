@@ -1,6 +1,12 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 
+// Define roles that can see ALL deferment/recall requests
+const HR_ADMIN_ROLES = ["hr_leave_office", "admin", "manager_hr", "director_hr", "hr_director", "hr_officer", "hr_office", "hr"]
+
+// Define roles that can see department/regional data
+const HOD_RM_ROLES = ["department_head", "regional_manager"]
+
 export async function GET(request: NextRequest) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -18,6 +24,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get("type") || "all" // "deferment", "recall", or "all"
     const status = searchParams.get("status") // "pending", "approved", "rejected", or null for all
+    
+    // Role-based access control parameters
+    const userId = searchParams.get("user_id")
+    const userRole = searchParams.get("user_role")?.toLowerCase().replace(/[-\s]+/g, "_") || ""
+    const userDepartment = searchParams.get("user_department")
+    const userLocation = searchParams.get("user_location")
+
+    // Determine access level
+    const canViewAll = HR_ADMIN_ROLES.includes(userRole)
+    const isHodRm = HOD_RM_ROLES.includes(userRole)
+    const isNormalStaff = !canViewAll && !isHodRm
 
     const results: { deferments: any[], recalls: any[] } = { deferments: [], recalls: [] }
 
@@ -43,6 +60,8 @@ export async function GET(request: NextRequest) {
             last_name,
             employee_id,
             position,
+            department_id,
+            assigned_location_id,
             departments (name)
           ),
           hod_reviewer:user_profiles!leave_deferment_requests_hod_reviewed_by_fkey (
@@ -60,15 +79,26 @@ export async function GET(request: NextRequest) {
         defermentQuery = defermentQuery.eq("status", status)
       }
 
+      // Role-based filtering for normal staff - only their own requests
+      if (isNormalStaff && userId) {
+        defermentQuery = defermentQuery.eq("user_id", userId)
+      }
+
       const { data: deferments, error: defermentError } = await defermentQuery
 
       if (defermentError) {
         console.error("[v0] Deferment fetch error:", defermentError)
         // Try simpler query without joins
-        const { data: simpleDeferments, error: simpleError } = await supabase
+        let simpleDefermentQuery = supabase
           .from("leave_deferment_requests")
           .select("*")
           .order("created_at", { ascending: false })
+        
+        if (isNormalStaff && userId) {
+          simpleDefermentQuery = simpleDefermentQuery.eq("user_id", userId)
+        }
+        
+        const { data: simpleDeferments, error: simpleError } = await simpleDefermentQuery
         
         if (!simpleError && simpleDeferments) {
           // Manually fetch related data
@@ -76,9 +106,34 @@ export async function GET(request: NextRequest) {
             // Get user info
             const { data: user } = await supabase
               .from("user_profiles")
-              .select("first_name, last_name, employee_id, position, department_id")
+              .select("first_name, last_name, employee_id, position, department_id, assigned_location_id")
               .eq("id", def.user_id)
               .single()
+            
+            // HOD/RM filtering - only their department/location
+            if (isHodRm && user) {
+              const userDeptId = user.department_id
+              const userLocId = user.assigned_location_id
+              
+              // Get current user's department/location for comparison
+              if (userId) {
+                const { data: currentUser } = await supabase
+                  .from("user_profiles")
+                  .select("department_id, assigned_location_id")
+                  .eq("id", userId)
+                  .single()
+                
+                if (currentUser) {
+                  // Skip if not in same department (for HOD) or location (for RM)
+                  if (userRole === "department_head" && userDeptId !== currentUser.department_id) {
+                    continue
+                  }
+                  if (userRole === "regional_manager" && userLocId !== currentUser.assigned_location_id) {
+                    continue
+                  }
+                }
+              }
+            }
             
             // Get leave request info
             const { data: leaveReq } = await supabase
@@ -104,6 +159,8 @@ export async function GET(request: NextRequest) {
               employee_id: user?.employee_id || "",
               position: user?.position || "",
               department: deptName,
+              department_id: user?.department_id,
+              location_id: user?.assigned_location_id,
               leave_type: leaveReq?.leave_type_key || "",
               start_date: leaveReq?.preferred_start_date,
               end_date: leaveReq?.preferred_end_date,
@@ -114,7 +171,34 @@ export async function GET(request: NextRequest) {
           }
         }
       } else if (deferments) {
-        results.deferments = deferments.map(def => ({
+        // Filter results based on role for HOD/RM
+        let filteredDeferments = deferments
+        
+        if (isHodRm && userId) {
+          // Get current user's department/location
+          const { data: currentUser } = await supabase
+            .from("user_profiles")
+            .select("department_id, assigned_location_id")
+            .eq("id", userId)
+            .single()
+          
+          if (currentUser) {
+            filteredDeferments = deferments.filter(def => {
+              const userDeptId = def.user_profiles?.department_id
+              const userLocId = def.user_profiles?.assigned_location_id
+              
+              if (userRole === "department_head") {
+                return userDeptId === currentUser.department_id
+              }
+              if (userRole === "regional_manager") {
+                return userLocId === currentUser.assigned_location_id
+              }
+              return true
+            })
+          }
+        }
+        
+        results.deferments = filteredDeferments.map(def => ({
           ...def,
           staff_name: def.user_profiles 
             ? `${def.user_profiles.first_name} ${def.user_profiles.last_name}` 
@@ -122,6 +206,8 @@ export async function GET(request: NextRequest) {
           employee_id: def.user_profiles?.employee_id || "",
           position: def.user_profiles?.position || "",
           department: def.user_profiles?.departments?.name || "",
+          department_id: def.user_profiles?.department_id,
+          location_id: def.user_profiles?.assigned_location_id,
           leave_type: def.leave_plan_requests?.leave_type_key || "",
           start_date: def.leave_plan_requests?.preferred_start_date,
           end_date: def.leave_plan_requests?.preferred_end_date,
@@ -160,6 +246,8 @@ export async function GET(request: NextRequest) {
             last_name,
             employee_id,
             position,
+            department_id,
+            assigned_location_id,
             departments (name)
           ),
           initiator:user_profiles!leave_recall_requests_initiated_by_user_id_fkey (
@@ -178,24 +266,53 @@ export async function GET(request: NextRequest) {
         recallQuery = recallQuery.eq("status", status)
       }
 
+      // Role-based filtering for normal staff - only their own requests
+      if (isNormalStaff && userId) {
+        recallQuery = recallQuery.eq("staff_user_id", userId)
+      }
+
       const { data: recalls, error: recallError } = await recallQuery
 
       if (recallError) {
         console.error("[v0] Recall fetch error:", recallError)
         // Try simpler query
-        const { data: simpleRecalls, error: simpleError } = await supabase
+        let simpleRecallQuery = supabase
           .from("leave_recall_requests")
           .select("*")
           .order("created_at", { ascending: false })
+        
+        if (isNormalStaff && userId) {
+          simpleRecallQuery = simpleRecallQuery.eq("staff_user_id", userId)
+        }
+        
+        const { data: simpleRecalls, error: simpleError } = await simpleRecallQuery
         
         if (!simpleError && simpleRecalls) {
           for (const rec of simpleRecalls) {
             // Get staff info
             const { data: staff } = await supabase
               .from("user_profiles")
-              .select("first_name, last_name, employee_id, position, department_id")
+              .select("first_name, last_name, employee_id, position, department_id, assigned_location_id")
               .eq("id", rec.staff_user_id)
               .single()
+            
+            // HOD/RM filtering
+            if (isHodRm && staff && userId) {
+              const { data: currentUser } = await supabase
+                .from("user_profiles")
+                .select("department_id, assigned_location_id")
+                .eq("id", userId)
+                .single()
+              
+              if (currentUser) {
+                if (userRole === "department_head" && staff.department_id !== currentUser.department_id) {
+                  continue
+                }
+                if (userRole === "regional_manager" && staff.assigned_location_id !== currentUser.assigned_location_id) {
+                  continue
+                }
+              }
+            }
             
             // Get initiator info
             const { data: initiator } = await supabase
@@ -228,6 +345,8 @@ export async function GET(request: NextRequest) {
               employee_id: staff?.employee_id || "",
               position: staff?.position || "",
               department: deptName,
+              department_id: staff?.department_id,
+              location_id: staff?.assigned_location_id,
               initiator_name: initiator ? `${initiator.first_name} ${initiator.last_name}` : "Unknown",
               initiator_position: initiator?.position || "",
               leave_type: leaveReq?.leave_type_key || "",
@@ -240,7 +359,33 @@ export async function GET(request: NextRequest) {
           }
         }
       } else if (recalls) {
-        results.recalls = recalls.map(rec => ({
+        // Filter results based on role for HOD/RM
+        let filteredRecalls = recalls
+        
+        if (isHodRm && userId) {
+          const { data: currentUser } = await supabase
+            .from("user_profiles")
+            .select("department_id, assigned_location_id")
+            .eq("id", userId)
+            .single()
+          
+          if (currentUser) {
+            filteredRecalls = recalls.filter(rec => {
+              const staffDeptId = rec.staff?.department_id
+              const staffLocId = rec.staff?.assigned_location_id
+              
+              if (userRole === "department_head") {
+                return staffDeptId === currentUser.department_id
+              }
+              if (userRole === "regional_manager") {
+                return staffLocId === currentUser.assigned_location_id
+              }
+              return true
+            })
+          }
+        }
+        
+        results.recalls = filteredRecalls.map(rec => ({
           ...rec,
           staff_name: rec.staff 
             ? `${rec.staff.first_name} ${rec.staff.last_name}` 
@@ -248,6 +393,8 @@ export async function GET(request: NextRequest) {
           employee_id: rec.staff?.employee_id || "",
           position: rec.staff?.position || "",
           department: rec.staff?.departments?.name || "",
+          department_id: rec.staff?.department_id,
+          location_id: rec.staff?.assigned_location_id,
           initiator_name: rec.initiator 
             ? `${rec.initiator.first_name} ${rec.initiator.last_name}` 
             : "Unknown",
@@ -274,7 +421,8 @@ export async function GET(request: NextRequest) {
         pending_deferments: results.deferments.filter(d => d.status === "pending").length,
         total_recalls: results.recalls.length,
         pending_recalls: results.recalls.filter(r => r.status === "pending").length
-      }
+      },
+      access_level: canViewAll ? "full" : isHodRm ? "department_regional" : "own_only"
     })
   } catch (error) {
     console.error("[v0] Deferment/Recall fetch error:", error)
