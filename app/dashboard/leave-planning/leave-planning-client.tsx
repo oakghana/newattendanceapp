@@ -3007,26 +3007,40 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 placeholder="Days"
                               />
                               <div className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2">
-                                <div className="relative w-10 h-6 bg-slate-300 rounded-full cursor-pointer transition-colors" style={{backgroundColor: draft.isActive !== false ? '#10b981' : '#d1d5db'}} onClick={() => setLeaveTypeDrafts((prev) => ({
-                                  ...prev,
-                                  [leaveTypeOption.leaveTypeKey]: {
-                                    ...(prev[leaveTypeOption.leaveTypeKey] || draft),
-                                    isActive: draft.isActive === false ? true : false,
-                                  },
-                                }))}>
+                                <div 
+                                  className="relative w-10 h-6 bg-slate-300 rounded-full cursor-pointer transition-colors" 
+                                  style={{
+                                    backgroundColor: draft.isActive !== false ? '#10b981' : '#d1d5db',
+                                    opacity: leaveTypeSavingKey === leaveTypeOption.leaveTypeKey ? 0.6 : 1,
+                                  }} 
+                                  onClick={async () => {
+                                    // Toggle the state immediately for UI responsiveness
+                                    const newIsActive = draft.isActive === false ? true : false
+                                    setLeaveTypeDrafts((prev) => ({
+                                      ...prev,
+                                      [leaveTypeOption.leaveTypeKey]: {
+                                        ...(prev[leaveTypeOption.leaveTypeKey] || draft),
+                                        isActive: newIsActive,
+                                      },
+                                    }))
+                                    // Auto-save to database immediately
+                                    await saveExistingLeaveType(leaveTypeOption.leaveTypeKey)
+                                  }}
+                                >
                                   <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all" style={{left: draft.isActive !== false ? '18px' : '2px'}} />
                                 </div>
                               </div>
                               <Button
                                 size="sm"
                                 className="bg-emerald-700 hover:bg-emerald-800"
-                                disabled={Boolean(leaveTypeSavingKey)}
+                                disabled={Boolean(leaveTypeSavingKey) || (draft.isActive === leaveTypeOption.is_active && draft.entitlementDays === leaveTypeOption.entitlementDays)}
                                 onClick={() => void saveExistingLeaveType(leaveTypeOption.leaveTypeKey)}
+                                title={draft.isActive === leaveTypeOption.is_active && draft.entitlementDays === leaveTypeOption.entitlementDays ? "Toggle auto-saves immediately. Update entitlement days and click Save to persist." : ""}
                               >
-                                {isSaving ? "Saving..." : "Save"}
+                                {leaveTypeSavingKey === leaveTypeOption.leaveTypeKey ? "Saving..." : "Save"}
                               </Button>
                               <p className="text-[11px] text-slate-400 md:col-span-4">
-                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1} · Status: {draft.isActive !== false ? 'Active' : 'Inactive'}
+                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1} · Status: <span className={draft.isActive !== false ? "text-emerald-700 font-medium" : "text-red-600 font-medium"}>{draft.isActive !== false ? 'Active' : 'Inactive'}</span> {leaveTypeSavingKey === leaveTypeOption.leaveTypeKey && <span className="ml-2 inline-flex items-center gap-1 text-emerald-600">● Saving...</span>}
                               </p>
                             </div>
                           )
