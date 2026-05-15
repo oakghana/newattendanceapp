@@ -22,7 +22,7 @@ export default async function DefaultersPage() {
     .eq("id", user.id)
     .single()
 
-  if (!profile || !["admin", "department_head"].includes(profile.role)) {
+  if (!profile || !["admin", "department_head", "director_hr", "manager_hr"].includes(profile.role)) {
     redirect("/dashboard")
   }
 
