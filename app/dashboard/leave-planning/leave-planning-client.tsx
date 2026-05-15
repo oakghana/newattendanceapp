@@ -1023,7 +1023,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
-  const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string }>>({})
+  const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }>>({})
   const [newLeaveTypeKey, setNewLeaveTypeKey] = useState("")
   const [newLeaveTypeLabel, setNewLeaveTypeLabel] = useState("")
   const [newLeaveTypeDays, setNewLeaveTypeDays] = useState("")
@@ -1596,12 +1596,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
   useEffect(() => {
     setLeaveTypeDrafts((prev) => {
-      const next: Record<string, { leaveTypeLabel: string; entitlementDays: string }> = {}
+      const next: Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }> = {}
       for (const leaveTypeOption of leaveTypes) {
         const existing = prev[leaveTypeOption.leaveTypeKey]
         next[leaveTypeOption.leaveTypeKey] = {
           leaveTypeLabel: existing?.leaveTypeLabel ?? leaveTypeOption.leaveTypeLabel,
           entitlementDays: existing?.entitlementDays ?? String(leaveTypeOption.entitlementDays ?? 0),
+          isActive: existing?.isActive ?? (leaveTypeOption.is_active !== false),
         }
       }
       return next
