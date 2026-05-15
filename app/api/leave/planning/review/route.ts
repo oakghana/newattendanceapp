@@ -86,19 +86,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: review, error: reviewError } = await admin
+    const { data: reviews, error: reviewError } = await admin
       .from("leave_plan_reviews")
       .select("id")
       .eq("leave_plan_request_id", leave_plan_request_id)
       .eq("reviewer_id", user.id)
-      .single()
 
     if (reviewError && isSchemaIssue(reviewError)) {
       return schemaIssueResponse()
     }
 
-    if (reviewError || !review) {
+    if (reviewError || !reviews || reviews.length === 0) {
       return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
+    }
+
+    // Update all review records for this manager for this request
+    const { error: updateReviewError } = await admin
+      .from("leave_plan_reviews")
+      .update({
+        decision,
+        recommendation: recommendation || null,
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("leave_plan_request_id", leave_plan_request_id)
+      .eq("reviewer_id", user.id)
+
+    if (updateReviewError) {
+      if (isSchemaIssue(updateReviewError)) {
+        return schemaIssueResponse()
+      }
+      throw updateReviewError
     }
 
     const { data: leavePlan, error: leavePlanError } = await admin
@@ -137,23 +155,6 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         )
       }
-    }
-
-    const { error: updateReviewError } = await admin
-      .from("leave_plan_reviews")
-      .update({
-        decision,
-        recommendation: recommendation || null,
-        reviewed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", review.id)
-
-    if (updateReviewError) {
-      if (isSchemaIssue(updateReviewError)) {
-        return schemaIssueResponse()
-      }
-      throw updateReviewError
     }
 
     const { data: allReviews, error: allReviewsError } = await admin
