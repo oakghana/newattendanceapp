@@ -29,24 +29,16 @@ export async function GET(request: NextRequest) {
         leave_year_period,
         requested_days,
         adjusted_days,
-        travelling_days_added,
-        holiday_days_deducted,
-        status,
         preferred_start_date,
         preferred_end_date,
         adjusted_start_date,
         adjusted_end_date,
+        status,
+        is_carry_over_leave,
         reason,
         created_at,
         submitted_at,
-        hr_approved_at,
-        is_carry_over_leave,
-        user_profiles (
-          first_name,
-          last_name,
-          employee_id,
-          departments (name)
-        )
+        hr_approved_at
       `)
       .in('status', ['hr_approved', 'hod_approved', 'hr_office_reviewed', 'pending'])
       .order('created_at', { ascending: false })
@@ -82,13 +74,7 @@ export async function GET(request: NextRequest) {
         carryover_to_next_year,
         max_carryover_allowed,
         notes,
-        created_at,
-        user_profiles!outstanding_leave_balances_user_id_fkey (
-          first_name,
-          last_name,
-          employee_id,
-          departments (name)
-        )
+        created_at
       `)
       .order('created_at', { ascending: false })
 
@@ -103,67 +89,152 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform leave requests to transactions
-    const leaveTransactions = (leaveData || []).map((record: any) => {
-      const days = record.adjusted_days || record.requested_days || 0
-      const startDate = record.adjusted_start_date || record.preferred_start_date
-      const endDate = record.adjusted_end_date || record.preferred_end_date
-      
-      return {
-        id: record.id,
-        created_at: record.hr_approved_at || record.submitted_at || record.created_at,
-        staff_name: `${record.user_profiles?.first_name || ''} ${record.user_profiles?.last_name || ''}`.trim(),
-        employee_id: record.user_profiles?.employee_id || '',
-        department: record.user_profiles?.departments?.name || '',
-        leave_year: record.leave_year_period,
-        leave_type: record.leave_type_key || 'annual',
-        transaction_type: record.is_carry_over_leave ? 'CARRYOVER' : 'LEAVE_TAKEN',
-        days_change: -Math.abs(days),
-        running_balance: 0,
-        reason_code: record.status === 'hr_approved' ? 'APPROVED' : record.status?.toUpperCase() || 'PENDING',
-        notes: record.reason || '',
-        status: record.status === 'hr_approved' ? 'APPROVED' : record.status?.toUpperCase() || 'PENDING',
-        start_date: startDate,
-        end_date: endDate,
-      }
-    })
+    const leaveTransactions = await Promise.all(
+      (leaveData || []).map(async (record: any) => {
+        try {
+          const { data: userProfile } = await supabase
+            .from('user_profiles')
+            .select('first_name, last_name, employee_id, departments(name)')
+            .eq('id', record.user_id)
+            .single()
+
+          const days = record.adjusted_days || record.requested_days || 0
+          const startDate = record.adjusted_start_date || record.preferred_start_date
+          const endDate = record.adjusted_end_date || record.preferred_end_date
+          
+          return {
+            id: record.id,
+            created_at: record.hr_approved_at || record.submitted_at || record.created_at,
+            staff_name: `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim(),
+            employee_id: userProfile?.employee_id || '',
+            department: userProfile?.departments?.name || '',
+            leave_year: record.leave_year_period,
+            leave_type: record.leave_type_key || 'annual',
+            transaction_type: record.is_carry_over_leave ? 'CARRYOVER' : 'LEAVE_TAKEN',
+            days_change: -Math.abs(days),
+            running_balance: 0,
+            reason_code: record.status === 'hr_approved' ? 'APPROVED' : record.status?.toUpperCase() || 'PENDING',
+            notes: record.reason || '',
+            status: record.status === 'hr_approved' ? 'APPROVED' : record.status?.toUpperCase() || 'PENDING',
+            start_date: startDate,
+            end_date: endDate,
+          }
+        } catch (err) {
+          console.error('[v0] Error fetching user profile:', err)
+          return {
+            id: record.id,
+            created_at: record.hr_approved_at || record.submitted_at || record.created_at,
+            staff_name: 'Unknown',
+            employee_id: '',
+            department: '',
+            leave_year: record.leave_year_period,
+            leave_type: record.leave_type_key || 'annual',
+            transaction_type: record.is_carry_over_leave ? 'CARRYOVER' : 'LEAVE_TAKEN',
+            days_change: -(record.adjusted_days || record.requested_days || 0),
+            running_balance: 0,
+            reason_code: record.status?.toUpperCase() || 'PENDING',
+            notes: record.reason || '',
+            status: record.status?.toUpperCase() || 'PENDING',
+            start_date: record.preferred_start_date,
+            end_date: record.preferred_end_date,
+          }
+        }
+      })
+    )
 
     // Transform outstanding balances to carryover transactions
-    const carryoverTransactions = (outstandingData || [])
-      .filter((record: any) => record.carryover_to_next_year > 0)
-      .map((record: any) => ({
-        id: record.id,
-        created_at: record.created_at,
-        staff_name: `${record.user_profiles?.first_name || ''} ${record.user_profiles?.last_name || ''}`.trim(),
-        employee_id: record.user_profiles?.employee_id || '',
-        department: record.user_profiles?.departments?.name || '',
-        leave_year: record.leave_year_period,
-        leave_type: 'annual',
-        transaction_type: 'CARRYOVER',
-        days_change: record.carryover_to_next_year || 0,
-        running_balance: record.opening_balance || 0,
-        reason_code: 'CARRYOVER_BALANCE',
-        notes: record.notes || `Carryover from ${record.leave_year_period}`,
-        status: 'APPROVED',
-      }))
+    const carryoverTransactions = await Promise.all(
+      (outstandingData || [])
+        .filter((record: any) => record.carryover_to_next_year > 0)
+        .map(async (record: any) => {
+          try {
+            const { data: userProfile } = await supabase
+              .from('user_profiles')
+              .select('first_name, last_name, employee_id, departments(name)')
+              .eq('id', record.user_id)
+              .single()
+
+            return {
+              id: record.id,
+              created_at: record.created_at,
+              staff_name: `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim(),
+              employee_id: userProfile?.employee_id || '',
+              department: userProfile?.departments?.name || '',
+              leave_year: record.leave_year_period,
+              leave_type: 'annual',
+              transaction_type: 'CARRYOVER',
+              days_change: record.carryover_to_next_year || 0,
+              running_balance: record.opening_balance || 0,
+              reason_code: 'CARRYOVER_BALANCE',
+              notes: record.notes || `Carryover from ${record.leave_year_period}`,
+              status: 'APPROVED',
+            }
+          } catch (err) {
+            return {
+              id: record.id,
+              created_at: record.created_at,
+              staff_name: 'Unknown',
+              employee_id: '',
+              department: '',
+              leave_year: record.leave_year_period,
+              leave_type: 'annual',
+              transaction_type: 'CARRYOVER',
+              days_change: record.carryover_to_next_year || 0,
+              running_balance: record.opening_balance || 0,
+              reason_code: 'CARRYOVER_BALANCE',
+              notes: record.notes || `Carryover from ${record.leave_year_period}`,
+              status: 'APPROVED',
+            }
+          }
+        })
+    )
 
     // Transform outstanding balances to outstanding transactions
-    const outstandingTransactions = (outstandingData || [])
-      .filter((record: any) => (record.opening_balance - record.used_this_period) > 0)
-      .map((record: any) => ({
-        id: `outstanding-${record.id}`,
-        created_at: record.created_at,
-        staff_name: `${record.user_profiles?.first_name || ''} ${record.user_profiles?.last_name || ''}`.trim(),
-        employee_id: record.user_profiles?.employee_id || '',
-        department: record.user_profiles?.departments?.name || '',
-        leave_year: record.leave_year_period,
-        leave_type: 'annual',
-        transaction_type: 'OUTSTANDING',
-        days_change: (record.opening_balance || 0) - (record.used_this_period || 0),
-        running_balance: record.opening_balance || 0,
-        reason_code: 'OUTSTANDING_BALANCE',
-        notes: record.notes || `Outstanding balance for ${record.leave_year_period}`,
-        status: 'ACTIVE',
-      }))
+    const outstandingTransactions = await Promise.all(
+      (outstandingData || [])
+        .filter((record: any) => (record.opening_balance - record.used_this_period) > 0)
+        .map(async (record: any) => {
+          try {
+            const { data: userProfile } = await supabase
+              .from('user_profiles')
+              .select('first_name, last_name, employee_id, departments(name)')
+              .eq('id', record.user_id)
+              .single()
+
+            return {
+              id: `outstanding-${record.id}`,
+              created_at: record.created_at,
+              staff_name: `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim(),
+              employee_id: userProfile?.employee_id || '',
+              department: userProfile?.departments?.name || '',
+              leave_year: record.leave_year_period,
+              leave_type: 'annual',
+              transaction_type: 'OUTSTANDING',
+              days_change: (record.opening_balance || 0) - (record.used_this_period || 0),
+              running_balance: record.opening_balance || 0,
+              reason_code: 'OUTSTANDING_BALANCE',
+              notes: record.notes || `Outstanding balance for ${record.leave_year_period}`,
+              status: 'ACTIVE',
+            }
+          } catch (err) {
+            return {
+              id: `outstanding-${record.id}`,
+              created_at: record.created_at,
+              staff_name: 'Unknown',
+              employee_id: '',
+              department: '',
+              leave_year: record.leave_year_period,
+              leave_type: 'annual',
+              transaction_type: 'OUTSTANDING',
+              days_change: (record.opening_balance || 0) - (record.used_this_period || 0),
+              running_balance: record.opening_balance || 0,
+              reason_code: 'OUTSTANDING_BALANCE',
+              notes: record.notes || `Outstanding balance for ${record.leave_year_period}`,
+              status: 'ACTIVE',
+            }
+          }
+        })
+    )
 
     // Combine all transactions
     let allTransactions = [

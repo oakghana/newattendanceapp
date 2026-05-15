@@ -24,16 +24,15 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('outstanding_leave_balances')
       .select(`
-        *,
-        user_profiles!outstanding_leave_balances_user_id_fkey (
-          first_name,
-          last_name,
-          employee_id,
-          department_id,
-          assigned_location_id,
-          departments (name),
-          locations:assigned_location_id (name)
-        )
+        id,
+        user_id,
+        leave_year_period,
+        opening_balance,
+        entitlement_days,
+        carryover_to_next_year,
+        max_carryover_allowed,
+        notes,
+        created_at
       `, { count: 'exact' })
       .gt('carryover_to_next_year', 0) // Only records with carryover - correct column name
       .order('created_at', { ascending: false })
@@ -53,26 +52,62 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform data to match expected carryover request format
-    const carryoverRequests = (data || []).map((record: any) => ({
-      id: record.id,
-      staff_id: record.user_id,
-      leave_year: record.leave_year_period,
-      leave_type_key: 'annual',
-      balance_available: record.opening_balance || 0,
-      max_carryover_allowed: record.max_carryover_allowed || 30,
-      requested_carryover_days: record.carryover_to_next_year || 0, // Use correct column
-      status: 'PENDING', // All outstanding balances are considered pending for review
-      requested_at: record.created_at,
-      approval_note: record.notes || '',
-      staff: {
-        email: '',
-        first_name: record.user_profiles?.first_name || '',
-        last_name: record.user_profiles?.last_name || '',
-        employee_id: record.user_profiles?.employee_id || '',
-        department: record.user_profiles?.departments?.name || '',
-        location: record.user_profiles?.locations?.name || '',
-      },
-    }))
+    // We'll fetch user info separately for each record
+    const carryoverRequests = await Promise.all(
+      (data || []).map(async (record: any) => {
+        try {
+          // Fetch user profile for this record
+          const { data: userProfile } = await supabase
+            .from('user_profiles')
+            .select('first_name, last_name, employee_id, departments(name), locations:assigned_location_id(name)')
+            .eq('id', record.user_id)
+            .single()
+
+          return {
+            id: record.id,
+            staff_id: record.user_id,
+            leave_year: record.leave_year_period,
+            leave_type_key: 'annual',
+            balance_available: record.opening_balance || 0,
+            max_carryover_allowed: record.max_carryover_allowed || 30,
+            requested_carryover_days: record.carryover_to_next_year || 0,
+            status: 'PENDING',
+            requested_at: record.created_at,
+            approval_note: record.notes || '',
+            staff: {
+              email: '',
+              first_name: userProfile?.first_name || '',
+              last_name: userProfile?.last_name || '',
+              employee_id: userProfile?.employee_id || '',
+              department: userProfile?.departments?.name || '',
+              location: userProfile?.locations?.name || '',
+            },
+          }
+        } catch (err) {
+          console.error('[v0] Error fetching user profile for:', record.user_id, err)
+          return {
+            id: record.id,
+            staff_id: record.user_id,
+            leave_year: record.leave_year_period,
+            leave_type_key: 'annual',
+            balance_available: record.opening_balance || 0,
+            max_carryover_allowed: record.max_carryover_allowed || 30,
+            requested_carryover_days: record.carryover_to_next_year || 0,
+            status: 'PENDING',
+            requested_at: record.created_at,
+            approval_note: record.notes || '',
+            staff: {
+              email: '',
+              first_name: '',
+              last_name: '',
+              employee_id: '',
+              department: '',
+              location: '',
+            },
+          }
+        }
+      })
+    )
 
     // Apply location/department filters
     let filteredData = carryoverRequests
