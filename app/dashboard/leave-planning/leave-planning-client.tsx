@@ -40,6 +40,8 @@ import {
   UserCheck,
   ShieldCheck,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Download,
   AlertCircle,
   RefreshCw,
@@ -984,6 +986,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrOfficeTab, setHrOfficeTab] = useState("operations")
   const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
   const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
+  const [hrOfficeControlsExpanded, setHrOfficeControlsExpanded] = useState(false)
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
   const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
   const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
@@ -1092,6 +1095,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     () => leaveTypes.find((t) => t.leaveTypeKey === leaveType),
     [leaveTypes, leaveType],
   )
+  
+  // Filter for active leave types only (for the application dropdown)
+  const activeLeaveTypes = useMemo(
+    () => leaveTypes.filter((t) => t.is_active !== false),
+    [leaveTypes],
+  )
+  
   const activeLeaveYearPeriod = useMemo(() => getActiveLeaveYearPeriod(), [])
 
   // Auto-calculate end date when start date or leave type changes
@@ -2288,7 +2298,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         <SelectValue placeholder="Select leave type" />
                       </SelectTrigger>
                       <SelectContent>
-                        {leaveTypes.map((t) => (
+                        {activeLeaveTypes.map((t) => (
                           <SelectItem key={t.leaveTypeKey} value={t.leaveTypeKey}>
                             {t.leaveTypeLabel}
                           </SelectItem>
@@ -2573,174 +2583,233 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
           {/* ── HR Leave Office ───────────────────────────────────────── */}
           <TabsContent value="hr-office">
-            <div className="mb-4 space-y-3">
-              <Alert className="border-blue-200 bg-blue-50">
-                <ClipboardList className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-xs text-blue-800 ml-1">
-                  Review HOD-approved leave requests. You may adjust days — add travelling days, deduct public holidays or
-                  prior partial leave enjoyed. All adjustments and reasons will appear in the staff&apos;s official leave memo.
-                </AlertDescription>
-              </Alert>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-wide text-emerald-700">Queue Size</p>
-                  <p className="text-xl font-bold text-emerald-900">{hrOfficeQueue.length}</p>
-                </div>
-                <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-wide text-blue-700">HOD Approved</p>
-                  <p className="text-xl font-bold text-blue-900">
-                    {hrOfficeQueue.filter((row: any) => String(row?.status || "") === "hod_approved").length}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-wide text-amber-700">Manager Confirmed</p>
-                  <p className="text-xl font-bold text-amber-900">
-                    {hrOfficeQueue.filter((row: any) => String(row?.status || "") === "manager_confirmed").length}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-wide text-slate-600">Showing</p>
-                  <p className="text-xl font-bold text-slate-900">{hrOfficeFilteredQueue.length}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-3">
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={hrOfficeShowArchived ? "outline" : "default"}
-                    className={!hrOfficeShowArchived ? "bg-emerald-600 hover:bg-emerald-700" : ""}
-                    onClick={() => setHrOfficeShowArchived(false)}
-                  >
-                    Active Queue
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={hrOfficeShowArchived ? "default" : "outline"}
-                    className={hrOfficeShowArchived ? "bg-blue-700 hover:bg-blue-800" : ""}
-                    onClick={() => setHrOfficeShowArchived(true)}
-                  >
-                    Archived Queue
-                  </Button>
-                  {!hrOfficeShowArchived && hrOfficeQueue.length > 0 && (isAdmin || isHrOffice) && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isArchivingAllLeaves}
-                      className="border-violet-300 text-violet-700 hover:bg-violet-50 gap-1"
-                      onClick={async () => {
-                        if (!window.confirm(`Archive all ${hrOfficeQueue.length} leave request${hrOfficeQueue.length !== 1 ? "s" : ""} in the active queue? They will move to the Archived Queue.`)) return
-                        setIsArchivingAllLeaves(true)
-                        try {
-                          const res = await fetch("/api/leave/bulk-archive", { method: "POST" })
-                          const json = await res.json()
-                          if (!res.ok) throw new Error(json.error || "Failed to archive")
-                          toast({ title: "Leaves Archived", description: json.message })
-                          await loadData()
-                        } catch (e: any) {
-                          toast({ title: "Archive Failed", description: e instanceof Error ? e.message : "Unable to archive", variant: "destructive" })
-                        } finally {
-                          setIsArchivingAllLeaves(false)
-                        }
-                      }}
-                    >
-                      {isArchivingAllLeaves ? "Archiving…" : `Archive All (${hrOfficeQueue.length})`}
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  Last refresh: {hrOfficeLastRefresh ? fmtDate(hrOfficeLastRefresh) : "—"}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={hrOfficeAutoRefresh ? "default" : "outline"}
-                    className={hrOfficeAutoRefresh ? "bg-emerald-700 hover:bg-emerald-800" : ""}
-                    onClick={() => setHrOfficeAutoRefresh((prev) => !prev)}
-                  >
-                    {hrOfficeAutoRefresh ? "Auto Refresh ON" : "Auto Refresh OFF"}
-                  </Button>
-                  <Label className="text-xs text-slate-600">Page Size</Label>
-                  <Select value={String(hrOfficePageSize)} onValueChange={(v) => setHrOfficePageSize(Number(v))}>
-                    <SelectTrigger className="h-8 w-[120px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="100">100</SelectItem>
-                      <SelectItem value="300">300</SelectItem>
-                      <SelectItem value="600">600</SelectItem>
-                      <SelectItem value="1000">1000</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
-                <div className="relative flex-1 min-w-[220px]">
-                  <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
-                  <Input
-                    value={hrOfficeSearch}
-                    onChange={(e) => setHrOfficeSearch(e.target.value)}
-                    className="pl-8"
-                    placeholder="Search staff, employee ID, leave type, or status"
-                  />
-                </div>
-                <Select value={hrOfficeStatusFilter} onValueChange={setHrOfficeStatusFilter}>
-                  <SelectTrigger className="h-9 w-40"><SelectValue placeholder="Filter status" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All statuses</SelectItem>
-                    <SelectItem value="hod_approved">HOD Approved</SelectItem>
-                    <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={hrOfficeLocationFilter} onValueChange={setHrOfficeLocationFilter}>
-                  <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All locations</SelectItem>
-                    {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={hrOfficeDeptFilter} onValueChange={setHrOfficeDeptFilter}>
-                  <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All departments</SelectItem>
-                    {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={hrOfficeSortBy} onValueChange={setHrOfficeSortBy}>
-                  <SelectTrigger className="h-9 w-40">
-                    <ArrowUpDown className="mr-2 h-3.5 w-3.5 text-slate-500" />
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="priority">Priority (recommended)</SelectItem>
-                    <SelectItem value="newest">Newest first</SelectItem>
-                    <SelectItem value="oldest">Oldest first</SelectItem>
-                    <SelectItem value="longest">Longest leave days</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hrOfficeFilteredQueue, "hr-office-queue.csv")}>
-                  <Download className="w-3 h-3 mr-1" /> Export CSV
-                </Button>
-              </div>
-            </div>
+            {/* Tabs moved to top for easy access */}
             <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
-              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
-                <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Operations</TabsTrigger>
-                {canManageLeaveTypePolicy && (
-                  <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Leave Policy</TabsTrigger>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <TabsList className="flex h-auto flex-wrap justify-start gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+                  <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Operations</TabsTrigger>
+                  {canManageLeaveTypePolicy && (
+                    <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Leave Policy</TabsTrigger>
+                  )}
+                  {canManageLeaveTypePolicy && (
+                    <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Holidays</TabsTrigger>
+                  )}
+                  {canViewLeaveAnalytics && (
+                    <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Analytics</TabsTrigger>
+                  )}
+                </TabsList>
+                
+                {/* Collapsible toggle for queue controls - only show in Operations tab */}
+                {hrOfficeTab === "operations" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setHrOfficeControlsExpanded(!hrOfficeControlsExpanded)}
+                    className="gap-2 text-slate-600 hover:text-slate-800"
+                  >
+                    {hrOfficeControlsExpanded ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Hide Queue Controls
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Show Queue Controls ({hrOfficeQueue.length} in queue)
+                      </>
+                    )}
+                  </Button>
                 )}
-                {canManageLeaveTypePolicy && (
-                  <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Holidays</TabsTrigger>
-                )}
-                {canViewLeaveAnalytics && (
-                  <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm px-2 sm:px-3">Analytics</TabsTrigger>
-                )}
-              </TabsList>
+              </div>
+
+              {/* Collapsible queue controls - only show in Operations tab */}
+              {hrOfficeTab === "operations" && hrOfficeControlsExpanded && (
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4 animate-in slide-in-from-top-2 duration-200">
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <ClipboardList className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-xs text-blue-800 ml-1">
+                      Review HOD-approved leave requests. You may adjust days — add travelling days, deduct public holidays or
+                      prior partial leave enjoyed. All adjustments and reasons will appear in the staff&apos;s official leave memo.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-emerald-700">Queue Size</p>
+                      <p className="text-xl font-bold text-emerald-900">{hrOfficeQueue.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-blue-700">HOD Approved</p>
+                      <p className="text-xl font-bold text-blue-900">
+                        {hrOfficeQueue.filter((row: any) => String(row?.status || "") === "hod_approved").length}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-amber-700">Manager Confirmed</p>
+                      <p className="text-xl font-bold text-amber-900">
+                        {hrOfficeQueue.filter((row: any) => String(row?.status || "") === "manager_confirmed").length}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-600">Showing</p>
+                      <p className="text-xl font-bold text-slate-900">{hrOfficeFilteredQueue.length}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant={hrOfficeShowArchived ? "outline" : "default"}
+                        className={!hrOfficeShowArchived ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                        onClick={() => setHrOfficeShowArchived(false)}
+                      >
+                        Active Queue
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={hrOfficeShowArchived ? "default" : "outline"}
+                        className={hrOfficeShowArchived ? "bg-blue-700 hover:bg-blue-800" : ""}
+                        onClick={() => setHrOfficeShowArchived(true)}
+                      >
+                        Archived Queue
+                      </Button>
+                      {!hrOfficeShowArchived && hrOfficeQueue.length > 0 && (isAdmin || isHrOffice) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isArchivingAllLeaves}
+                          className="border-violet-300 text-violet-700 hover:bg-violet-50 gap-1"
+                          onClick={async () => {
+                            if (!window.confirm(`Archive all ${hrOfficeQueue.length} leave request${hrOfficeQueue.length !== 1 ? "s" : ""} in the active queue? They will move to the Archived Queue.`)) return
+                            setIsArchivingAllLeaves(true)
+                            try {
+                              const res = await fetch("/api/leave/bulk-archive", { method: "POST" })
+                              const json = await res.json()
+                              if (!res.ok) throw new Error(json.error || "Failed to archive")
+                              toast({ title: "Leaves Archived", description: json.message })
+                              await loadData()
+                            } catch (e: any) {
+                              toast({ title: "Archive Failed", description: e instanceof Error ? e.message : "Unable to archive", variant: "destructive" })
+                            } finally {
+                              setIsArchivingAllLeaves(false)
+                            }
+                          }}
+                        >
+                          {isArchivingAllLeaves ? "Archiving..." : `Archive All (${hrOfficeQueue.length})`}
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Clock3 className="h-3.5 w-3.5" />
+                      Last refresh: {hrOfficeLastRefresh ? fmtDate(hrOfficeLastRefresh) : "—"}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant={hrOfficeAutoRefresh ? "default" : "outline"}
+                        className={hrOfficeAutoRefresh ? "bg-emerald-700 hover:bg-emerald-800" : ""}
+                        onClick={() => setHrOfficeAutoRefresh((prev) => !prev)}
+                      >
+                        {hrOfficeAutoRefresh ? "Auto Refresh ON" : "Auto Refresh OFF"}
+                      </Button>
+                      <Label className="text-xs text-slate-600">Page Size</Label>
+                      <Select value={String(hrOfficePageSize)} onValueChange={(v) => setHrOfficePageSize(Number(v))}>
+                        <SelectTrigger className="h-8 w-[120px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="100">100</SelectItem>
+                          <SelectItem value="300">300</SelectItem>
+                          <SelectItem value="600">600</SelectItem>
+                          <SelectItem value="1000">1000</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="relative flex-1 min-w-[220px]">
+                      <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
+                      <Input
+                        value={hrOfficeSearch}
+                        onChange={(e) => setHrOfficeSearch(e.target.value)}
+                        className="pl-8"
+                        placeholder="Search staff, employee ID, leave type, or status"
+                      />
+                    </div>
+                    <Select value={hrOfficeStatusFilter} onValueChange={setHrOfficeStatusFilter}>
+                      <SelectTrigger className="h-9 w-40"><SelectValue placeholder="Filter status" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="hod_approved">HOD Approved</SelectItem>
+                        <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={hrOfficeLocationFilter} onValueChange={setHrOfficeLocationFilter}>
+                      <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All locations</SelectItem>
+                        {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={hrOfficeDeptFilter} onValueChange={setHrOfficeDeptFilter}>
+                      <SelectTrigger className="h-9 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All departments</SelectItem>
+                        {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={hrOfficeSortBy} onValueChange={setHrOfficeSortBy}>
+                      <SelectTrigger className="h-9 w-40">
+                        <ArrowUpDown className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                        <SelectValue placeholder="Sort" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="priority">Priority (recommended)</SelectItem>
+                        <SelectItem value="newest">Newest first</SelectItem>
+                        <SelectItem value="oldest">Oldest first</SelectItem>
+                        <SelectItem value="longest">Longest leave days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hrOfficeFilteredQueue, "hr-office-queue.csv")}>
+                      <Download className="w-3 h-3 mr-1" /> Export CSV
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Compact summary bar when controls are collapsed - only in Operations tab */}
+              {hrOfficeTab === "operations" && !hrOfficeControlsExpanded && (
+                <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm">
+                  <span className="text-slate-600">
+                    <span className="font-semibold text-emerald-700">{hrOfficeQueue.length}</span> in queue
+                  </span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-slate-600">
+                    Showing <span className="font-semibold">{hrOfficeFilteredQueue.length}</span>
+                  </span>
+                  {hrOfficeSearch && (
+                    <>
+                      <span className="text-slate-400">|</span>
+                      <span className="text-slate-500 text-xs">Search: &quot;{hrOfficeSearch}&quot;</span>
+                    </>
+                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <Input
+                        value={hrOfficeSearch}
+                        onChange={(e) => setHrOfficeSearch(e.target.value)}
+                        className="h-8 w-48 pl-7 text-sm"
+                        placeholder="Quick search..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {canViewLeaveAnalytics && (
               <TabsContent value="analytics" className="space-y-4">
@@ -2938,26 +3007,40 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 placeholder="Days"
                               />
                               <div className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2">
-                                <div className="relative w-10 h-6 bg-slate-300 rounded-full cursor-pointer transition-colors" style={{backgroundColor: draft.isActive !== false ? '#10b981' : '#d1d5db'}} onClick={() => setLeaveTypeDrafts((prev) => ({
-                                  ...prev,
-                                  [leaveTypeOption.leaveTypeKey]: {
-                                    ...(prev[leaveTypeOption.leaveTypeKey] || draft),
-                                    isActive: draft.isActive === false ? true : false,
-                                  },
-                                }))}>
+                                <div 
+                                  className="relative w-10 h-6 bg-slate-300 rounded-full cursor-pointer transition-colors" 
+                                  style={{
+                                    backgroundColor: draft.isActive !== false ? '#10b981' : '#d1d5db',
+                                    opacity: leaveTypeSavingKey === leaveTypeOption.leaveTypeKey ? 0.6 : 1,
+                                  }} 
+                                  onClick={async () => {
+                                    // Toggle the state immediately for UI responsiveness
+                                    const newIsActive = draft.isActive === false ? true : false
+                                    setLeaveTypeDrafts((prev) => ({
+                                      ...prev,
+                                      [leaveTypeOption.leaveTypeKey]: {
+                                        ...(prev[leaveTypeOption.leaveTypeKey] || draft),
+                                        isActive: newIsActive,
+                                      },
+                                    }))
+                                    // Auto-save to database immediately
+                                    await saveExistingLeaveType(leaveTypeOption.leaveTypeKey)
+                                  }}
+                                >
                                   <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all" style={{left: draft.isActive !== false ? '18px' : '2px'}} />
                                 </div>
                               </div>
                               <Button
                                 size="sm"
                                 className="bg-emerald-700 hover:bg-emerald-800"
-                                disabled={Boolean(leaveTypeSavingKey)}
+                                disabled={Boolean(leaveTypeSavingKey) || (draft.isActive === leaveTypeOption.is_active && draft.entitlementDays === leaveTypeOption.entitlementDays)}
                                 onClick={() => void saveExistingLeaveType(leaveTypeOption.leaveTypeKey)}
+                                title={draft.isActive === leaveTypeOption.is_active && draft.entitlementDays === leaveTypeOption.entitlementDays ? "Toggle auto-saves immediately. Update entitlement days and click Save to persist." : ""}
                               >
-                                {isSaving ? "Saving..." : "Save"}
+                                {leaveTypeSavingKey === leaveTypeOption.leaveTypeKey ? "Saving..." : "Save"}
                               </Button>
                               <p className="text-[11px] text-slate-400 md:col-span-4">
-                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1} · Status: {draft.isActive !== false ? 'Active' : 'Inactive'}
+                                Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1} · Status: <span className={draft.isActive !== false ? "text-emerald-700 font-medium" : "text-red-600 font-medium"}>{draft.isActive !== false ? 'Active' : 'Inactive'}</span> {leaveTypeSavingKey === leaveTypeOption.leaveTypeKey && <span className="ml-2 inline-flex items-center gap-1 text-emerald-600">● Saving...</span>}
                               </p>
                             </div>
                           )

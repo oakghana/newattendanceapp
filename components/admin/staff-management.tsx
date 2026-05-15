@@ -799,7 +799,7 @@ export function StaffManagement() {
                                 <SelectItem value="audit_staff">Audit Staff</SelectItem>
                                 <SelectItem value="department_head">Department Head</SelectItem>
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="regional_hr_officer">Regional HR Officer</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}

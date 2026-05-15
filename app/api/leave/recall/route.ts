@@ -144,17 +144,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get("user_id")
     const leaveRequestId = searchParams.get("leave_plan_request_id")
+    const initiatedBy = searchParams.get("initiated_by") // The user who initiated the recall
 
-    if (!userId && !leaveRequestId) {
+    if (!userId && !leaveRequestId && !initiatedBy) {
       return NextResponse.json(
-        { error: "Provide either user_id or leave_plan_request_id" },
+        { error: "Provide user_id, initiated_by, or leave_plan_request_id" },
         { status: 400 }
       )
     }
 
     let query = supabase.from("leave_recall_requests").select("*")
 
-    if (userId) {
+    if (initiatedBy) {
+      // Fetch recall requests where this user initiated the recall
+      query = query.eq("initiated_by_user_id", initiatedBy)
+    } else if (userId) {
       query = query.eq("created_by", userId)
     }
     if (leaveRequestId) {

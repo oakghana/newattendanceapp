@@ -114,18 +114,22 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get("user_id")
+    const requesterId = searchParams.get("requester_id") // The user who submitted the deferment request
     const leaveRequestId = searchParams.get("leave_plan_request_id")
 
-    if (!userId && !leaveRequestId) {
+    if (!userId && !leaveRequestId && !requesterId) {
       return NextResponse.json(
-        { error: "Provide either user_id or leave_plan_request_id" },
+        { error: "Provide user_id, requester_id, or leave_plan_request_id" },
         { status: 400 }
       )
     }
 
     let query = supabase.from("leave_deferment_requests").select("*")
 
-    if (userId) {
+    if (requesterId) {
+      // Fetch deferment requests where this user is the requester
+      query = query.eq("user_id", requesterId)
+    } else if (userId) {
       query = query.eq("created_by", userId)
     }
     if (leaveRequestId) {

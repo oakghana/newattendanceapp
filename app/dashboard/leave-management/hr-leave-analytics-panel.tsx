@@ -86,7 +86,7 @@ function downloadCsv(rows: any[], fileName: string) {
   URL.revokeObjectURL(url)
 }
 
-async function downloadPdf(rows: any[], fileName: string, title: string, rangeStart: string, rangeEnd: string) {
+async function downloadPdf(rows: any[], fileName: string, title: string, rangeStart: string, rangeEnd: string, locationFilter?: string) {
   const { jsPDF } = await import("jspdf")
   const autoTable = (await import("jspdf-autotable")).default
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
@@ -100,10 +100,16 @@ async function downloadPdf(rows: any[], fileName: string, title: string, rangeSt
   doc.setFontSize(9)
   doc.setTextColor(120, 120, 120)
   doc.text(`Period: ${fmt(rangeStart)} — ${fmt(rangeEnd)}`, 14, 28)
-  doc.text(`Generated: ${new Date().toLocaleString("en-GH", { timeZone: "Africa/Accra" })}`, 14, 33)
+  if (locationFilter && locationFilter !== "all") {
+    doc.text(`Region / Location: ${locationFilter}`, 14, 33)
+    doc.text(`Generated: ${new Date().toLocaleString("en-GH", { timeZone: "Africa/Accra" })}`, 14, 38)
+  } else {
+    doc.text(`Region / Location: All Regions`, 14, 33)
+    doc.text(`Generated: ${new Date().toLocaleString("en-GH", { timeZone: "Africa/Accra" })}`, 14, 38)
+  }
 
   autoTable(doc, {
-    startY: 38,
+    startY: 44,
     head: [["Staff Name", "Emp. ID", "Department", "Location", "Leave Type", "Start", "End", "Days"]],
     body: rows.map(r => [
       r.staff_name || "",
@@ -170,6 +176,7 @@ export function HrLeaveAnalyticsPanel() {
   const [sendingReminder, setSendingReminder] = useState(false)
   const [data, setData] = useState<any>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [selectedLocation, setSelectedLocation] = useState<string>("all")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -182,6 +189,7 @@ export function HrLeaveAnalyticsPanel() {
         throw new Error((json && (json.error || json.message)) || "Failed to load leave analytics")
       }
       setData(json)
+      setSelectedLocation("all") // reset filter on new load
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Failed to load leave analytics")
       setData(null)
@@ -193,17 +201,63 @@ export function HrLeaveAnalyticsPanel() {
   useEffect(() => { load() }, [load])
 
   const analytics = data?.analytics
-  const records: any[] = analytics?.records ?? []
-  const roster: any[] = analytics?.current_leave_roster ?? []
-  const typeBreakdown: any[] = analytics?.leave_type_breakdown ?? []
-  const locationRanking: any[] = analytics?.location_ranking ?? []
-  const totals = analytics?.totals ?? {}
+  const allRecords: any[] = analytics?.records ?? []
+  const allRoster: any[] = analytics?.current_leave_roster ?? []
+  const allLocationRanking: any[] = analytics?.location_ranking ?? []
+
+  // All unique location names for the dropdown
+  const allLocations = Array.from(
+    new Set(allRecords.map((r: any) => r.location_name || "Unassigned Location"))
+  ).sort()
+
+  // Client-side location filter
+  const records: any[] = selectedLocation === "all"
+    ? allRecords
+    : allRecords.filter((r: any) => r.location_name === selectedLocation)
+
+  const roster: any[] = selectedLocation === "all"
+    ? allRoster
+    : allRoster.filter((r: any) => r.location_name === selectedLocation)
+
+  const locationRanking: any[] = selectedLocation === "all"
+    ? allLocationRanking
+    : allLocationRanking.filter((l: any) => l.name === selectedLocation)
+
+  // Recompute type breakdown from filtered records
+  const typeBreakdown: any[] = (() => {
+    const map = new Map<string, number>()
+    records.forEach((r: any) => {
+      const key = r.leave_type_key || "unknown"
+      map.set(key, (map.get(key) || 0) + 1)
+    })
+    return Array.from(map.entries())
+      .map(([leave_type_key, total]) => ({ leave_type_key, total }))
+      .sort((a, b) => b.total - a.total)
+  })()
+
+  // Recompute totals from filtered records
+  const totals = (() => {
+    if (selectedLocation === "all") return analytics?.totals ?? {}
+    const now = new Date()
+    const todayStr = now.toISOString().split("T")[0]
+    return {
+      approved: records.length,
+      on_leave_now: records.filter((r: any) => r.start_date <= todayStr && r.end_date >= todayStr).length,
+      upcoming: records.filter((r: any) => r.start_date > todayStr).length,
+      yet_to_enjoy: records.filter((r: any) => r.start_date > todayStr).length,
+      completed: records.filter((r: any) => r.end_date < todayStr).length,
+      outstanding: analytics?.totals?.outstanding ?? 0,
+      unique_staff: new Set(records.map((r: any) => r.employee_id)).size,
+    }
+  })()
+
   const maxType = Math.max(...typeBreakdown.map((t: any) => Number(t.total || 0)), 1)
   const maxLoc = Math.max(...locationRanking.map((l: any) => Number(l.total || 0)), 1)
   const rangeStart = data?.rangeStart ?? range.start
   const rangeEnd = data?.rangeEnd ?? range.end
 
-  const rangeLabel = `leave_analytics_${range.start}_to_${range.end}`
+  const locationLabel = selectedLocation === "all" ? "all-regions" : selectedLocation.toLowerCase().replace(/\s+/g, "-")
+  const rangeLabel = `leave_analytics_${range.start}_to_${range.end}_${locationLabel}`
 
   const sendFiveDayResumeReminders = useCallback(async () => {
     setSendingReminder(true)
@@ -261,13 +315,15 @@ export function HrLeaveAnalyticsPanel() {
             <Button size="sm" variant="ghost"
               className="h-8 border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
               onClick={() => downloadCsv(records, `${rangeLabel}.csv`)}
-              disabled={!records.length}>
+              disabled={!records.length}
+              title={selectedLocation !== "all" ? `Export ${records.length} records for ${selectedLocation}` : `Export all ${records.length} records`}>
               <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
             </Button>
             <Button size="sm" variant="ghost"
               className="h-8 border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              onClick={() => downloadPdf(records, `${rangeLabel}.pdf`, "Leave Analytics Report", rangeStart, rangeEnd)}
-              disabled={!records.length}>
+              onClick={() => downloadPdf(records, `${rangeLabel}.pdf`, "Leave Analytics Report", rangeStart, rangeEnd, selectedLocation)}
+              disabled={!records.length}
+              title={selectedLocation !== "all" ? `Export PDF for ${selectedLocation}` : "Export PDF for all regions"}>
               <FileText className="w-3.5 h-3.5 mr-1.5" /> PDF
             </Button>
             <Button size="sm" variant="ghost"
@@ -280,7 +336,7 @@ export function HrLeaveAnalyticsPanel() {
           </div>
         </div>
 
-        {/* Date range controls */}
+        {/* Date range + location filter controls */}
         <div className="relative mt-5 flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">From</p>
@@ -300,11 +356,56 @@ export function HrLeaveAnalyticsPanel() {
                 className="bg-transparent text-sm text-white outline-none w-32 [color-scheme:dark]" />
             </div>
           </div>
+
+          {/* Location / Region Filter */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Region / Location</p>
+            <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/8 px-3 py-2 backdrop-blur-sm">
+              <MapPin className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+              <select
+                value={selectedLocation}
+                onChange={e => setSelectedLocation(e.target.value)}
+                className="bg-transparent text-sm text-white outline-none min-w-[160px] [color-scheme:dark] cursor-pointer"
+              >
+                <option value="all">All Regions</option>
+                {allLocations.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <Button size="sm" onClick={load} disabled={loading}
             className="h-9 bg-white text-indigo-900 hover:bg-purple-50 font-semibold shadow-sm">
             Apply Range
           </Button>
+
+          {/* Active filter badge */}
+          {selectedLocation !== "all" && (
+            <div className="flex items-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/20 px-3 py-2 text-xs text-purple-200">
+              <MapPin className="w-3 h-3" />
+              <span>Filtered: {selectedLocation}</span>
+              <button
+                onClick={() => setSelectedLocation("all")}
+                className="ml-1 rounded-full hover:text-white transition-colors text-purple-300"
+                aria-label="Clear location filter"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Filter summary line */}
+        {!loading && analytics && (
+          <div className="relative mt-3 text-xs text-slate-400">
+            Showing <span className="text-white font-medium">{records.length}</span> record{records.length !== 1 ? "s" : ""}
+            {selectedLocation !== "all" && (
+              <> for <span className="text-purple-300 font-medium">{selectedLocation}</span></>
+            )}
+            {" "}· <span className="text-white font-medium">{fmt(rangeStart)}</span> to <span className="text-white font-medium">{fmt(rangeEnd)}</span>
+          </div>
+        )}
       </div>
 
       {loading && (
