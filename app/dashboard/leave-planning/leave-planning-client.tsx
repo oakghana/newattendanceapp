@@ -2497,14 +2497,25 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           {/* ── HOD Review ���─────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
             {/* 2-day approval notice for HOD/RM */}
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-amber-800">Important: 2-Day Approval Window</p>
-                <p className="text-xs text-amber-700 mt-1">
-                  You have a <strong>2 working days window</strong> to review and approve leave requests. 
-                  Requests not actioned within this period will be <strong>auto-approved</strong> and forwarded to HR Leave Office, 
-                  except for <strong>Annual Leave</strong> which requires your explicit approval.
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+              <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+                <span className="text-lg">⏱️</span> Important: 2-Day Approval Window
+              </p>
+              <div className="text-xs text-blue-800 space-y-2">
+                <p>
+                  Please note that you have <strong>2 working days</strong> to review and approve leave requests.
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-sm mt-0.5">👉</span>
+                  <span>If no action is taken within this period, the request will be automatically approved and forwarded to the HR Leave Office.</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-sm mt-0.5">⚠️</span>
+                  <span><strong>Exception:</strong> Annual Leave requests will not be auto-approved — they require your direct and explicit approval.</span>
+                </p>
+                <p className="pt-1 flex items-start gap-2">
+                  <span className="text-sm">😊</span>
+                  <span>Kindly stay on top of your approvals to avoid automatic processing. Let's keep things running smoothly 👍🏽</span>
                 </p>
               </div>
             </div>
