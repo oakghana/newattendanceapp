@@ -39,6 +39,67 @@ export async function GET() {
       return NextResponse.json({ error: "Permission denied" }, { status: 403 })
     }
 
+    // Fetch approved requests from NEW table (leave_plan_requests) with approver info
+    const { data: approvedLeaveRequests } = await admin
+      .from("leave_plan_requests")
+      .select(`
+        id,
+        user_id,
+        leave_type_key,
+        preferred_start_date,
+        preferred_end_date,
+        adjusted_start_date,
+        adjusted_end_date,
+        requested_days,
+        adjusted_days,
+        status,
+        hr_approver_name,
+        hr_approver_id,
+        hr_approved_at,
+        hr_approval_note,
+        hr_office_reviewer_name,
+        hr_office_reviewer_id,
+        hr_office_reviewed_at,
+        submitted_at,
+        user_profiles!inner(first_name, last_name)
+      `)
+      .eq("status", "hr_approved")
+      .order("hr_approved_at", { ascending: false })
+      .limit(100)
+
+    // Format new table results with approver information
+    const formattedNewRequests = (approvedLeaveRequests || []).map((req: any) => {
+      const userProfile = Array.isArray(req.user_profiles) ? req.user_profiles[0] : req.user_profiles
+      const staffName = userProfile
+        ? `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
+        : "Staff"
+
+      return {
+        id: req.id,
+        leave_request_id: req.id,
+        user_id: req.user_id,
+        staff_name: staffName,
+        leave_type: req.leave_type_key,
+        start_date: req.adjusted_start_date || req.preferred_start_date,
+        end_date: req.adjusted_end_date || req.preferred_end_date,
+        reason: null,
+        status: "approved",
+        reviewer_stage: "hr_approved",
+        requester_role: "staff",
+        created_at: req.submitted_at,
+        // NEW: Approval information
+        hr_approver_name: req.hr_approver_name,
+        hr_approver_id: req.hr_approver_id,
+        hr_approved_at: req.hr_approved_at,
+        hr_approval_note: req.hr_approval_note,
+        hr_office_reviewer_name: req.hr_office_reviewer_name,
+        hr_office_reviewer_id: req.hr_office_reviewer_id,
+        hr_office_reviewed_at: req.hr_office_reviewed_at,
+        submitted_at: req.submitted_at,
+      }
+    })
+
+    // Fallback: Also fetch from old table for backwards compatibility
     let query = admin
       .from("leave_notifications")
       .select(
@@ -79,7 +140,7 @@ export async function GET() {
     const { data: notifications, error } = await query
     if (error) throw error
 
-    const formatted = (notifications || []).map((notif: any) => {
+    const formattedOldRequests = (notifications || []).map((notif: any) => {
       const leave = notif.leave_requests
       const requestUser = leave?.user
       const staffName = requestUser
@@ -102,6 +163,9 @@ export async function GET() {
         created_at: notif.created_at,
       }
     })
+
+    // Combine both sources - new table results first (they have approver info)
+    const formatted = [...formattedNewRequests, ...formattedOldRequests]
 
     return NextResponse.json(formatted)
   } catch (error) {
