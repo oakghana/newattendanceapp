@@ -105,6 +105,13 @@ const navigationItems = [
     category: "admin",
   },
   {
+    title: "Leave Deferral/Recall",
+    href: "/dashboard/leave-deferment-recall",
+    icon: RefreshCw,
+    roles: ["admin", "regional_manager", "department_head", "staff", "director_hr", "manager_hr", "hr_leave_office"],
+    category: "admin",
+  },
+  {
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,
