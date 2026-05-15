@@ -41,12 +41,24 @@ CREATE INDEX IF NOT EXISTS idx_leave_balance_transactions_created_at ON leave_ba
 -- Enable RLS
 ALTER TABLE leave_balance_transactions ENABLE ROW LEVEL SECURITY;
 
+-- Staff can view their own balance transactions
 CREATE POLICY "Staff can view own balance transactions" ON leave_balance_transactions
-  FOR SELECT USING (staff_id = auth.uid() OR 
-    auth.uid() IN (SELECT user_id FROM staff_roles WHERE role IN ('hr_office', 'hod', 'admin')));
+  FOR SELECT USING (
+    staff_id = auth.uid() OR 
+    auth.uid() IN (
+      SELECT id FROM user_profiles 
+      WHERE role IN ('hr_leave_office', 'hod', 'admin', 'regional_manager')
+    )
+  );
 
+-- HR/Admin can insert transactions
 CREATE POLICY "Only HR/Admin can insert transactions" ON leave_balance_transactions
-  FOR INSERT WITH CHECK (auth.uid() IN (SELECT user_id FROM staff_roles WHERE role IN ('hr_office', 'admin')));
+  FOR INSERT WITH CHECK (
+    auth.uid() IN (
+      SELECT id FROM user_profiles 
+      WHERE role IN ('hr_leave_office', 'admin')
+    )
+  );
 
 ---
 
@@ -77,6 +89,7 @@ CREATE TABLE IF NOT EXISTS carryover_approval_requests (
   -- Values: CRITICAL_ROLE, HEALTH_REASONS, OPERATIONAL_NEED, POLICY_EXCEPTION
   
   -- Outcome
+  approved_days numeric(10,2),
   forfeited_days numeric(10,2),
   forfeited_reason text,
   
@@ -91,12 +104,33 @@ CREATE INDEX IF NOT EXISTS idx_carryover_approval_requests_reviewed_at ON carryo
 
 ALTER TABLE carryover_approval_requests ENABLE ROW LEVEL SECURITY;
 
+-- Staff can view their own carryover requests
 CREATE POLICY "Staff can view own carryover requests" ON carryover_approval_requests
-  FOR SELECT USING (staff_id = auth.uid() OR 
-    auth.uid() IN (SELECT user_id FROM staff_roles WHERE role IN ('hr_office', 'hod', 'admin')));
+  FOR SELECT USING (
+    staff_id = auth.uid() OR 
+    auth.uid() IN (
+      SELECT id FROM user_profiles 
+      WHERE role IN ('hr_leave_office', 'hod', 'admin', 'regional_manager')
+    )
+  );
 
+-- HR/Admin can modify carryover requests
 CREATE POLICY "Only HR/Admin can modify carryover requests" ON carryover_approval_requests
-  FOR UPDATE USING (auth.uid() IN (SELECT user_id FROM staff_roles WHERE role IN ('hr_office', 'admin')));
+  FOR UPDATE USING (
+    auth.uid() IN (
+      SELECT id FROM user_profiles 
+      WHERE role IN ('hr_leave_office', 'admin')
+    )
+  );
+
+-- HR/Admin can insert carryover requests
+CREATE POLICY "HR/Admin can insert carryover requests" ON carryover_approval_requests
+  FOR INSERT WITH CHECK (
+    auth.uid() IN (
+      SELECT id FROM user_profiles 
+      WHERE role IN ('hr_leave_office', 'admin')
+    )
+  );
 
 ---
 
@@ -131,8 +165,15 @@ CREATE INDEX IF NOT EXISTS idx_forfeiture_policies_leave_year ON forfeiture_poli
 
 ALTER TABLE forfeiture_policies ENABLE ROW LEVEL SECURITY;
 
+-- Everyone can view forfeiture policies
 CREATE POLICY "Everyone can view forfeiture policies" ON forfeiture_policies
   FOR SELECT USING (true);
 
+-- Only Admin can modify forfeiture policies
 CREATE POLICY "Only Admin can modify forfeiture policies" ON forfeiture_policies
-  FOR ALL USING (auth.uid() IN (SELECT user_id FROM staff_roles WHERE role = 'admin'));
+  FOR ALL USING (
+    auth.uid() IN (
+      SELECT id FROM user_profiles 
+      WHERE role = 'admin'
+    )
+  );
