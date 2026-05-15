@@ -1023,7 +1023,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
-  const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string }>>({})
+  const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }>>({})
   const [newLeaveTypeKey, setNewLeaveTypeKey] = useState("")
   const [newLeaveTypeLabel, setNewLeaveTypeLabel] = useState("")
   const [newLeaveTypeDays, setNewLeaveTypeDays] = useState("")
@@ -1596,12 +1596,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
   useEffect(() => {
     setLeaveTypeDrafts((prev) => {
-      const next: Record<string, { leaveTypeLabel: string; entitlementDays: string }> = {}
+      const next: Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }> = {}
       for (const leaveTypeOption of leaveTypes) {
         const existing = prev[leaveTypeOption.leaveTypeKey]
         next[leaveTypeOption.leaveTypeKey] = {
           leaveTypeLabel: existing?.leaveTypeLabel ?? leaveTypeOption.leaveTypeLabel,
           entitlementDays: existing?.entitlementDays ?? String(leaveTypeOption.entitlementDays ?? 0),
+          isActive: existing?.isActive ?? (leaveTypeOption.is_active !== false),
         }
       }
       return next
@@ -3014,8 +3015,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                     opacity: leaveTypeSavingKey === leaveTypeOption.leaveTypeKey ? 0.6 : 1,
                                   }} 
                                   onClick={async () => {
-                                    // Toggle the state immediately for UI responsiveness
+                                    // Compute the new value first, before any state update
                                     const newIsActive = draft.isActive === false ? true : false
+                                    // Update local draft state for immediate UI feedback
                                     setLeaveTypeDrafts((prev) => ({
                                       ...prev,
                                       [leaveTypeOption.leaveTypeKey]: {
@@ -3023,8 +3025,17 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                         isActive: newIsActive,
                                       },
                                     }))
-                                    // Auto-save to database immediately
-                                    await saveExistingLeaveType(leaveTypeOption.leaveTypeKey)
+                                    // Save directly with the computed value — avoids the React
+                                    // async-state race where saveExistingLeaveType would read
+                                    // the old draft from its closure.
+                                    const idx = leaveTypes.findIndex((t) => t.leaveTypeKey === leaveTypeOption.leaveTypeKey)
+                                    await saveLeaveTypePolicy({
+                                      leaveTypeKey: leaveTypeOption.leaveTypeKey,
+                                      leaveTypeLabel: String(draft.leaveTypeLabel || "").trim(),
+                                      entitlementDays: Number(draft.entitlementDays),
+                                      sortOrder: idx >= 0 ? idx + 1 : 100,
+                                      isEnabled: newIsActive,
+                                    })
                                   }}
                                 >
                                   <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all" style={{left: draft.isActive !== false ? '18px' : '2px'}} />
