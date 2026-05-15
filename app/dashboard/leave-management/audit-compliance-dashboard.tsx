@@ -11,29 +11,31 @@ import { useToast } from '@/hooks/use-toast'
 
 interface Transaction {
   id: string
-  staff_id: string
+  staff_name: string
+  employee_id: string
+  department: string
   leave_year: string
-  leave_type_key: string
+  leave_type: string
   transaction_type: string
   days_change: number
   running_balance: number
   reason_code: string
   notes: string
+  status: string
   created_at: string
-  approved_at: string
-  created_by_user: {
-    email: string
-  }
-  approved_by_user: {
-    email: string
-  }
-  staff: {
-    email: string
-  }
+}
+
+interface Summary {
+  total_days_taken: number
+  days_forfeited: number
+  carryovers_approved: number
+  total_carryover_days: number
+  adjustments_made: number
 }
 
 export function AuditComplianceDashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [summary, setSummary] = useState<Summary>({ total_days_taken: 0, days_forfeited: 0, carryovers_approved: 0, total_carryover_days: 0, adjustments_made: 0 })
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -55,6 +57,7 @@ export function AuditComplianceDashboard() {
       const res = await fetch(url, { cache: 'no-store' })
       const data = await res.json()
       setTransactions(data.transactions || [])
+      setSummary(data.summary || { total_days_taken: 0, days_forfeited: 0, carryovers_approved: 0, total_carryover_days: 0, adjustments_made: 0 })
     } catch (error) {
       console.error('[v0] Failed to fetch transactions:', error)
       toast({
@@ -105,12 +108,14 @@ export function AuditComplianceDashboard() {
     switch (type) {
       case 'OPENING':
         return 'bg-blue-100 text-blue-900'
-      case 'TAKEN':
+      case 'LEAVE_TAKEN':
         return 'bg-red-100 text-red-900'
       case 'ADJUSTMENT':
         return 'bg-yellow-100 text-yellow-900'
-      case 'CARRYOVER_APPROVED':
+      case 'CARRYOVER':
         return 'bg-emerald-100 text-emerald-900'
+      case 'OUTSTANDING':
+        return 'bg-orange-100 text-orange-900'
       case 'FORFEITED':
         return 'bg-purple-100 text-purple-900'
       default:
@@ -120,8 +125,9 @@ export function AuditComplianceDashboard() {
 
   const filteredTransactions = transactions.filter(t =>
     searchQuery === '' ||
-    t.staff?.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.leave_type_key.toLowerCase().includes(searchQuery.toLowerCase())
+    t.staff_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.employee_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.leave_type?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   return (
@@ -134,7 +140,7 @@ export function AuditComplianceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-700">
-              {Math.abs(transactions.filter(t => t.transaction_type === 'TAKEN').reduce((sum, t) => sum + t.days_change, 0))}
+              {summary.total_days_taken}
             </div>
           </CardContent>
         </Card>
@@ -145,7 +151,7 @@ export function AuditComplianceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-purple-700">
-              {Math.abs(transactions.filter(t => t.transaction_type === 'FORFEITED').reduce((sum, t) => sum + t.days_change, 0))}
+              {summary.days_forfeited}
             </div>
           </CardContent>
         </Card>
@@ -156,7 +162,7 @@ export function AuditComplianceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-700">
-              {transactions.filter(t => t.transaction_type === 'CARRYOVER_APPROVED').length}
+              {summary.carryovers_approved}
             </div>
           </CardContent>
         </Card>
@@ -167,7 +173,7 @@ export function AuditComplianceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-yellow-700">
-              {transactions.filter(t => t.transaction_type === 'ADJUSTMENT').length}
+              {summary.adjustments_made}
             </div>
           </CardContent>
         </Card>
@@ -207,10 +213,9 @@ export function AuditComplianceDashboard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Types</SelectItem>
-                <SelectItem value="OPENING">Opening Balance</SelectItem>
-                <SelectItem value="TAKEN">Leave Taken</SelectItem>
-                <SelectItem value="ADJUSTMENT">Adjustments</SelectItem>
-                <SelectItem value="CARRYOVER_APPROVED">Carryover Approved</SelectItem>
+                <SelectItem value="LEAVE_TAKEN">Leave Taken</SelectItem>
+                <SelectItem value="CARRYOVER">Carryover</SelectItem>
+                <SelectItem value="OUTSTANDING">Outstanding</SelectItem>
                 <SelectItem value="FORFEITED">Forfeited</SelectItem>
               </SelectContent>
             </Select>
@@ -253,12 +258,11 @@ export function AuditComplianceDashboard() {
                 <tr>
                   <th className="px-4 py-2 text-left font-semibold text-slate-700">Date</th>
                   <th className="px-4 py-2 text-left font-semibold text-slate-700">Staff</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Leave Year</th>
+                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Department</th>
                   <th className="px-4 py-2 text-left font-semibold text-slate-700">Type</th>
                   <th className="px-4 py-2 text-right font-semibold text-slate-700">Days</th>
-                  <th className="px-4 py-2 text-right font-semibold text-slate-700">Balance</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Reason</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Created By</th>
+                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Status</th>
+                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -268,9 +272,10 @@ export function AuditComplianceDashboard() {
                       {new Date(t.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-slate-900">{t.staff?.email}</div>
+                      <div className="text-sm font-medium text-slate-900">{t.staff_name}</div>
+                      <div className="text-xs text-slate-500">{t.employee_id}</div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{t.leave_year}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{t.department}</td>
                     <td className="px-4 py-3">
                       <Badge className={getTypeColor(t.transaction_type)}>
                         {t.transaction_type}
@@ -281,14 +286,13 @@ export function AuditComplianceDashboard() {
                         {t.days_change > 0 ? '+' : ''}{t.days_change}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-slate-900">
-                      {t.running_balance}
+                    <td className="px-4 py-3">
+                      <Badge variant="outline" className={t.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}>
+                        {t.status}
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-600 max-w-xs truncate">
-                      {t.reason_code}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">
-                      {t.created_by_user?.email || 'System'}
+                      {t.notes || '-'}
                     </td>
                   </tr>
                 ))}

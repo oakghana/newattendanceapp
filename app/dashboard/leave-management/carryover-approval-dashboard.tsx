@@ -21,13 +21,11 @@ interface CarryoverRequest {
   approval_note: string
   staff: {
     email: string
-    user_metadata: {
-      first_name: string
-      last_name: string
-      employee_id: string
-      department: string
-      location: string
-    }
+    first_name: string
+    last_name: string
+    employee_id: string
+    department: string
+    location: string
   }
 }
 
@@ -80,7 +78,7 @@ export function CarryoverApprovalDashboard() {
 
       toast({
         title: 'Approved',
-        description: `${request.staff.user_metadata.first_name} carryover approved`,
+        description: `${request.staff.first_name} carryover approved`,
       })
 
       await fetchPendingCarryovers()
@@ -113,7 +111,7 @@ export function CarryoverApprovalDashboard() {
 
       toast({
         title: 'Rejected',
-        description: `${request.staff.user_metadata.first_name} carryover forfeited`,
+        description: `${request.staff.first_name} carryover forfeited`,
       })
 
       await fetchPendingCarryovers()
@@ -246,7 +244,7 @@ export function CarryoverApprovalDashboard() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <CardTitle className="text-base">
-                        {request.staff.user_metadata.first_name} {request.staff.user_metadata.last_name}
+                        {request.staff.first_name} {request.staff.last_name}
                       </CardTitle>
                       <Badge variant="outline" className={getStatusColor(request.status)}>
                         {getStatusIcon(request.status)}
@@ -254,7 +252,7 @@ export function CarryoverApprovalDashboard() {
                       </Badge>
                     </div>
                     <CardDescription className="text-xs">
-                      ID: {request.staff.user_metadata.employee_id} • {request.staff.user_metadata.department} • {request.staff.user_metadata.location}
+                      ID: {request.staff.employee_id} • {request.staff.department} • {request.staff.location}
                     </CardDescription>
                   </div>
                 </div>
