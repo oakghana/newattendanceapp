@@ -781,11 +781,13 @@ export async function GET(request: NextRequest) {
 
     // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
     const isAdmin = role === "admin"
+    console.log("[v0] HOD Review check - role:", role, "isAdmin:", isAdmin, "isHr:", isHr, "isHodRole:", isHodRole(role))
     if ((isHodRole(role) || isAdmin) && !isHr) {
       let nonArchivedReviews: any[] = []
 
       // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)
       if (isAdmin) {
+        console.log("[v0] Admin HOD query: Fetching all pending requests...")
         const { data: allPendingRequests, error: allError } = await admin
           .from("leave_plan_requests")
           .select(`
@@ -818,6 +820,7 @@ export async function GET(request: NextRequest) {
         if (allError) {
           console.error("[v0] Error fetching all pending requests for admin:", allError)
         } else {
+          console.log("[v0] Admin found pending requests:", allPendingRequests?.length || 0)
           // Transform to match the review structure expected by frontend
           nonArchivedReviews = (allPendingRequests || []).map((req: any) => ({
             id: `admin-view-${req.id}`,
