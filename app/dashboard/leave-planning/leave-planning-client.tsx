@@ -1766,10 +1766,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
   const hrApproverQueue: any[] = useMemo(() => {
     if (!data) return []
+    // HR Approvers only see requests that were specifically forwarded to them
     return (data.requests || []).filter((r: any) =>
-      ["hod_approved", "manager_confirmed", "hr_office_forwarded"].includes(String(r?.status || "")),
+      ["hod_approved", "manager_confirmed", "hr_office_forwarded"].includes(String(r?.status || "")) &&
+      (r?.hr_approver_id === user?.id || isAdmin)
     )
-  }, [data])
+  }, [data, user?.id, isAdmin])
 
   const hrApproverQueueFiltered: any[] = useMemo(() => {
     let rows = [...hrApproverQueue]
