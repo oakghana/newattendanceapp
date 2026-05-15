@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const supabase = await createAdminClient()
 
-    // Fetch locations with district and region info
+    // Fetch ALL locations with district and region info (no is_active filter)
     const { data: locations, error: locError } = await supabase
       .from("geofence_locations")
       .select(`
@@ -25,7 +25,6 @@ export async function GET() {
           )
         )
       `)
-      .eq("is_active", true)
       .order("name")
 
     if (locError) {

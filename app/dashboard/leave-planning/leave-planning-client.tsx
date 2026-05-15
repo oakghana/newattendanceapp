@@ -21,6 +21,7 @@ import {
   isHrApproverRole,
   isHrLeaveOfficeRole,
   isManagerRole,
+  isHodRole,
   isStaffRole,
   getStatusLabel,
   getStatusColor,
@@ -44,6 +45,7 @@ import {
   ChevronDown,
   Download,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   CalendarDays,
   Plus,
@@ -912,6 +914,30 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
             <strong>HR note:</strong> {req.hr_approval_note}
           </p>
         )}
+        {/* Approver Information */}
+        {(req.hod_approver_name || req.hr_office_reviewer_name || req.hr_approver_name) && (
+          <div className="mt-3 p-2 bg-slate-50 rounded border border-slate-200 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Approval Trail</p>
+            {req.hod_approver_name && (
+              <p className="text-xs text-slate-700">
+                <span className="font-medium">HOD:</span> {req.hod_approver_name}
+                {req.hod_approved_at && <span className="text-slate-500 ml-1">({fmtDate(req.hod_approved_at)})</span>}
+              </p>
+            )}
+            {req.hr_office_reviewer_name && (
+              <p className="text-xs text-slate-700">
+                <span className="font-medium">HR Office:</span> {req.hr_office_reviewer_name}
+                {req.hr_office_reviewed_at && <span className="text-slate-500 ml-1">({fmtDate(req.hr_office_reviewed_at)})</span>}
+              </p>
+            )}
+            {req.hr_approver_name && (
+              <p className="text-xs text-slate-700">
+                <span className="font-medium">HR Executive:</span> {req.hr_approver_name}
+                {req.hr_approved_at && <span className="text-slate-500 ml-1">({fmtDate(req.hr_approved_at)})</span>}
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex gap-2 mt-3 justify-end flex-wrap">
           {req.status === "hr_approved" && req.memo_token && onViewMemo && (
             <Button size="sm" variant="outline"
@@ -958,9 +984,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
   const isStaff = isStaffRole(normalizedRole)
-  const isHod = isManagerRole(normalizedRole) &&
-    !isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) &&
-    !isHrLeaveOfficeRole(normalizedRole)
+  const isHod = isHodRole(normalizedRole) && !isHrLeaveOfficeRole(normalizedRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
@@ -1049,7 +1073,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────���──────────────���────────
+  // ── HR Leave Office ─────────────────────────���──────────────����────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -1295,7 +1319,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       setLoadingHrExecutives(true)
       const res = await fetch("/api/leave/hr-executives", { cache: "no-store" })
       const json = await res.json()
-      if (!res.ok) return
+      console.log("[v0] HR Executives API response:", { status: res.status, data: json })
+      if (!res.ok) {
+        console.error("[v0] HR Executives API error:", json.error)
+        setHrExecutives([])
+        return
+      }
       setHrExecutives(Array.isArray(json.executives) ? json.executives : [])
     } catch (e) {
       console.error("[v0] Failed to load HR executives:", e)
@@ -1505,7 +1534,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ─── Holiday CRUD Functions ───────���─────────────────────────────────
+  // ���── Holiday CRUD Functions ───────����────���────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1904,7 +1933,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return data.analytics
   }, [analyticsData, data])
 
-  // ── Actions ──────────────────────────────────────────────────────────
+  // ── Actions ─────────────────────────────────────────���───────────────���
 
   const submitPlan = async () => {
     if (!leaveType) {
@@ -2467,6 +2496,29 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
           {/* ── HOD Review ���─────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
+            {/* 2-day approval notice for HOD/RM */}
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+              <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+                <span className="text-lg">⏱️</span> Important: 2-Day Approval Window
+              </p>
+              <div className="text-xs text-blue-800 space-y-2">
+                <p>
+                  Please note that you have <strong>2 working days</strong> to review and approve leave requests.
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-sm mt-0.5">👉</span>
+                  <span>If no action is taken within this period, the request will be automatically approved and forwarded to the HR Leave Office.</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-sm mt-0.5">⚠️</span>
+                  <span><strong>Exception:</strong> Annual Leave requests will not be auto-approved — they require your direct and explicit approval.</span>
+                </p>
+                <p className="pt-1 flex items-start gap-2">
+                  <span className="text-sm">😊</span>
+                  <span>Kindly stay on top of your approvals to avoid automatic processing. Let's keep things running smoothly 👍🏽</span>
+                </p>
+              </div>
+            </div>
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <UserCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />

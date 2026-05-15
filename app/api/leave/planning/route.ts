@@ -9,6 +9,7 @@ import {
   isHrLeaveOfficeRole,
   isHrDepartment,
   isManagerRole,
+  isHodRole,
   isStaffRole,
   HR_OFFICE_PENDING_STATUSES,
 } from "@/lib/leave-planning"
@@ -778,15 +779,16 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    if (isManagerRole(role) && !isHr) {
-      const { data, error } = await admin
-        .from("leave_plan_reviews")
-        .select(`
-          id,
-          decision,
-          recommendation,
-          reviewed_at,
-          leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
+    // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
+    const isAdmin = role === "admin"
+    if ((isHodRole(role) || isAdmin) && !isHr) {
+      let nonArchivedReviews: any[] = []
+
+      // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)
+      if (isAdmin) {
+        const { data: allPendingRequests, error: allError } = await admin
+          .from("leave_plan_requests")
+          .select(`
             id,
             leave_year_period,
             preferred_start_date,
@@ -798,26 +800,80 @@ export async function GET(request: NextRequest) {
             status,
             is_archived,
             submitted_at,
+            hod_approver_name,
+            hod_approved_at,
             user:user_profiles!leave_plan_requests_user_id_fkey (
               id,
               first_name,
               last_name,
               employee_id,
-              departments(name, code)
+              departments(name, code),
+              geofence_locations(name)
             )
-          )
-        `)
-        .eq("reviewer_id", user.id)
-        .order("created_at", { ascending: false })
+          `)
+          .in("status", ["pending_hod_review", "hod_pending", "submitted", "pending"])
+          .eq("is_archived", false)
+          .order("submitted_at", { ascending: false })
 
-      if (error) {
-        if (isSchemaIssue(error)) {
-          return buildDegradedModeResponse("manager", getSchemaIssueMessage(error))
+        if (allError) {
+          console.error("[v0] Error fetching all pending requests for admin:", allError)
+        } else {
+          // Transform to match the review structure expected by frontend
+          nonArchivedReviews = (allPendingRequests || []).map((req: any) => ({
+            id: `admin-view-${req.id}`,
+            decision: null,
+            recommendation: null,
+            reviewed_at: null,
+            reviewer_id: null,
+            leave_plan_request: req,
+          }))
         }
-        throw error
-      }
+      } else {
+        // Regular HOD/RM - only see their assigned reviews
+        let reviewsQuery = admin
+          .from("leave_plan_reviews")
+          .select(`
+            id,
+            decision,
+            recommendation,
+            reviewed_at,
+            reviewer_id,
+            leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
+              id,
+              leave_year_period,
+              preferred_start_date,
+              preferred_end_date,
+              leave_type_key,
+              entitlement_days,
+              requested_days,
+              reason,
+              status,
+              is_archived,
+              submitted_at,
+              user:user_profiles!leave_plan_requests_user_id_fkey (
+                id,
+                first_name,
+                last_name,
+                employee_id,
+                departments(name, code),
+                geofence_locations(name)
+              )
+            )
+          `)
+          .order("created_at", { ascending: false })
+          .eq("reviewer_id", user.id)
 
-      const nonArchivedReviews = (data || []).filter((row: any) => !row?.leave_plan_request?.is_archived)
+        const { data, error } = await reviewsQuery
+
+        if (error) {
+          if (isSchemaIssue(error)) {
+            return buildDegradedModeResponse("manager", getSchemaIssueMessage(error))
+          }
+          throw error
+        }
+
+        nonArchivedReviews = (data || []).filter((row: any) => !row?.leave_plan_request?.is_archived)
+      }
 
       const { data: staggerReviews, error: staggerError } = await admin
         .from("leave_plan_stagger_reviews")
