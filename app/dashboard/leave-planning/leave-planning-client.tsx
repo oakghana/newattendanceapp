@@ -1049,7 +1049,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────���───────────────────────
+  // ── HR Leave Office ─────────────────────────���──────────────��────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -3711,7 +3711,16 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           history={staffHistoryByUser[String(req.user?.id || "")] || []}
                           currentRequestId={req.id}
                         />
+                        {req.status === "hod_approved" && (
+                          <Alert className="mb-3 py-2 border-amber-200 bg-amber-50">
+                            <AlertCircle className="h-3 w-3 text-amber-600" />
+                            <AlertDescription className="text-xs text-amber-800 ml-1">
+                              This request is currently being processed by the HR Leave Office. You can review it once they complete their adjustments and forward it to you.
+                            </AlertDescription>
+                          </Alert>
+                        )}
                         <Button size="sm" variant="outline"
+                          disabled={req.status === "hod_approved"}
                           onClick={() => {
                             if (isExpanded) {
                               setHrExpandedId(null)
