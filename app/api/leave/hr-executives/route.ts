@@ -22,17 +22,24 @@ export async function GET() {
         role,
         employee_id,
         department_id,
+        is_active,
         departments (
           name
         )
       `)
       .in("role", HR_EXECUTIVE_ROLES)
+      .eq("is_active", true)
       .order("role")
       .order("first_name")
 
     if (error) {
       console.error("[v0] Error fetching HR executives:", error)
-      throw error
+      return NextResponse.json({ executives: [], error: error.message }, { status: 500 })
+    }
+
+    if (!executives || executives.length === 0) {
+      console.warn("[v0] No HR executives found in database for roles:", HR_EXECUTIVE_ROLES)
+      return NextResponse.json({ executives: [], grouped: { manager_hr: [], director_hr: [] } })
     }
 
     // Format executives for dropdown
@@ -50,6 +57,8 @@ export async function GET() {
     const managerHrExecs = formattedExecutives.filter((e: any) => e.role === "manager_hr")
     const directorHrExecs = formattedExecutives.filter((e: any) => e.role === "director_hr")
 
+    console.log("[v0] Fetched HR executives:", { total: formattedExecutives.length, manager_hr: managerHrExecs.length, director_hr: directorHrExecs.length })
+
     return NextResponse.json({
       executives: formattedExecutives,
       grouped: {
@@ -59,6 +68,6 @@ export async function GET() {
     })
   } catch (error) {
     console.error("[v0] Failed to fetch HR executives:", error)
-    return NextResponse.json({ error: "Failed to fetch HR executives" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch HR executives", executives: [] }, { status: 500 })
   }
 }

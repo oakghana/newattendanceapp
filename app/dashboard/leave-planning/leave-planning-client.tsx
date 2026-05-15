@@ -1295,7 +1295,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       setLoadingHrExecutives(true)
       const res = await fetch("/api/leave/hr-executives", { cache: "no-store" })
       const json = await res.json()
-      if (!res.ok) return
+      console.log("[v0] HR Executives API response:", { status: res.status, data: json })
+      if (!res.ok) {
+        console.error("[v0] HR Executives API error:", json.error)
+        setHrExecutives([])
+        return
+      }
       setHrExecutives(Array.isArray(json.executives) ? json.executives : [])
     } catch (e) {
       console.error("[v0] Failed to load HR executives:", e)
@@ -1505,7 +1510,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ���── Holiday CRUD Functions ───────���────���────────────────────────────
+  // ���── Holiday CRUD Functions ───────����────���────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1904,7 +1909,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return data.analytics
   }, [analyticsData, data])
 
-  // ── Actions ─────────────────────────────────────────���────────────────
+  // ── Actions ─────────────────────────────────────────���───────────────���
 
   const submitPlan = async () => {
     if (!leaveType) {
