@@ -1050,7 +1050,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hodAdjEnd, setHodAdjEnd] = useState<Record<string, string>>({})
   const [hodSubmitting, setHodSubmitting] = useState<string | null>(null)
 
-  // ── HR Leave Office ─────────────────────────────────────────────────
+  // ── HR Leave Office ─────────────────────────���───────────────────────
   const [officeExpanded, setOfficeExpanded] = useState<string | null>(null)
   const [officeAdjStart, setOfficeAdjStart] = useState<Record<string, string>>({})
   const [officeAdjEnd, setOfficeAdjEnd] = useState<Record<string, string>>({})
@@ -2261,10 +2261,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     </div>
                     <div className="flex-1">
                       <h4 className="text-sm font-bold text-amber-900 mb-1">
-                        Annual Leave Planning Reminder:
+                        Annual Leave 📌 Planning Reminder:
                       </h4>
                       <p className="text-sm text-amber-800 leading-relaxed">
-                        In October, all staff are expected to submit their annual leave requests for the cocoa season cycle. This gives HODs and Regional Managers enough time to review and approve leave before the period progresses. Kindly plan ahead to keep operations running smoothly.
+                        In October, all staff are expected to submit their annual leave requests for the next cocoa season. This helps HODs and Regional Managers review and approve leave early, so everything runs smoothly as the season begins.
+                        <br className="my-2" />
+                        Kindly plan ahead and submit your requests on time to avoid any inconvenience. Please note that staff who do not submit their leave plans will not be able to access leave once the season is active.
+                        <br className="my-2" />
+                        Let's all cooperate and do our part to keep operations flowing well 👍🏽.
                       </p>
                     </div>
                   </div>
