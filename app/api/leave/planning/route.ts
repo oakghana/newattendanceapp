@@ -9,6 +9,7 @@ import {
   isHrLeaveOfficeRole,
   isHrDepartment,
   isManagerRole,
+  isHodRole,
   isStaffRole,
   HR_OFFICE_PENDING_STATUSES,
 } from "@/lib/leave-planning"
@@ -778,14 +779,17 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    if (isManagerRole(role) && !isHr) {
-      const { data, error } = await admin
+    // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
+    const isAdmin = role === "admin"
+    if ((isHodRole(role) || isAdmin) && !isHr) {
+      let reviewsQuery = admin
         .from("leave_plan_reviews")
         .select(`
           id,
           decision,
           recommendation,
           reviewed_at,
+          reviewer_id,
           leave_plan_request:leave_plan_requests!leave_plan_reviews_leave_plan_request_id_fkey (
             id,
             leave_year_period,
@@ -803,12 +807,19 @@ export async function GET(request: NextRequest) {
               first_name,
               last_name,
               employee_id,
-              departments(name, code)
+              departments(name, code),
+              geofence_locations(name)
             )
           )
         `)
-        .eq("reviewer_id", user.id)
         .order("created_at", { ascending: false })
+
+      // Admin sees all reviews nationwide; others see only their own
+      if (!isAdmin) {
+        reviewsQuery = reviewsQuery.eq("reviewer_id", user.id)
+      }
+
+      const { data, error } = await reviewsQuery
 
       if (error) {
         if (isSchemaIssue(error)) {

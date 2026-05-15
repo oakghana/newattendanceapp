@@ -45,6 +45,7 @@ import {
   ChevronDown,
   Download,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   CalendarDays,
   Plus,
@@ -1504,7 +1505,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ���── Holiday CRUD Functions ───────���─────────────────────────────────
+  // ���── Holiday CRUD Functions ───────���────���────────────────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -2466,6 +2467,18 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
           {/* ── HOD Review ���─────────────────────────────────────────────── */}
           <TabsContent value="hod-review">
+            {/* 2-day approval notice for HOD/RM */}
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Important: 2-Day Approval Window</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  You have a <strong>2 working days window</strong> to review and approve leave requests. 
+                  Requests not actioned within this period will be <strong>auto-approved</strong> and forwarded to HR Leave Office, 
+                  except for <strong>Annual Leave</strong> which requires your explicit approval.
+                </p>
+              </div>
+            </div>
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <UserCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
