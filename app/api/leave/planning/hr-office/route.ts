@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
       memo_draft_subject,
       memo_draft_body,
       memo_draft_cc,
+      forwarded_to_hr_approver_id,
     } = body
 
     if (!leave_plan_request_id) {
@@ -164,6 +165,8 @@ export async function POST(request: NextRequest) {
         memo_draft_last_edited_by: user.id,
         memo_draft_last_edited_role: "hr_leave_office",
         memo_draft_last_edited_at: new Date().toISOString(),
+        // Store the HR executive selected to receive this forwarded request
+        forwarded_to_hr_approver_id: forwarded_to_hr_approver_id || null,
         // Apply the adjusted dates as the effective dates for HR to finalize
         preferred_start_date: adjusted_start_date,
         preferred_end_date: adjusted_end_date,

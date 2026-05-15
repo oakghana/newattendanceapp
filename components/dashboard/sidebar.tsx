@@ -108,7 +108,7 @@ const navigationItems = [
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,
-    roles: ["admin", "regional_manager", "department_head"],
+    roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
@@ -136,7 +136,7 @@ const navigationItems = [
     title: "Reports & Trends",
     href: "/dashboard/reports",
     icon: BarChart3,
-    roles: ["admin", "regional_manager", "department_head"],
+    roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
