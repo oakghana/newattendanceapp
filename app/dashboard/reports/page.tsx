@@ -17,11 +17,11 @@ export default async function ReportsPage() {
     .eq("id", user.id)
     .single()
 
-  if (!profile || !["admin", "regional_manager", "department_head"].includes(profile.role)) {
+  if (!profile || !["admin", "regional_manager", "department_head", "director_hr", "manager_hr"].includes(profile.role)) {
     redirect("/dashboard")
   }
 
-  const scopeRole = profile.role as "admin" | "regional_manager" | "department_head"
+  const scopeRole = profile.role as "admin" | "regional_manager" | "department_head" | "director_hr" | "manager_hr"
   const scopeDepartmentId = profile.department_id ?? null
   const scopeLocationId = profile.assigned_location_id ?? null
 

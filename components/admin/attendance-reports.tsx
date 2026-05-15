@@ -144,8 +144,8 @@ const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = 
 
 interface AttendanceReportsProps {
   /** Server-resolved role so the component knows immediately which filters to lock */
-  scopeRole?: "admin" | "regional_manager" | "department_head"
-  /** For department_head: their own department_id (all other depts hidden) */
+  scopeRole?: "admin" | "regional_manager" | "department_head" | "director_hr" | "manager_hr"
+  /** For department_head/director_hr/manager_hr: their own department_id (all other depts hidden) */
   scopeDepartmentId?: string | null
   /** For regional_manager: their own location_id (all other locations hidden) */
   scopeLocationId?: string | null
@@ -169,6 +169,7 @@ export function AttendanceReports({
 
   // Derived scope flags (server props take precedence once available)
   const isDeptHead = scopeRole === "department_head"
+  const isHrExecutive = scopeRole === "director_hr" || scopeRole === "manager_hr"
   const isRegionalManager = scopeRole === "regional_manager"
   const isAdmin = scopeRole === "admin" || (!scopeRole)
   
@@ -1120,16 +1121,16 @@ export function AttendanceReports({
               <label className="text-sm font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
                 <Users className="h-4 w-4 text-purple-600" />
                 Department
-                {isDeptHead && (
+                {(isDeptHead || isHrExecutive) && (
                   <span className="ml-1 text-xs text-amber-600 font-normal">(your department)</span>
                 )}
               </label>
               <Select
                 value={selectedDepartment}
-                onValueChange={isDeptHead ? undefined : setSelectedDepartment}
-                disabled={isDeptHead}
+                onValueChange={(isDeptHead || isHrExecutive) ? undefined : setSelectedDepartment}
+                disabled={(isDeptHead || isHrExecutive)}
               >
-                <SelectTrigger className={`w-full border border-gray-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-150 bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-gray-900 dark:text-slate-100 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} ${isDeptHead ? 'opacity-70 cursor-not-allowed' : ''}`}>
+                <SelectTrigger className={`w-full border border-gray-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-150 bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-gray-900 dark:text-slate-100 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} ${(isDeptHead || isHrExecutive) ? 'opacity-70 cursor-not-allowed' : ''}`}>
                   <SelectValue placeholder="All Departments" />
                 </SelectTrigger>
                 <SelectContent>
