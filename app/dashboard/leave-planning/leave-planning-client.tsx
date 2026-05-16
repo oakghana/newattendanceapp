@@ -1752,6 +1752,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
   // Filter and paginate worked on reviews
   const hodWorkedOnFiltered: any[] = useMemo(() => {
+    if (!hodWorkedOnReviews || hodWorkedOnReviews.length === 0) return []
     let rows = [...hodWorkedOnReviews]
 
     // Filter by tab (status)
@@ -3459,7 +3460,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Original Start" value={fmtDate(req.preferred_start_date)} />
                           <InfoPill label="Original End" value={fmtDate(req.preferred_end_date)} />
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
-                          <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
+                          <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "���"} />
                         </div>
                         {/* Entitlement Exceeded Warning */}
                         {req.adjustment_reason?.includes("ENTITLEMENT EXCEEDED") && (
