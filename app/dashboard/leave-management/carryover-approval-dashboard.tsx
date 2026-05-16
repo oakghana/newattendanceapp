@@ -29,7 +29,12 @@ interface CarryoverRequest {
   }
 }
 
-export function CarryoverApprovalDashboard() {
+interface CarryoverApprovalDashboardProps {
+  userId?: string
+  userRole?: string
+}
+
+export function CarryoverApprovalDashboard({ userId, userRole }: CarryoverApprovalDashboardProps) {
   const [carryoverRequests, setCarryoverRequests] = useState<CarryoverRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [approvingId, setApprovingId] = useState<string | null>(null)
@@ -74,7 +79,7 @@ export function CarryoverApprovalDashboard() {
           carryover_request_id: request.id,
           approved_days: Math.min(request.requested_carryover_days, request.max_carryover_allowed),
           approval_reason: 'POLICY_COMPLIANT',
-          reviewed_by: 'current-user-id', // Replace with actual user ID
+          reviewed_by: userId,
         }),
       })
 
@@ -107,7 +112,7 @@ export function CarryoverApprovalDashboard() {
         body: JSON.stringify({
           carryover_request_id: request.id,
           forfeiture_reason: 'POLICY_LIMIT_EXCEEDED',
-          reviewed_by: 'current-user-id', // Replace with actual user ID
+          reviewed_by: userId,
         }),
       })
 
