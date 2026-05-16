@@ -150,14 +150,14 @@ const navigationItems = [
     title: "QR Events",
     href: "/dashboard/qr-events",
     icon: QrCode,
-    roles: ["admin", "regional_manager", "department_head"],
+    roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
   {
     title: "Defaulters",
     href: "/dashboard/defaulters",
     icon: AlertCircle,
-    roles: ["admin", "department_head"],
+    roles: ["admin", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
   {

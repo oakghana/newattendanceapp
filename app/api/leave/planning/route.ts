@@ -944,7 +944,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (isHr) {
-      const { data, error } = await admin
+      let query = admin
         .from("leave_plan_requests")
         .select(`
           *,
@@ -956,7 +956,16 @@ export async function GET(request: NextRequest) {
             departments(name, code)
           )
         `)
-        .order("created_at", { ascending: false })
+
+      // HR Approvers (director_hr, manager_hr) only see requests forwarded to them
+      if (isHrApprover && !isHrOffice) {
+        query = query.eq("hr_approver_id", user.id)
+        console.log("[v0] HR Approver filter: Only showing requests assigned to user", user.id.substring(0, 8))
+      }
+
+      query = query.order("created_at", { ascending: false })
+
+      const { data, error } = await query
 
       if (error) {
         if (isSchemaIssue(error)) {

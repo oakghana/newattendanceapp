@@ -8,6 +8,18 @@ function getSupabaseClient() {
   )
 }
 
+// Roles that get auto-approval for carryover requests
+const AUTO_APPROVE_ROLES = [
+  'hod',
+  'regional_manager',
+  'director_hr',
+  'manager_hr',
+  'hr_staff',
+  'leave_office',
+  'super_admin',
+  'admin',
+]
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseClient()
@@ -20,6 +32,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Get staff's role to determine approval workflow
+    const { data: staffProfile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', staff_id)
+      .single()
+
+    const staffRole = staffProfile?.role || 'staff'
+    const shouldAutoApprove = AUTO_APPROVE_ROLES.includes(staffRole.toLowerCase())
 
     // Get current balance
     const { data: latestTransaction } = await supabase
@@ -43,6 +65,10 @@ export async function POST(request: NextRequest) {
       .single()
 
     const max_carryover_allowed = policy?.max_carryover_days || 0
+    const approved_days = Math.min(requested_days, max_carryover_allowed)
+
+    // Determine initial status based on role
+    const initialStatus = shouldAutoApprove ? 'APPROVED' : 'PENDING'
 
     // Create carryover request
     const { data, error } = await supabase
@@ -54,9 +80,16 @@ export async function POST(request: NextRequest) {
         balance_available,
         max_carryover_allowed,
         requested_carryover_days: requested_days,
-        status: 'PENDING',
+        status: initialStatus,
         requested_by: staff_id,
         approval_note: reason,
+        // If auto-approved, set approval fields
+        ...(shouldAutoApprove && {
+          approved_carryover_days: approved_days,
+          reviewed_by: staff_id,
+          reviewed_at: new Date().toISOString(),
+          approval_reason: 'AUTO_APPROVED_BY_ROLE',
+        }),
       })
       .select()
       .single()
@@ -69,9 +102,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // If auto-approved, also create the balance transaction for carryover
+    if (shouldAutoApprove && approved_days > 0) {
+      // Get the next leave year
+      const [startYear] = leave_year.split('/').map(Number)
+      const nextLeaveYear = `${startYear + 1}/${startYear + 2}`
+
+      await supabase
+        .from('leave_balance_transactions')
+        .insert({
+          staff_id,
+          leave_year: nextLeaveYear,
+          leave_type_key,
+          transaction_type: 'carryover_in',
+          days: approved_days,
+          running_balance: approved_days,
+          description: `Carryover from ${leave_year} (auto-approved for ${staffRole})`,
+          carryover_request_id: data.id,
+        })
+    }
+
     return NextResponse.json({
-      message: 'Carryover request submitted',
+      message: shouldAutoApprove 
+        ? 'Carryover request auto-approved based on your role'
+        : 'Carryover request submitted for HOD approval',
       carryover_request: data,
+      auto_approved: shouldAutoApprove,
     })
   } catch (error: any) {
     console.error('[v0] Carryover submit error:', error)
