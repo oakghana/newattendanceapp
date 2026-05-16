@@ -2636,7 +2636,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 {hodWorkedOnReviews.length > 0 && (
                   <Card className="border border-blue-200 bg-blue-50/40">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-blue-900">Worked On Requests</CardTitle>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm text-blue-900">Worked On Requests</CardTitle>
+                        <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hodWorkedOnReviews, "hod-worked-reviews.csv")}>
+                          <Download className="w-3 h-3 mr-1" /> Export CSV
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       {hodWorkedOnReviews.map((review: any) => {
