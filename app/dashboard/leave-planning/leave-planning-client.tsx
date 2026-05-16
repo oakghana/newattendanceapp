@@ -2678,7 +2678,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   )
                 })}
 
-                {hodWorkedOnReviews.length > 0 && (
+                {hodWorkedOnFiltered.length > 0 && (
                   <Card className="border border-blue-200 bg-blue-50/40">
                     <CardHeader className="pb-3">
                       <div className="flex flex-col gap-4">
