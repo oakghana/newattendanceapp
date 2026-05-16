@@ -1019,6 +1019,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hodDeptFilter, setHodDeptFilter] = useState("all")
   const [hodWorkedPage, setHodWorkedPage] = useState(1)
   const HOD_WORKED_PAGE_SIZE = 8
+  const [hodWorkedSearch, setHodWorkedSearch] = useState("")
   const [hrOfficeLocationFilter, setHrOfficeLocationFilter] = useState("all")
   const [hrOfficeDeptFilter, setHrOfficeDeptFilter] = useState("all")
   const [hrApproverLocationFilter, setHrApproverLocationFilter] = useState("all")
@@ -2616,16 +2617,28 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 })}
 
                 {hodWorkedOnReviews.length > 0 && (() => {
-                  const totalWorked = hodWorkedOnReviews.length
+                  // Filter by search
+                  const filtered = hodWorkedOnReviews.filter(review => {
+                    if (!hodWorkedSearch) return true
+                    const req = review.leave_plan_request
+                    if (!req) return false
+                    const name = `${req.user?.first_name || ""} ${req.user?.last_name || ""}`.toLowerCase()
+                    const empId = String(req.user?.employee_id || "").toLowerCase()
+                    const q = hodWorkedSearch.toLowerCase()
+                    return name.includes(q) || empId.includes(q)
+                  })
+
+                  const totalWorked = filtered.length
                   const totalPages = Math.ceil(totalWorked / HOD_WORKED_PAGE_SIZE)
-                  const pagedWorked = hodWorkedOnReviews.slice(
+                  const pagedWorked = filtered.slice(
                     (hodWorkedPage - 1) * HOD_WORKED_PAGE_SIZE,
                     hodWorkedPage * HOD_WORKED_PAGE_SIZE
                   )
+                  
                   return (
                     <Card className="border border-blue-200 bg-blue-50/40">
                       <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <CardTitle className="text-sm text-blue-900">
                             Worked On Requests
                             <span className="ml-2 text-xs font-normal text-blue-600">({totalWorked} total)</span>
@@ -2634,62 +2647,95 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                             <Download className="w-3 h-3 mr-1" /> Export CSV
                           </Button>
                         </div>
+                        
+                        {/* Search field */}
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Search by name or employee ID..."
+                            value={hodWorkedSearch}
+                            onChange={(e) => {
+                              setHodWorkedSearch(e.target.value)
+                              setHodWorkedPage(1)
+                            }}
+                            className="flex-1 px-3 py-2 rounded-md border border-blue-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          {hodWorkedSearch && (
+                            <button
+                              onClick={() => {
+                                setHodWorkedSearch("")
+                                setHodWorkedPage(1)
+                              }}
+                              className="px-3 py-2 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 text-sm font-medium transition-colors"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </CardHeader>
                       <CardContent className="space-y-2">
-                        {pagedWorked.map((review: any) => {
-                          const req = review.leave_plan_request
-                          if (!req) return null
-                          return (
-                            <div key={review.id} className="rounded-lg border border-blue-100 bg-white p-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-800">{fmtName(req.user)}</p>
-                                  <p className="text-xs text-slate-500">
-                                    {req.user?.employee_id ? `ID: ${req.user.employee_id} · ` : ""}
-                                    {leaveTypeLabelShort(req.leave_type_key)} · {fmtDate(req.preferred_start_date)} to {fmtDate(req.preferred_end_date)}
-                                  </p>
-                                </div>
-                                <Badge className={`text-xs border ${getStatusColor(req.status)}`}>{getStatusLabel(req.status)}</Badge>
-                              </div>
-                              {review.recommendation && (
-                                <p className="mt-2 text-xs text-slate-600"><strong>Your note:</strong> {review.recommendation}</p>
-                              )}
-                            </div>
-                          )
-                        })}
-
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                          <div className="flex items-center justify-between gap-2 pt-3 border-t border-blue-100 mt-2">
-                            <span className="text-xs text-slate-500">
-                              Showing {(hodWorkedPage - 1) * HOD_WORKED_PAGE_SIZE + 1}–{Math.min(hodWorkedPage * HOD_WORKED_PAGE_SIZE, totalWorked)} of {totalWorked}
-                            </span>
-                            <div className="flex gap-1">
-                              <button
-                                disabled={hodWorkedPage === 1}
-                                onClick={() => setHodWorkedPage(p => p - 1)}
-                                className="px-2 py-1 rounded-md border border-blue-200 text-xs hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                              >
-                                &larr; Prev
-                              </button>
-                              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                                <button
-                                  key={p}
-                                  onClick={() => setHodWorkedPage(p)}
-                                  className={`px-2 py-1 rounded-md text-xs border ${hodWorkedPage === p ? "bg-blue-600 text-white border-blue-600" : "border-blue-200 hover:bg-blue-50"}`}
-                                >
-                                  {p}
-                                </button>
-                              ))}
-                              <button
-                                disabled={hodWorkedPage === totalPages}
-                                onClick={() => setHodWorkedPage(p => p + 1)}
-                                className="px-2 py-1 rounded-md border border-blue-200 text-xs hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                              >
-                                Next &rarr;
-                              </button>
-                            </div>
+                        {pagedWorked.length === 0 ? (
+                          <div className="py-6 text-center text-sm text-slate-500">
+                            No requests found
                           </div>
+                        ) : (
+                          <>
+                            {pagedWorked.map((review: any) => {
+                              const req = review.leave_plan_request
+                              if (!req) return null
+                              return (
+                                <div key={review.id} className="rounded-lg border border-blue-100 bg-white p-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-800">{fmtName(req.user)}</p>
+                                      <p className="text-xs text-slate-500">
+                                        {req.user?.employee_id ? `ID: ${req.user.employee_id} · ` : ""}
+                                        {leaveTypeLabelShort(req.leave_type_key)} · {fmtDate(req.preferred_start_date)} to {fmtDate(req.preferred_end_date)}
+                                      </p>
+                                    </div>
+                                    <Badge className={`text-xs border ${getStatusColor(req.status)}`}>{getStatusLabel(req.status)}</Badge>
+                                  </div>
+                                  {review.recommendation && (
+                                    <p className="mt-2 text-xs text-slate-600"><strong>Your note:</strong> {review.recommendation}</p>
+                                  )}
+                                </div>
+                              )
+                            })}
+
+                            {/* Pagination */}
+                            {totalPages > 1 && (
+                              <div className="flex items-center justify-between gap-2 pt-3 border-t border-blue-100 mt-2">
+                                <span className="text-xs text-slate-500">
+                                  Showing {(hodWorkedPage - 1) * HOD_WORKED_PAGE_SIZE + 1}–{Math.min(hodWorkedPage * HOD_WORKED_PAGE_SIZE, totalWorked)} of {totalWorked}
+                                </span>
+                                <div className="flex gap-1">
+                                  <button
+                                    disabled={hodWorkedPage === 1}
+                                    onClick={() => setHodWorkedPage(p => p - 1)}
+                                    className="px-2 py-1 rounded-md border border-blue-200 text-xs hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    &larr; Prev
+                                  </button>
+                                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                                    <button
+                                      key={p}
+                                      onClick={() => setHodWorkedPage(p)}
+                                      className={`px-2 py-1 rounded-md text-xs border ${hodWorkedPage === p ? "bg-blue-600 text-white border-blue-600" : "border-blue-200 hover:bg-blue-50"}`}
+                                    >
+                                      {p}
+                                    </button>
+                                  ))}
+                                  <button
+                                    disabled={hodWorkedPage === totalPages}
+                                    onClick={() => setHodWorkedPage(p => p + 1)}
+                                    className="px-2 py-1 rounded-md border border-blue-200 text-xs hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    Next &rarr;
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
                         )}
                       </CardContent>
                     </Card>
