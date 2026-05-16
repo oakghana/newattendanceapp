@@ -1008,9 +1008,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrOfficeStatusFilter, setHrOfficeStatusFilter] = useState("all")
   const [hrOfficeSortBy, setHrOfficeSortBy] = useState("priority")
   const [hrOfficeTab, setHrOfficeTab] = useState("operations")
-  const [hrOfficeAutoRefresh, setHrOfficeAutoRefresh] = useState(true)
-  const [hrOfficeLastRefresh, setHrOfficeLastRefresh] = useState<string | null>(null)
   const [hrOfficeControlsExpanded, setHrOfficeControlsExpanded] = useState(false)
+
+  // Worked On Requests filtering and pagination
+  const [hodWorkedOnTab, setHodWorkedOnTab] = useState("all")
+  const [hodWorkedOnSearch, setHodWorkedOnSearch] = useState("")
+  const [hodWorkedOnPage, setHodWorkedOnPage] = useState(1)
+  const [hodWorkedOnPageSize, setHodWorkedOnPageSize] = useState(10)
+
   const [allRequestsSearch, setAllRequestsSearch] = useState("")
   const [allRequestsStatusFilter, setAllRequestsStatusFilter] = useState("all")
   const [allRequestsLocationFilter, setAllRequestsLocationFilter] = useState("all")
@@ -1744,6 +1749,45 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       return r.decision !== "pending" || !(HOD_PENDING_STATUSES as string[]).includes(status)
     })
   }, [hodAssignedReviews])
+
+  // Filter and paginate worked on reviews
+  const hodWorkedOnFiltered: any[] = useMemo(() => {
+    let rows = [...hodWorkedOnReviews]
+
+    // Filter by tab (status)
+    if (hodWorkedOnTab !== "all") {
+      rows = rows.filter((r: any) => {
+        const status = String(r?.leave_plan_request?.status || "")
+        if (hodWorkedOnTab === "hod_approved") return status === "hod_approved"
+        if (hodWorkedOnTab === "manager_confirmed") return status === "manager_confirmed"
+        if (hodWorkedOnTab === "approved") return ["hr_approved", "approved"].includes(status)
+        if (hodWorkedOnTab === "rejected") return status === "rejected"
+        return true
+      })
+    }
+
+    // Filter by search (name or employee ID)
+    if (hodWorkedOnSearch) {
+      const q = hodWorkedOnSearch.toLowerCase()
+      rows = rows.filter((r: any) => {
+        const req = r.leave_plan_request
+        if (!req) return false
+        const name = `${req.user?.first_name || ""} ${req.user?.last_name || ""}`.toLowerCase()
+        const empId = String(req.user?.employee_id || "").toLowerCase()
+        return name.includes(q) || empId.includes(q)
+      })
+    }
+
+    return rows
+  }, [hodWorkedOnReviews, hodWorkedOnTab, hodWorkedOnSearch])
+
+  // Paginate worked on reviews
+  const hodWorkedOnPaginated: any[] = useMemo(() => {
+    const start = (hodWorkedOnPage - 1) * hodWorkedOnPageSize
+    return hodWorkedOnFiltered.slice(start, start + hodWorkedOnPageSize)
+  }, [hodWorkedOnFiltered, hodWorkedOnPage, hodWorkedOnPageSize])
+
+  const hodWorkedOnTotalPages = Math.ceil(hodWorkedOnFiltered.length / hodWorkedOnPageSize)
 
   const hodPendingReviewsFiltered: any[] = useMemo(() => {
     let rows = [...hodPendingReviews]
@@ -2636,27 +2680,148 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 {hodWorkedOnReviews.length > 0 && (
                   <Card className="border border-blue-200 bg-blue-50/40">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-blue-900">Worked On Requests</CardTitle>
+                      <div className="flex flex-col gap-4">
+                        <CardTitle className="text-sm text-blue-900">Worked On Requests</CardTitle>
+                        
+                        {/* Tabs for status filtering */}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {setHodWorkedOnTab("all"); setHodWorkedOnPage(1)}}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              hodWorkedOnTab === "all"
+                                ? "bg-blue-600 text-white"
+                                : "bg-white border border-blue-200 text-blue-900 hover:bg-blue-50"
+                            }`}
+                          >
+                            All ({hodWorkedOnFiltered.length})
+                          </button>
+                          <button
+                            onClick={() => {setHodWorkedOnTab("hod_approved"); setHodWorkedOnPage(1)}}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              hodWorkedOnTab === "hod_approved"
+                                ? "bg-orange-600 text-white"
+                                : "bg-white border border-orange-200 text-orange-900 hover:bg-orange-50"
+                            }`}
+                          >
+                            HOD Approved ({hodWorkedOnFiltered.filter((r: any) => r.leave_plan_request?.status === "hod_approved").length})
+                          </button>
+                          <button
+                            onClick={() => {setHodWorkedOnTab("manager_confirmed"); setHodWorkedOnPage(1)}}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              hodWorkedOnTab === "manager_confirmed"
+                                ? "bg-amber-600 text-white"
+                                : "bg-white border border-amber-200 text-amber-900 hover:bg-amber-50"
+                            }`}
+                          >
+                            Manager Confirmed ({hodWorkedOnFiltered.filter((r: any) => r.leave_plan_request?.status === "manager_confirmed").length})
+                          </button>
+                          <button
+                            onClick={() => {setHodWorkedOnTab("approved"); setHodWorkedOnPage(1)}}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              hodWorkedOnTab === "approved"
+                                ? "bg-emerald-600 text-white"
+                                : "bg-white border border-emerald-200 text-emerald-900 hover:bg-emerald-50"
+                            }`}
+                          >
+                            Approved ({hodWorkedOnFiltered.filter((r: any) => ["hr_approved", "approved"].includes(r.leave_plan_request?.status)).length})
+                          </button>
+                          <button
+                            onClick={() => {setHodWorkedOnTab("rejected"); setHodWorkedOnPage(1)}}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              hodWorkedOnTab === "rejected"
+                                ? "bg-red-600 text-white"
+                                : "bg-white border border-red-200 text-red-900 hover:bg-red-50"
+                            }`}
+                          >
+                            Rejected ({hodWorkedOnFiltered.filter((r: any) => r.leave_plan_request?.status === "rejected").length})
+                          </button>
+                        </div>
+
+                        {/* Search box */}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Search by name or employee ID..."
+                            value={hodWorkedOnSearch}
+                            onChange={(e) => {setHodWorkedOnSearch(e.target.value); setHodWorkedOnPage(1)}}
+                            className="flex-1 px-3 py-1.5 rounded-lg border border-blue-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          {hodWorkedOnSearch && (
+                            <button
+                              onClick={() => {setHodWorkedOnSearch(""); setHodWorkedOnPage(1)}}
+                              className="px-2 py-1 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 text-xs font-medium"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {hodWorkedOnReviews.map((review: any) => {
-                        const req = review.leave_plan_request
-                        if (!req) return null
-                        return (
-                          <div key={review.id} className="rounded-lg border border-blue-100 bg-white p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-800">{fmtName(req.user)}</p>
-                                <p className="text-xs text-slate-500">{leaveTypeLabelShort(req.leave_type_key)} · {fmtDate(req.preferred_start_date)} to {fmtDate(req.preferred_end_date)}</p>
+                      {hodWorkedOnPaginated.length === 0 ? (
+                        <div className="text-center py-6">
+                          <p className="text-sm text-slate-500">No requests found</p>
+                        </div>
+                      ) : (
+                        <>
+                          {hodWorkedOnPaginated.map((review: any) => {
+                            const req = review.leave_plan_request
+                            if (!req) return null
+                            return (
+                              <div key={review.id} className="rounded-lg border border-blue-100 bg-white p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-800">{fmtName(req.user)}</p>
+                                    <p className="text-xs text-slate-500">{req.user?.employee_id ? `ID: ${req.user.employee_id} · ` : ""}{leaveTypeLabelShort(req.leave_type_key)} · {fmtDate(req.preferred_start_date)} to {fmtDate(req.preferred_end_date)}</p>
+                                  </div>
+                                  <Badge className={`text-xs border ${getStatusColor(req.status)}`}>{getStatusLabel(req.status)}</Badge>
+                                </div>
+                                {review.recommendation && (
+                                  <p className="mt-2 text-xs text-slate-600"><strong>Your note:</strong> {review.recommendation}</p>
+                                )}
                               </div>
-                              <Badge className={`text-xs border ${getStatusColor(req.status)}`}>{getStatusLabel(req.status)}</Badge>
+                            )
+                          })}
+
+                          {/* Pagination */}
+                          {hodWorkedOnTotalPages > 1 && (
+                            <div className="flex items-center justify-between gap-2 pt-3 border-t border-blue-100 mt-3">
+                              <div className="text-xs text-slate-500">
+                                Showing {(hodWorkedOnPage - 1) * hodWorkedOnPageSize + 1} to {Math.min(hodWorkedOnPage * hodWorkedOnPageSize, hodWorkedOnFiltered.length)} of {hodWorkedOnFiltered.length}
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => setHodWorkedOnPage(p => Math.max(1, p - 1))}
+                                  disabled={hodWorkedOnPage === 1}
+                                  className="px-2 py-1 rounded-lg border border-blue-200 text-xs hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  ← Prev
+                                </button>
+                                {Array.from({length: hodWorkedOnTotalPages}, (_, i) => i + 1).map((page) => (
+                                  <button
+                                    key={page}
+                                    onClick={() => setHodWorkedOnPage(page)}
+                                    className={`px-2 py-1 rounded-lg text-xs ${
+                                      hodWorkedOnPage === page
+                                        ? "bg-blue-600 text-white"
+                                        : "border border-blue-200 hover:bg-blue-50"
+                                    }`}
+                                  >
+                                    {page}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => setHodWorkedOnPage(p => Math.min(hodWorkedOnTotalPages, p + 1))}
+                                  disabled={hodWorkedOnPage === hodWorkedOnTotalPages}
+                                  className="px-2 py-1 rounded-lg border border-blue-200 text-xs hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next →
+                                </button>
+                              </div>
                             </div>
-                            {review.recommendation && (
-                              <p className="mt-2 text-xs text-slate-600"><strong>Your note:</strong> {review.recommendation}</p>
-                            )}
-                          </div>
-                        )
-                      })}
+                          )}
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 )}

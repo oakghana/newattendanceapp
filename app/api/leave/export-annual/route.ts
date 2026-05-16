@@ -87,12 +87,29 @@ export async function GET(request: NextRequest) {
     const userIds = leaveRequests.map((req: any) => req.user_id)
     const { data: profiles, error: profileError } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, phone, position, assigned_location_id")
+      .select("id, first_name, last_name, employee_id, email, phone, position, assigned_location_id, departments(name)")
       .in("id", userIds)
 
     if (profileError) {
       console.error("[v0] Profile fetch error:", profileError)
       // Continue without profiles - use IDs only
+    }
+
+    // Fetch locations for those profiles
+    const locationIds = (profiles || [])
+      .map((p: any) => p.assigned_location_id)
+      .filter((id: any) => id)
+    
+    let locationMap = new Map()
+    if (locationIds.length > 0) {
+      const { data: locations, error: locationError } = await supabase
+        .from("locations")
+        .select("id, name")
+        .in("id", locationIds)
+      
+      if (!locationError && locations) {
+        locationMap = new Map(locations.map((loc: any) => [loc.id, loc.name]))
+      }
     }
 
     // Create a map of user_id -> profile for fast lookup
@@ -121,6 +138,7 @@ export async function GET(request: NextRequest) {
     const rows = leaveRequests
       .map((request: any) => {
         const profile = profileMap.get(request.user_id) || {}
+        const locationName = profile.assigned_location_id ? locationMap.get(profile.assigned_location_id) : null
 
         return [
           profile.employee_id || "N/A",
@@ -128,7 +146,7 @@ export async function GET(request: NextRequest) {
           profile.email || "N/A",
           profile.phone || "N/A",
           profile.position || "N/A",
-          "Not Assigned", // Location would need separate fetch
+          locationName || "Not Assigned",
           "N/A",
           request.preferred_start_date || "N/A",
           request.preferred_end_date || "N/A",
