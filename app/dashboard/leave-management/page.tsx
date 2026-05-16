@@ -254,6 +254,7 @@ export default async function LeaveManagementPage() {
           status: req.status,
           created_at: req.created_at,
           user_name: `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim() || "Staff",
+          employee_id: staffProfile.employee_id || undefined,
           rank: staffProfile.position || undefined,
           location: locationName || undefined,
         }

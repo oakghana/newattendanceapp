@@ -42,6 +42,7 @@ interface LeaveRequest {
   status: string
   created_at: string
   user_name?: string
+  employee_id?: string
   department?: string
   location?: string
   rank?: string
@@ -1858,7 +1859,7 @@ export function LeaveManagementClient({
                                   <option value="">-- Choose a leave request --</option>
                                   {approvedRequests.map((req) => (
                                     <option key={req.id} value={req.id}>
-                                      {req.user_name || "Staff"} - {req.leave_type} ({new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()})
+                                      {req.user_name || "Staff"} {req.employee_id ? `| ${req.employee_id}` : ""} {req.location ? `| ${req.location}` : ""} - {req.leave_type} ({new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()})
                                     </option>
                                   ))}
                                 </select>
@@ -2047,7 +2048,7 @@ export function LeaveManagementClient({
                               <option value="">-- Choose a leave request --</option>
                               {approvedRequests.map((req) => (
                                 <option key={req.id} value={req.id}>
-                                  {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                                  {req.user_name || "Staff"} {req.employee_id ? `| ${req.employee_id}` : ""} {req.location ? `| ${req.location}` : ""} - {req.leave_type} ({new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()})
                                 </option>
                               ))}
                             </select>
