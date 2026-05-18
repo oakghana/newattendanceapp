@@ -189,36 +189,39 @@ export function PaymentAdviceClient() {
 
       // ============ LOGO AND LETTERHEAD ============
       try {
-        // Add company logo on the left
-        const logoUrl = "/images/qcc-logo.jpg"
-        doc.addImage(logoUrl, "JPEG", 15, 8, 15, 15)
+        // Add company logo - centered, larger and more prominent
+        const logoUrl = "/images/qcc-logo.png"
+        doc.addImage(logoUrl, "PNG", pageWidth / 2 - 12, 8, 24, 24)
       } catch (err) {
         console.log("[v0] Logo not available, skipping")
       }
 
-      doc.setFontSize(11)
+      // Add decorative line below logo
+      doc.setDrawColor(139, 109, 50) // Brown/gold color
+      doc.setLineWidth(0.8)
+      doc.line(20, 35, pageWidth - 20, 35)
+
+      // Company info - centered, modern style
+      doc.setFontSize(12)
       doc.setFont(undefined, "bold")
-      doc.text("QUALITY CONTROL COMPANY LTD.", 35, yPos)
-      yPos += 6
+      doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, 40, { align: "center" })
 
       doc.setFontSize(10)
       doc.setFont(undefined, "normal")
-      doc.text("(COCOBOD)", 35, yPos)
-      yPos += 5
-      doc.text("P. O. BOX M54", 35, yPos)
-      yPos += 5
-      doc.text("ACCRA", 35, yPos)
+      doc.text("(COCOBOD) • P.O. BOX M54 • ACCRA", pageWidth / 2, 45, { align: "center" })
 
-      // Add "MEMORANDUM" on the right
-      doc.setFontSize(12)
+      // Add "MEMORANDUM" in modern style
+      doc.setFontSize(16)
       doc.setFont(undefined, "bold")
-      doc.text("MEMORANDUM", pageWidth - 50, 10)
+      doc.setTextColor(51, 65, 85) // Dark blue-gray
+      doc.text("MEMORANDUM", pageWidth / 2, 55, { align: "center" })
 
-      yPos = 35
+      yPos = 65
 
       // ============ MEMO HEADER ============
       doc.setFontSize(10)
       doc.setFont(undefined, "normal")
+      doc.setTextColor(0, 0, 0) // Reset to black
 
       // Extract month and year from selectedMonth (format: YYYY-MM)
       const [year, month] = selectedMonth.split("-")
@@ -238,41 +241,52 @@ export function PaymentAdviceClient() {
       ]
       const monthName = monthNames[parseInt(month) - 1]
 
-      doc.text(`REF. NO: QCC/HR/PA/${monthName.substring(0, 3).toUpperCase()}/${year}`, 20, yPos)
-      doc.text(`DATE: ${format(new Date(), "dd/MM/yyyy")}`, pageWidth - 50, yPos)
-      yPos += 12
-
-      // TO, FROM, SUBJECT
+      // Modern two-column header
+      // Modern TO, FROM, SUBJECT section
+      doc.setFontSize(10)
       doc.setFont(undefined, "bold")
+      doc.setTextColor(139, 109, 50) // Brown/gold color for labels
       doc.text("TO:", 20, yPos)
       doc.setFont(undefined, "normal")
-      doc.text("DEPUTY DIRECTOR, FINANCE", 35, yPos)
+      doc.setTextColor(0, 0, 0)
+      doc.text("DEPUTY DIRECTOR, FINANCE", 32, yPos)
       yPos += 8
 
       doc.setFont(undefined, "bold")
+      doc.setTextColor(139, 109, 50)
       doc.text("FROM:", 20, yPos)
       doc.setFont(undefined, "normal")
-      doc.text("DEPUTY HUMAN RESOURCE MANAGER", 35, yPos)
+      doc.setTextColor(0, 0, 0)
+      doc.text("DEPUTY HUMAN RESOURCE MANAGER", 32, yPos)
       yPos += 10
 
-      // SUBJECT
+      // Subject line with background
       doc.setFont(undefined, "bold")
+      doc.setTextColor(139, 109, 50)
+      doc.text("SUBJECT:", 20, yPos)
       const categoryLabel = category === "Manager" ? "MANAGEMENT" : category === "Senior" ? "SNR." : "JNR."
-      doc.text(`SUBJECT: PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`, 20, yPos)
+      doc.setTextColor(0, 0, 0)
+      const subjectText = `PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`
+      const subjectWidth = doc.getStringUnitWidth(subjectText) * 10 / doc.internal.scaleFactor
+      doc.rect(32, yPos - 4, Math.min(subjectWidth + 4, pageWidth - 52), 7, "F")
+      doc.setTextColor(255, 255, 255) // White text on background
+      doc.text(subjectText, 34, yPos, { maxWidth: pageWidth - 54 })
+      
       yPos += 12
 
       // ============ BODY TEXT ============
       doc.setFont(undefined, "normal")
       doc.setFontSize(10)
+      doc.setTextColor(0, 0, 0)
       const bodyText = `We wish to inform you that the under-listed ${categoryLabel.toLowerCase()} staff are scheduled to proceed on their annual vacation leave in ${monthName} ${year}.`
       const splitBody = doc.splitTextToSize(bodyText, pageWidth - 40)
       splitBody.forEach((line: string) => {
         doc.text(line, 20, yPos)
         yPos += 6
       })
-      yPos += 4
+      yPos += 6
 
-      // ============ STAFF TABLE ============
+      // ============ STAFF TABLE WITH MODERN STYLING ============
       const staffData = staffByCategory[category] || []
       const tableHeaders = ["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]
       const tableData = staffData.map((staff, index) => [
@@ -288,42 +302,73 @@ export function PaymentAdviceClient() {
       const colWidths = [8, 50, 16, 28, 28, 20]
       const rowHeight = 7
       const headerHeight = 8
+      const startX = 15
 
-      // Draw table header
+      // Draw table header with modern styling
       doc.setFont(undefined, "bold")
       doc.setFontSize(9)
-      let xPos = 15
+      doc.setTextColor(255, 255, 255)
+      doc.setFillColor(139, 109, 50) // Brown/gold background
+      let xPos = startX
       tableHeaders.forEach((header, i) => {
-        doc.rect(xPos, yPos, colWidths[i], headerHeight)
+        doc.rect(xPos, yPos, colWidths[i], headerHeight, "F")
         doc.text(header, xPos + 2, yPos + 5)
         xPos += colWidths[i]
       })
+      
+      // Add border to header
+      doc.setDrawColor(80, 60, 30)
+      doc.setLineWidth(0.5)
+      xPos = startX
+      tableHeaders.forEach((header, i) => {
+        doc.rect(xPos, yPos, colWidths[i], headerHeight)
+        xPos += colWidths[i]
+      })
+      
       yPos += headerHeight
 
-      // Draw table data
+      // Draw table data with alternating row colors
       doc.setFont(undefined, "normal")
       doc.setFontSize(8)
-      tableData.forEach((row) => {
+      doc.setTextColor(0, 0, 0)
+      tableData.forEach((row, rowIdx) => {
         // Check if we need a new page
         if (yPos + rowHeight > pageHeight - 30) {
           doc.addPage()
           yPos = 20
         }
 
-        xPos = 15
+        // Alternate row background color
+        if (rowIdx % 2 === 0) {
+          doc.setFillColor(245, 242, 238) // Light beige
+          xPos = startX
+          tableHeaders.forEach((header, i) => {
+            doc.rect(xPos, yPos, colWidths[i], rowHeight, "F")
+            xPos += colWidths[i]
+          })
+        }
+
+        // Draw cell borders and text
+        xPos = startX
         row.forEach((cell, i) => {
           const colWidth = colWidths[i]
           
           // Handle text wrapping for NAME column (index 1)
           if (i === 1) {
             const wrappedText = doc.splitTextToSize(cell, colWidth - 3)
+            doc.setDrawColor(200, 190, 180)
+            doc.setLineWidth(0.3)
             doc.rect(xPos, yPos, colWidth, rowHeight * wrappedText.length)
+            doc.setTextColor(0, 0, 0)
             wrappedText.forEach((line: string, lineIdx: number) => {
               doc.text(line, xPos + 2, yPos + 4 + lineIdx * 5)
             })
             yPos += (wrappedText.length - 1) * 3
           } else {
+            doc.setDrawColor(200, 190, 180)
+            doc.setLineWidth(0.3)
             doc.rect(xPos, yPos, colWidth, rowHeight)
+            doc.setTextColor(0, 0, 0)
             doc.text(cell, xPos + 2, yPos + 4)
           }
           xPos += colWidth
@@ -331,49 +376,73 @@ export function PaymentAdviceClient() {
         yPos += rowHeight
       })
 
-      yPos += 8
+      yPos += 10
 
       // ============ CLOSING TEXT ============
       doc.setFont(undefined, "normal")
       doc.setFontSize(10)
+      doc.setTextColor(0, 0, 0)
       const closingText = "We, therefore, kindly request you to pay their leave allowances accordingly."
       doc.text(closingText, 20, yPos)
       yPos += 8
 
       const cooperationText = "We count on your co-operation."
       doc.text(cooperationText, 20, yPos)
-      yPos += 12
+      yPos += 16
 
       // ============ SIGNATURE BLOCK ============
+      // Add signature line
+      doc.setDrawColor(80, 60, 30)
+      doc.setLineWidth(0.5)
+      doc.line(20, yPos, 50, yPos)
+      yPos += 6
+
       doc.setFont(undefined, "bold")
       doc.setFontSize(10)
+      doc.setTextColor(51, 65, 85)
       doc.text("FRANK FREDUA-MENSAH (ESQ.)", 20, yPos)
       yPos += 6
+      
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(9)
+      doc.setTextColor(80, 80, 80)
       doc.text("DEPUTY HUMAN RESOURCE MANAGER", 20, yPos)
-      yPos += 6
+      yPos += 5
       doc.text("FOR: MANAGING DIRECTOR", 20, yPos)
       yPos += 10
+
+      // Add footer divider
+      doc.setDrawColor(139, 109, 50)
+      doc.setLineWidth(0.8)
+      doc.line(20, yPos, pageWidth - 20, yPos)
+      yPos += 8
 
       // ============ CC LIST ============
       doc.setFont(undefined, "bold")
       doc.setFontSize(9)
+      doc.setTextColor(139, 109, 50)
       doc.text("cc:", 20, yPos)
+      
       doc.setFont(undefined, "normal")
-
+      doc.setFontSize(8)
+      doc.setTextColor(80, 80, 80)
+      
       const ccList = [
         "Managing Director",
         "Deputy Director, HR",
         "Deputy Director, Finance",
         "Audit Manager",
       ]
-      let xOffset = 28
+      
+      let ccIndex = 0
       ccList.forEach((cc, index) => {
-        if (index > 0 && index % 2 === 0) {
-          yPos += 6
-          xOffset = 28
+        if (index === 0) {
+          doc.text(cc, 28, yPos)
+        } else if (index === 2) {
+          doc.text(cc, 28, yPos + 5)
+        } else {
+          doc.text(cc, 28, yPos + (index % 2 === 1 ? 5 : 10))
         }
-        doc.text(cc, xOffset, yPos)
-        xOffset += 55
       })
 
       // Save the PDF
