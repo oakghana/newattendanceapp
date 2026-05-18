@@ -28,10 +28,11 @@ export async function POST(request: NextRequest) {
       monthStart,
       monthEnd,
       leaveTypeKey: "annual",
-      status: "approved",
+      statuses: ["approved", "hr_approved", "hod_approved"],
     })
 
     // Query staff on annual leave for this month
+    // Status can be: approved, hr_approved, hod_approved (all are approved states)
     const { data: staffOnLeave, error } = await supabase
       .from("leave_plan_requests")
       .select(
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
       `
       )
       .eq("leave_type_key", "annual")
-      .eq("status", "approved")
+      .in("status", ["approved", "hr_approved", "hod_approved"])
       .lte("preferred_start_date", monthEnd)
       .gte("preferred_end_date", monthStart)
 
