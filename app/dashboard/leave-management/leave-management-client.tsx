@@ -607,6 +607,7 @@ export function LeaveManagementClient({
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = normalizedRole === "leave_office"
+  const isPaymentAdviceVisible = ["admin", "hr_leave_office", "hr_executive"].includes(normalizedRole)
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
@@ -1582,18 +1583,20 @@ export function LeaveManagementClient({
                     <Download className="h-4 w-4" />
                     Approved Memos
                   </Button>
-                  <Button
-                    onClick={() => setSelectedTab("payment-advice")}
-                    className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                      selectedTab === "payment-advice"
-                        ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                    }`}
-                    variant={selectedTab === "payment-advice" ? "default" : "outline"}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Payment Advice
-                  </Button>
+                  {isPaymentAdviceVisible && (
+                    <Button
+                      onClick={() => setSelectedTab("payment-advice")}
+                      className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                        selectedTab === "payment-advice"
+                          ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                      }`}
+                      variant={selectedTab === "payment-advice" ? "default" : "outline"}
+                    >
+                      <FileText className="h-4 w-4" />
+                      Payment Advice
+                    </Button>
+                  )}
                 </>
               )}
             </div>
@@ -2303,7 +2306,7 @@ export function LeaveManagementClient({
             </Card>
           )}
 
-        {isManagerView && selectedTab === "payment-advice" && (
+        {isPaymentAdviceVisible && selectedTab === "payment-advice" && (
           <PaymentAdviceClient />
         )}
 
