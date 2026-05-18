@@ -432,13 +432,13 @@ export function QRScanner({ locations = [] }: { locations: Location[] }) {
         console.log("[v0] Distance to location:", distance, "meters")
 
         // Device-based proximity check: 100m for mobile/tablet, 2000m for desktop
-        // Always display "100 meters" to users (trade secret)
+        // Always display "50 meters" to users (trade secret)
         const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
         const maxDistance = isMobileDevice ? 100 : 2000
         
         if (distance > maxDistance) {
           showError(
-            `You are too far from ${location.name} (${Math.round(distance)}m away). You must be within 100 meters of the location to check in.`,
+            `You are too far from ${location.name} (${Math.round(distance)}m away). You must be within 50 meters of the location to check in.`,
           )
           return
         }

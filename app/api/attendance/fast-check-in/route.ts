@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
             })
 
             return NextResponse.json(
-              { error: "You are outside the allowed proximity for this location. Auto check-in blocked. Please move closer or use manual check-in.", type: "out_of_range" },
+              { error: "You are outside the allowed proximity for this location (within 50m required). Auto check-in blocked. Please move closer or use manual check-in.", type: "out_of_range" },
               { status: 400 }
             )
           }
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
         })
 
         return NextResponse.json(
-          { error: "You are too far from any registered QCC location to check in. Please move closer.", type: "out_of_range" },
+          { error: "You are too far from any registered QCC location to check in (within 50m required). Please move closer.", type: "out_of_range" },
           { status: 400 }
         )
       }

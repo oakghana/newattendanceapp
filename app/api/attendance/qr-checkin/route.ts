@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error: "Too far from location",
-            message: `You must be within 100 meters of your assigned location to check in. Please use manual location code entry.`,
+            message: `You must be within 50 meters of your assigned location to check in. Please use manual location code entry.`,
             distance: Math.round(distance),
             locationName: location.name,
           },

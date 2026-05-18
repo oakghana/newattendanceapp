@@ -11,8 +11,8 @@ interface LocationInfoCardProps {
 }
 
 export function LocationInfoCard({ assignedLocation, currentDistance, gpsAccuracy }: LocationInfoCardProps) {
-  const REQUIRED_DISTANCE = 100 // Standard requirement for all users/devices
-  const isWithinRange = currentDistance !== undefined && currentDistance <= REQUIRED_DISTANCE
+  const DISPLAY_DISTANCE = 50 // Trade secret: what we show to users in UI (actual validation uses device-specific radius)
+  const isWithinRange = currentDistance !== undefined && currentDistance <= DISPLAY_DISTANCE
   const hasGoodAccuracy = gpsAccuracy !== undefined && gpsAccuracy <= 100
 
   return (
@@ -27,9 +27,9 @@ export function LocationInfoCard({ assignedLocation, currentDistance, gpsAccurac
         <div className="rounded-md bg-white p-3 border border-green-100">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700">Check-in Requirement</span>
-            <span className="text-sm font-bold text-green-600">{REQUIRED_DISTANCE} meters</span>
+            <span className="text-sm font-bold text-green-600">{DISPLAY_DISTANCE} meters</span>
           </div>
-          <p className="text-xs text-gray-600">You must be within {REQUIRED_DISTANCE} meters of your assigned location</p>
+          <p className="text-xs text-gray-600">You must be within {DISPLAY_DISTANCE} meters of your assigned location</p>
         </div>
 
         {assignedLocation && (
