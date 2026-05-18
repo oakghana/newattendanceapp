@@ -187,26 +187,34 @@ export function PaymentAdviceClient() {
       const pageHeight = doc.internal.pageSize.getHeight()
       let yPos = 10
 
-      // ============ LETTERHEAD ============
+      // ============ LOGO AND LETTERHEAD ============
+      try {
+        // Add company logo on the left
+        const logoUrl = "/images/qcc-logo.jpg"
+        doc.addImage(logoUrl, "JPEG", 15, 8, 15, 15)
+      } catch (err) {
+        console.log("[v0] Logo not available, skipping")
+      }
+
       doc.setFontSize(11)
       doc.setFont(undefined, "bold")
-      doc.text("QUALITY CONTROL COMPANY LTD.", 20, yPos)
+      doc.text("QUALITY CONTROL COMPANY LTD.", 35, yPos)
       yPos += 6
 
       doc.setFontSize(10)
       doc.setFont(undefined, "normal")
-      doc.text("(COCOBOD)", 20, yPos)
+      doc.text("(COCOBOD)", 35, yPos)
       yPos += 5
-      doc.text("P. O. BOX M54", 20, yPos)
+      doc.text("P. O. BOX M54", 35, yPos)
       yPos += 5
-      doc.text("ACCRA", 20, yPos)
+      doc.text("ACCRA", 35, yPos)
 
       // Add "MEMORANDUM" on the right
       doc.setFontSize(12)
       doc.setFont(undefined, "bold")
       doc.text("MEMORANDUM", pageWidth - 50, 10)
 
-      yPos = 45
+      yPos = 35
 
       // ============ MEMO HEADER ============
       doc.setFontSize(10)
@@ -277,7 +285,7 @@ export function PaymentAdviceClient() {
       ])
 
       // Table parameters
-      const colWidths = [10, 35, 18, 30, 30, 22]
+      const colWidths = [8, 50, 16, 28, 28, 20]
       const rowHeight = 7
       const headerHeight = 8
 
@@ -304,9 +312,21 @@ export function PaymentAdviceClient() {
 
         xPos = 15
         row.forEach((cell, i) => {
-          doc.rect(xPos, yPos, colWidths[i], rowHeight)
-          doc.text(cell, xPos + 2, yPos + 4)
-          xPos += colWidths[i]
+          const colWidth = colWidths[i]
+          
+          // Handle text wrapping for NAME column (index 1)
+          if (i === 1) {
+            const wrappedText = doc.splitTextToSize(cell, colWidth - 3)
+            doc.rect(xPos, yPos, colWidth, rowHeight * wrappedText.length)
+            wrappedText.forEach((line: string, lineIdx: number) => {
+              doc.text(line, xPos + 2, yPos + 4 + lineIdx * 5)
+            })
+            yPos += (wrappedText.length - 1) * 3
+          } else {
+            doc.rect(xPos, yPos, colWidth, rowHeight)
+            doc.text(cell, xPos + 2, yPos + 4)
+          }
+          xPos += colWidth
         })
         yPos += rowHeight
       })
