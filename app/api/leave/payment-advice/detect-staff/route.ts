@@ -23,14 +23,6 @@ export async function POST(request: NextRequest) {
       .toISOString()
       .split("T")[0]
 
-    console.log("[v0] Detect Staff Query:", {
-      month,
-      monthStart,
-      monthEnd,
-      leaveTypeKey: "annual",
-      statuses: ["approved", "hr_approved", "hod_approved"],
-    })
-
     // Query staff on annual leave for this month
     // Status can be: approved, hr_approved, hod_approved (all are approved states)
     const { data: staffOnLeave, error } = await supabase
@@ -59,7 +51,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[v0] Staff Found:", staffOnLeave?.length || 0)
+    // Get user IDs and fetch user profiles separately
+    const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
+    
+    let userProfiles: any[] = []
+    if (userIds.length > 0) {
+      const { data: profiles, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("id, full_name, employee_id, department_name, position, role")
+        .in("id", userIds)
+
+      if (profileError) {
+        console.error("[v0] Error querying user profiles:", profileError)
+      } else {
+        userProfiles = profiles || []
+      }
+    }
+
+    // Create a map of user profiles for easy lookup
+    const profileMap = new Map(userProfiles.map((p: any) => [p.id, p]))
+
+    // Function to derive staff_category from role/position if NULL
+    const deriveStaffCategory = (record: any, profile: any): string => {
+      // If staff_category is already set, use it
+      if (record.staff_category) return record.staff_category
+
+      // Otherwise derive from role or position
+      if (profile?.role) {
+        const role = String(profile.role).toLowerCase()
+        if (role.includes("director") || role.includes("manager")) return "Manager"
+        if (role.includes("senior") || role.includes("snr")) return "Senior"
+      }
+
+      if (profile?.position) {
+        const position = String(profile.position).toLowerCase()
+        if (position.includes("director") || position.includes("manager")) return "Manager"
+        if (position.includes("senior") || position.includes("snr")) return "Senior"
+      }
+
+      // Default to Junior if no match
+      return "Junior"
+    }
 
     const formatted = (staffOnLeave || []).map((record: any) => {
       const profile = profileMap.get(record.user_id)
