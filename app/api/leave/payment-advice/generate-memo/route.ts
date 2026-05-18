@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { generateMemoTemplate, groupStaffByCategory } from "@/lib/payment-advice-service"
+import { generateProfessionalMemos, groupStaffByCategory } from "@/lib/payment-advice-service"
 
 export const dynamic = "force-dynamic"
 
@@ -14,14 +14,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate memo template
-    const memo = generateMemoTemplate(staffList, month)
+    // Generate professional memos per category
+    const memos = generateProfessionalMemos(staffList, month)
 
-    return NextResponse.json({ memo })
+    if (Object.keys(memos).length === 0) {
+      return NextResponse.json(
+        { error: "No staff found for memo generation" },
+        { status: 400 }
+      )
+    }
+
+    // Get category summary
+    const categories = groupStaffByCategory(staffList)
+    const summary = {
+      total: staffList.length,
+      manager: categories.Manager.length,
+      senior: categories.Senior.length,
+      junior: categories.Junior.length,
+    }
+
+    console.log("[v0] Generated professional memos:", { month, summary })
+
+    return NextResponse.json({
+      success: true,
+      memos,
+      summary,
+    })
   } catch (err) {
     console.error("[v0] Error generating memo:", err)
     return NextResponse.json(
-      { error: "Failed to generate memo" },
+      { error: "Failed to generate memo", details: String(err) },
       { status: 500 }
     )
   }

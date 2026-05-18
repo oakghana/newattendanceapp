@@ -86,12 +86,12 @@ export async function detectStaffOnLeaveForMonth(month: string): Promise<StaffOn
 }
 
 /**
- * Generate payment advice memo template
+ * Generate professional payment advice memos per category
  */
-export function generateMemoTemplate(
+export function generateProfessionalMemos(
   staffList: StaffOnLeave[],
   month: string
-): string {
+): Record<string, string> {
   const monthDate = new Date(`${month}-01`)
   const monthName = monthDate.toLocaleDateString("en-US", {
     month: "long",
@@ -99,44 +99,67 @@ export function generateMemoTemplate(
   })
 
   const categories = groupStaffByCategory(staffList)
+  const memos: Record<string, string> = {}
 
-  let memoText = `PAYMENT ADVICE MEMO\n\n`
-  memoText += `TO: Deputy Director, Finance\n`
-  memoText += `FROM: Human Resources Department\n`
-  memoText += `DATE: ${new Date().toLocaleDateString("en-US")}\n`
-  memoText += `RE: Annual Leave Payment Advice for ${monthName}\n\n`
-
-  memoText += `Dear Sir/Madam,\n\n`
-
-  memoText += `Please be informed that the following staff members are scheduled to be on approved annual leave during the month of ${monthName}.\n\n`
-
-  memoText += `STAFF SUMMARY BY CATEGORY:\n`
-  memoText += `================================\n`
-  memoText += `Managers: ${categories.Manager.length}\n`
-  memoText += `Senior Staff: ${categories.Senior.length}\n`
-  memoText += `Junior Staff: ${categories.Junior.length}\n`
-  memoText += `Total: ${staffList.length}\n\n`
-
-  memoText += `DETAILED STAFF LIST:\n`
-  memoText += `================================\n\n`
-
-  for (const [category, staff] of Object.entries(categories)) {
-    if ((staff as StaffOnLeave[]).length > 0) {
-      memoText += `${category} Staff (${(staff as StaffOnLeave[]).length}):\n`
-      memoText += `---\n`
-      ;(staff as StaffOnLeave[]).forEach((s, idx) => {
-        memoText += `${idx + 1}. ${s.full_name} (${s.employee_id}) - ${s.department_name}\n`
-        memoText += `   Position: ${s.position}\n`
-        memoText += `   Leave Period: ${s.start_date} to ${s.end_date}\n\n`
-      })
-    }
+  const categoryLabels: Record<string, string> = {
+    Manager: "MANAGEMENT STAFF",
+    Senior: "SNR. STAFF",
+    Junior: "JNR. STAFF",
   }
 
-  memoText += `Please process the leave allowances accordingly.\n\n`
-  memoText += `Yours faithfully,\n`
-  memoText += `Human Resources Department\n`
+  Object.entries(categories).forEach(([category, staff]) => {
+    if ((staff as StaffOnLeave[]).length === 0) return
 
-  return memoText
+    const categoryLabel = categoryLabels[category] || category
+    const today = new Date()
+    const dateStr = `${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}`
+
+    let memo = `QUALITY CONTROL COMPANY LTD.
+(COCOBOD)
+P. O. BOX M54
+ACCRA                                                    MEMORANDUM
+
+REF. NO: QCC/                         DATE: ${dateStr}
+
+TO:      DEPUTY DIRECTOR, FINANCE
+
+FROM:    DEPUTY HUMAN RESOURCE MANAGER
+
+SUBJECT: PAYMENT OF LEAVE ALLOWANCE (${categoryLabel}) – ${monthName.toUpperCase()}
+
+We wish to inform you that the under-listed ${categoryLabel} are scheduled to proceed on their annual vacation leave in ${monthName}.
+
+NO    NAME                          S/NO        POSITION                      DEPARTMENT              LEAVE DATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+
+    ;(staff as StaffOnLeave[]).forEach((s, idx) => {
+      const startDate = new Date(s.start_date)
+      const dateFormatted = `${startDate.getDate()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${startDate.getFullYear().toString().slice(2)}`
+      memo += `\n${String(idx + 1).padEnd(3)} ${s.full_name.padEnd(30)} ${s.employee_id.padEnd(11)} ${s.position.substring(0, 28).padEnd(30)} ${(s.department_name || "N/A").padEnd(23)} ${dateFormatted}`
+    })
+
+    memo += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+We, therefore, kindly request you to pay their leave allowances accordingly.
+
+We count on your co-operation.
+
+
+FRANK FREDUA-MENSAH (ESQ.)
+DEPUTY HUMAN RESOURCE MANAGER
+FOR: MANAGING DIRECTOR
+
+cc:    Managing Director
+       Deputy Director, HR
+       Audit Manager
+
+Prepared by: Human Resource Department
+Date: ${monthName}`
+
+    memos[category] = memo
+  })
+
+  return memos
 }
 
 /**
