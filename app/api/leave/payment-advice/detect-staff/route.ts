@@ -54,28 +54,41 @@ export async function POST(request: NextRequest) {
     // Get user IDs and fetch user profiles separately with department names
     const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
     
+    console.log("[v0] Fetching profiles for user IDs:", userIds)
+    
     let userProfiles: any[] = []
+    let departments: any[] = []
+    
     if (userIds.length > 0) {
+      // Fetch user profiles
       const { data: profiles, error: profileError } = await supabase
         .from("user_profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          employee_id,
-          position,
-          role,
-          departments:department_id(name)
-        `)
+        .select("id, first_name, last_name, employee_id, position, role, department_id")
         .in("id", userIds)
 
       if (profileError) {
         console.error("[v0] Error querying user profiles:", profileError)
       } else {
         userProfiles = profiles || []
+        console.log("[v0] Fetched user profiles:", userProfiles.length)
+      }
+
+      // Fetch all departments
+      const { data: depts, error: deptError } = await supabase
+        .from("departments")
+        .select("id, name")
+
+      if (deptError) {
+        console.error("[v0] Error querying departments:", deptError)
+      } else {
+        departments = depts || []
+        console.log("[v0] Fetched departments:", departments.length)
       }
     }
 
+    // Create a map of departments for easy lookup
+    const departmentMap = new Map(departments.map((d: any) => [d.id, d.name]))
+    
     // Create a map of user profiles for easy lookup
     const profileMap = new Map(userProfiles.map((p: any) => [p.id, p]))
 
@@ -108,9 +121,10 @@ export async function POST(request: NextRequest) {
       // Construct full name from first_name and last_name
       const fullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "Unknown"
       
-      // Handle department - it's an array from the join
-      const departmentData = Array.isArray(profile?.departments) ? profile.departments[0] : profile?.departments
-      const departmentName = departmentData?.name || "N/A"
+      // Get department name from the map
+      const departmentName = profile?.department_id ? (departmentMap.get(profile.department_id) || "N/A") : "N/A"
+
+      console.log("[v0] Formatted staff:", { id: record.id, fullName, employee_id: profile?.employee_id, departmentName })
 
       return {
         id: record.id,
