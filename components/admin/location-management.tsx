@@ -596,14 +596,14 @@ export function LocationManagement() {
                 <li>Click on the <strong>"Scan QR Code"</strong> button</li>
                 <li>Allow camera access when prompted</li>
                 <li>Point your camera at this QR code</li>
-                <li>The system will verify you're within <strong>100 meters</strong> of the location</li>
+                <li>The system will verify you're within <strong>50 meters</strong> of the location</li>
                 <li>If verified, you'll be checked in/out automatically</li>
               </ol>
             </div>
 
             <div class="note">
               <strong>⚠️ Important Note:</strong>
-              You must be within <strong>100 meters</strong> of ${selectedLocation.name} to use this QR code.
+              You must be within <strong>50 meters</strong> of ${selectedLocation.name} to use this QR code.
               Location services must be enabled on your device.
             </div>
 
@@ -1136,13 +1136,13 @@ export function LocationManagement() {
                     <li>Allow camera access when prompted</li>
                     <li>Point your camera at this QR code</li>
                     <li>
-                      The system will verify you're within <strong>100 meters</strong> of the location
+                      The system will verify you're within <strong>50 meters</strong> of the location
                     </li>
                     <li>If verified, you'll be checked in/out automatically</li>
                   </ol>
                   <div className="pt-2 border-t border-border">
                     <p className="text-xs text-muted-foreground">
-                      <strong>Note:</strong> You must be within 100 meters of {selectedLocation?.name} to use this QR
+                      <strong>Note:</strong> You must be within 50 meters of {selectedLocation?.name} to use this QR
                       code. Location services must be enabled on your device.
                     </p>
                   </div>

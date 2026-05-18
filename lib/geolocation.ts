@@ -164,7 +164,6 @@ export async function getBrowserTolerance(geoSettings?: GeoSettings): Promise<nu
   }
 
   // Updated Chrome, Firefox, Safari, and Opera to 2000 meters tolerance
-  // This is a trade secret and should not be displayed in the UI
   switch (browserInfo.name.toLowerCase()) {
     case "chrome":
       return 2000 // Increased tolerance for PC Chrome users
@@ -629,7 +628,7 @@ export function validateAttendanceLocation(
       deviceProximityBase = 2000 // Desktop PC
     }
   }
-  const displayDistance = 100 // What we show to users in UI messages (standard requirement)
+  const displayDistance = 50 // Display distance to users
 
   console.log("[v0] Check-in validation - Device Detection:", {
     deviceType: deviceInfo.device_type,
@@ -764,7 +763,7 @@ export function validateCheckoutLocation(
       deviceProximityBase = 1000 // Desktop PC
     }
   }
-  const displayDistance = 100 // What we show to users in UI messages (standard requirement, regardless of device)
+  const displayDistance = 50 // Display distance to users
 
 
   const nearest = findNearestLocation(userLocation, qccLocations)

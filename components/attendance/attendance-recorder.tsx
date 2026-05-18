@@ -1341,7 +1341,7 @@ export function AttendanceRecorder({
         } else {
           // Capture nearest location for failure logging even when out of range
           resolvedNearestLocation = effectiveValidation.nearestLocation ?? liveValidation.nearestLocation ?? null
-          throw new Error("You must be within 100m of a valid location to check in.")
+          throw new Error("You must be within 50m of a valid location to check in.")
         }
       } else {
         const sharedValidationAllowsCheckIn =

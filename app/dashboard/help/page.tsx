@@ -626,7 +626,7 @@ export default async function HelpPage() {
                 <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium">Check-in Requirements</p>
-                  <p className="text-muted-foreground">You must be within 100 meters of a QCC location to check in</p>
+                  <p className="text-muted-foreground">You must be within 50 meters of a QCC location to check in</p>
                 </div>
               </div>
 
