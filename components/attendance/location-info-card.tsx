@@ -11,7 +11,7 @@ interface LocationInfoCardProps {
 }
 
 export function LocationInfoCard({ assignedLocation, currentDistance, gpsAccuracy }: LocationInfoCardProps) {
-  const DISPLAY_DISTANCE = 50 // Trade secret: what we show to users in UI (actual validation uses device-specific radius)
+  const DISPLAY_DISTANCE = 50 // Distance requirement shown to users
   const isWithinRange = currentDistance !== undefined && currentDistance <= DISPLAY_DISTANCE
   const hasGoodAccuracy = gpsAccuracy !== undefined && gpsAccuracy <= 100
 

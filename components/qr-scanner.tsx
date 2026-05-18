@@ -432,7 +432,7 @@ export function QRScanner({ locations = [] }: { locations: Location[] }) {
         console.log("[v0] Distance to location:", distance, "meters")
 
         // Device-based proximity check: 100m for mobile/tablet, 2000m for desktop
-        // Always display "50 meters" to users (trade secret)
+        // Display "50 meters" to users as standard requirement
         const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
         const maxDistance = isMobileDevice ? 100 : 2000
         
