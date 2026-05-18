@@ -23,6 +23,14 @@ export async function POST(request: NextRequest) {
       .toISOString()
       .split("T")[0]
 
+    console.log("[v0] Query parameters:", {
+      month,
+      monthStart,
+      monthEnd,
+      leaveTypeKey: "annual",
+      statuses: ["approved", "hr_approved", "hod_approved"],
+    })
+
     // Query staff on annual leave for this month
     // Status can be: approved, hr_approved, hod_approved (all are approved states)
     const { data: staffOnLeave, error } = await supabase
@@ -144,10 +152,15 @@ export async function POST(request: NextRequest) {
       staff: formatted,
       count: formatted.length,
     })
-  } catch (err) {
+  } catch (err: any) {
     console.error("[v0] Error in detect-staff API:", err)
+    const errorMessage = err instanceof Error ? err.message : String(err)
     return NextResponse.json(
-      { error: "Internal server error", details: String(err) },
+      { 
+        error: "Internal server error", 
+        details: errorMessage,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      },
       { status: 500 }
     )
   }

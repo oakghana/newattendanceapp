@@ -85,9 +85,10 @@ export function PaymentAdviceClient() {
       }
     } catch (err: any) {
       console.error("[v0] Error detecting staff:", err)
+      const errorMessage = err instanceof Error ? err.message : (err?.message || "Failed to detect staff. Please try again.")
       toast({
         title: "Error",
-        description: err.message || "Failed to detect staff. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
