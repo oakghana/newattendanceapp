@@ -171,7 +171,7 @@ export function PaymentAdviceClient() {
     }
   }
 
-  // Download memo as professional PDF
+  // Download memo as professional PDF - traditional memo format
   const handleDownloadMemo = (category: string) => {
     const memo = memos[category]
     if (!memo) return
@@ -185,16 +185,215 @@ export function PaymentAdviceClient() {
 
       const pageWidth = doc.internal.pageSize.getWidth()
       const pageHeight = doc.internal.pageSize.getHeight()
-      let yPos = 10
+      let yPos = 15
 
-      // ============ LOGO AND LETTERHEAD ============
+      // ============ HEADER - TWO COLUMN LAYOUT ============
+      // Left column: Company details
+      doc.setFontSize(10)
+      doc.setFont(undefined, "bold")
+      doc.setTextColor(0, 0, 0)
+      doc.text("QUALITY CONTROL COMPANY LTD.", 20, yPos)
+      yPos += 5
+      doc.setFont(undefined, "normal")
+      doc.text("(COCOBOD)", 20, yPos)
+      yPos += 4
+      doc.text("P. O. BOX M54", 20, yPos)
+      yPos += 4
+      doc.text("ACCRA", 20, yPos)
+
+      // Right column: MEMORANDUM title and logo
+      doc.setFontSize(11)
+      doc.setFont(undefined, "bold")
+      doc.text("MEMORANDUM", pageWidth - 50, 15)
+      
+      // Add logo in top right
       try {
-        // Add company logo - centered, larger and more prominent
         const logoUrl = "/images/qcc-logo.png"
-        doc.addImage(logoUrl, "PNG", pageWidth / 2 - 12, 8, 24, 24)
+        doc.addImage(logoUrl, "PNG", pageWidth - 32, 18, 20, 20)
       } catch (err) {
         console.log("[v0] Logo not available, skipping")
       }
+
+      // Vertical separator line
+      doc.setDrawColor(0, 0, 0)
+      doc.setLineWidth(0.5)
+      doc.line(pageWidth / 2, 12, pageWidth / 2, 40)
+
+      // Horizontal line below header
+      yPos = 42
+      doc.line(20, yPos, pageWidth - 20, yPos)
+      yPos += 8
+
+      // ============ MEMO FIELDS ============
+      doc.setFontSize(10)
+      doc.setFont(undefined, "normal")
+
+      // Extract month and year
+      const [year, month] = selectedMonth.split("-")
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+      ]
+      const monthName = monthNames[parseInt(month) - 1]
+      const categoryLabel = category === "Manager" ? "MANAGEMENT" : category === "Senior" ? "SNR." : "JNR."
+
+      // REF. NO and DATE
+      doc.setFont(undefined, "normal")
+      doc.text("REF. NO: QCC/", 20, yPos)
+      doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
+      yPos += 8
+
+      // TO field
+      doc.setFont(undefined, "bold")
+      doc.text("TO:", 20, yPos)
+      doc.setFont(undefined, "normal")
+      doc.text("DEPUTY DIRECTOR, FINANCE", 35, yPos)
+      yPos += 6
+
+      // FROM field
+      doc.setFont(undefined, "bold")
+      doc.text("FROM:", 20, yPos)
+      doc.setFont(undefined, "normal")
+      doc.text("DEPUTY HUMAN RESOURCE MANAGER", 35, yPos)
+      yPos += 6
+
+      // SUBJECT field
+      doc.setFont(undefined, "bold")
+      doc.text("SUBJECT:", 20, yPos)
+      doc.setFont(undefined, "normal")
+      const subjectText = `PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`
+      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 55)
+      doc.text(splitSubject[0], 35, yPos)
+      if (splitSubject.length > 1) {
+        yPos += 5
+        doc.text(splitSubject[1], 35, yPos)
+      }
+      yPos += 10
+
+      // ============ BODY TEXT ============
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(10)
+      const bodyText = `We wish to inform you that the under-listed ${categoryLabel.toLowerCase()} staff are scheduled to proceed on their annual vacation leave in ${monthName} ${year}.`
+      const splitBody = doc.splitTextToSize(bodyText, pageWidth - 40)
+      splitBody.forEach((line: string) => {
+        doc.text(line, 20, yPos)
+        yPos += 5
+      })
+      yPos += 6
+
+      // ============ STAFF TABLE ============
+      const staffData = staffByCategory[category] || []
+      const tableHeaders = ["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]
+      const tableData = staffData.map((staff, index) => [
+        (index + 1).toString(),
+        staff.full_name || "Unknown",
+        staff.employee_id || "N/A",
+        staff.position || "N/A",
+        staff.department_name || "N/A",
+        staff.start_date ? format(new Date(staff.start_date), "dd-MMM-yy") : "N/A",
+      ])
+
+      // Table parameters - simple clean layout
+      const colWidths = [8, 45, 18, 35, 35, 24]
+      const rowHeight = 6
+      const headerHeight = 8
+      const startX = 15
+
+      // Draw table header - simple black borders, no fill
+      doc.setFont(undefined, "bold")
+      doc.setFontSize(9)
+      doc.setTextColor(0, 0, 0)
+      doc.setDrawColor(0, 0, 0)
+      doc.setLineWidth(0.5)
+      
+      let xPos = startX
+      tableHeaders.forEach((header, i) => {
+        doc.rect(xPos, yPos, colWidths[i], headerHeight)
+        doc.text(header, xPos + 2, yPos + 5)
+        xPos += colWidths[i]
+      })
+      yPos += headerHeight
+
+      // Draw table data - simple borders
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(8)
+      doc.setTextColor(0, 0, 0)
+      tableData.forEach((row) => {
+        // Check if we need a new page
+        if (yPos + rowHeight > pageHeight - 30) {
+          doc.addPage()
+          yPos = 20
+        }
+
+        xPos = startX
+        row.forEach((cell, i) => {
+          const colWidth = colWidths[i]
+          
+          // Handle text wrapping for NAME column (index 1)
+          if (i === 1) {
+            const wrappedText = doc.splitTextToSize(cell, colWidth - 3)
+            const cellHeight = rowHeight * wrappedText.length
+            doc.setDrawColor(0, 0, 0)
+            doc.setLineWidth(0.3)
+            doc.rect(xPos, yPos, colWidth, cellHeight)
+            doc.setTextColor(0, 0, 0)
+            wrappedText.forEach((line: string, lineIdx: number) => {
+              doc.text(line, xPos + 2, yPos + 4 + lineIdx * 4)
+            })
+            yPos += (wrappedText.length - 1) * 2
+          } else {
+            doc.setDrawColor(0, 0, 0)
+            doc.setLineWidth(0.3)
+            doc.rect(xPos, yPos, colWidth, rowHeight)
+            doc.setTextColor(0, 0, 0)
+            doc.text(cell, xPos + 2, yPos + 4)
+          }
+          xPos += colWidth
+        })
+        yPos += rowHeight
+      })
+
+      yPos += 8
+
+      // ============ CLOSING TEXT ============
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(10)
+      doc.setTextColor(0, 0, 0)
+      doc.text("We, therefore, kindly request you to pay their leave allowances accordingly.", 20, yPos)
+      yPos += 6
+      doc.text("We count on your co-operation.", 20, yPos)
+      yPos += 12
+
+      // ============ SIGNATURE ============
+      doc.setFont(undefined, "bold")
+      doc.setFontSize(10)
+      doc.text("FRANK FREDUA-MENSAH (ESQ.)", 20, yPos)
+      yPos += 10
+
+      // ============ CC LIST ============
+      doc.setFont(undefined, "bold")
+      doc.setFontSize(9)
+      doc.text("cc:", 20, yPos)
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(9)
+      
+      const ccList = ["Managing Director", "Deputy Director, HR", "Audit Manager"]
+      ccList.forEach((cc) => {
+        yPos += 4
+        doc.text(cc, 25, yPos)
+      })
+
+      // Save the PDF
+      doc.save(`payment-advice-${category}-${selectedMonth}.pdf`)
+    } catch (err) {
+      console.error("[v0] Error generating PDF:", err)
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
 
       // Add decorative line below logo
       doc.setDrawColor(139, 109, 50) // Brown/gold color
