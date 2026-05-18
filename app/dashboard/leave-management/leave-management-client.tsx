@@ -609,6 +609,16 @@ export function LeaveManagementClient({
   const isLeaveOfficeRole = normalizedRole === "leave_office"
   const isPaymentAdviceVisible = ["admin", "hr_leave_office", "hr_executive"].includes(normalizedRole)
 
+  // [v0] Debug: Log role information
+  useEffect(() => {
+    console.log("[v0] Leave Management - Role Debug:", {
+      userRole,
+      normalizedRole,
+      isManagerView,
+      isPaymentAdviceVisible,
+    })
+  }, [userRole, normalizedRole])
+
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
     try {
