@@ -42,14 +42,7 @@ export async function POST(request: NextRequest) {
         preferred_start_date,
         preferred_end_date,
         leave_type_key,
-        status,
-        user_profiles!inner(
-          id,
-          full_name,
-          employee_id,
-          department_name,
-          position
-        )
+        status
       `
       )
       .eq("leave_type_key", "annual")
@@ -65,19 +58,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get user IDs and fetch user profiles separately
+    const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
+    
+    let userProfiles: any[] = []
+    if (userIds.length > 0) {
+      const { data: profiles, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("id, full_name, employee_id, department_name, position")
+        .in("id", userIds)
+
+      if (profileError) {
+        console.error("[v0] Error querying user profiles:", profileError)
+      } else {
+        userProfiles = profiles || []
+      }
+    }
+
+    // Create a map of user profiles for easy lookup
+    const profileMap = new Map(userProfiles.map((p: any) => [p.id, p]))
+
+    if (error) {
+      console.error("[v0] Error querying staff:", error)
+      return NextResponse.json(
+        { error: "Failed to query staff", details: error.message },
+        { status: 500 }
+      )
+    }
+
     console.log("[v0] Staff Found:", staffOnLeave?.length || 0)
 
-    const formatted = (staffOnLeave || []).map((record: any) => ({
-      id: record.id,
-      full_name: record.user_profiles?.full_name || "Unknown",
-      employee_id: record.user_profiles?.employee_id || "N/A",
-      department_name: record.user_profiles?.department_name || "N/A",
-      position: record.user_profiles?.position || "N/A",
-      staff_category: record.staff_category || "Junior",
-      start_date: record.preferred_start_date,
-      end_date: record.preferred_end_date,
-      leave_type: record.leave_type_key,
-    }))
+    const formatted = (staffOnLeave || []).map((record: any) => {
+      const profile = profileMap.get(record.user_id)
+      return {
+        id: record.id,
+        full_name: profile?.full_name || "Unknown",
+        employee_id: profile?.employee_id || "N/A",
+        department_name: profile?.department_name || "N/A",
+        position: profile?.position || "N/A",
+        staff_category: record.staff_category || "Junior",
+        start_date: record.preferred_start_date,
+        end_date: record.preferred_end_date,
+        leave_type: record.leave_type_key,
+      }
+    })
 
     return NextResponse.json({
       success: true,
