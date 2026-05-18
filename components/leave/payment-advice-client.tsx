@@ -260,19 +260,21 @@ export function PaymentAdviceClient() {
       doc.text("DEPUTY HUMAN RESOURCE MANAGER", 32, yPos)
       yPos += 10
 
-      // Subject line with background
+      // Subject line - plain text (no background)
       doc.setFont(undefined, "bold")
       doc.setTextColor(139, 109, 50)
       doc.text("SUBJECT:", 20, yPos)
       const categoryLabel = category === "Manager" ? "MANAGEMENT" : category === "Senior" ? "SNR." : "JNR."
       doc.setTextColor(0, 0, 0)
+      doc.setFont(undefined, "normal")
       const subjectText = `PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`
-      const subjectWidth = doc.getStringUnitWidth(subjectText) * 10 / doc.internal.scaleFactor
-      doc.rect(32, yPos - 4, Math.min(subjectWidth + 4, pageWidth - 52), 7, "F")
-      doc.setTextColor(255, 255, 255) // White text on background
-      doc.text(subjectText, 34, yPos, { maxWidth: pageWidth - 54 })
+      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 52)
+      splitSubject.forEach((line: string) => {
+        doc.text(line, 32, yPos)
+        yPos += 5
+      })
       
-      yPos += 12
+      yPos += 8
 
       // ============ BODY TEXT ============
       doc.setFont(undefined, "normal")
@@ -309,19 +311,15 @@ export function PaymentAdviceClient() {
       doc.setFontSize(9)
       doc.setTextColor(255, 255, 255)
       doc.setFillColor(139, 109, 50) // Brown/gold background
-      let xPos = startX
-      tableHeaders.forEach((header, i) => {
-        doc.rect(xPos, yPos, colWidths[i], headerHeight, "F")
-        doc.text(header, xPos + 2, yPos + 5)
-        xPos += colWidths[i]
-      })
-      
-      // Add border to header
       doc.setDrawColor(80, 60, 30)
       doc.setLineWidth(0.5)
-      xPos = startX
+      let xPos = startX
       tableHeaders.forEach((header, i) => {
-        doc.rect(xPos, yPos, colWidths[i], headerHeight)
+        // Draw filled rectangle
+        doc.rect(xPos, yPos, colWidths[i], headerHeight, "FD")
+        // Draw text with white color
+        doc.setTextColor(255, 255, 255)
+        doc.text(header, xPos + 2, yPos + 5)
         xPos += colWidths[i]
       })
       
@@ -434,15 +432,11 @@ export function PaymentAdviceClient() {
         "Audit Manager",
       ]
       
-      let ccIndex = 0
-      ccList.forEach((cc, index) => {
-        if (index === 0) {
-          doc.text(cc, 28, yPos)
-        } else if (index === 2) {
-          doc.text(cc, 28, yPos + 5)
-        } else {
-          doc.text(cc, 28, yPos + (index % 2 === 1 ? 5 : 10))
-        }
+      // Display CC list vertically with proper spacing
+      let ccYPos = yPos + 4
+      ccList.forEach((cc) => {
+        doc.text(cc, 28, ccYPos)
+        ccYPos += 5
       })
 
       // Save the PDF
