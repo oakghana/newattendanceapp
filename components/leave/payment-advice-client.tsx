@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check } from "lucide-react"
 import { jsPDF } from "jspdf"
@@ -24,6 +24,13 @@ interface StaffOnLeave {
   leave_type: string
 }
 
+interface HRExecutive {
+  id: string
+  full_name: string
+  position: string
+  email: string
+}
+
 export function PaymentAdviceClient() {
   const { toast } = useToast()
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -33,6 +40,33 @@ export function PaymentAdviceClient() {
   const [memoSummary, setMemoSummary] = useState<any>(null)
   const [selectedMemoCategory, setSelectedMemoCategory] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hrExecutives, setHrExecutives] = useState<HRExecutive[]>([])
+  const [selectedSigner, setSelectedSigner] = useState<HRExecutive | null>(null)
+  const [loadingHrExecutives, setLoadingHrExecutives] = useState(false)
+
+  // Load HR executives on mount
+  useEffect(() => {
+    const fetchHrExecutives = async () => {
+      setLoadingHrExecutives(true)
+      try {
+        const response = await fetch("/api/hr/executives")
+        if (response.ok) {
+          const data = await response.json()
+          setHrExecutives(data.executives || [])
+          // Set default signer as first HR executive
+          if (data.executives && data.executives.length > 0) {
+            setSelectedSigner(data.executives[0])
+          }
+        }
+      } catch (err) {
+        console.error("[v0] Error fetching HR executives:", err)
+      } finally {
+        setLoadingHrExecutives(false)
+      }
+    }
+    
+    fetchHrExecutives()
+  }, [])
 
   // Group staff by category
   const staffByCategory = useMemo(() => {
@@ -364,23 +398,50 @@ export function PaymentAdviceClient() {
       doc.text("We count on your co-operation.", 20, yPos)
       yPos += 12
 
-      // ============ SIGNATURE ============
+      // ============ SIGNATURE BLOCK WITH PROPER FORMATTING ============
+      yPos += 4
+      
+      // Signature line (for handwritten signature)
+      doc.setDrawColor(0, 0, 0)
+      doc.setLineWidth(0.5)
+      doc.line(20, yPos, 50, yPos)
+      yPos += 10
+      
+      // Signer name
       doc.setFont(undefined, "bold")
       doc.setFontSize(10)
-      doc.text("FRANK FREDUA-MENSAH (ESQ.)", 20, yPos)
+      doc.setTextColor(0, 0, 0)
+      const signerName = selectedSigner ? selectedSigner.full_name.toUpperCase() : "HR EXECUTIVE"
+      doc.text(signerName, 20, yPos)
+      yPos += 6
+      
+      // Signer title
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(9)
+      const signerTitle = selectedSigner ? selectedSigner.position : "DEPUTY HUMAN RESOURCE MANAGER"
+      doc.text(signerTitle, 20, yPos)
       yPos += 10
 
       // ============ CC LIST ============
+      // Add horizontal line separator
+      doc.setDrawColor(0, 0, 0)
+      doc.setLineWidth(0.3)
+      doc.line(20, yPos, pageWidth - 20, yPos)
+      yPos += 6
+      
       doc.setFont(undefined, "bold")
       doc.setFontSize(9)
+      doc.setTextColor(0, 0, 0)
       doc.text("cc:", 20, yPos)
+      yPos += 5
+      
       doc.setFont(undefined, "normal")
-      doc.setFontSize(9)
+      doc.setFontSize(8)
       
       const ccList = ["Managing Director", "Deputy Director, HR", "Audit Manager"]
       ccList.forEach((cc) => {
-        yPos += 4
         doc.text(cc, 25, yPos)
+        yPos += 4
       })
 
       // Save the PDF
@@ -397,18 +458,18 @@ export function PaymentAdviceClient() {
 
   return (
     <div className="space-y-6">
-      {/* Month Selection */}
+      {/* Month Selection & HR Signer */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-blue-600" />
-            Select Month for Payment Advice
+            Select Month & Signer for Payment Advice
           </CardTitle>
           <CardDescription>Generate professional payment advice memos for annual leave</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
               <Label htmlFor="month-select" className="mb-2 block font-medium">
                 Month & Year
               </Label>
@@ -420,9 +481,44 @@ export function PaymentAdviceClient() {
                 className="text-base"
               />
             </div>
+            <div>
+              <Label htmlFor="signer-select" className="mb-2 block font-medium">
+                HR Executive (Signer)
+              </Label>
+              <select
+                id="signer-select"
+                value={selectedSigner?.id || ""}
+                onChange={(e) => {
+                  const signer = hrExecutives.find((exec) => exec.id === e.target.value)
+                  if (signer) setSelectedSigner(signer)
+                }}
+                disabled={loadingHrExecutives || hrExecutives.length === 0}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
+              >
+                <option value="">
+                  {loadingHrExecutives ? "Loading..." : "Select HR Executive"}
+                </option>
+                {hrExecutives.map((exec) => (
+                  <option key={exec.id} value={exec.id}>
+                    {exec.full_name} ({exec.position})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex gap-4">
+            <div className="flex-1">
+              {selectedSigner && (
+                <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                  <div className="font-medium text-gray-900">{selectedSigner.full_name}</div>
+                  <div className="text-xs text-gray-600">{selectedSigner.position}</div>
+                </div>
+              )}
+            </div>
             <Button 
               onClick={handleDetectStaff} 
-              disabled={isLoading} 
+              disabled={isLoading || !selectedSigner} 
               className="gap-2 bg-green-600 hover:bg-green-700"
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
