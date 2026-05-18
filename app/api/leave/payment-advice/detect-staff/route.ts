@@ -51,14 +51,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user IDs and fetch user profiles separately
+    // Get user IDs and fetch user profiles separately with department names
     const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
     
     let userProfiles: any[] = []
     if (userIds.length > 0) {
       const { data: profiles, error: profileError } = await supabase
         .from("user_profiles")
-        .select("id, full_name, employee_id, department_name, position, role")
+        .select(`
+          id,
+          first_name,
+          last_name,
+          employee_id,
+          position,
+          role,
+          departments:department_id(name)
+        `)
         .in("id", userIds)
 
       if (profileError) {
@@ -96,12 +104,19 @@ export async function POST(request: NextRequest) {
     const formatted = (staffOnLeave || []).map((record: any) => {
       const profile = profileMap.get(record.user_id)
       const staffCategory = deriveStaffCategory(record, profile)
+      
+      // Construct full name from first_name and last_name
+      const fullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "Unknown"
+      
+      // Handle department - it's an array from the join
+      const departmentData = Array.isArray(profile?.departments) ? profile.departments[0] : profile?.departments
+      const departmentName = departmentData?.name || "N/A"
 
       return {
         id: record.id,
-        full_name: profile?.full_name || "Unknown",
+        full_name: fullName,
         employee_id: profile?.employee_id || "N/A",
-        department_name: profile?.department_name || "N/A",
+        department_name: departmentName,
         position: profile?.position || "N/A",
         staff_category: staffCategory,
         start_date: record.preferred_start_date,
