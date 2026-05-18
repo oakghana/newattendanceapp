@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check } from "lucide-react"
+import { jsPDF } from "jspdf"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -169,18 +170,62 @@ export function PaymentAdviceClient() {
     }
   }
 
-  // Download memo
+  // Download memo as PDF
   const handleDownloadMemo = (category: string) => {
     const memo = memos[category]
     if (!memo) return
 
-    const element = document.createElement("a")
-    const file = new Blob([memo], { type: "text/plain" })
-    element.href = URL.createObjectURL(file)
-    element.download = `payment-advice-${category}-${selectedMonth}.txt`
-    document.body.appendChild(element)
-    element.click()
-    document.body.removeChild(element)
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      })
+
+      // Add title
+      doc.setFontSize(14)
+      doc.setFont(undefined, "bold")
+      doc.text("PAYMENT OF LEAVE ALLOWANCE", 20, 20)
+
+      // Add metadata
+      doc.setFontSize(10)
+      doc.setFont(undefined, "normal")
+      doc.text(`Category: ${category}`, 20, 30)
+      doc.text(`Month: ${selectedMonth}`, 20, 36)
+      doc.text(`Generated: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 20, 42)
+
+      // Add separator line
+      doc.line(20, 48, 190, 48)
+
+      // Add memo content with text wrapping
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const maxWidth = pageWidth - 40
+      const splitText = doc.splitTextToSize(memo, maxWidth)
+
+      let yPosition = 55
+      const lineHeight = 5
+      const pageBreakThreshold = pageHeight - 20
+
+      splitText.forEach((line: string) => {
+        if (yPosition > pageBreakThreshold) {
+          doc.addPage()
+          yPosition = 20
+        }
+        doc.text(line, 20, yPosition)
+        yPosition += lineHeight
+      })
+
+      // Save the PDF
+      doc.save(`payment-advice-${category}-${selectedMonth}.pdf`)
+    } catch (err) {
+      console.error("[v0] Error generating PDF:", err)
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
