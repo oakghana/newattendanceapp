@@ -260,17 +260,20 @@ export function PaymentAdviceClient() {
       doc.text("DEPUTY HUMAN RESOURCE MANAGER", 32, yPos)
       yPos += 10
 
-      // Subject line - plain text (no background)
+      // Subject line - label on separate line from text
       doc.setFont(undefined, "bold")
+      doc.setFontSize(10)
       doc.setTextColor(139, 109, 50)
       doc.text("SUBJECT:", 20, yPos)
+      yPos += 6
+      
       const categoryLabel = category === "Manager" ? "MANAGEMENT" : category === "Senior" ? "SNR." : "JNR."
       doc.setTextColor(0, 0, 0)
       doc.setFont(undefined, "normal")
       const subjectText = `PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`
-      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 52)
+      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 40)
       splitSubject.forEach((line: string) => {
-        doc.text(line, 32, yPos)
+        doc.text(line, 20, yPos)
         yPos += 5
       })
       
@@ -300,25 +303,26 @@ export function PaymentAdviceClient() {
         staff.start_date ? format(new Date(staff.start_date), "dd-MM-yy") : "N/A",
       ])
 
-      // Table parameters
-      const colWidths = [8, 50, 16, 28, 28, 20]
+      // Table parameters - adjusted for better header visibility
+      const colWidths = [8, 48, 18, 28, 28, 22]
       const rowHeight = 7
       const headerHeight = 8
       const startX = 15
 
       // Draw table header with modern styling
       doc.setFont(undefined, "bold")
-      doc.setFontSize(9)
-      doc.setTextColor(255, 255, 255)
-      doc.setFillColor(139, 109, 50) // Brown/gold background
-      doc.setDrawColor(80, 60, 30)
-      doc.setLineWidth(0.5)
+      doc.setFontSize(8)
       let xPos = startX
       tableHeaders.forEach((header, i) => {
         // Draw filled rectangle
+        doc.setFillColor(139, 109, 50) // Brown/gold background
+        doc.setDrawColor(80, 60, 30)
+        doc.setLineWidth(0.5)
         doc.rect(xPos, yPos, colWidths[i], headerHeight, "FD")
+        
         // Draw text with white color
         doc.setTextColor(255, 255, 255)
+        doc.setFont(undefined, "bold")
         doc.text(header, xPos + 2, yPos + 5)
         xPos += colWidths[i]
       })
