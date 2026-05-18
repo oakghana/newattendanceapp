@@ -39,7 +39,7 @@ function exportToExcel(month: string, staffList: any[]) {
 
   const buffer = Buffer.from(csv, "utf-8")
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -73,7 +73,7 @@ DETAILED LIST:
 
   const buffer = Buffer.from(pdfContent, "utf-8")
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "text/plain",
