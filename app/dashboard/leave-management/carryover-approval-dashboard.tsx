@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { createClient } from '@/lib/supabase/client'
 
 interface CarryoverRequest {
   id: string
