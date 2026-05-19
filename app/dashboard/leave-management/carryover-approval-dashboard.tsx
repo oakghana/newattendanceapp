@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { createClient } from '@/lib/supabase/client'
 
 interface CarryoverRequest {
   id: string
@@ -36,7 +37,20 @@ export function CarryoverApprovalDashboard() {
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('ALL')
   const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, totalDays: 0 })
+  const [currentUserId, setCurrentUserId] = useState<string>('')
   const { toast } = useToast()
+
+  useEffect(() => {
+    // Get current user
+    const getCurrentUser = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setCurrentUserId(user.id)
+      }
+    }
+    getCurrentUser()
+  }, [])
 
   useEffect(() => {
     fetchPendingCarryovers()
@@ -65,32 +79,50 @@ export function CarryoverApprovalDashboard() {
   }
 
   const handleApprove = async (request: CarryoverRequest) => {
+    if (!currentUserId) {
+      toast({
+        title: 'Error',
+        description: 'User not authenticated',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setApprovingId(request.id)
     try {
+      const approvalPayload = {
+        carryover_request_id: request.id,
+        approved_days: Math.min(request.requested_carryover_days, request.max_carryover_allowed),
+        approval_reason: 'POLICY_COMPLIANT',
+        reviewed_by: currentUserId,
+      }
+
+      console.log('[v0] Sending approval payload:', approvalPayload)
+
       const res = await fetch('/api/leave/carryover/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          carryover_request_id: request.id,
-          approved_days: Math.min(request.requested_carryover_days, request.max_carryover_allowed),
-          approval_reason: 'POLICY_COMPLIANT',
-          reviewed_by: 'current-user-id', // Replace with actual user ID
-        }),
+        body: JSON.stringify(approvalPayload),
       })
 
-      if (!res.ok) throw new Error('Failed to approve')
+      const responseData = await res.json()
+
+      if (!res.ok) {
+        console.error('[v0] API error:', responseData)
+        throw new Error(responseData.error || 'Failed to approve')
+      }
 
       toast({
         title: 'Approved',
-        description: `${request.staff.first_name} carryover approved`,
+        description: `${request.staff.first_name} carryover approved for ${approvalPayload.approved_days} days`,
       })
 
       await fetchPendingCarryovers()
-    } catch (error) {
+    } catch (error: any) {
       console.error('[v0] Approve error:', error)
       toast({
         title: 'Error',
-        description: 'Failed to approve carryover',
+        description: error.message || 'Failed to approve carryover',
         variant: 'destructive',
       })
     } finally {
@@ -99,19 +131,37 @@ export function CarryoverApprovalDashboard() {
   }
 
   const handleReject = async (request: CarryoverRequest) => {
+    if (!currentUserId) {
+      toast({
+        title: 'Error',
+        description: 'User not authenticated',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setRejectingId(request.id)
     try {
+      const rejectPayload = {
+        carryover_request_id: request.id,
+        forfeiture_reason: 'POLICY_LIMIT_EXCEEDED',
+        reviewed_by: currentUserId,
+      }
+
+      console.log('[v0] Sending reject payload:', rejectPayload)
+
       const res = await fetch('/api/leave/carryover/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          carryover_request_id: request.id,
-          forfeiture_reason: 'POLICY_LIMIT_EXCEEDED',
-          reviewed_by: 'current-user-id', // Replace with actual user ID
-        }),
+        body: JSON.stringify(rejectPayload),
       })
 
-      if (!res.ok) throw new Error('Failed to reject')
+      const responseData = await res.json()
+
+      if (!res.ok) {
+        console.error('[v0] API error:', responseData)
+        throw new Error(responseData.error || 'Failed to reject')
+      }
 
       toast({
         title: 'Rejected',
@@ -119,11 +169,11 @@ export function CarryoverApprovalDashboard() {
       })
 
       await fetchPendingCarryovers()
-    } catch (error) {
+    } catch (error: any) {
       console.error('[v0] Reject error:', error)
       toast({
         title: 'Error',
-        description: 'Failed to reject carryover',
+        description: error.message || 'Failed to reject carryover',
         variant: 'destructive',
       })
     } finally {

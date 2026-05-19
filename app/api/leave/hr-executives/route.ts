@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const supabase = await createAdminClient()
 
-    // Fetch HR executives
+    // Fetch HR executives with their position information
     const { data: executives, error } = await supabase
       .from("user_profiles")
       .select(`
@@ -23,6 +23,7 @@ export async function GET() {
         employee_id,
         department_id,
         is_active,
+        position,
         departments (
           name
         )
@@ -42,13 +43,13 @@ export async function GET() {
       return NextResponse.json({ executives: [], grouped: { manager_hr: [], director_hr: [] } })
     }
 
-    // Format executives for dropdown
+    // Format executives for dropdown - use position field instead of role_label
     const formattedExecutives = (executives || []).map((exec: any) => ({
       id: exec.id,
       name: `${exec.first_name || ""} ${exec.last_name || ""}`.trim() || exec.email,
       email: exec.email,
       role: exec.role,
-      role_label: exec.role === "manager_hr" ? "Manager HR" : "Director HR",
+      position: exec.position || (exec.role === "manager_hr" ? "MANAGER HR" : "DIRECTOR HR"),
       employee_id: exec.employee_id,
       department: exec.departments?.name || null,
     }))

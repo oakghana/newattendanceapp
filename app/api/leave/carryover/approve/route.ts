@@ -21,21 +21,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the carryover request
+    // Get the carryover record from outstanding_leave_balances (not carryover_approval_requests)
     const { data: carryoverRequest, error: fetchError } = await supabase
-      .from('carryover_approval_requests')
+      .from('outstanding_leave_balances')
       .select('*')
       .eq('id', carryover_request_id)
       .single()
 
     if (fetchError || !carryoverRequest) {
+      console.error('[v0] Carryover record not found:', { carryover_request_id, fetchError })
       return NextResponse.json(
         { error: 'Carryover request not found' },
         { status: 404 }
       )
     }
 
-    const { staff_id, leave_year, leave_type_key, balance_available } = carryoverRequest
+    const staff_id = carryoverRequest.user_id
+    const leave_year = carryoverRequest.leave_year_period
+    const leave_type_key = 'annual'
+    const balance_available = carryoverRequest.opening_balance || 0
 
     // Create CARRYOVER_APPROVED transaction
     const { error: transactionError } = await supabase
@@ -63,15 +67,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update carryover request status
+    // Update outstanding_leave_balances record to mark as approved and set the approved days
     const { data: updatedRequest, error: updateError } = await supabase
-      .from('carryover_approval_requests')
+      .from('outstanding_leave_balances')
       .update({
+        carryover_to_next_year: approved_days,
         status: 'APPROVED',
-        reviewed_by,
-        reviewed_at: new Date().toISOString(),
-        approval_reason,
-        approval_note: notes,
+        notes: `Approved: ${approved_days} days. Reason: ${approval_reason || 'Not specified'}. ${notes || ''}`,
+        approved_by: reviewed_by,
+        approved_at: new Date().toISOString(),
       })
       .eq('id', carryover_request_id)
       .select()
