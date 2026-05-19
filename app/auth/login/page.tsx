@@ -281,39 +281,7 @@ export default function LoginPage() {
           return
         }
 
-        const deviceCheck = await deviceCheckResponse.json()
-
-        // Device binding check is disabled - allow all users to login
-        // if (!deviceCheck.allowed) {
-        //   logLoginActivity(data.user.id, "login_blocked_device_violation", false, "password")
-        //   await supabase.auth.signOut()
-        //   showError(
-        //     deviceCheck.message || "This device is registered to another user. Your supervisor has been notified.",
-        //     "Device Security Violation",
-        //     { duration: 20000 },
-        //   )
-        //   return
-        // }
-
-        // Skip device sharing warnings - enforcement disabled
-        // if (deviceCheck.warning && deviceCheck.message) {
-        //   persistPendingDeviceSharingWarning(deviceCheck.message)
-        //   showWarning(deviceCheck.message, "Shared Device Detected", { duration: 20000 })
-        // }
-
-        // Skip concurrent session warnings - enforcement disabled
-        // if (deviceCheck.concurrent) {
-        //   try {
-        //     const first = Array.isArray(deviceCheck.sessions) && deviceCheck.sessions.length > 0 ? deviceCheck.sessions[0] : null
-        //     const deviceLabel = first ? `${first.device_name || first.device_type || first.device_id} (last seen ${new Date(first.last_activity).toLocaleString()})` : 'another device'
-        //     showWarning(
-        //       `Another active session was detected on ${deviceLabel}. Proceeding will allow you to sign in; if this wasn't you, contact IT immediately.`,
-        //       'Concurrent Session Detected',
-        //     )
-        //   } catch (warnErr) {
-        //     showWarning('Another active session was detected on this account. Proceeding will allow you to sign in.', 'Concurrent Session Detected')
-        //   }
-        // }
+        // Device binding check disabled - users can login freely without device restrictions
 
         // Fire-and-forget login log — don't await so it doesn't block redirect
         logLoginActivity(data.user.id, "login_success", true, "password")
