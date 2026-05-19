@@ -21,19 +21,22 @@ interface CarryoverRequest {
   approval_note: string
   staff: {
     email: string
-    first_name: string
-    last_name: string
-    employee_id: string
-    department: string
-    location: string
+    user_metadata: {
+      first_name: string
+      last_name: string
+      employee_id: string
+      department: string
+      location: string
+    }
   }
 }
 
 export function CarryoverApprovalDashboard() {
   const [carryoverRequests, setCarryoverRequests] = useState<CarryoverRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('ALL')
-  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, totalDays: 0 })
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING')
   const { toast } = useToast()
 
   useEffect(() => {
@@ -47,9 +50,6 @@ export function CarryoverApprovalDashboard() {
       const res = await fetch(`/api/leave/carryover/pending?${status}&limit=100`)
       const data = await res.json()
       setCarryoverRequests(data.carryover_requests || [])
-      if (data.stats) {
-        setStats(data.stats)
-      }
     } catch (error) {
       console.error('[v0] Failed to fetch carryover requests:', error)
       toast({
@@ -62,6 +62,85 @@ export function CarryoverApprovalDashboard() {
     }
   }
 
+  const handleApprove = async (request: CarryoverRequest) => {
+    setApprovingId(request.id)
+    try {
+      const res = await fetch('/api/leave/carryover/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carryover_request_id: request.id,
+          approved_days: Math.min(request.requested_carryover_days, request.max_carryover_allowed),
+          approval_reason: 'POLICY_COMPLIANT',
+          reviewed_by: 'current-user-id', // Replace with actual user ID
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to approve')
+
+      toast({
+        title: 'Approved',
+        description: `${request.staff.user_metadata.first_name} carryover approved`,
+      })
+
+      await fetchPendingCarryovers()
+    } catch (error) {
+      console.error('[v0] Approve error:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to approve carryover',
+        variant: 'destructive',
+      })
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
+  const handleReject = async (request: CarryoverRequest) => {
+    setRejectingId(request.id)
+    try {
+      const res = await fetch('/api/leave/carryover/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carryover_request_id: request.id,
+          forfeiture_reason: 'POLICY_LIMIT_EXCEEDED',
+          reviewed_by: 'current-user-id', // Replace with actual user ID
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to reject')
+
+      toast({
+        title: 'Rejected',
+        description: `${request.staff.user_metadata.first_name} carryover forfeited`,
+      })
+
+      await fetchPendingCarryovers()
+    } catch (error) {
+      console.error('[v0] Reject error:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to reject carryover',
+        variant: 'destructive',
+      })
+    } finally {
+      setRejectingId(null)
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'bg-amber-100 text-amber-900'
+      case 'APPROVED':
+        return 'bg-emerald-100 text-emerald-900'
+      case 'REJECTED':
+        return 'bg-red-100 text-red-900'
+      default:
+        return 'bg-slate-100 text-slate-900'
+    }
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -86,7 +165,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-amber-700">
-              {stats.pending}
+              {carryoverRequests.filter(r => r.status === 'PENDING').length}
             </div>
           </CardContent>
         </Card>
@@ -97,7 +176,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-700">
-              {stats.approved}
+              {carryoverRequests.filter(r => r.status === 'APPROVED').length}
             </div>
           </CardContent>
         </Card>
@@ -108,7 +187,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-700">
-              {stats.rejected}
+              {carryoverRequests.filter(r => r.status === 'REJECTED').length}
             </div>
           </CardContent>
         </Card>
@@ -119,7 +198,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-700">
-              {stats.totalDays}
+              {carryoverRequests.reduce((sum, r) => sum + r.requested_carryover_days, 0)}
             </div>
           </CardContent>
         </Card>
@@ -167,7 +246,7 @@ export function CarryoverApprovalDashboard() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <CardTitle className="text-base">
-                        {request.staff.first_name} {request.staff.last_name}
+                        {request.staff.user_metadata.first_name} {request.staff.user_metadata.last_name}
                       </CardTitle>
                       <Badge variant="outline" className={getStatusColor(request.status)}>
                         {getStatusIcon(request.status)}
@@ -175,7 +254,7 @@ export function CarryoverApprovalDashboard() {
                       </Badge>
                     </div>
                     <CardDescription className="text-xs">
-                      ID: {request.staff.employee_id} • {request.staff.department} • {request.staff.location}
+                      ID: {request.staff.user_metadata.employee_id} • {request.staff.user_metadata.department} • {request.staff.user_metadata.location}
                     </CardDescription>
                   </div>
                 </div>
@@ -208,14 +287,27 @@ export function CarryoverApprovalDashboard() {
                   </Alert>
                 )}
 
-                {/* Auto-Approval Notice */}
+                {/* Actions */}
                 {request.status === 'PENDING' && (
-                  <Alert className="bg-blue-50 border-blue-200 text-blue-900">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      This carryover request will be automatically approved by the system.
-                    </AlertDescription>
-                  </Alert>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      onClick={() => handleApprove(request)}
+                      disabled={approvingId === request.id}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {approvingId === request.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Approve
+                    </Button>
+                    <Button
+                      onClick={() => handleReject(request)}
+                      disabled={rejectingId === request.id}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      {rejectingId === request.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Reject
+                    </Button>
+                  </div>
                 )}
 
                 {/* Meta Info */}
