@@ -601,6 +601,7 @@ export function LeaveManagementClient({
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = normalizedRole === "leave_office"
   const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
+  const canAccessPaymentAdvice = isLeaveOfficeRole || isHrExecutive
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
@@ -1546,7 +1547,7 @@ export function LeaveManagementClient({
                   Approved Memos
                 </Button>
               )}
-              {isHrExecutive && (
+              {canAccessPaymentAdvice && (
                 <Button
                   onClick={() => setSelectedTab("payment-advice")}
                   className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
@@ -2077,7 +2078,7 @@ export function LeaveManagementClient({
             </Card>
           )}
 
-          {selectedTab === "payment-advice" && isHrExecutive && (
+          {selectedTab === "payment-advice" && canAccessPaymentAdvice && (
             <PaymentAdviceClient />
           )}
 
