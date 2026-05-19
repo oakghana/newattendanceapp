@@ -15,12 +15,14 @@ import {
   Copy,
   Download,
   FileClock,
+  FileText,
   Loader2,
   Plus,
   Search,
   Sparkles,
   XCircle,
 } from "lucide-react"
+import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -598,6 +600,7 @@ export function LeaveManagementClient({
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = normalizedRole === "leave_office"
+  const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
@@ -1543,6 +1546,20 @@ export function LeaveManagementClient({
                   Approved Memos
                 </Button>
               )}
+              {isHrExecutive && (
+                <Button
+                  onClick={() => setSelectedTab("payment-advice")}
+                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                    selectedTab === "payment-advice"
+                      ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                  variant={selectedTab === "payment-advice" ? "default" : "outline"}
+                >
+                  <FileText className="h-4 w-4" />
+                  Payment Advice
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -2058,6 +2075,10 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {selectedTab === "payment-advice" && isHrExecutive && (
+            <PaymentAdviceClient />
           )}
 
         {isManagerView && selectedTab === "pending-approvals" && (
