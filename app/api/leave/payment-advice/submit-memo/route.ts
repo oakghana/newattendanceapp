@@ -34,19 +34,26 @@ export async function POST(request: NextRequest) {
       Junior: categories.Junior.length,
     }
 
-    // Save memo to database with signer information
+    // Store memo content with signer information
+    const memoContentWithSigner = {
+      memos,
+      selectedSigner: {
+        id: selectedSigner.id,
+        name: selectedSigner.name,
+        position: selectedSigner.position,
+      },
+    }
+
+    // Save memo to database
     const { data, error } = await supabase
       .from("leave_payment_memos")
       .insert({
         month,
-        memo_content: JSON.stringify(memos), // Store all memos as JSON
+        memo_body: JSON.stringify(memoContentWithSigner), // Store memos and signer info as JSON
         staff_count_by_category: staffCountByCategory,
         staff_list_json: staffList,
-        generated_by: user.id,
-        signer_id: selectedSigner.id,
-        signer_name: selectedSigner.name,
-        signer_position: selectedSigner.position,
-        generated_at: new Date().toISOString(),
+        hr_leave_office_id: user.id,
+        status: "generated",
       })
       .select("id")
       .single()
@@ -59,6 +66,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log("[v0] Memo saved successfully:", data.id)
     return NextResponse.json({ success: true, memoId: data.id })
   } catch (err: any) {
     console.error("[v0] Error submitting memo:", err)
