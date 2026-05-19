@@ -28,17 +28,18 @@ export async function POST(request: NextRequest) {
 
     // Group and count staff
     const categories = groupStaffByCategory(staffList)
-    const staffCountByCategory = {
-      Manager: categories.Manager.length,
-      Senior: categories.Senior.length,
-      Junior: categories.Junior.length,
-    }
-
+    
     // Store memo content with signer information and reference number
     const memoContentWithSigner = {
       memos,
       month,
       referenceNumber,
+      staffList,
+      staffCountByCategory: {
+        Manager: categories.Manager.length,
+        Senior: categories.Senior.length,
+        Junior: categories.Junior.length,
+      },
       selectedSigner: {
         id: selectedSigner.id,
         name: selectedSigner.name,
@@ -51,8 +52,6 @@ export async function POST(request: NextRequest) {
       .from("leave_payment_memos")
       .insert({
         memo_body: JSON.stringify(memoContentWithSigner), // Store all data as JSON
-        staff_count_by_category: staffCountByCategory,
-        staff_list_json: staffList,
         hr_leave_office_id: user.id,
         status: "generated",
       })

@@ -591,7 +591,7 @@ export function PaymentAdviceClient() {
           <div className="flex gap-4">
             <div className="flex-1">
               {selectedSigner && (
-                <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                <div className="text-sm text-gray-600">
                   <div className="font-medium text-gray-900">{selectedSigner.full_name}</div>
                   <div className="text-xs text-gray-600">{selectedSigner.position}</div>
                 </div>
