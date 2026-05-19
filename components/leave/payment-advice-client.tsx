@@ -13,15 +13,28 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 
 interface StaffOnLeave {
-  id: string
+  // Required for payment memo creation
+  leave_plan_request_id: string
+  user_id: string
+  // Staff details
+  id?: string
   full_name: string
   employee_id: string
+  staff_number?: string
   department_name: string
   position: string
+  category?: string
   staff_category: string
-  start_date: string
-  end_date: string
+  // Leave details
+  start_date?: string
+  end_date?: string
+  preferred_start_date?: string
+  preferred_end_date?: string
+  leave_start_date?: string
+  leave_end_date?: string
   leave_type: string
+  requested_days?: number
+  approved_days?: number
 }
 
 interface HRExecutive {
