@@ -74,7 +74,7 @@ export function PaymentAdviceClient() {
           const execs = (data.executives || []).map((exec: any) => ({
             id: exec.id,
             full_name: exec.name || exec.full_name || "Unknown",
-            position: exec.role_label || exec.position || "HR Executive",
+            position: exec.position || "HR EXECUTIVE",
             email: exec.email,
           }))
           setHrExecutives(execs)
@@ -364,10 +364,12 @@ export function PaymentAdviceClient() {
       doc.line(pageWidth / 2, 12, pageWidth / 2, 40)
 
       // Reference Number and Date (below address, above border line)
+      // Generate reference if not provided
+      const refNo = referenceNumbers[category]?.trim() || `${category.charAt(0)}-${format(new Date(), "yyyy-MM-dd")}`
       yPos = 36
       doc.setFontSize(9)
       doc.setFont(undefined, "normal")
-      doc.text(`REF. NO: ${referenceNumbers[category] || "N/A"}`, 20, yPos)
+      doc.text(`REF. NO: ${refNo}`, 20, yPos)
       doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
 
       // Horizontal line below header
@@ -434,14 +436,26 @@ export function PaymentAdviceClient() {
       // ============ STAFF TABLE ============
       const staffData = staffByCategory[category] || []
       const tableHeaders = ["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]
-      const tableData = staffData.map((staff, index) => [
-        (index + 1).toString(),
-        staff.full_name || "Unknown",
-        staff.employee_id || "N/A",
-        staff.position || "N/A",
-        staff.department_name || "N/A",
-        staff.start_date ? format(new Date(staff.start_date), "dd-MMM-yy") : "N/A",
-      ])
+      const tableData = staffData.map((staff, index) => {
+        // Try multiple date fields to find a valid leave date
+        let leaveDate = "N/A"
+        if (staff.leave_start_date) {
+          leaveDate = format(new Date(staff.leave_start_date), "dd-MMM-yy")
+        } else if (staff.preferred_start_date) {
+          leaveDate = format(new Date(staff.preferred_start_date), "dd-MMM-yy")
+        } else if (staff.start_date) {
+          leaveDate = format(new Date(staff.start_date), "dd-MMM-yy")
+        }
+        
+        return [
+          (index + 1).toString(),
+          staff.full_name || "Unknown",
+          staff.employee_id || staff.staff_number || "",
+          staff.position || "",
+          staff.department_name || "",
+          leaveDate,
+        ]
+      })
 
       // Table parameters - simple clean layout
       const colWidths = [8, 45, 18, 35, 35, 24]
