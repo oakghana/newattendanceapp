@@ -45,8 +45,10 @@ interface HRExecutive {
   email: string
 }
 
-export function PaymentAdviceClient() {
+export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole?: string }) {
   const { toast } = useToast()
+  const isHrLeaveOffice = userRole === "hr_leave_office"
+  const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(userRole)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [isLoading, setIsLoading] = useState(false)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])
@@ -612,7 +614,36 @@ export function PaymentAdviceClient() {
     }
   }
 
-  return (
+  // HR Executives View - Show pending memos for approval (read-only)
+  if (isHrExecutive) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-purple-600" />
+            Payment Advice Approval
+          </CardTitle>
+          <CardDescription>Review and approve payment advice memos submitted by HR Leave Office</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Alert className="border-blue-200 bg-blue-50">
+              <AlertDescription>
+                As an HR Executive, you can review and approve payment advice memos submitted by the HR Leave Office staff. You cannot create new memos from this interface.
+              </AlertDescription>
+            </Alert>
+            <div className="text-center py-12 text-gray-500">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg">Pending Memos for Approval</p>
+              <p className="text-sm text-gray-400 mt-2">The memo review system is being configured. Submitted memos will appear here.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // HR Leave Office View - Create and submit payment advice memos
     <div className="space-y-6">
       {/* Month Selection & HR Signer */}
       <Card>

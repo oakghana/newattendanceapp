@@ -599,9 +599,9 @@ export function LeaveManagementClient({
   const isAdminView = normalizedRole === "admin"
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
-  const isLeaveOfficeRole = normalizedRole === "leave_office"
+  const isHrLeaveOfficeRole = normalizedRole === "hr_leave_office"
   const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
-  const canAccessPaymentAdvice = isLeaveOfficeRole || isHrExecutive
+  const canAccessPaymentAdvice = isHrLeaveOfficeRole || isHrExecutive
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
@@ -2079,7 +2079,7 @@ export function LeaveManagementClient({
           )}
 
           {selectedTab === "payment-advice" && canAccessPaymentAdvice && (
-            <PaymentAdviceClient />
+            <PaymentAdviceClient userRole={normalizedRole} />
           )}
 
         {isManagerView && selectedTab === "pending-approvals" && (
