@@ -399,7 +399,7 @@ export function PaymentAdviceClient() {
       doc.setFont(undefined, "bold")
       doc.text("FROM:", 20, yPos)
       doc.setFont(undefined, "normal")
-      const fromPosition = selectedSigner ? selectedSigner.position : "DEPUTY HUMAN RESOURCE MANAGER"
+      const fromPosition = selectedSigner ? selectedSigner.position.toUpperCase() : "DEPUTY HUMAN RESOURCE MANAGER"
       doc.text(fromPosition, 35, yPos)
       yPos += 6
 
@@ -533,10 +533,10 @@ export function PaymentAdviceClient() {
       doc.text(signerName, 20, yPos)
       yPos += 5
       
-      // Signer title
+      // Signer title (rank/position in UPPERCASE)
       doc.setFont(undefined, "normal")
       doc.setFontSize(9)
-      const signerTitle = selectedSigner ? selectedSigner.position : "DEPUTY HUMAN RESOURCE MANAGER"
+      const signerTitle = selectedSigner ? selectedSigner.position.toUpperCase() : "DEPUTY HUMAN RESOURCE MANAGER"
       doc.text(signerTitle, 20, yPos)
       yPos += 10
 
@@ -550,13 +550,13 @@ export function PaymentAdviceClient() {
       doc.setFont(undefined, "bold")
       doc.setFontSize(9)
       doc.setTextColor(0, 0, 0)
-      doc.text("cc:", 20, yPos)
+      doc.text("CC:", 20, yPos)
       yPos += 5
       
       doc.setFont(undefined, "normal")
       doc.setFontSize(8)
       
-      const ccList = ["Managing Director", "Deputy Director, HR", "Audit Manager"]
+      const ccList = ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"]
       ccList.forEach((cc) => {
         doc.text(cc, 25, yPos)
         yPos += 4
