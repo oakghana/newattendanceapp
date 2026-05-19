@@ -16,12 +16,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { month, memos, staffList, selectedSigner } = await request.json()
+    const { month, memos, staffList, selectedSigner, referenceNumber } = await request.json()
 
-    if (!month || !memos || !staffList || !selectedSigner) {
-      console.error("[v0] Missing fields:", { month: !!month, memos: !!memos, staffList: !!staffList, selectedSigner: !!selectedSigner })
+    if (!month || !memos || !staffList || !selectedSigner || !referenceNumber) {
+      console.error("[v0] Missing fields:", { month: !!month, memos: !!memos, staffList: !!staffList, selectedSigner: !!selectedSigner, referenceNumber: !!referenceNumber })
       return NextResponse.json(
-        { error: "Missing required fields", details: "month, memos, staffList, and selectedSigner are all required" },
+        { error: "Missing required fields", details: "month, memos, staffList, selectedSigner, and referenceNumber are all required" },
         { status: 400 }
       )
     }
@@ -34,9 +34,11 @@ export async function POST(request: NextRequest) {
       Junior: categories.Junior.length,
     }
 
-    // Store memo content with signer information
+    // Store memo content with signer information and reference number
     const memoContentWithSigner = {
       memos,
+      month,
+      referenceNumber,
       selectedSigner: {
         id: selectedSigner.id,
         name: selectedSigner.name,
@@ -44,12 +46,11 @@ export async function POST(request: NextRequest) {
       },
     }
 
-    // Save memo to database
+    // Save memo to database using only existing columns
     const { data, error } = await supabase
       .from("leave_payment_memos")
       .insert({
-        month,
-        memo_body: JSON.stringify(memoContentWithSigner), // Store memos and signer info as JSON
+        memo_body: JSON.stringify(memoContentWithSigner), // Store all data as JSON
         staff_count_by_category: staffCountByCategory,
         staff_list_json: staffList,
         hr_leave_office_id: user.id,

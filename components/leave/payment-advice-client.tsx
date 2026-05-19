@@ -44,6 +44,7 @@ export function PaymentAdviceClient() {
   const [hrExecutives, setHrExecutives] = useState<HRExecutive[]>([])
   const [selectedSigner, setSelectedSigner] = useState<HRExecutive | null>(null)
   const [loadingHrExecutives, setLoadingHrExecutives] = useState(false)
+  const [referenceNumber, setReferenceNumber] = useState("")
 
   // Load HR executives on mount
   useEffect(() => {
@@ -194,6 +195,15 @@ export function PaymentAdviceClient() {
       return
     }
 
+    if (!referenceNumber.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a reference number for the memos.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const response = await fetch("/api/leave/payment-advice/submit-memo", {
@@ -201,6 +211,7 @@ export function PaymentAdviceClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           month: selectedMonth,
+          referenceNumber,
           memos,
           staffList,
           selectedSigner: {
@@ -306,7 +317,7 @@ export function PaymentAdviceClient() {
 
       // REF. NO and DATE
       doc.setFont(undefined, "normal")
-      doc.text("REF. NO: QCC/", 20, yPos)
+      doc.text(`REF. NO: ${referenceNumber}`, 20, yPos)
       doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
       yPos += 8
 
@@ -525,7 +536,7 @@ export function PaymentAdviceClient() {
           <CardDescription>Generate professional payment advice memos for annual leave</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <Label htmlFor="month-select" className="mb-2 block font-medium">
                 Month & Year
@@ -536,6 +547,19 @@ export function PaymentAdviceClient() {
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 className="text-base"
+              />
+            </div>
+            <div>
+              <Label htmlFor="ref-number" className="mb-2 block font-medium">
+                Reference Number
+              </Label>
+              <Input
+                id="ref-number"
+                type="text"
+                placeholder="e.g., HR/PA/2026/07"
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                className="text-sm"
               />
             </div>
             <div>
@@ -575,7 +599,7 @@ export function PaymentAdviceClient() {
             </div>
             <Button 
               onClick={handleDetectStaff} 
-              disabled={isLoading || !selectedSigner} 
+              disabled={isLoading || !selectedSigner || !referenceNumber.trim()} 
               className="gap-2 bg-green-600 hover:bg-green-700"
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
