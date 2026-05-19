@@ -43,7 +43,10 @@ export async function POST(request: NextRequest) {
         preferred_start_date,
         preferred_end_date,
         leave_type_key,
-        status
+        status,
+        requested_days,
+        adjusted_days,
+        entitlement_days
       `
       )
       .eq("leave_type_key", "annual")
@@ -132,18 +135,26 @@ export async function POST(request: NextRequest) {
       // Get department name from the map
       const departmentName = profile?.department_id ? (departmentMap.get(profile.department_id) || "N/A") : "N/A"
 
-      console.log("[v0] Formatted staff:", { id: record.id, fullName, employee_id: profile?.employee_id, departmentName })
-
       return {
-        id: record.id,
+        // Required fields for payment memo creation
+        leave_plan_request_id: record.id,
+        user_id: record.user_id,
+        // Staff details
         full_name: fullName,
+        staff_number: profile?.employee_id || "N/A",
         employee_id: profile?.employee_id || "N/A",
         department_name: departmentName,
         position: profile?.position || "N/A",
+        category: staffCategory,
         staff_category: staffCategory,
-        start_date: record.preferred_start_date,
-        end_date: record.preferred_end_date,
+        // Leave details
+        preferred_start_date: record.preferred_start_date,
+        preferred_end_date: record.preferred_end_date,
+        leave_start_date: record.preferred_start_date,
+        leave_end_date: record.preferred_end_date,
         leave_type: record.leave_type_key,
+        requested_days: record.requested_days || record.entitlement_days || 0,
+        approved_days: record.adjusted_days || record.requested_days || record.entitlement_days || 0,
       }
     })
 

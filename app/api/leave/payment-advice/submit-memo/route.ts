@@ -37,49 +37,79 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Group and count staff
+    // Group staff by category
     const categories = groupStaffByCategory(staffList)
     
-    // Store memo content with signer information and reference numbers
-    // Only include serializable data
-    const memoContentWithSigner = {
-      memos: memos || {},
-      month,
-      referenceNumbers,
-      staffList: Array.isArray(staffList) ? staffList : [],
-      staffCountByCategory: {
-        Manager: categories.Manager?.length || 0,
-        Senior: categories.Senior?.length || 0,
-        Junior: categories.Junior?.length || 0,
-      },
-      selectedSigner: {
-        id: selectedSigner.id || "",
-        name: selectedSigner.name || "",
-        position: selectedSigner.position || "",
-      },
+    // Create individual payment memo records for each staff member
+    const memoRecords: any[] = []
+    const errors: string[] = []
+
+    for (const staff of staffList) {
+      // Get the reference number for this staff's category
+      const category = staff.category || staff.staff_category || "Junior"
+      const refNumber = referenceNumbers[category] || ""
+      
+      // Build memo body with all relevant info
+      const memoBody = {
+        month,
+        referenceNumber: refNumber,
+        category,
+        selectedSigner: {
+          id: selectedSigner.id || "",
+          name: selectedSigner.name || "",
+          position: selectedSigner.position || "",
+        },
+      }
+
+      // Only insert if we have required fields
+      if (staff.leave_plan_request_id && staff.user_id) {
+        memoRecords.push({
+          leave_plan_request_id: staff.leave_plan_request_id,
+          staff_id: staff.user_id,
+          staff_name: staff.full_name || "",
+          staff_number: staff.staff_number || staff.employee_id || "",
+          memo_body: JSON.stringify(memoBody),
+          memo_subject: `Payment of Leave Allowance (${category} Staff) - ${month}`,
+          hr_leave_office_id: user.id,
+          hr_leave_office_name: selectedSigner.name || "",
+          status: "generated",
+          leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
+          leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
+          approved_days: staff.approved_days || staff.requested_days || 0,
+        })
+      } else {
+        errors.push(`Missing leave_plan_request_id or user_id for ${staff.full_name}`)
+      }
     }
 
-    // Save memo to database using only existing columns
+    if (memoRecords.length === 0) {
+      console.error("[v0] No valid memo records to insert:", errors)
+      return NextResponse.json(
+        { error: "No valid staff records", details: errors.join("; ") },
+        { status: 400 }
+      )
+    }
+
+    // Insert all memo records
     const { data, error } = await supabase
       .from("leave_payment_memos")
-      .insert({
-        memo_body: JSON.stringify(memoContentWithSigner), // Store all data as JSON
-        hr_leave_office_id: user.id,
-        status: "generated",
-      })
+      .insert(memoRecords)
       .select("id")
-      .single()
 
     if (error) {
-      console.error("[v0] Error saving memo:", error)
+      console.error("[v0] Error saving memos:", error)
       return NextResponse.json(
-        { error: "Failed to save memo", details: error.message },
+        { error: "Failed to save memos", details: error.message },
         { status: 500 }
       )
     }
 
-    console.log("[v0] Memo saved successfully:", data.id)
-    return NextResponse.json({ success: true, memoId: data.id })
+    console.log("[v0] Memos saved successfully:", data?.length || 0, "records")
+    return NextResponse.json({ 
+      success: true, 
+      memoCount: data?.length || 0,
+      warnings: errors.length > 0 ? errors : undefined
+    })
   } catch (err: any) {
     console.error("[v0] Error submitting memo:", err.message || err)
     return NextResponse.json(
