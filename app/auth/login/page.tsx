@@ -290,13 +290,10 @@ export default function LoginPage() {
         clearAttendanceCache()
         clearGeolocationCache()
 
-        showSuccess("Login successful! Redirecting...", "Welcome Back")
+        showSuccess("Login successful! Redirecting to check-in...", "Welcome Back")
 
-        // Determine dashboard based on user role
-        let dashboardUrl = "/dashboard/attendance" // Default for staff
-        if (isHrLeaveOfficeRole(approvalCheck.role) || isHrApproverRole(approvalCheck.role) || isManagerRole(approvalCheck.role)) {
-          dashboardUrl = "/dashboard/leave-management"
-        }
+        // Direct all users to attendance check-in page on successful login
+        const dashboardUrl = "/dashboard/attendance"
 
         // Wait longer for Supabase to properly set and persist cookies
         setTimeout(() => {
@@ -531,13 +528,10 @@ export default function LoginPage() {
         await logLoginActivity(data.user.id, "otp_login_success", true, "otp")
 
         console.log("[v0] OTP verification successful")
-        showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
+        showSuccess("OTP verified successfully! Redirecting to check-in...", "Login Successful")
 
-        // Determine dashboard based on user role
-        let dashboardUrl = "/dashboard/attendance" // Default for staff
-        if (isHrLeaveOfficeRole(approvalCheck.role) || isHrApproverRole(approvalCheck.role) || isManagerRole(approvalCheck.role)) {
-          dashboardUrl = "/dashboard/leave-management"
-        }
+        // Direct all users to attendance check-in page on successful OTP login
+        const dashboardUrl = "/dashboard/attendance"
 
         // Wait longer for Supabase to properly set and persist cookies
         setTimeout(() => {
