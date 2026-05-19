@@ -44,7 +44,11 @@ export function PaymentAdviceClient() {
   const [hrExecutives, setHrExecutives] = useState<HRExecutive[]>([])
   const [selectedSigner, setSelectedSigner] = useState<HRExecutive | null>(null)
   const [loadingHrExecutives, setLoadingHrExecutives] = useState(false)
-  const [referenceNumber, setReferenceNumber] = useState("")
+  const [referenceNumbers, setReferenceNumbers] = useState<Record<string, string>>({
+    Manager: "",
+    Senior: "",
+    Junior: "",
+  })
 
   // Load HR executives on mount
   useEffect(() => {
@@ -119,6 +123,8 @@ export function PaymentAdviceClient() {
       setStaffList(data.staff || [])
       setMemos({})
       setMemoSummary(null)
+      // Reset reference numbers when new staff are detected
+      setReferenceNumbers({ Manager: "", Senior: "", Junior: "" })
 
       if ((data.staff || []).length === 0) {
         toast({
@@ -195,10 +201,19 @@ export function PaymentAdviceClient() {
       return
     }
 
-    if (!referenceNumber.trim()) {
+    // Validate that all required reference numbers are filled
+    const requiredCategories = ["Manager", "Senior", "Junior"].filter(
+      (cat) => staffByCategory[cat as keyof typeof staffByCategory]?.length > 0
+    )
+    
+    const missingReferences = requiredCategories.filter(
+      (cat) => !referenceNumbers[cat]?.trim()
+    )
+
+    if (missingReferences.length > 0) {
       toast({
         title: "Error",
-        description: "Please enter a reference number for the memos.",
+        description: `Please enter reference numbers for: ${missingReferences.join(", ")}`,
         variant: "destructive",
       })
       return
@@ -211,7 +226,7 @@ export function PaymentAdviceClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           month: selectedMonth,
-          referenceNumber,
+          referenceNumbers,
           memos,
           staffList,
           selectedSigner: {
@@ -317,7 +332,7 @@ export function PaymentAdviceClient() {
 
       // REF. NO and DATE
       doc.setFont(undefined, "normal")
-      doc.text(`REF. NO: ${referenceNumber}`, 20, yPos)
+      doc.text(`REF. NO: ${referenceNumbers[category] || "N/A"}`, 20, yPos)
       doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
       yPos += 8
 
@@ -550,19 +565,6 @@ export function PaymentAdviceClient() {
               />
             </div>
             <div>
-              <Label htmlFor="ref-number" className="mb-2 block font-medium">
-                Reference Number
-              </Label>
-              <Input
-                id="ref-number"
-                type="text"
-                placeholder="e.g., HR/PA/2026/07"
-                value={referenceNumber}
-                onChange={(e) => setReferenceNumber(e.target.value)}
-                className="text-sm"
-              />
-            </div>
-            <div>
               <Label htmlFor="signer-select" className="mb-2 block font-medium">
                 HR Executive (Signer)
               </Label>
@@ -587,6 +589,42 @@ export function PaymentAdviceClient() {
               </select>
             </div>
           </div>
+
+          {/* Dynamic Reference Number Fields - show only for categories with staff */}
+          {staffList.length > 0 && (
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <Label className="mb-3 block font-medium text-gray-700">
+                Reference Numbers (by Staff Category)
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {["Manager", "Senior", "Junior"].map((category) => {
+                  const count = staffByCategory[category as keyof typeof staffByCategory]?.length || 0
+                  if (count === 0) return null
+                  
+                  return (
+                    <div key={category}>
+                      <Label htmlFor={`ref-${category}`} className="mb-2 block text-sm font-medium">
+                        {category} Staff ({count})
+                      </Label>
+                      <Input
+                        id={`ref-${category}`}
+                        type="text"
+                        placeholder={`e.g., HR/PA/${category}/2026/07`}
+                        value={referenceNumbers[category] || ""}
+                        onChange={(e) =>
+                          setReferenceNumbers((prev) => ({
+                            ...prev,
+                            [category]: e.target.value,
+                          }))
+                        }
+                        className="text-sm"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           
           <div className="flex gap-4">
             <div className="flex-1">
@@ -599,7 +637,7 @@ export function PaymentAdviceClient() {
             </div>
             <Button 
               onClick={handleDetectStaff} 
-              disabled={isLoading || !selectedSigner || !referenceNumber.trim()} 
+              disabled={isLoading || !selectedSigner} 
               className="gap-2 bg-green-600 hover:bg-green-700"
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}

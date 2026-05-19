@@ -16,12 +16,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { month, memos, staffList, selectedSigner, referenceNumber } = await request.json()
+    const { month, memos, staffList, selectedSigner, referenceNumbers } = await request.json()
 
-    if (!month || !memos || !staffList || !selectedSigner || !referenceNumber) {
-      console.error("[v0] Missing fields:", { month: !!month, memos: !!memos, staffList: !!staffList, selectedSigner: !!selectedSigner, referenceNumber: !!referenceNumber })
+    if (!month || !memos || !staffList || !selectedSigner || !referenceNumbers) {
+      console.error("[v0] Missing fields:", { month: !!month, memos: !!memos, staffList: !!staffList, selectedSigner: !!selectedSigner, referenceNumbers: !!referenceNumbers })
       return NextResponse.json(
-        { error: "Missing required fields", details: "month, memos, staffList, selectedSigner, and referenceNumber are all required" },
+        { error: "Missing required fields", details: "month, memos, staffList, selectedSigner, and referenceNumbers are all required" },
         { status: 400 }
       )
     }
@@ -29,11 +29,11 @@ export async function POST(request: NextRequest) {
     // Group and count staff
     const categories = groupStaffByCategory(staffList)
     
-    // Store memo content with signer information and reference number
+    // Store memo content with signer information and reference numbers
     const memoContentWithSigner = {
       memos,
       month,
-      referenceNumber,
+      referenceNumbers,
       staffList,
       staffCountByCategory: {
         Manager: categories.Manager.length,
