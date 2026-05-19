@@ -254,7 +254,7 @@ export function LeaveManagementClient({
   const fetchStaffApprovedMemos = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "regional_manager"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "regional_manager", "admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office"].includes(normalizedRole)
 
       if (!isAuthorized) return
 
@@ -1517,6 +1517,7 @@ export function LeaveManagementClient({
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
                 }`}
                 variant={selectedTab === "deferrments" ? "default" : "outline"}
+                disabled={!approvedRequests || approvedRequests.length === 0}
               >
                 <Calendar className="h-4 w-4" />
                 Deferrments
@@ -2003,15 +2004,34 @@ export function LeaveManagementClient({
                           <p className="text-slate-500">No memos match your search</p>
                         </div>
                       ) : (
-                        paginatedMemos.map((memo: any) => (
+                        paginatedMemos.map((memo: any) => {
+                          const isSigned = memo.approver_signature || memo.approval_date
+                          const isYetToSign = !isSigned
+                          
+                          return (
                           <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-slate-900">{memo.staff_name}</p>
+                                <div className="flex items-center gap-3 mb-1">
+                                  <p className="font-semibold text-slate-900">{memo.staff_name}</p>
+                                  {isYetToSign && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800">
+                                      Yet to Sign
+                                    </span>
+                                  )}
+                                  {isSigned && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                                      ✓ Signed
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-xs text-slate-500 mt-1">{memo.email}</p>
                                 <p className="text-sm text-slate-700 mt-2">{memo.leave_type} Leave</p>
                                 <p className="text-xs text-slate-600 mt-1">{new Date(memo.start_date).toLocaleDateString()} to {new Date(memo.end_date).toLocaleDateString()}</p>
                                 <p className="text-xs text-slate-500 mt-1">Location: {memo.location}</p>
+                                {isYetToSign && memo.assigned_to && (
+                                  <p className="text-xs text-amber-600 mt-2 font-medium">Awaiting approval from: {memo.assigned_to}</p>
+                                )}
                               </div>
                               <div className="flex gap-2 flex-shrink-0">
                                 <Button
@@ -2028,7 +2048,8 @@ export function LeaveManagementClient({
                               </div>
                             </div>
                           </div>
-                        ))
+                        )
+                        })
                       )}
                     </div>
                     
