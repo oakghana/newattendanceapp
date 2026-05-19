@@ -221,28 +221,51 @@ export function PaymentAdviceClient() {
 
     setIsSubmitting(true)
     try {
+      // Log what we're sending for debugging
+      console.log("[v0] Submitting memos data:", {
+        month: selectedMonth,
+        referenceNumbers,
+        staffList: staffList?.length,
+        selectedSigner,
+        memosKeys: Object.keys(memos),
+      })
+
+      // Create a clean payload with only serializable data
+      const cleanPayload = {
+        month: selectedMonth,
+        referenceNumbers,
+        memos: memos, // Should be serializable now
+        staffList: staffList.map((staff: any) => ({
+          user_id: staff.user_id,
+          full_name: staff.full_name,
+          position: staff.position,
+          department: staff.department,
+          leave_date: staff.leave_date,
+          status: staff.status,
+          category: staff.category,
+        })),
+        selectedSigner: {
+          id: selectedSigner.id,
+          name: selectedSigner.full_name || selectedSigner.name,
+          position: selectedSigner.position,
+          email: selectedSigner.email,
+        },
+      }
+
       const response = await fetch("/api/leave/payment-advice/submit-memo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          month: selectedMonth,
-          referenceNumbers,
-          memos,
-          staffList,
-          selectedSigner: {
-            id: selectedSigner.id,
-            name: selectedSigner.full_name || selectedSigner.name,
-            position: selectedSigner.position,
-            email: selectedSigner.email,
-          },
-        }),
+        body: JSON.stringify(cleanPayload),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        console.error("[v0] API error details:", error)
-        throw new Error(error.details || error.error || "Failed to submit memos")
+        const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }))
+        console.error("[v0] API error details:", errorData)
+        throw new Error(errorData.details || errorData.error || "Failed to submit memos")
       }
+
+      const result = await response.json()
+      console.log("[v0] Memo submitted successfully:", result)
 
       toast({
         title: "Success",

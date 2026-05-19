@@ -6,6 +6,17 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
   try {
+    let requestBody: any
+    try {
+      requestBody = await request.json()
+    } catch (parseErr: any) {
+      console.error("[v0] JSON parse error:", parseErr.message)
+      return NextResponse.json(
+        { error: "Invalid JSON in request body", details: parseErr.message },
+        { status: 400 }
+      )
+    }
+
     const supabase = await createClient()
 
     const {
@@ -16,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { month, memos, staffList, selectedSigner, referenceNumbers } = await request.json()
+    const { month, memos, staffList, selectedSigner, referenceNumbers } = requestBody
 
     if (!month || !memos || !staffList || !selectedSigner || !referenceNumbers) {
       console.error("[v0] Missing fields:", { month: !!month, memos: !!memos, staffList: !!staffList, selectedSigner: !!selectedSigner, referenceNumbers: !!referenceNumbers })
@@ -30,20 +41,21 @@ export async function POST(request: NextRequest) {
     const categories = groupStaffByCategory(staffList)
     
     // Store memo content with signer information and reference numbers
+    // Only include serializable data
     const memoContentWithSigner = {
-      memos,
+      memos: memos || {},
       month,
       referenceNumbers,
-      staffList,
+      staffList: Array.isArray(staffList) ? staffList : [],
       staffCountByCategory: {
-        Manager: categories.Manager.length,
-        Senior: categories.Senior.length,
-        Junior: categories.Junior.length,
+        Manager: categories.Manager?.length || 0,
+        Senior: categories.Senior?.length || 0,
+        Junior: categories.Junior?.length || 0,
       },
       selectedSigner: {
-        id: selectedSigner.id,
-        name: selectedSigner.name,
-        position: selectedSigner.position,
+        id: selectedSigner.id || "",
+        name: selectedSigner.name || "",
+        position: selectedSigner.position || "",
       },
     }
 
@@ -69,9 +81,9 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Memo saved successfully:", data.id)
     return NextResponse.json({ success: true, memoId: data.id })
   } catch (err: any) {
-    console.error("[v0] Error submitting memo:", err)
+    console.error("[v0] Error submitting memo:", err.message || err)
     return NextResponse.json(
-      { error: "Internal server error", details: err.message },
+      { error: "Internal server error", details: err.message || "Unknown error" },
       { status: 500 }
     )
   }
