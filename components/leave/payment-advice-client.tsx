@@ -446,6 +446,30 @@ export function PaymentAdviceClient() {
 
       // Save the PDF
       doc.save(`payment-advice-${category}-${selectedMonth}.pdf`)
+
+      // Send notifications to all staff in this category for this month
+      const staffIds = staffData.map((staff) => staff.user_id).filter(Boolean)
+      if (staffIds.length > 0) {
+        try {
+          await fetch("/api/leave/payment-advice-notification", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              staffIds,
+              month: selectedMonth,
+              category,
+            }),
+          })
+          console.log(`[v0] Notifications sent to ${staffIds.length} staff members`)
+        } catch (err) {
+          console.error("[v0] Error sending notifications:", err)
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: `Payment advice memo downloaded and notifications sent to ${staffData.length} staff member(s).`,
+      })
     } catch (err) {
       console.error("[v0] Error generating PDF:", err)
       toast({

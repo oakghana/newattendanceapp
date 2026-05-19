@@ -30,6 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
+import { PaymentAdviceNotifications } from "@/components/leave/payment-advice-notifications"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { placeholderDescriptions } from "@/lib/leave-templates"
@@ -1607,6 +1608,9 @@ export function LeaveManagementClient({
         <div className="space-y-4">
           {selectedTab === "my-requests" && (
             <div className="space-y-6">
+              {/* Payment Advice Notifications */}
+              <PaymentAdviceNotifications userId={userId} />
+              
               {/* Leave Requests Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
