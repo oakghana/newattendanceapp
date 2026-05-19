@@ -206,7 +206,7 @@ export function PaymentAdviceClient() {
   }
 
   // Download memo as professional PDF - traditional memo format
-  const handleDownloadMemo = (category: string) => {
+  const handleDownloadMemo = async (category: string) => {
     const memo = memos[category]
     if (!memo) return
 
