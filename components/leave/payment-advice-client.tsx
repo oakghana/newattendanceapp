@@ -254,13 +254,22 @@ export function PaymentAdviceClient() {
         referenceNumbers,
         memos: memos, // Should be serializable now
         staffList: staffList.map((staff: any) => ({
+          leave_plan_request_id: staff.leave_plan_request_id,
           user_id: staff.user_id,
           full_name: staff.full_name,
+          staff_number: staff.staff_number,
+          employee_id: staff.employee_id,
           position: staff.position,
-          department: staff.department,
-          leave_date: staff.leave_date,
-          status: staff.status,
+          department_name: staff.department_name,
           category: staff.category,
+          staff_category: staff.staff_category,
+          leave_start_date: staff.leave_start_date,
+          leave_end_date: staff.leave_end_date,
+          preferred_start_date: staff.preferred_start_date,
+          preferred_end_date: staff.preferred_end_date,
+          leave_type: staff.leave_type,
+          requested_days: staff.requested_days,
+          approved_days: staff.approved_days,
         })),
         selectedSigner: {
           id: selectedSigner.id,
@@ -340,10 +349,11 @@ export function PaymentAdviceClient() {
       doc.setFont(undefined, "bold")
       doc.text("MEMORANDUM", pageWidth - 50, 15)
       
-      // Add logo in top right
+      // Add logo centered between date and memorandum text
       try {
         const logoUrl = "/images/qcc-logo.png"
-        doc.addImage(logoUrl, "PNG", pageWidth - 32, 18, 20, 20)
+        // Position logo in the middle, between the right column and edge
+        doc.addImage(logoUrl, "PNG", pageWidth - 40, 18, 18, 18)
       } catch (err) {
         console.log("[v0] Logo not available, skipping")
       }
@@ -352,6 +362,13 @@ export function PaymentAdviceClient() {
       doc.setDrawColor(0, 0, 0)
       doc.setLineWidth(0.5)
       doc.line(pageWidth / 2, 12, pageWidth / 2, 40)
+
+      // Reference Number and Date (below address, above border line)
+      yPos = 36
+      doc.setFontSize(9)
+      doc.setFont(undefined, "normal")
+      doc.text(`REF. NO: ${referenceNumbers[category] || "N/A"}`, 20, yPos)
+      doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
 
       // Horizontal line below header
       yPos = 42
@@ -371,12 +388,6 @@ export function PaymentAdviceClient() {
       const monthName = monthNames[parseInt(month) - 1]
       const categoryLabel = category === "Manager" ? "MANAGEMENT" : category === "Senior" ? "SNR." : "JNR."
 
-      // REF. NO and DATE
-      doc.setFont(undefined, "normal")
-      doc.text(`REF. NO: ${referenceNumbers[category] || "N/A"}`, 20, yPos)
-      doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
-      yPos += 8
-
       // TO field
       doc.setFont(undefined, "bold")
       doc.text("TO:", 20, yPos)
@@ -393,11 +404,15 @@ export function PaymentAdviceClient() {
 
       // SUBJECT field
       doc.setFont(undefined, "bold")
-      doc.text("SUBJECT:", 20, yPos)
-      doc.setFont(undefined, "normal")
       const subjectText = `PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`
-      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 55)
-      doc.text(splitSubject[0], 35, yPos)
+      doc.text("SUBJECT: ", 20, yPos)
+      
+      // Calculate space after SUBJECT:
+      const subjectLabelWidth = doc.getTextWidth("SUBJECT: ")
+      doc.setFont(undefined, "normal")
+      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 55 - subjectLabelWidth)
+      doc.text(splitSubject[0], 20 + subjectLabelWidth, yPos)
+      
       if (splitSubject.length > 1) {
         yPos += 5
         doc.text(splitSubject[1], 35, yPos)
@@ -431,7 +446,9 @@ export function PaymentAdviceClient() {
       const colWidths = [8, 45, 18, 35, 35, 24]
       const rowHeight = 6
       const headerHeight = 8
-      const startX = 15
+      // Calculate centered position: (pageWidth - totalTableWidth) / 2
+      const totalTableWidth = colWidths.reduce((sum, width) => sum + width, 0)
+      const startX = (pageWidth - totalTableWidth) / 2
 
       // Draw table header - simple black borders, no fill
       doc.setFont(undefined, "bold")
@@ -505,15 +522,15 @@ export function PaymentAdviceClient() {
       doc.setDrawColor(0, 0, 0)
       doc.setLineWidth(0.5)
       doc.line(20, yPos, 50, yPos)
-      yPos += 10
+      yPos += 5
       
-      // Signer name
+      // Signer name (no border above)
       doc.setFont(undefined, "bold")
       doc.setFontSize(10)
       doc.setTextColor(0, 0, 0)
       const signerName = selectedSigner ? selectedSigner.full_name.toUpperCase() : "HR EXECUTIVE"
       doc.text(signerName, 20, yPos)
-      yPos += 6
+      yPos += 5
       
       // Signer title
       doc.setFont(undefined, "normal")
