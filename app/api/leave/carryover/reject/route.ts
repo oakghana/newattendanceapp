@@ -21,25 +21,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the carryover record from outstanding_leave_balances (not carryover_approval_requests)
+    // Get the carryover request
     const { data: carryoverRequest, error: fetchError } = await supabase
-      .from('outstanding_leave_balances')
+      .from('carryover_approval_requests')
       .select('*')
       .eq('id', carryover_request_id)
       .single()
 
     if (fetchError || !carryoverRequest) {
-      console.error('[v0] Carryover record not found:', { carryover_request_id, fetchError })
       return NextResponse.json(
         { error: 'Carryover request not found' },
         { status: 404 }
       )
     }
 
-    const staff_id = carryoverRequest.user_id
-    const leave_year = carryoverRequest.leave_year_period
-    const leave_type_key = 'annual'
-    const requested_carryover_days = carryoverRequest.carryover_to_next_year || 0
+    const { staff_id, leave_year, leave_type_key, requested_carryover_days } = carryoverRequest
 
     // Create FORFEITED transaction
     const { error: transactionError } = await supabase
@@ -67,15 +63,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update outstanding_leave_balances record to mark as rejected and set carryover to 0
+    // Update carryover request status
     const { data: updatedRequest, error: updateError } = await supabase
-      .from('outstanding_leave_balances')
+      .from('carryover_approval_requests')
       .update({
-        carryover_to_next_year: 0,
         status: 'REJECTED',
-        notes: `Rejected/Forfeited: ${requested_carryover_days} days. Reason: ${forfeiture_reason || 'Not specified'}. ${notes || ''}`,
-        approved_by: reviewed_by,
-        approved_at: new Date().toISOString(),
+        reviewed_by,
+        reviewed_at: new Date().toISOString(),
+        forfeited_days: requested_carryover_days,
+        forfeited_reason: forfeiture_reason || 'Not specified',
+        approval_note: notes,
       })
       .eq('id', carryover_request_id)
       .select()

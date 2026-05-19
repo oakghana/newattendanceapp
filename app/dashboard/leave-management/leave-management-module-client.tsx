@@ -1,6 +1,6 @@
 "use client"
 
-import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CreditCard } from "lucide-react"
+import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
@@ -11,11 +11,9 @@ import { OutstandingLeavePanel } from "./outstanding-leave-panel"
 import { LeaveCenterInfo } from "./leave-center-info"
 import { CarryoverApprovalDashboard } from "./carryover-approval-dashboard"
 import { AuditComplianceDashboard } from "./audit-compliance-dashboard"
-import { PaymentAdviceApprovalDashboard } from "./payment-advice-approval-dashboard"
 import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planning"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
-const HR_EXECUTIVE_ROLES = ["director_hr", "manager_hr", "admin", "hr_officer", "hr_leave_office"]
 
 function normalizeRole(role: string | null | undefined) {
   return String(role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -26,16 +24,10 @@ function isHrAnalyticsRole(role: string | null | undefined) {
   return HR_ANALYTICS_ROLES.includes(normalized)
 }
 
-function isHrExecutive(role: string | null | undefined) {
-  const normalized = normalizeRole(role)
-  return HR_EXECUTIVE_ROLES.includes(normalized)
-}
-
 interface LeaveManagementModuleClientProps {
   userId: string
   userRole: string | null
   userDepartment: string | null
-  userLocation: string | null
   userFirstName: string | null
   userLastName: string | null
   inactivityDays: number
@@ -52,7 +44,6 @@ export function LeaveManagementModuleClient({
   userId,
   userRole,
   userDepartment,
-  userLocation,
   userFirstName,
   userLastName,
   inactivityDays,
@@ -68,7 +59,6 @@ export function LeaveManagementModuleClient({
   const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
-  const showPaymentAdviceTab = isHrExecutive(userRole)
 
   return (
     <div className="space-y-6 w-full">
@@ -120,15 +110,6 @@ export function LeaveManagementModuleClient({
             </TabsTrigger>
           )}
 
-          {showPaymentAdviceTab && !isRegionalHR && (
-            <TabsTrigger value="payment-advice" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-indigo-300 transition-all duration-300 ease-out data-[state=active]:border-indigo-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-indigo-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(99,102,241,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
-              <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" />
-              <span className="hidden sm:inline">Payment Advice</span>
-              <span className="sm:hidden">Payment</span>
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-indigo-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
-            </TabsTrigger>
-          )}
-
           <TabsTrigger value="insights" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-amber-300 transition-all duration-300 ease-out data-[state=active]:border-amber-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-amber-500 data-[state=active]:to-amber-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(245,158,11,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
             <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" /> 
             <span className="hidden sm:inline">Balance & Calendar</span>
@@ -146,7 +127,6 @@ export function LeaveManagementModuleClient({
               userId={userId}
               userRole={userRole}
               userDepartment={userDepartment}
-              userLocation={userLocation}
               userFirstName={userFirstName}
               userLastName={userLastName}
               hasHodLinkage={hasHodLinkage}
@@ -189,16 +169,9 @@ export function LeaveManagementModuleClient({
         {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
           <TabsContent value="carryover-audit" className="space-y-4 sm:space-y-6 w-full">
             <div className="space-y-6">
-              <CarryoverApprovalDashboard userId={userId} userRole={userRole || undefined} />
+              <CarryoverApprovalDashboard />
               <AuditComplianceDashboard />
             </div>
-          </TabsContent>
-        )}
-
-        {/* Payment Advice Tab - HR Executives only */}
-        {showPaymentAdviceTab && !isRegionalHR && (
-          <TabsContent value="payment-advice" className="space-y-4 sm:space-y-6 w-full">
-            <PaymentAdviceApprovalDashboard />
           </TabsContent>
         )}
 
