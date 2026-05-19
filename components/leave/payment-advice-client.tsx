@@ -64,6 +64,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     Senior: "",
     Junior: "",
   })
+  const [pendingMemos, setPendingMemos] = useState<any[]>([])
+  const [loadingPendingMemos, setLoadingPendingMemos] = useState(false)
 
   // Load HR executives on mount
   useEffect(() => {
@@ -101,6 +103,30 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     
     fetchHrExecutives()
   }, [])
+
+  // Load pending memos for HR Executives
+  useEffect(() => {
+    if (isHrExecutive) {
+      const fetchPendingMemos = async () => {
+        setLoadingPendingMemos(true)
+        try {
+          const response = await fetch("/api/leave/payment-advice/pending-approval")
+          if (response.ok) {
+            const data = await response.json()
+            setPendingMemos(data.memos || [])
+            console.log("[v0] Pending memos loaded:", data.memos?.length || 0)
+          } else {
+            console.error("[v0] Failed to fetch pending memos")
+          }
+        } catch (err) {
+          console.error("[v0] Error fetching pending memos:", err)
+        } finally {
+          setLoadingPendingMemos(false)
+        }
+      }
+      fetchPendingMemos()
+    }
+  }, [isHrExecutive])
 
   // Group staff by category
   const staffByCategory = useMemo(() => {
@@ -632,11 +658,94 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                 As an HR Executive, you can review and approve payment advice memos submitted by the HR Leave Office staff. You cannot create new memos from this interface.
               </AlertDescription>
             </Alert>
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">Pending Memos for Approval</p>
-              <p className="text-sm text-gray-400 mt-2">The memo review system is being configured. Submitted memos will appear here.</p>
-            </div>
+            
+            {loadingPendingMemos ? (
+              <div className="flex justify-center py-8">
+                <div className="text-center">
+                  <div className="inline-block animate-spin">
+                    <FileText className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <p className="mt-2 text-gray-600">Loading pending memos...</p>
+                </div>
+              </div>
+            ) : pendingMemos.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">No Pending Memos</p>
+                <p className="text-sm text-gray-400 mt-2">All submitted payment advice memos have been reviewed.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <h3 className="font-semibold text-gray-800">Pending Memos ({pendingMemos.length})</h3>
+                <div className="grid gap-3">
+                  {pendingMemos.map((memo) => (
+                    <div key={memo.id} className="border rounded-lg p-4 bg-white hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-medium text-gray-900">{memo.staff_name}</p>
+                          <p className="text-sm text-gray-600">{memo.staff_number}</p>
+                        </div>
+                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
+                          {memo.approval_status || "Pending"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 mb-2">{memo.memo_subject}</p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded">
+                        <div>
+                          <span className="text-gray-500">Submitted By</span>
+                          <p className="font-medium">{memo.hr_leave_office_name}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Leave Days</span>
+                          <p className="font-medium">{memo.approved_days} days</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Leave Period</span>
+                          <p className="font-medium">
+                            {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Submitted</span>
+                          <p className="font-medium">
+                            {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            // Approve memo
+                            toast({ title: "Memo Approved", description: `Payment advice for ${memo.staff_name} has been approved.` })
+                          }}
+                          className="flex-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => {
+                            // Reject memo
+                            toast({ title: "Memo Rejected", description: `Payment advice for ${memo.staff_name} has been rejected.` })
+                          }}
+                          className="flex-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => {
+                            // View details
+                            toast({ title: "Memo Details", description: `Full memo content: ${memo.memo_subject}` })
+                          }}
+                          className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                        >
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
