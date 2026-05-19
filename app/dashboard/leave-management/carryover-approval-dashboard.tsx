@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { createClient } from '@/lib/supabase/client'
 
 interface CarryoverRequest {
   id: string
@@ -22,11 +21,13 @@ interface CarryoverRequest {
   approval_note: string
   staff: {
     email: string
-    first_name: string
-    last_name: string
-    employee_id: string
-    department: string
-    location: string
+    user_metadata: {
+      first_name: string
+      last_name: string
+      employee_id: string
+      department: string
+      location: string
+    }
   }
 }
 
@@ -35,22 +36,8 @@ export function CarryoverApprovalDashboard() {
   const [loading, setLoading] = useState(true)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
-  const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('ALL')
-  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, totalDays: 0 })
-  const [currentUserId, setCurrentUserId] = useState<string>('')
+  const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING')
   const { toast } = useToast()
-
-  useEffect(() => {
-    // Get current user
-    const getCurrentUser = async () => {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setCurrentUserId(user.id)
-      }
-    }
-    getCurrentUser()
-  }, [])
 
   useEffect(() => {
     fetchPendingCarryovers()
@@ -63,9 +50,6 @@ export function CarryoverApprovalDashboard() {
       const res = await fetch(`/api/leave/carryover/pending?${status}&limit=100`)
       const data = await res.json()
       setCarryoverRequests(data.carryover_requests || [])
-      if (data.stats) {
-        setStats(data.stats)
-      }
     } catch (error) {
       console.error('[v0] Failed to fetch carryover requests:', error)
       toast({
@@ -79,50 +63,32 @@ export function CarryoverApprovalDashboard() {
   }
 
   const handleApprove = async (request: CarryoverRequest) => {
-    if (!currentUserId) {
-      toast({
-        title: 'Error',
-        description: 'User not authenticated',
-        variant: 'destructive',
-      })
-      return
-    }
-
     setApprovingId(request.id)
     try {
-      const approvalPayload = {
-        carryover_request_id: request.id,
-        approved_days: Math.min(request.requested_carryover_days, request.max_carryover_allowed),
-        approval_reason: 'POLICY_COMPLIANT',
-        reviewed_by: currentUserId,
-      }
-
-      console.log('[v0] Sending approval payload:', approvalPayload)
-
       const res = await fetch('/api/leave/carryover/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(approvalPayload),
+        body: JSON.stringify({
+          carryover_request_id: request.id,
+          approved_days: Math.min(request.requested_carryover_days, request.max_carryover_allowed),
+          approval_reason: 'POLICY_COMPLIANT',
+          reviewed_by: 'current-user-id', // Replace with actual user ID
+        }),
       })
 
-      const responseData = await res.json()
-
-      if (!res.ok) {
-        console.error('[v0] API error:', responseData)
-        throw new Error(responseData.error || 'Failed to approve')
-      }
+      if (!res.ok) throw new Error('Failed to approve')
 
       toast({
         title: 'Approved',
-        description: `${request.staff.first_name} carryover approved for ${approvalPayload.approved_days} days`,
+        description: `${request.staff.user_metadata.first_name} carryover approved`,
       })
 
       await fetchPendingCarryovers()
-    } catch (error: any) {
+    } catch (error) {
       console.error('[v0] Approve error:', error)
       toast({
         title: 'Error',
-        description: error.message || 'Failed to approve carryover',
+        description: 'Failed to approve carryover',
         variant: 'destructive',
       })
     } finally {
@@ -131,49 +97,31 @@ export function CarryoverApprovalDashboard() {
   }
 
   const handleReject = async (request: CarryoverRequest) => {
-    if (!currentUserId) {
-      toast({
-        title: 'Error',
-        description: 'User not authenticated',
-        variant: 'destructive',
-      })
-      return
-    }
-
     setRejectingId(request.id)
     try {
-      const rejectPayload = {
-        carryover_request_id: request.id,
-        forfeiture_reason: 'POLICY_LIMIT_EXCEEDED',
-        reviewed_by: currentUserId,
-      }
-
-      console.log('[v0] Sending reject payload:', rejectPayload)
-
       const res = await fetch('/api/leave/carryover/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rejectPayload),
+        body: JSON.stringify({
+          carryover_request_id: request.id,
+          forfeiture_reason: 'POLICY_LIMIT_EXCEEDED',
+          reviewed_by: 'current-user-id', // Replace with actual user ID
+        }),
       })
 
-      const responseData = await res.json()
-
-      if (!res.ok) {
-        console.error('[v0] API error:', responseData)
-        throw new Error(responseData.error || 'Failed to reject')
-      }
+      if (!res.ok) throw new Error('Failed to reject')
 
       toast({
         title: 'Rejected',
-        description: `${request.staff.first_name} carryover forfeited`,
+        description: `${request.staff.user_metadata.first_name} carryover forfeited`,
       })
 
       await fetchPendingCarryovers()
-    } catch (error: any) {
+    } catch (error) {
       console.error('[v0] Reject error:', error)
       toast({
         title: 'Error',
-        description: error.message || 'Failed to reject carryover',
+        description: 'Failed to reject carryover',
         variant: 'destructive',
       })
     } finally {
@@ -217,7 +165,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-amber-700">
-              {stats.pending}
+              {carryoverRequests.filter(r => r.status === 'PENDING').length}
             </div>
           </CardContent>
         </Card>
@@ -228,7 +176,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-700">
-              {stats.approved}
+              {carryoverRequests.filter(r => r.status === 'APPROVED').length}
             </div>
           </CardContent>
         </Card>
@@ -239,7 +187,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-700">
-              {stats.rejected}
+              {carryoverRequests.filter(r => r.status === 'REJECTED').length}
             </div>
           </CardContent>
         </Card>
@@ -250,7 +198,7 @@ export function CarryoverApprovalDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-700">
-              {stats.totalDays}
+              {carryoverRequests.reduce((sum, r) => sum + r.requested_carryover_days, 0)}
             </div>
           </CardContent>
         </Card>
@@ -298,7 +246,7 @@ export function CarryoverApprovalDashboard() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <CardTitle className="text-base">
-                        {request.staff.first_name} {request.staff.last_name}
+                        {request.staff.user_metadata.first_name} {request.staff.user_metadata.last_name}
                       </CardTitle>
                       <Badge variant="outline" className={getStatusColor(request.status)}>
                         {getStatusIcon(request.status)}
@@ -306,7 +254,7 @@ export function CarryoverApprovalDashboard() {
                       </Badge>
                     </div>
                     <CardDescription className="text-xs">
-                      ID: {request.staff.employee_id} • {request.staff.department} • {request.staff.location}
+                      ID: {request.staff.user_metadata.employee_id} • {request.staff.user_metadata.department} • {request.staff.user_metadata.location}
                     </CardDescription>
                   </div>
                 </div>

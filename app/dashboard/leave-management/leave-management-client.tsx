@@ -15,13 +15,14 @@ import {
   Copy,
   Download,
   FileClock,
+  FileText,
   Loader2,
   Plus,
   Search,
   Sparkles,
   XCircle,
-  FileText,
 } from "lucide-react"
+import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,8 +30,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
-import { PaymentAdviceNotifications } from "@/components/leave/payment-advice-notifications"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { placeholderDescriptions } from "@/lib/leave-templates"
@@ -70,7 +69,6 @@ interface LeaveManagementClientProps {
   userId: string
   userRole: string
   userDepartment: string | null
-  userLocation: string | null
   userFirstName: string | null
   userLastName: string | null
   hasHodLinkage: boolean
@@ -97,7 +95,6 @@ export function LeaveManagementClient({
   userId,
   userRole,
   userDepartment,
-  userLocation,
   userFirstName,
   userLastName,
   hasHodLinkage,
@@ -145,11 +142,6 @@ export function LeaveManagementClient({
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
   const [selectedTab, setSelectedTab] = useState("my-requests")
-  const [defermentSubTab, setDefermentSubTab] = useState<"submit" | "all">("submit")
-  const [recallSubTab, setRecallSubTab] = useState<"submit" | "all">("submit")
-  const [allDefermentRequests, setAllDefermentRequests] = useState<any[]>([])
-  const [allRecallRequests, setAllRecallRequests] = useState<any[]>([])
-  const [isLoadingAllRequests, setIsLoadingAllRequests] = useState(false)
   const [defermentRequests, setDefermentRequests] = useState<any[]>([])
   const [recallRequests, setRecallRequests] = useState<any[]>([])
   const [myDefermentRequests, setMyDefermentRequests] = useState<any[]>([])
@@ -258,11 +250,11 @@ export function LeaveManagementClient({
     }
   }
 
-  // ─── Fetch Approved Memos for HOD/RM Staff and HR Executives ───
+  // ─── Fetch Approved Memos for HOD/RM Staff ───
   const fetchStaffApprovedMemos = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "regional_manager", "director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "regional_manager"].includes(normalizedRole)
 
       if (!isAuthorized) return
 
@@ -382,7 +374,7 @@ export function LeaveManagementClient({
       return
     }
 
-    if (!window.confirm("⚠�� WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
+    if (!window.confirm("⚠️ WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
       return
     }
 
@@ -607,8 +599,9 @@ export function LeaveManagementClient({
   const isAdminView = normalizedRole === "admin"
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
-  const isLeaveOfficeRole = normalizedRole === "leave_office"
-  const isPaymentAdviceVisible = ["admin", "hr_leave_office", "hr_executive"].includes(normalizedRole)
+  const isHrLeaveOfficeRole = normalizedRole === "hr_leave_office"
+  const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
+  const canAccessPaymentAdvice = isHrLeaveOfficeRole || isHrExecutive
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
@@ -747,10 +740,10 @@ export function LeaveManagementClient({
     void loadTemplates()
   }, [canViewHrTemplates, toast])
 
-  // Fetch approved memos for HOD/RM and HR Executives
+  // Fetch approved memos for HOD/RM
   useEffect(() => {
     const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-    if (["department_head", "regional_manager", "director_hr", "manager_hr", "admin", "hr_leave_office", "hr_office"].includes(normalizedRole)) {
+    if (["department_head", "regional_manager"].includes(normalizedRole)) {
       fetchStaffApprovedMemos()
     }
   }, [userId, userRole, userDepartment])
@@ -784,36 +777,6 @@ export function LeaveManagementClient({
     
     void fetchDefermentAndRecallRequests()
   }, [userId, userRole])
-
-  // Fetch ALL deferment and recall requests (for viewing all requests)
-  // Role-based: HR/Admin see all, HOD/RM see their dept/region, normal staff see only their own
-  useEffect(() => {
-    const fetchAllDefermentAndRecallRequests = async () => {
-      if (defermentSubTab !== "all" && recallSubTab !== "all") return
-      if (!userId) return
-      setIsLoadingAllRequests(true)
-      try {
-        const params = new URLSearchParams({
-          user_id: userId,
-          user_role: userRole || "",
-          user_department: userDepartment || "",
-          user_location: userLocation || ""
-        })
-        const res = await fetch(`/api/leave/deferment-recall/all?${params.toString()}`, { cache: "no-store" })
-        if (res.ok) {
-          const data = await res.json()
-          setAllDefermentRequests(data.deferments || [])
-          setAllRecallRequests(data.recalls || [])
-        }
-      } catch (error) {
-        console.error("[v0] Failed to fetch all deferment/recall requests:", error)
-      } finally {
-        setIsLoadingAllRequests(false)
-      }
-    }
-    
-    void fetchAllDefermentAndRecallRequests()
-  }, [defermentSubTab, recallSubTab, userId, userRole, userDepartment, userLocation])
 
   // Fetch user's own recall and deferment requests (for My Requests tab)
   useEffect(() => {
@@ -1571,34 +1534,32 @@ export function LeaveManagementClient({
                 Recalls
               </Button>
               {isManagerView && (
-                <>
-                  <Button
-                    onClick={() => setSelectedTab("approved-memos")}
-                    className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                      selectedTab === "approved-memos"
-                        ? "bg-teal-600 text-white shadow-md hover:bg-teal-700"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                    }`}
-                    variant={selectedTab === "approved-memos" ? "default" : "outline"}
-                  >
-                    <Download className="h-4 w-4" />
-                    Approved Memos
-                  </Button>
-                  {isPaymentAdviceVisible && (
-                    <Button
-                      onClick={() => setSelectedTab("payment-advice")}
-                      className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                        selectedTab === "payment-advice"
-                          ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                      }`}
-                      variant={selectedTab === "payment-advice" ? "default" : "outline"}
-                    >
-                      <FileText className="h-4 w-4" />
-                      Payment Advice
-                    </Button>
-                  )}
-                </>
+                <Button
+                  onClick={() => setSelectedTab("approved-memos")}
+                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                    selectedTab === "approved-memos"
+                      ? "bg-teal-600 text-white shadow-md hover:bg-teal-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                  variant={selectedTab === "approved-memos" ? "default" : "outline"}
+                >
+                  <Download className="h-4 w-4" />
+                  Approved Memos
+                </Button>
+              )}
+              {canAccessPaymentAdvice && (
+                <Button
+                  onClick={() => setSelectedTab("payment-advice")}
+                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                    selectedTab === "payment-advice"
+                      ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                  variant={selectedTab === "payment-advice" ? "default" : "outline"}
+                >
+                  <FileText className="h-4 w-4" />
+                  Payment Advice
+                </Button>
               )}
             </div>
           </CardContent>
@@ -1608,9 +1569,6 @@ export function LeaveManagementClient({
         <div className="space-y-4">
           {selectedTab === "my-requests" && (
             <div className="space-y-6">
-              {/* Payment Advice Notifications */}
-              <PaymentAdviceNotifications userId={userId} />
-              
               {/* Leave Requests Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -1785,215 +1743,123 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
-                  Leave Deferments
+                  {isLeaveOfficeRole ? "Pending Leave Deferments" : "Defer Your Approved Leave"}
                 </CardTitle>
                 <CardDescription className="text-amber-100">
-                  Submit deferment requests or view all submitted requests
+                  {isLeaveOfficeRole ? "Review and process pending deferment requests from staff" : "Defer your approved leave to a future leave year"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {/* Sub-tabs for Submit and All Requests */}
-                <div className="flex gap-2 mb-6">
-                  <Button
-                    onClick={() => setDefermentSubTab("submit")}
-                    variant={defermentSubTab === "submit" ? "default" : "outline"}
-                    className={`gap-2 ${defermentSubTab === "submit" ? "bg-amber-600 hover:bg-amber-700" : "border-amber-300 text-amber-700 hover:bg-amber-50"}`}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Submit Request
-                  </Button>
-                  <Button
-                    onClick={() => setDefermentSubTab("all")}
-                    variant={defermentSubTab === "all" ? "default" : "outline"}
-                    className={`gap-2 ${defermentSubTab === "all" ? "bg-amber-600 hover:bg-amber-700" : "border-amber-300 text-amber-700 hover:bg-amber-50"}`}
-                  >
-                    <ClipboardList className="h-4 w-4" />
-                    All Requests ({allDefermentRequests.length})
-                  </Button>
-                </div>
-
-                {/* Submit Request Sub-tab */}
-                {defermentSubTab === "submit" && (
-                  <>
-                    {isLeaveOfficeRole ? (
-                      // Leave Office sees pending deferments to process
-                      defermentRequests.length === 0 ? (
-                        <div className="text-center py-12">
-                          <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                          <p className="font-medium text-slate-700">No pending deferment requests</p>
-                          <p className="text-sm text-slate-500 mt-2">All deferment requests have been processed</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {defermentRequests.map((req: any) => (
-                            <div key={req.id} className="border border-amber-200 rounded-lg p-4 bg-white">
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div>
-                                  <p className="text-sm text-slate-600">Staff</p>
-                                  <p className="font-semibold text-slate-900">{req.staff_name || "Unknown"}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-slate-600">Leave Type</p>
-                                  <p className="font-semibold text-slate-900">{req.leave_type}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-slate-600">Original Period</p>
-                                  <p className="text-sm text-slate-700">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-slate-600">Defer to Year</p>
-                                  <p className="font-semibold text-slate-900">{req.deferral_year}</p>
-                                </div>
-                              </div>
-                              {req.deferment_reason && (
-                                <div className="mt-4 pt-4 border-t border-amber-100">
-                                  <p className="text-sm text-slate-600">Reason</p>
-                                  <p className="text-sm text-slate-700">{req.deferment_reason}</p>
-                                </div>
-                              )}
-                              <div className="flex gap-3 mt-4">
-                                <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
-                                <Button variant="outline" className="flex-1">Decline</Button>
-                              </div>
+                {isLeaveOfficeRole ? (
+                  defermentRequests.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                      <p className="font-medium text-slate-700">No pending deferment requests</p>
+                      <p className="text-sm text-slate-500 mt-2">There are no deferment requests awaiting review</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {defermentRequests.map((req: any) => (
+                        <div key={req.id} className="bg-white rounded-lg border border-amber-200 p-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-slate-600">Staff Name</p>
+                              <p className="font-semibold text-slate-900">{req.user_name}</p>
                             </div>
-                          ))}
-                        </div>
-                      )
-                    ) : (
-                      <>
-                        {approvedRequests.length === 0 ? (
-                          <div className="text-center py-12">
-                            <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                            <p className="font-medium text-slate-700">No approved leave to defer</p>
-                            <p className="text-sm text-slate-500 mt-2">You must have approved leave requests to create a deferment</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-6">
-                            <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
-                              <div className="space-y-3">
-                                <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">Select Approved Leave Request</Label>
-                                <select
-                                  id="defer_request"
-                                  value={selectedApprovedForDeferment || ""}
-                                  onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
-                                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
-                                >
-                                  <option value="">-- Choose a leave request --</option>
-                                  {approvedRequests.map((req) => (
-                                    <option key={req.id} value={req.id}>
-                                      {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div className="space-y-3">
-                                <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
-                                <Input
-                                  id="deferral_year"
-                                  type="text"
-                                  placeholder="2027"
-                                  value={deferralYear}
-                                  onChange={(e) => setDeferralYear(e.target.value)}
-                                  maxLength={4}
-                                  className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                />
-                              </div>
-
-                              <div className="space-y-3">
-                                <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">Reason (Optional)</Label>
-                                <Textarea
-                                  id="deferment_reason"
-                                  placeholder="Explain why you want to defer this leave..."
-                                  value={defermentReason}
-                                  onChange={(e) => setDefermentReason(e.target.value)}
-                                  rows={3}
-                                  className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                />
-                              </div>
-
-                              <Button
-                                onClick={submitDefermentRequest}
-                                disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear}
-                                className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-semibold py-2.5 rounded-lg transition-all"
-                              >
-                                {isSubmittingDeferment ? (
-                                  <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Submitting...
-                                  </>
-                                ) : (
-                                  "Submit Deferment Request"
-                                )}
-                              </Button>
+                            <div>
+                              <p className="text-sm text-slate-600">Leave Type</p>
+                              <p className="font-semibold text-slate-900">{req.leave_type}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-slate-600">Original Period</p>
+                              <p className="text-sm text-slate-700">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-slate-600">Defer to Year</p>
+                              <p className="font-semibold text-slate-900">{req.deferral_year}</p>
                             </div>
                           </div>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-
-                {/* All Requests Sub-tab */}
-                {defermentSubTab === "all" && (
+                          {req.deferment_reason && (
+                            <div className="mt-4 pt-4 border-t border-amber-100">
+                              <p className="text-sm text-slate-600">Reason</p>
+                              <p className="text-sm text-slate-700">{req.deferment_reason}</p>
+                            </div>
+                          )}
+                          <div className="flex gap-3 mt-4">
+                            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
+                            <Button variant="outline" className="flex-1">Decline</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : (
                   <>
-                    {isLoadingAllRequests ? (
-                      <div className="flex items-center justify-center py-12">
-                        <Loader2 className="h-8 w-8 animate-spin text-amber-600" />
-                      </div>
-                    ) : allDefermentRequests.length === 0 ? (
+                    {approvedRequests.length === 0 ? (
                       <div className="text-center py-12">
                         <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                        <p className="font-medium text-slate-700">No deferment requests found</p>
-                        <p className="text-sm text-slate-500 mt-2">No staff have submitted deferment requests yet</p>
+                        <p className="font-medium text-slate-700">No approved leave to defer</p>
+                        <p className="text-sm text-slate-500 mt-2">You must have approved leave requests to create a deferment</p>
                       </div>
                     ) : (
-                      <div className="space-y-4">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-amber-100 border-b border-amber-200">
-                              <tr>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Department</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Leave Type</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Original Period</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Defer To</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Submitted</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-amber-100">
-                              {allDefermentRequests.map((req) => (
-                                <tr key={req.id} className="hover:bg-amber-50/50">
-                                  <td className="px-4 py-3">
-                                    <div className="font-medium text-slate-900">{req.staff_name}</div>
-                                    <div className="text-xs text-slate-500">{req.employee_id}</div>
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-600">{req.department}</td>
-                                  <td className="px-4 py-3 text-slate-600">{req.leave_type}</td>
-                                  <td className="px-4 py-3 text-slate-600">
-                                    {req.start_date && req.end_date ? (
-                                      <span>{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</span>
-                                    ) : "-"}
-                                  </td>
-                                  <td className="px-4 py-3 font-semibold text-amber-700">{req.requested_deferment_year || req.requested_deferment_period}</td>
-                                  <td className="px-4 py-3">
-                                    <Badge className={
-                                      req.status === "pending" ? "bg-amber-100 text-amber-800" :
-                                      req.status === "approved" ? "bg-emerald-100 text-emerald-800" :
-                                      req.status === "rejected" ? "bg-red-100 text-red-800" :
-                                      "bg-slate-100 text-slate-800"
-                                    }>
-                                      {req.status}
-                                    </Badge>
-                                  </td>
-                                  <td className="px-4 py-3 text-xs text-slate-500">
-                                    {new Date(req.created_at).toLocaleDateString()}
-                                  </td>
-                                </tr>
+                      <div className="space-y-6">
+                        <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
+                          <div className="space-y-3">
+                            <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">Select Approved Leave Request</Label>
+                            <select
+                              id="defer_request"
+                              value={selectedApprovedForDeferment || ""}
+                              onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
+                              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
+                            >
+                              <option value="">-- Choose a leave request --</option>
+                              {approvedRequests.map((req) => (
+                                <option key={req.id} value={req.id}>
+                                  {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                                </option>
                               ))}
-                            </tbody>
-                          </table>
+                            </select>
+                          </div>
+
+                          <div className="space-y-3">
+                            <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
+                            <Input
+                              id="deferral_year"
+                              type="text"
+                              placeholder="2027"
+                              value={deferralYear}
+                              onChange={(e) => setDeferralYear(e.target.value)}
+                              maxLength={4}
+                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div className="space-y-3">
+                            <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">Reason (Optional)</Label>
+                            <Textarea
+                              id="deferment_reason"
+                              placeholder="Explain why you want to defer this leave..."
+                              value={defermentReason}
+                              onChange={(e) => setDefermentReason(e.target.value)}
+                              rows={3}
+                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <Button
+                            onClick={submitDefermentRequest}
+                            disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear}
+                            className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                          >
+                            {isSubmittingDeferment ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Submitting...
+                              </>
+                            ) : (
+                              "Submit Deferment Request"
+                            )}
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -2008,178 +1874,80 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <ArrowUpRight className="h-5 w-5" />
-                  Leave Recalls
+                  Recall Your Leave
                 </CardTitle>
-                <CardDescription className="text-rose-100">Submit recall requests or view all submitted requests</CardDescription>
+                <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {/* Sub-tabs for Submit and All Requests */}
-                <div className="flex gap-2 mb-6">
-                  <Button
-                    onClick={() => setRecallSubTab("submit")}
-                    variant={recallSubTab === "submit" ? "default" : "outline"}
-                    className={`gap-2 ${recallSubTab === "submit" ? "bg-rose-600 hover:bg-rose-700" : "border-rose-300 text-rose-700 hover:bg-rose-50"}`}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Submit Request
-                  </Button>
-                  <Button
-                    onClick={() => setRecallSubTab("all")}
-                    variant={recallSubTab === "all" ? "default" : "outline"}
-                    className={`gap-2 ${recallSubTab === "all" ? "bg-rose-600 hover:bg-rose-700" : "border-rose-300 text-rose-700 hover:bg-rose-50"}`}
-                  >
-                    <ClipboardList className="h-4 w-4" />
-                    All Requests ({allRecallRequests.length})
-                  </Button>
-                </div>
-
-                {/* Submit Request Sub-tab */}
-                {recallSubTab === "submit" && (
-                  <>
-                    {!isManagerView ? (
-                      <Alert className="border-blue-200 bg-blue-50">
-                        <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
-                      </Alert>
-                    ) : approvedRequests.length === 0 ? (
-                      <div className="text-center py-12">
-                        <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
-                        <p className="font-medium text-slate-700">No approved leave to recall</p>
-                        <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
+                {!isManagerView ? (
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
+                  </Alert>
+                ) : approvedRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
+                    <p className="font-medium text-slate-700">No approved leave to recall</p>
+                    <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_request" className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
+                        <select
+                          id="recall_request"
+                          value={selectedApprovedForRecall || ""}
+                          onChange={(e) => setSelectedApprovedForRecall(e.target.value || null)}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
+                        >
+                          <option value="">-- Choose a leave request --</option>
+                          {approvedRequests.map((req) => (
+                            <option key={req.id} value={req.id}>
+                              {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    ) : (
-                      <div className="space-y-6">
-                        <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
-                          <div className="space-y-3">
-                            <Label htmlFor="recall_request" className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
-                            <select
-                              id="recall_request"
-                              value={selectedApprovedForRecall || ""}
-                              onChange={(e) => setSelectedApprovedForRecall(e.target.value || null)}
-                              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
-                            >
-                              <option value="">-- Choose a leave request --</option>
-                              {approvedRequests.map((req) => (
-                                <option key={req.id} value={req.id}>
-                                  {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
 
-                          <div className="space-y-3">
-                            <Label htmlFor="recall_date" className="text-sm font-semibold text-slate-700">Recall Date (YYYY-MM-DD)</Label>
-                            <Input
-                              id="recall_date"
-                              type="date"
-                              value={recallDateInput}
-                              onChange={(e) => setRecallDateInput(e.target.value)}
-                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
-                            />
-                          </div>
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_date" className="text-sm font-semibold text-slate-700">Recall Date (YYYY-MM-DD)</Label>
+                        <Input
+                          id="recall_date"
+                          type="date"
+                          value={recallDateInput}
+                          onChange={(e) => setRecallDateInput(e.target.value)}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
 
-                          <div className="space-y-3">
-                            <Label htmlFor="recall_reason" className="text-sm font-semibold text-slate-700">Reason for Recall</Label>
-                            <Textarea
-                              id="recall_reason"
-                              placeholder="Explain the reason for recalling this leave..."
-                              value={recallReasonInput}
-                              onChange={(e) => setRecallReasonInput(e.target.value)}
-                              rows={3}
-                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
-                            />
-                          </div>
+                      <div className="space-y-3">
+                        <Label htmlFor="recall_reason" className="text-sm font-semibold text-slate-700">Reason for Recall</Label>
+                        <Textarea
+                          id="recall_reason"
+                          placeholder="Explain the reason for recalling this leave..."
+                          value={recallReasonInput}
+                          onChange={(e) => setRecallReasonInput(e.target.value)}
+                          rows={3}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
 
-                          <Button
-                            onClick={submitRecallRequest}
-                            disabled={isSubmittingRecall || !selectedApprovedForRecall || !recallDateInput}
-                            className="w-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-semibold py-2.5 rounded-lg transition-all"
-                          >
-                            {isSubmittingRecall ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Submitting...
-                              </>
-                            ) : (
-                              "Submit Recall Request"
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* All Requests Sub-tab */}
-                {recallSubTab === "all" && (
-                  <>
-                    {isLoadingAllRequests ? (
-                      <div className="flex items-center justify-center py-12">
-                        <Loader2 className="h-8 w-8 animate-spin text-rose-600" />
-                      </div>
-                    ) : allRecallRequests.length === 0 ? (
-                      <div className="text-center py-12">
-                        <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
-                        <p className="font-medium text-slate-700">No recall requests found</p>
-                        <p className="text-sm text-slate-500 mt-2">No staff have submitted recall requests yet</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-rose-100 border-b border-rose-200">
-                              <tr>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Department</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Leave Type</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Original Period</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Recall Date</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Initiated By</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
-                                <th className="px-4 py-3 text-left font-semibold text-slate-700">Submitted</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-rose-100">
-                              {allRecallRequests.map((req) => (
-                                <tr key={req.id} className="hover:bg-rose-50/50">
-                                  <td className="px-4 py-3">
-                                    <div className="font-medium text-slate-900">{req.staff_name}</div>
-                                    <div className="text-xs text-slate-500">{req.employee_id}</div>
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-600">{req.department}</td>
-                                  <td className="px-4 py-3 text-slate-600">{req.leave_type}</td>
-                                  <td className="px-4 py-3 text-slate-600">
-                                    {req.start_date && req.end_date ? (
-                                      <span>{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</span>
-                                    ) : "-"}
-                                  </td>
-                                  <td className="px-4 py-3 font-semibold text-rose-700">
-                                    {req.recall_date ? new Date(req.recall_date).toLocaleDateString() : "-"}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <div className="text-sm text-slate-900">{req.initiator_name}</div>
-                                    <div className="text-xs text-slate-500">{req.initiator_position}</div>
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <Badge className={
-                                      req.status === "pending" ? "bg-amber-100 text-amber-800" :
-                                      req.status === "approved" ? "bg-emerald-100 text-emerald-800" :
-                                      req.status === "rejected" ? "bg-red-100 text-red-800" :
-                                      "bg-slate-100 text-slate-800"
-                                    }>
-                                      {req.status}
-                                    </Badge>
-                                  </td>
-                                  <td className="px-4 py-3 text-xs text-slate-500">
-                                    {new Date(req.created_at).toLocaleDateString()}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                      <Button
+                        onClick={submitRecallRequest}
+                        disabled={isSubmittingRecall || !selectedApprovedForRecall || !recallDateInput}
+                        className="w-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                      >
+                        {isSubmittingRecall ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Recall Request"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -2310,9 +2078,9 @@ export function LeaveManagementClient({
             </Card>
           )}
 
-        {isPaymentAdviceVisible && selectedTab === "payment-advice" && (
-          <PaymentAdviceClient />
-        )}
+          {selectedTab === "payment-advice" && canAccessPaymentAdvice && (
+            <PaymentAdviceClient userRole={normalizedRole} />
+          )}
 
         {isManagerView && selectedTab === "pending-approvals" && (
           <>
