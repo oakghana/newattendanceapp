@@ -20,6 +20,7 @@ import {
   Search,
   Sparkles,
   XCircle,
+  FileText,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +29,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
+import { PaymentAdviceNotifications } from "@/components/leave/payment-advice-notifications"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { placeholderDescriptions } from "@/lib/leave-templates"
@@ -379,7 +382,7 @@ export function LeaveManagementClient({
       return
     }
 
-    if (!window.confirm("⚠️ WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
+    if (!window.confirm("⚠�� WARNING: This will DELETE ALL leave transactions, requests, planning data, and notifications from the entire system. The leave process will start completely fresh. This action CANNOT be undone. Are you sure?")) {
       return
     }
 
@@ -605,6 +608,7 @@ export function LeaveManagementClient({
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const isLeaveOfficeRole = normalizedRole === "leave_office"
+  const isPaymentAdviceVisible = ["admin", "hr_leave_office", "hr_executive"].includes(normalizedRole)
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {
@@ -1567,18 +1571,34 @@ export function LeaveManagementClient({
                 Recalls
               </Button>
               {isManagerView && (
-                <Button
-                  onClick={() => setSelectedTab("approved-memos")}
-                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
-                    selectedTab === "approved-memos"
-                      ? "bg-teal-600 text-white shadow-md hover:bg-teal-700"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
-                  }`}
-                  variant={selectedTab === "approved-memos" ? "default" : "outline"}
-                >
-                  <Download className="h-4 w-4" />
-                  Approved Memos
-                </Button>
+                <>
+                  <Button
+                    onClick={() => setSelectedTab("approved-memos")}
+                    className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                      selectedTab === "approved-memos"
+                        ? "bg-teal-600 text-white shadow-md hover:bg-teal-700"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                    }`}
+                    variant={selectedTab === "approved-memos" ? "default" : "outline"}
+                  >
+                    <Download className="h-4 w-4" />
+                    Approved Memos
+                  </Button>
+                  {isPaymentAdviceVisible && (
+                    <Button
+                      onClick={() => setSelectedTab("payment-advice")}
+                      className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                        selectedTab === "payment-advice"
+                          ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                      }`}
+                      variant={selectedTab === "payment-advice" ? "default" : "outline"}
+                    >
+                      <FileText className="h-4 w-4" />
+                      Payment Advice
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </CardContent>
@@ -1588,6 +1608,9 @@ export function LeaveManagementClient({
         <div className="space-y-4">
           {selectedTab === "my-requests" && (
             <div className="space-y-6">
+              {/* Payment Advice Notifications */}
+              <PaymentAdviceNotifications userId={userId} />
+              
               {/* Leave Requests Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -2286,6 +2309,10 @@ export function LeaveManagementClient({
               </CardContent>
             </Card>
           )}
+
+        {isPaymentAdviceVisible && selectedTab === "payment-advice" && (
+          <PaymentAdviceClient />
+        )}
 
         {isManagerView && selectedTab === "pending-approvals" && (
           <>
