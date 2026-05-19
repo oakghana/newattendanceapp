@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 
 interface CarryoverRequest {
   id: string
@@ -33,24 +34,9 @@ interface CarryoverRequest {
 export function CarryoverApprovalDashboard() {
   const [carryoverRequests, setCarryoverRequests] = useState<CarryoverRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [approvingId, setApprovingId] = useState<string | null>(null)
-  const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('ALL')
   const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, totalDays: 0 })
-  const [currentUserId, setCurrentUserId] = useState<string>('')
   const { toast } = useToast()
-
-  useEffect(() => {
-    // Get current user
-    const getCurrentUser = async () => {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setCurrentUserId(user.id)
-      }
-    }
-    getCurrentUser()
-  }, [])
 
   useEffect(() => {
     fetchPendingCarryovers()
@@ -78,121 +64,6 @@ export function CarryoverApprovalDashboard() {
     }
   }
 
-  const handleApprove = async (request: CarryoverRequest) => {
-    if (!currentUserId) {
-      toast({
-        title: 'Error',
-        description: 'User not authenticated',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setApprovingId(request.id)
-    try {
-      const approvalPayload = {
-        carryover_request_id: request.id,
-        approved_days: Math.min(request.requested_carryover_days, request.max_carryover_allowed),
-        approval_reason: 'POLICY_COMPLIANT',
-        reviewed_by: currentUserId,
-      }
-
-      console.log('[v0] Sending approval payload:', approvalPayload)
-
-      const res = await fetch('/api/leave/carryover/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(approvalPayload),
-      })
-
-      const responseData = await res.json()
-
-      if (!res.ok) {
-        console.error('[v0] API error:', responseData)
-        throw new Error(responseData.error || 'Failed to approve')
-      }
-
-      toast({
-        title: 'Approved',
-        description: `${request.staff.first_name} carryover approved for ${approvalPayload.approved_days} days`,
-      })
-
-      await fetchPendingCarryovers()
-    } catch (error: any) {
-      console.error('[v0] Approve error:', error)
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to approve carryover',
-        variant: 'destructive',
-      })
-    } finally {
-      setApprovingId(null)
-    }
-  }
-
-  const handleReject = async (request: CarryoverRequest) => {
-    if (!currentUserId) {
-      toast({
-        title: 'Error',
-        description: 'User not authenticated',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setRejectingId(request.id)
-    try {
-      const rejectPayload = {
-        carryover_request_id: request.id,
-        forfeiture_reason: 'POLICY_LIMIT_EXCEEDED',
-        reviewed_by: currentUserId,
-      }
-
-      console.log('[v0] Sending reject payload:', rejectPayload)
-
-      const res = await fetch('/api/leave/carryover/reject', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rejectPayload),
-      })
-
-      const responseData = await res.json()
-
-      if (!res.ok) {
-        console.error('[v0] API error:', responseData)
-        throw new Error(responseData.error || 'Failed to reject')
-      }
-
-      toast({
-        title: 'Rejected',
-        description: `${request.staff.first_name} carryover forfeited`,
-      })
-
-      await fetchPendingCarryovers()
-    } catch (error: any) {
-      console.error('[v0] Reject error:', error)
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to reject carryover',
-        variant: 'destructive',
-      })
-    } finally {
-      setRejectingId(null)
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return 'bg-amber-100 text-amber-900'
-      case 'APPROVED':
-        return 'bg-emerald-100 text-emerald-900'
-      case 'REJECTED':
-        return 'bg-red-100 text-red-900'
-      default:
-        return 'bg-slate-100 text-slate-900'
-    }
-  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -339,27 +210,14 @@ export function CarryoverApprovalDashboard() {
                   </Alert>
                 )}
 
-                {/* Actions */}
+                {/* Auto-Approval Notice */}
                 {request.status === 'PENDING' && (
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      onClick={() => handleApprove(request)}
-                      disabled={approvingId === request.id}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      {approvingId === request.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Approve
-                    </Button>
-                    <Button
-                      onClick={() => handleReject(request)}
-                      disabled={rejectingId === request.id}
-                      variant="destructive"
-                      className="flex-1"
-                    >
-                      {rejectingId === request.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Reject
-                    </Button>
-                  </div>
+                  <Alert className="bg-blue-50 border-blue-200 text-blue-900">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      This carryover request will be automatically approved by the system.
+                    </AlertDescription>
+                  </Alert>
                 )}
 
                 {/* Meta Info */}

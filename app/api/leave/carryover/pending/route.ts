@@ -19,6 +19,34 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Number(searchParams.get('limit')) || 100, 500)
     const offset = Math.max(Number(searchParams.get('offset')) || 0, 0)
 
+    // Auto-approve all pending carryover records from HR Leave Office
+    // Get all pending records and auto-approve them
+    const { data: pendingRecords, error: pendingError } = await supabase
+      .from('outstanding_leave_balances')
+      .select('id, user_id, carryover_to_next_year')
+      .gt('carryover_to_next_year', 0)
+      .is('status', null) // Status is null (pending)
+      .eq('leave_year_period', leaveYear || new Date().getFullYear().toString() + '-' + (new Date().getFullYear() + 1).toString())
+
+    if (!pendingError && pendingRecords && pendingRecords.length > 0) {
+      console.log(`[v0] Auto-approving ${pendingRecords.length} pending carryover records`)
+      for (const record of pendingRecords) {
+        try {
+          await supabase
+            .from('outstanding_leave_balances')
+            .update({
+              status: 'APPROVED',
+              approved_by: 'system-auto-approve',
+              approved_at: new Date().toISOString(),
+              notes: `Auto-approved: ${record.carryover_to_next_year} days carryover. Reason: System auto-approval for HR Leave Office submission.`,
+            })
+            .eq('id', record.id)
+        } catch (approveErr) {
+          console.error('[v0] Error auto-approving record:', record.id, approveErr)
+        }
+      }
+    }
+
     // Query outstanding_leave_balances which contains the actual carryover data
     // The column is 'carryover_to_next_year', not 'carryover_days'
     let query = supabase
