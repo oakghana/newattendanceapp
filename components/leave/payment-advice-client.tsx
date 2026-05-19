@@ -644,6 +644,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   }
 
   // HR Leave Office View - Create and submit payment advice memos
+  return (
     <div className="space-y-6">
       {/* Month Selection & HR Signer */}
       <Card>
