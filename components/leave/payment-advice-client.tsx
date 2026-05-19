@@ -395,11 +395,12 @@ export function PaymentAdviceClient() {
       doc.text("DEPUTY DIRECTOR, FINANCE", 35, yPos)
       yPos += 6
 
-      // FROM field
+      // FROM field - use selected signer's position
       doc.setFont(undefined, "bold")
       doc.text("FROM:", 20, yPos)
       doc.setFont(undefined, "normal")
-      doc.text("DEPUTY HUMAN RESOURCE MANAGER", 35, yPos)
+      const fromPosition = selectedSigner ? selectedSigner.position : "DEPUTY HUMAN RESOURCE MANAGER"
+      doc.text(fromPosition, 35, yPos)
       yPos += 6
 
       // SUBJECT field
