@@ -133,6 +133,11 @@ export function PaymentAdviceClient() {
       }
 
       const data = await response.json()
+      console.log("[v0] Detected staff data:", data.staff)
+      if (data.staff && data.staff.length > 0) {
+        console.log("[v0] First staff member:", data.staff[0])
+        console.log("[v0] First staff keys:", Object.keys(data.staff[0]))
+      }
       setStaffList(data.staff || [])
       setMemos({})
       setMemoSummary(null)

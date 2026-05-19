@@ -78,6 +78,13 @@ export async function POST(request: NextRequest) {
           approved_days: staff.approved_days || staff.requested_days || 0,
         })
       } else {
+        console.log("[v0] Staff validation failed:", {
+          name: staff.full_name,
+          has_leave_plan_request_id: !!staff.leave_plan_request_id,
+          has_user_id: !!staff.user_id,
+          staff_keys: Object.keys(staff),
+          staff,
+        })
         errors.push(`Missing leave_plan_request_id or user_id for ${staff.full_name}`)
       }
     }
