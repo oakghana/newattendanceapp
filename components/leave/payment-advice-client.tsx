@@ -349,10 +349,11 @@ export function PaymentAdviceClient() {
       doc.setFont(undefined, "bold")
       doc.text("MEMORANDUM", pageWidth - 50, 15)
       
-      // Add logo in top right
+      // Add logo centered between date and memorandum text
       try {
         const logoUrl = "/images/qcc-logo.png"
-        doc.addImage(logoUrl, "PNG", pageWidth - 32, 18, 20, 20)
+        // Position logo in the middle, between the right column and edge
+        doc.addImage(logoUrl, "PNG", pageWidth - 40, 18, 18, 18)
       } catch (err) {
         console.log("[v0] Logo not available, skipping")
       }
