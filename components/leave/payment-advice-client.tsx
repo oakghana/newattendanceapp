@@ -26,8 +26,9 @@ interface StaffOnLeave {
 
 interface HRExecutive {
   id: string
-  full_name: string
-  position: string
+  name?: string
+  full_name?: string
+  position?: string
   email: string
 }
 
@@ -49,14 +50,27 @@ export function PaymentAdviceClient() {
     const fetchHrExecutives = async () => {
       setLoadingHrExecutives(true)
       try {
-        const response = await fetch("/api/hr/executives")
+        const response = await fetch("/api/leave/hr-executives")
         if (response.ok) {
           const data = await response.json()
-          setHrExecutives(data.executives || [])
+          const execs = (data.executives || []).map((exec: any) => ({
+            id: exec.id,
+            full_name: exec.name || exec.full_name || "Unknown",
+            position: exec.role_label || exec.position || "HR Executive",
+            email: exec.email,
+          }))
+          setHrExecutives(execs)
+          console.log("[v0] HR Executives loaded:", execs.length)
           // Set default signer as first HR executive
-          if (data.executives && data.executives.length > 0) {
-            setSelectedSigner(data.executives[0])
+          if (execs.length > 0) {
+            setSelectedSigner(execs[0])
+            console.log("[v0] Default signer set to:", execs[0].full_name)
+          } else {
+            console.log("[v0] No HR executives found")
           }
+        } else {
+          const error = await response.json()
+          console.error("[v0] API returned error:", error)
         }
       } catch (err) {
         console.error("[v0] Error fetching HR executives:", err)
