@@ -185,6 +185,15 @@ export function PaymentAdviceClient() {
 
   // Submit memos
   const handleSubmitMemos = async () => {
+    if (!selectedSigner) {
+      toast({
+        title: "Error",
+        description: "Please select an HR executive signer first.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const response = await fetch("/api/leave/payment-advice/submit-memo", {
@@ -194,10 +203,20 @@ export function PaymentAdviceClient() {
           month: selectedMonth,
           memos,
           staffList,
+          selectedSigner: {
+            id: selectedSigner.id,
+            name: selectedSigner.full_name || selectedSigner.name,
+            position: selectedSigner.position,
+            email: selectedSigner.email,
+          },
         }),
       })
 
-      if (!response.ok) throw new Error("Failed to submit memos")
+      if (!response.ok) {
+        const error = await response.json()
+        console.error("[v0] API error details:", error)
+        throw new Error(error.details || error.error || "Failed to submit memos")
+      }
 
       toast({
         title: "Success",
@@ -207,11 +226,11 @@ export function PaymentAdviceClient() {
       setMemos({})
       setStaffList([])
       setMemoSummary(null)
-    } catch (err) {
+    } catch (err: any) {
       console.error("[v0] Error submitting memos:", err)
       toast({
         title: "Error",
-        description: "Failed to submit memos. Please try again.",
+        description: err.message || "Failed to submit memos. Please try again.",
         variant: "destructive",
       })
     } finally {

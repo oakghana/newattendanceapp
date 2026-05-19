@@ -16,11 +16,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { month, memoText, staffList } = await request.json()
+    const { month, memos, staffList, selectedSigner } = await request.json()
 
-    if (!month || !memoText || !staffList) {
+    if (!month || !memos || !staffList || !selectedSigner) {
+      console.error("[v0] Missing fields:", { month: !!month, memos: !!memos, staffList: !!staffList, selectedSigner: !!selectedSigner })
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields", details: "month, memos, staffList, and selectedSigner are all required" },
         { status: 400 }
       )
     }
@@ -33,15 +34,18 @@ export async function POST(request: NextRequest) {
       Junior: categories.Junior.length,
     }
 
-    // Save memo to database
+    // Save memo to database with signer information
     const { data, error } = await supabase
       .from("leave_payment_memos")
       .insert({
         month,
-        memo_content: memoText,
+        memo_content: JSON.stringify(memos), // Store all memos as JSON
         staff_count_by_category: staffCountByCategory,
         staff_list_json: staffList,
         generated_by: user.id,
+        signer_id: selectedSigner.id,
+        signer_name: selectedSigner.name,
+        signer_position: selectedSigner.position,
         generated_at: new Date().toISOString(),
       })
       .select("id")
@@ -50,16 +54,16 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("[v0] Error saving memo:", error)
       return NextResponse.json(
-        { error: "Failed to save memo" },
+        { error: "Failed to save memo", details: error.message },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true, memoId: data.id })
-  } catch (err) {
+  } catch (err: any) {
     console.error("[v0] Error submitting memo:", err)
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: err.message },
       { status: 500 }
     )
   }
