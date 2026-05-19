@@ -362,6 +362,13 @@ export function PaymentAdviceClient() {
       doc.setLineWidth(0.5)
       doc.line(pageWidth / 2, 12, pageWidth / 2, 40)
 
+      // Reference Number and Date (below address, above border line)
+      yPos = 36
+      doc.setFontSize(9)
+      doc.setFont(undefined, "normal")
+      doc.text(`REF. NO: ${referenceNumbers[category] || "N/A"}`, 20, yPos)
+      doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
+
       // Horizontal line below header
       yPos = 42
       doc.line(20, yPos, pageWidth - 20, yPos)
@@ -380,12 +387,6 @@ export function PaymentAdviceClient() {
       const monthName = monthNames[parseInt(month) - 1]
       const categoryLabel = category === "Manager" ? "MANAGEMENT" : category === "Senior" ? "SNR." : "JNR."
 
-      // REF. NO and DATE
-      doc.setFont(undefined, "normal")
-      doc.text(`REF. NO: ${referenceNumbers[category] || "N/A"}`, 20, yPos)
-      doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
-      yPos += 8
-
       // TO field
       doc.setFont(undefined, "bold")
       doc.text("TO:", 20, yPos)
@@ -402,11 +403,15 @@ export function PaymentAdviceClient() {
 
       // SUBJECT field
       doc.setFont(undefined, "bold")
-      doc.text("SUBJECT:", 20, yPos)
-      doc.setFont(undefined, "normal")
       const subjectText = `PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`
-      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 55)
-      doc.text(splitSubject[0], 35, yPos)
+      doc.text("SUBJECT: ", 20, yPos)
+      
+      // Calculate space after SUBJECT:
+      const subjectLabelWidth = doc.getTextWidth("SUBJECT: ")
+      doc.setFont(undefined, "normal")
+      const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 55 - subjectLabelWidth)
+      doc.text(splitSubject[0], 20 + subjectLabelWidth, yPos)
+      
       if (splitSubject.length > 1) {
         yPos += 5
         doc.text(splitSubject[1], 35, yPos)
@@ -514,15 +519,15 @@ export function PaymentAdviceClient() {
       doc.setDrawColor(0, 0, 0)
       doc.setLineWidth(0.5)
       doc.line(20, yPos, 50, yPos)
-      yPos += 10
+      yPos += 5
       
-      // Signer name
+      // Signer name (no border above)
       doc.setFont(undefined, "bold")
       doc.setFontSize(10)
       doc.setTextColor(0, 0, 0)
       const signerName = selectedSigner ? selectedSigner.full_name.toUpperCase() : "HR EXECUTIVE"
       doc.text(signerName, 20, yPos)
-      yPos += 6
+      yPos += 5
       
       // Signer title
       doc.setFont(undefined, "normal")

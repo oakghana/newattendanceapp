@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
           memo_subject: `Payment of Leave Allowance (${category} Staff) - ${month}`,
           hr_leave_office_id: user.id,
           hr_leave_office_name: selectedSigner.name || "",
-          status: "generated",
+          status: "pending",
           leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
           leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
           approved_days: staff.approved_days || staff.requested_days || 0,
