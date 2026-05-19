@@ -446,7 +446,9 @@ export function PaymentAdviceClient() {
       const colWidths = [8, 45, 18, 35, 35, 24]
       const rowHeight = 6
       const headerHeight = 8
-      const startX = 15
+      // Calculate centered position: (pageWidth - totalTableWidth) / 2
+      const totalTableWidth = colWidths.reduce((sum, width) => sum + width, 0)
+      const startX = (pageWidth - totalTableWidth) / 2
 
       // Draw table header - simple black borders, no fill
       doc.setFont(undefined, "bold")
