@@ -60,9 +60,13 @@ export async function GET(request: NextRequest) {
           hr_approver_name,
           hr_approved_at,
           hr_office_reviewer_name,
-          hr_office_reviewed_at
+          hr_office_reviewed_at,
+          hr_signature_image_url,
+          hr_signature_data_url,
+          hr_approval_note
         `)
         .in("status", ["approved", "hr_approved"])
+        .not("hr_signature_image_url", "is", null)
         .order("hr_approved_at", { ascending: false, nullsFirst: false })
         .limit(200)
 
@@ -167,13 +171,22 @@ export async function GET(request: NextRequest) {
         user_id,
         preferred_start_date,
         preferred_end_date,
+        adjusted_start_date,
+        adjusted_end_date,
         leave_type_key,
         reason,
         status,
-        created_at
+        created_at,
+        hr_approver_name,
+        hr_approved_at,
+        hr_office_reviewer_name,
+        hr_office_reviewed_at,
+        hr_signature_image_url,
+        hr_approval_note
       `)
       .in("user_id", staffIds)
       .in("status", ["approved", "hr_approved"])
+      .not("hr_signature_image_url", "is", null)
       .order("created_at", { ascending: false })
 
     if (requestError) {

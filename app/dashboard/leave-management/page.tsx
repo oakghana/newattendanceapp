@@ -241,10 +241,13 @@ export default async function LeaveManagementPage() {
             leave_type_key,
             reason,
             status,
-            created_at
+            created_at,
+            hr_signature_image_url,
+            hr_approved_at
           `)
           .in("user_id", staffIds)
           .in("status", ["approved", "hr_approved"])
+          .not("hr_signature_image_url", "is", null)
           .order("preferred_start_date", { ascending: true })
 
         // Fetch user profiles separately to get names, ranks, locations
