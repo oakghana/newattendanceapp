@@ -1796,7 +1796,7 @@ export function LeaveManagementClient({
                   )
                 ) : (
                   <>
-                    {approvedRequests.length === 0 ? (
+                    {typeof approvedRequests === "undefined" || approvedRequests.length === 0 ? (
                       <div className="text-center py-12">
                         <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
                         <p className="font-medium text-slate-700">No approved leave to defer</p>
@@ -1814,7 +1814,7 @@ export function LeaveManagementClient({
                               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
                             >
                               <option value="">-- Choose a leave request --</option>
-                              {approvedRequests.map((req) => (
+                              {Array.isArray(approvedRequests) && approvedRequests.map((req) => (
                                 <option key={req.id} value={req.id}>
                                   {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
                                 </option>
@@ -1884,7 +1884,7 @@ export function LeaveManagementClient({
                   <Alert className="border-blue-200 bg-blue-50">
                     <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
                   </Alert>
-                ) : approvedRequests.length === 0 ? (
+                ) : typeof approvedRequests === "undefined" || approvedRequests.length === 0 ? (
                   <div className="text-center py-12">
                     <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
                     <p className="font-medium text-slate-700">No approved leave to recall</p>
@@ -1902,7 +1902,7 @@ export function LeaveManagementClient({
                           className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
                         >
                           <option value="">-- Choose a leave request --</option>
-                          {approvedRequests.map((req) => (
+                          {Array.isArray(approvedRequests) && approvedRequests.map((req) => (
                             <option key={req.id} value={req.id}>
                               {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
                             </option>

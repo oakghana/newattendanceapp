@@ -181,83 +181,96 @@ export default async function LeaveManagementPage() {
 
   // Fetch approved leaves from staff for HOD/RM to perform deferment/recall
   if (canReviewLeave) {
-    let staffIds: any[] = []
-    
-    // For admin/hr roles: get all staff with approved leaves
-    if (["admin", "hr_leave_office", "hr_office", "hr", "hr_officer", "manager_hr", "director_hr"].includes(roleNorm)) {
-      // Get all users
-      const { data: allUsers } = await admin
-        .from("user_profiles")
-        .select("id")
-      staffIds = (allUsers || []).map((s: any) => s.id)
-    } 
-    // For HOD/RM: get staff in their department
-    else if (profile.department_id) {
-      const { data: deptStaff } = await admin
-        .from("user_profiles")
-        .select("id")
-        .eq("department_id", profile.department_id)
-      staffIds = (deptStaff || []).map((s: any) => s.id)
-    }
-
-    if (staffIds.length > 0) {
-      // Fetch approved leaves
-      const { data: approvedLeaves } = await admin
-        .from("leave_plan_requests")
-        .select(`
-          id,
-          user_id,
-          preferred_start_date,
-          preferred_end_date,
-          leave_type_key,
-          reason,
-          status,
-          created_at
-        `)
-        .in("user_id", staffIds)
-        .in("status", ["approved", "hr_approved"])
-        .order("preferred_start_date", { ascending: true })
-
-      // Fetch user profiles separately to get names, ranks, locations
-      const { data: staffProfiles } = await admin
-        .from("user_profiles")
-        .select("id, first_name, last_name, position, assigned_location_id")
-        .in("id", staffIds)
-
-      // Create a map for quick lookup
-      const profileMap = new Map((staffProfiles || []).map((p: any) => [p.id, p]))
-
-      // Fetch locations if needed
-      const locationIds = new Set((staffProfiles || []).map((p: any) => p.assigned_location_id).filter(Boolean))
-      const { data: locations } = locationIds.size > 0 
-        ? await admin
-            .from("geofence_locations")
-            .select("id, name")
-            .in("id", Array.from(locationIds))
-        : { data: [] }
+    try {
+      let staffIds: any[] = []
       
-      const locationMap = new Map((locations || []).map((l: any) => [l.id, l.name]))
+      // For admin/hr roles: get all staff with approved leaves
+      if (["admin", "hr_leave_office", "hr_office", "hr", "hr_officer", "manager_hr", "director_hr"].includes(roleNorm)) {
+        // Get all users
+        const { data: allUsers } = await admin
+          .from("user_profiles")
+          .select("id")
+        staffIds = (allUsers || []).map((s: any) => s.id)
+      } 
+      // For HOD/RM: get staff in their department
+      else if (profile.department_id) {
+        const { data: deptStaff } = await admin
+          .from("user_profiles")
+          .select("id")
+          .eq("department_id", profile.department_id)
+        staffIds = (deptStaff || []).map((s: any) => s.id)
+      }
 
-      approvedStaffRequests = (approvedLeaves || []).map((req: any) => {
-        const staffProfile = profileMap.get(req.user_id) || {}
-        const locationName = staffProfile.assigned_location_id 
-          ? locationMap.get(staffProfile.assigned_location_id) 
-          : null
+      if (staffIds.length > 0) {
+        // Fetch approved leaves
+        const { data: approvedLeaves } = await admin
+          .from("leave_plan_requests")
+          .select(`
+            id,
+            user_id,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            reason,
+            status,
+            created_at
+          `)
+          .in("user_id", staffIds)
+          .in("status", ["approved", "hr_approved"])
+          .order("preferred_start_date", { ascending: true })
 
-        return {
-          id: String(req.id),
-          user_id: String(req.user_id),
-          start_date: req.preferred_start_date,
-          end_date: req.preferred_end_date,
-          reason: req.reason || "",
-          leave_type: req.leave_type_key || "annual",
-          status: req.status,
-          created_at: req.created_at,
-          user_name: `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim() || "Staff",
-          rank: staffProfile.position || undefined,
-          location: locationName || undefined,
+        // Fetch user profiles separately to get names, ranks, locations
+        const { data: staffProfiles } = await admin
+          .from("user_profiles")
+          .select("id, first_name, last_name, position, assigned_location_id")
+          .in("id", staffIds)
+
+        // Create a map for quick lookup
+        const profileMap = new Map((staffProfiles || []).map((p: any) => [p.id, p]))
+
+        // Fetch locations if needed
+        const locationIds = new Set((staffProfiles || []).map((p: any) => p.assigned_location_id).filter(Boolean))
+        let locations: any[] = []
+        if (locationIds.size > 0) {
+          try {
+            const { data: locData, error: locError } = await admin
+              .from("geofence_locations")
+              .select("id, name")
+              .in("id", Array.from(locationIds))
+            if (!locError && locData) {
+              locations = locData
+            }
+          } catch (err) {
+            console.error("[v0] Error fetching locations:", err)
+          }
         }
-      })
+        
+        const locationMap = new Map((locations || []).map((l: any) => [l.id, l.name]))
+
+        approvedStaffRequests = (approvedLeaves || []).map((req: any) => {
+          const staffProfile = profileMap.get(req.user_id) || {}
+          const locationName = staffProfile.assigned_location_id 
+            ? locationMap.get(staffProfile.assigned_location_id) 
+            : null
+
+          return {
+            id: String(req.id),
+            user_id: String(req.user_id),
+            start_date: req.preferred_start_date,
+            end_date: req.preferred_end_date,
+            reason: req.reason || "",
+            leave_type: req.leave_type_key || "annual",
+            status: req.status,
+            created_at: req.created_at,
+            user_name: `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim() || "Staff",
+            rank: staffProfile.position || undefined,
+            location: locationName || undefined,
+          }
+        })
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching approved staff requests:", error)
+      approvedStaffRequests = []
     }
   }
 
