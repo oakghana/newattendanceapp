@@ -29,14 +29,7 @@ export async function GET() {
         hr_office_decision_note,
         hr_office_reviewed_at,
         created_at,
-        updated_at,
-        leave_plan_requests!leave_deferment_requests_leave_plan_request_id_fkey (
-          id,
-          preferred_start_date,
-          preferred_end_date,
-          leave_type_key,
-          status
-        )
+        updated_at
       `)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
@@ -61,14 +54,7 @@ export async function GET() {
         staff_acknowledged,
         staff_acknowledged_at,
         created_at,
-        updated_at,
-        leave_plan_requests!leave_recall_requests_leave_plan_request_id_fkey (
-          id,
-          preferred_start_date,
-          preferred_end_date,
-          leave_type_key,
-          status
-        )
+        updated_at
       `)
       .eq("staff_user_id", user.id)
       .order("created_at", { ascending: false })
@@ -94,14 +80,7 @@ export async function GET() {
         staff_acknowledged,
         staff_acknowledged_at,
         created_at,
-        updated_at,
-        leave_plan_requests!leave_recall_requests_leave_plan_request_id_fkey (
-          id,
-          preferred_start_date,
-          preferred_end_date,
-          leave_type_key,
-          status
-        )
+        updated_at
       `)
       .eq("initiated_by_user_id", user.id)
       .order("created_at", { ascending: false })
@@ -130,16 +109,9 @@ export async function GET() {
         hr_office_decision_note,
         hr_office_reviewed_at,
         created_at,
-        updated_at,
-        leave_plan_requests!leave_deferment_requests_leave_plan_request_id_fkey (
-          id,
-          preferred_start_date,
-          preferred_end_date,
-          leave_type_key,
-          status
-        )
+        updated_at
       `)
-      .neq("user_id", user.id) // Exclude own requests, get only ones initiated for others
+      .eq("initiated_by_user_id", user.id)
       .order("created_at", { ascending: false })
 
     return NextResponse.json({

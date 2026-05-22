@@ -793,18 +793,23 @@ export function LeaveManagementClient({
       if (!userId) return
       setIsLoadingMyRequests(true)
       try {
-        // Fetch user's own deferment requests (where they are the requester)
-        const defermentRes = await fetch(`/api/leave/deferment?requester_id=${encodeURIComponent(userId)}`, { cache: "no-store" })
-        if (defermentRes.ok) {
-          const defermentData = await defermentRes.json()
-          setMyDefermentRequests(Array.isArray(defermentData) ? defermentData : defermentData.deferments || [])
-        }
-        
-        // Fetch user's own recall requests (where they initiated the recall)
-        const recallRes = await fetch(`/api/leave/recall?initiated_by=${encodeURIComponent(userId)}`, { cache: "no-store" })
-        if (recallRes.ok) {
-          const recallData = await recallRes.json()
-          setMyRecallRequests(Array.isArray(recallData) ? recallData : recallData.recalls || [])
+        // Fetch all user's deferment and recall requests (own requests and initiated requests)
+        const res = await fetch(`/api/leave/my-deferment-recall-requests`, { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          // Combine user's own deferment requests with ones they initiated
+          const allDeferments = [
+            ...(Array.isArray(data.deferment_requests) ? data.deferment_requests : []),
+            ...(Array.isArray(data.initiated_deferments) ? data.initiated_deferments : [])
+          ]
+          setMyDefermentRequests(allDeferments)
+
+          // Combine user's own recall requests with ones they initiated
+          const allRecalls = [
+            ...(Array.isArray(data.recall_requests) ? data.recall_requests : []),
+            ...(Array.isArray(data.initiated_recalls) ? data.initiated_recalls : [])
+          ]
+          setMyRecallRequests(allRecalls)
         }
       } catch (error) {
         console.error("[v0] Failed to fetch my recall/deferment requests:", error)
