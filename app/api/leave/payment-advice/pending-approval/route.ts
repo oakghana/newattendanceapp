@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
 
     // Use admin client to bypass RLS and fetch ALL pending memos
     // This ensures HR Executives can see all memos regardless of who submitted them
+    // Fetch ALL memos that are NOT approved or rejected (includes NULL, pending, submitted)
     const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
         assigned_signer_position
       `
       )
-      .in("approval_status", ["pending", "submitted"])
+      .or("approval_status.is.null,approval_status.eq.pending,approval_status.eq.submitted")
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -58,8 +59,6 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       )
     }
-
-    console.log("[v0] Pending memos fetched for HR Executive:", pendingMemos?.length || 0)
 
     return NextResponse.json({
       success: true,
