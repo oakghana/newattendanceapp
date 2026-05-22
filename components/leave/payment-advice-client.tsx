@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
-import { Download, Loader2, FileText, Users, Calendar, Check } from "lucide-react"
+import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
 import { jsPDF } from "jspdf"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -68,6 +68,10 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   })
   const [pendingMemos, setPendingMemos] = useState<any[]>([])
   const [loadingPendingMemos, setLoadingPendingMemos] = useState(false)
+  const [approvedMemos, setApprovedMemos] = useState<any[]>([])
+  const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
+  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
+  const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
 
   // Load HR executives on mount
   useEffect(() => {
@@ -128,6 +132,32 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       fetchPendingMemos()
     }
   }, [isHrExecutive])
+
+  // Load approved memos for tracking/download
+  useEffect(() => {
+    if (isHrExecutive) {
+      const fetchApprovedMemos = async () => {
+        setLoadingApprovedMemos(true)
+        try {
+          const url = approvedFilterMonth
+            ? `/api/leave/payment-advice/approved-memos?month=${approvedFilterMonth}`
+            : "/api/leave/payment-advice/approved-memos"
+          const response = await fetch(url)
+          if (response.ok) {
+            const data = await response.json()
+            setApprovedMemos(data.memos || [])
+          } else {
+            console.error("[v0] Failed to fetch approved memos")
+          }
+        } catch (err) {
+          console.error("[v0] Error fetching approved memos:", err)
+        } finally {
+          setLoadingApprovedMemos(false)
+        }
+      }
+      fetchApprovedMemos()
+    }
+  }, [isHrExecutive, approvedFilterMonth])
 
   // Group staff by category
   const staffByCategory = useMemo(() => {
@@ -641,112 +671,353 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
   }
 
-  // HR Executives View - Show pending memos for approval (read-only)
+  // Download an approved memo as PDF
+  const downloadApprovedMemo = (memo: any) => {
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      let yPos = 20
+
+      doc.setFont(undefined, "bold")
+      doc.setFontSize(13)
+      doc.setTextColor(0, 0, 0)
+      doc.text("GHANA COCOA BOARD - QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, yPos, { align: "center" })
+      yPos += 7
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(10)
+      doc.text("PAYMENT OF LEAVE ALLOWANCE - APPROVED MEMO", pageWidth / 2, yPos, { align: "center" })
+      yPos += 10
+
+      doc.setDrawColor(0, 0, 0)
+      doc.setLineWidth(0.5)
+      doc.line(20, yPos, pageWidth - 20, yPos)
+      yPos += 8
+
+      doc.setFont(undefined, "bold")
+      doc.setFontSize(10)
+      doc.text("STAFF DETAILS", 20, yPos)
+      yPos += 6
+
+      const details = [
+        ["Staff Name:", memo.staff_name || "N/A"],
+        ["Staff Number:", memo.staff_number || "N/A"],
+        ["Memo Subject:", memo.memo_subject || "N/A"],
+        ["Leave Period:", `${memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"} - ${memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString() : "N/A"}`],
+        ["Approved Days:", `${memo.approved_days || 0} days`],
+        ["Submitted By:", memo.hr_leave_office_name || "N/A"],
+        ["Submitted On:", memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"],
+        ["Approved On:", memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"],
+        ["Status:", "APPROVED"],
+      ]
+
+      doc.setFont(undefined, "normal")
+      doc.setFontSize(9)
+      details.forEach(([label, value]) => {
+        doc.setFont(undefined, "bold")
+        doc.text(label, 20, yPos)
+        doc.setFont(undefined, "normal")
+        doc.text(value, 75, yPos)
+        yPos += 6
+      })
+
+      yPos += 4
+      doc.setDrawColor(0, 0, 0)
+      doc.line(20, yPos, pageWidth - 20, yPos)
+      yPos += 8
+
+      if (memo.memo_body) {
+        try {
+          const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+          if (body.paragraphs) {
+            doc.setFontSize(9)
+            body.paragraphs.forEach((para: string) => {
+              const lines = doc.splitTextToSize(para, pageWidth - 40)
+              doc.text(lines, 20, yPos)
+              yPos += lines.length * 5 + 3
+            })
+          }
+        } catch {
+          // memo_body not JSON parseable, skip body content
+        }
+      }
+
+      const staffName = (memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")
+      doc.save(`approved-payment-advice-${staffName}-${memo.created_at?.slice(0, 7) || "unknown"}.pdf`)
+
+      toast({ title: "Downloaded", description: `Payment advice for ${memo.staff_name} downloaded.` })
+    } catch (err) {
+      console.error("[v0] Error downloading approved memo:", err)
+      toast({ title: "Error", description: "Failed to download memo.", variant: "destructive" })
+    }
+  }
+
+  // HR Executives View - Tabbed: Pending Approval + Approved/Download
   if (isHrExecutive) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-purple-600" />
-            Payment Advice Approval
+            Payment Advice Management
           </CardTitle>
-          <CardDescription>Review and approve payment advice memos submitted by HR Leave Office</CardDescription>
+          <CardDescription>Review, approve, and download payment advice memos submitted by HR Leave Office</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <Alert className="border-blue-200 bg-blue-50">
               <AlertDescription>
-                As an HR Executive, you can review and approve payment advice memos submitted by the HR Leave Office staff. You cannot create new memos from this interface.
+                As an HR Executive, you can approve pending memos and download all approved payment advice for tracking.
               </AlertDescription>
             </Alert>
-            
-            {loadingPendingMemos ? (
-              <div className="flex justify-center py-8">
-                <div className="text-center">
-                  <div className="inline-block animate-spin">
-                    <FileText className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <p className="mt-2 text-gray-600">Loading pending memos...</p>
-                </div>
-              </div>
-            ) : pendingMemos.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg">No Pending Memos</p>
-                <p className="text-sm text-gray-400 mt-2">All submitted payment advice memos have been reviewed.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <h3 className="font-semibold text-gray-800">Pending Memos ({pendingMemos.length})</h3>
-                <div className="grid gap-3">
-                  {pendingMemos.map((memo) => (
-                    <div key={memo.id} className="border rounded-lg p-4 bg-white hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-medium text-gray-900">{memo.staff_name}</p>
-                          <p className="text-sm text-gray-600">{memo.staff_number}</p>
-                        </div>
-                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
-                          {memo.status || "Pending"}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700 mb-2">{memo.memo_subject}</p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded">
-                        <div>
-                          <span className="text-gray-500">Submitted By</span>
-                          <p className="font-medium">{memo.hr_leave_office_name}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Leave Days</span>
-                          <p className="font-medium">{memo.approved_days} days</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Leave Period</span>
-                          <p className="font-medium">
-                            {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Submitted</span>
-                          <p className="font-medium">
-                            {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            // Approve memo
-                            toast({ title: "Memo Approved", description: `Payment advice for ${memo.staff_name} has been approved.` })
-                          }}
-                          className="flex-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => {
-                            // Reject memo
-                            toast({ title: "Memo Rejected", description: `Payment advice for ${memo.staff_name} has been rejected.` })
-                          }}
-                          className="flex-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors"
-                        >
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => {
-                            // View details
-                            toast({ title: "Memo Details", description: `Full memo content: ${memo.memo_subject}` })
-                          }}
-                          className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                        >
-                          View
-                        </button>
-                      </div>
+
+            {/* Tab buttons */}
+            <div className="flex gap-2 border-b pb-2">
+              <button
+                onClick={() => setActivePaymentTab("pending")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t text-sm font-medium transition-colors ${
+                  activePaymentTab === "pending"
+                    ? "bg-orange-100 text-orange-800 border-b-2 border-orange-500"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                }`}
+              >
+                <Clock className="h-4 w-4" />
+                Pending Approval
+                {pendingMemos.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 bg-orange-500 text-white text-xs rounded-full">
+                    {pendingMemos.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActivePaymentTab("approved")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t text-sm font-medium transition-colors ${
+                  activePaymentTab === "approved"
+                    ? "bg-green-100 text-green-800 border-b-2 border-green-500"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                }`}
+              >
+                <CheckCircle className="h-4 w-4" />
+                Approved & Download
+                {approvedMemos.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 bg-green-500 text-white text-xs rounded-full">
+                    {approvedMemos.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* PENDING TAB */}
+            {activePaymentTab === "pending" && (
+              <>
+                {loadingPendingMemos ? (
+                  <div className="flex justify-center py-8">
+                    <div className="text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
+                      <p className="mt-2 text-gray-600 text-sm">Loading pending memos...</p>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                ) : pendingMemos.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                    <p className="text-lg font-medium">No Pending Memos</p>
+                    <p className="text-sm text-gray-400 mt-1">All submitted payment advice memos have been reviewed.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-600 font-medium">Pending Memos ({pendingMemos.length})</p>
+                    <div className="grid gap-3">
+                      {pendingMemos.map((memo) => (
+                        <div key={memo.id} className="border rounded-lg p-4 bg-white hover:shadow-md transition-shadow">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="font-semibold text-gray-900">{memo.staff_name}</p>
+                              <p className="text-sm text-gray-500">{memo.staff_number}</p>
+                            </div>
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded capitalize">
+                              {memo.status || "draft"}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded">
+                            <div>
+                              <span className="text-gray-500">Submitted By</span>
+                              <p className="font-medium">{memo.hr_leave_office_name}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Leave Days</span>
+                              <p className="font-medium">{memo.approved_days} days</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Leave Period</span>
+                              <p className="font-medium">
+                                {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Submitted</span>
+                              <p className="font-medium">
+                                {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch("/api/leave/payment-advice/pending-approval", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ memoId: memo.id, approved: true }),
+                                  })
+                                  if (res.ok) {
+                                    setPendingMemos((prev) => prev.filter((m) => m.id !== memo.id))
+                                    const updated = { ...memo, status: "approved", updated_at: new Date().toISOString() }
+                                    setApprovedMemos((prev) => [updated, ...prev])
+                                    toast({ title: "Memo Approved", description: `Payment advice for ${memo.staff_name} has been approved.` })
+                                  } else {
+                                    toast({ title: "Error", description: "Failed to approve memo.", variant: "destructive" })
+                                  }
+                                } catch {
+                                  toast({ title: "Error", description: "Failed to approve memo.", variant: "destructive" })
+                                }
+                              }}
+                              className="flex-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch("/api/leave/payment-advice/pending-approval", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ memoId: memo.id, approved: false }),
+                                  })
+                                  if (res.ok) {
+                                    setPendingMemos((prev) => prev.filter((m) => m.id !== memo.id))
+                                    toast({ title: "Memo Rejected", description: `Payment advice for ${memo.staff_name} has been rejected.` })
+                                  } else {
+                                    toast({ title: "Error", description: "Failed to reject memo.", variant: "destructive" })
+                                  }
+                                } catch {
+                                  toast({ title: "Error", description: "Failed to reject memo.", variant: "destructive" })
+                                }
+                              }}
+                              className="flex-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              onClick={() => downloadApprovedMemo(memo)}
+                              className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
+                            >
+                              <Download className="h-3 w-3" /> View/Download
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
+
+            {/* APPROVED TAB */}
+            {activePaymentTab === "approved" && (
+              <>
+                {/* Month filter */}
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <Filter className="h-4 w-4 text-gray-500" />
+                  <label className="text-sm font-medium text-gray-700">Filter by Month:</label>
+                  <input
+                    type="month"
+                    value={approvedFilterMonth}
+                    onChange={(e) => setApprovedFilterMonth(e.target.value)}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
+                  />
+                  {approvedFilterMonth && (
+                    <button
+                      onClick={() => setApprovedFilterMonth("")}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {loadingApprovedMemos ? (
+                  <div className="flex justify-center py-8">
+                    <div className="text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-green-500 mx-auto" />
+                      <p className="mt-2 text-gray-600 text-sm">Loading approved memos...</p>
+                    </div>
+                  </div>
+                ) : approvedMemos.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                    <p className="text-lg font-medium">No Approved Memos</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {approvedFilterMonth ? `No approved memos found for ${approvedFilterMonth}.` : "No payment advice memos have been approved yet."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-600 font-medium">
+                        Approved Memos ({approvedMemos.length})
+                        {approvedFilterMonth && ` — ${approvedFilterMonth}`}
+                      </p>
+                    </div>
+                    <div className="grid gap-3">
+                      {approvedMemos.map((memo) => (
+                        <div key={memo.id} className="border border-green-200 rounded-lg p-4 bg-green-50 hover:shadow-md transition-shadow">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="font-semibold text-gray-900">{memo.staff_name}</p>
+                              <p className="text-sm text-gray-500">{memo.staff_number}</p>
+                            </div>
+                            <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
+                              <CheckCircle className="h-3 w-3" /> Approved
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-white p-2 rounded border border-green-100">
+                            <div>
+                              <span className="text-gray-500">Submitted By</span>
+                              <p className="font-medium">{memo.hr_leave_office_name}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Leave Days</span>
+                              <p className="font-medium">{memo.approved_days} days</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Leave Period</span>
+                              <p className="font-medium">
+                                {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Approved On</span>
+                              <p className="font-medium">
+                                {memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => downloadApprovedMemo(memo)}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-700 text-white text-sm font-medium rounded hover:bg-green-800 transition-colors"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download PDF
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
           </div>
         </CardContent>
       </Card>
