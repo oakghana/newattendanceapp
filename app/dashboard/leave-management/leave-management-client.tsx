@@ -2242,7 +2242,8 @@ export function LeaveManagementClient({
                         </div>
                       ) : (
                         paginatedMemos.map((memo: any) => {
-                          const isSigned = memo.approver_signature || memo.approval_date
+                          // A memo is signed if it has a memo_url (downloadable) OR has approval/signature data
+                          const isSigned = memo.memo_url || memo.approver_signature || memo.approval_date || memo.hr_signature_image_url
                           const isYetToSign = !isSigned
                           
                           return (

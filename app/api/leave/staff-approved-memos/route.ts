@@ -115,6 +115,7 @@ export async function GET(request: NextRequest) {
           hr_approved_at: req.hr_approved_at,
           hr_office_reviewer_name: req.hr_office_reviewer_name,
           hr_office_reviewed_at: req.hr_office_reviewed_at,
+          hr_signature_image_url: req.hr_signature_image_url,
         }
       })
 
@@ -217,15 +218,18 @@ export async function GET(request: NextRequest) {
         user_id: String(req.user_id),
         staff_name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
         email: profile.email || "N/A",
-        location: "Not Assigned", // Would need location fetch separately
+        location: "Not Assigned",
         address: "N/A",
         leave_type: req.leave_type_key || "annual",
-        start_date: req.preferred_start_date,
-        end_date: req.preferred_end_date,
+        start_date: req.adjusted_start_date || req.preferred_start_date,
+        end_date: req.adjusted_end_date || req.preferred_end_date,
         reason: req.reason || "",
         status: req.status,
-        approved_at: req.created_at,
-        memo_url: `/api/leave/memo-document/${req.id}`, // Link to download memo
+        created_at: req.created_at,
+        hr_approver_name: req.hr_approver_name,
+        hr_approved_at: req.hr_approved_at,
+        hr_signature_image_url: req.hr_signature_image_url,
+        memo_url: `/api/leave/memo-document/${req.id}`,
       }
     })
 
