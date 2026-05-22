@@ -704,7 +704,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         ["Memo Subject:", memo.memo_subject || "N/A"],
         ["Leave Period:", `${memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"} - ${memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString() : "N/A"}`],
         ["Approved Days:", `${memo.approved_days || 0} days`],
-        ["Submitted By:", memo.hr_leave_office_name || "N/A"],
+        ["Processed By:", memo.hr_leave_office_name || "N/A"],
         ["Submitted On:", memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"],
         ["Approved On:", memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"],
         ["Status:", "APPROVED"],
@@ -840,7 +840,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                           <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded">
                             <div>
-                              <span className="text-gray-500">Submitted By</span>
+                              <span className="text-gray-500">Processed By</span>
                               <p className="font-medium">{memo.hr_leave_office_name}</p>
                             </div>
                             <div>
@@ -983,7 +983,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                           <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-white p-2 rounded border border-green-100">
                             <div>
-                              <span className="text-gray-500">Submitted By</span>
+                              <span className="text-gray-500">Processed By</span>
                               <p className="font-medium">{memo.hr_leave_office_name}</p>
                             </div>
                             <div>

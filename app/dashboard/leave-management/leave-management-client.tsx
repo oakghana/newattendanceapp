@@ -2088,7 +2088,7 @@ export function LeaveManagementClient({
                             ["Subject:", memo.memo_subject || "N/A"],
                             ["Leave Period:", `${memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"} – ${memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString() : "N/A"}`],
                             ["Approved Days:", `${memo.approved_days || 0} days`],
-                            ["Submitted By:", memo.hr_leave_office_name || "N/A"],
+                            ["Processed By:", memo.hr_leave_office_name || "N/A"],
                             ["Approved On:", memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"],
                           ]
                           rows.forEach(([label, value]) => {
@@ -2113,7 +2113,7 @@ export function LeaveManagementClient({
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
                               <span>Leave Period: <strong>{memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}</strong></span>
                               <span>Days: <strong>{memo.approved_days}</strong></span>
-                              <span>Submitted By: <strong>{memo.hr_leave_office_name || "N/A"}</strong></span>
+                              <span>Processed By: <strong>{memo.hr_leave_office_name || "N/A"}</strong></span>
                               <span>Approved: <strong>{memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"}</strong></span>
                             </div>
                           </div>
