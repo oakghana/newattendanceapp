@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { groupStaffByCategory } from "@/lib/payment-advice-service"
 
@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient()
+    const admin = await createAdminClient()
 
     const {
       data: { user },
@@ -26,6 +27,17 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Fetch the actual submitter's (HR Leave Office) profile name
+    const { data: submitterProfile } = await admin
+      .from("user_profiles")
+      .select("first_name, last_name, position")
+      .eq("id", user.id)
+      .single()
+
+    const submitterName = submitterProfile
+      ? `${submitterProfile.first_name || ""} ${submitterProfile.last_name || ""}`.trim()
+      : (user.user_metadata?.full_name || user.email || "HR Leave Office")
 
     const { month, memos, staffList, selectedSigner, referenceNumbers } = requestBody
 
@@ -71,7 +83,7 @@ export async function POST(request: NextRequest) {
           memo_body: JSON.stringify(memoBody),
           memo_subject: `Payment of Leave Allowance (${category} Staff) - ${month}`,
           hr_leave_office_id: user.id,
-          hr_leave_office_name: selectedSigner.name || "",
+          hr_leave_office_name: submitterName,
           leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
           leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
           approved_days: staff.approved_days || staff.requested_days || 0,

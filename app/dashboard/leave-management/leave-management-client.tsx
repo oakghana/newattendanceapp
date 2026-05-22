@@ -170,6 +170,8 @@ export function LeaveManagementClient({
   const [recallSearch, setRecallSearch] = useState<string>("")
   const [recallDeptFilter, setRecallDeptFilter] = useState<string>("")
   const [recallLocFilter, setRecallLocFilter] = useState<string>("")
+  const [myPaymentAdviceMemos, setMyPaymentAdviceMemos] = useState<any[]>([])
+  const [isLoadingMyPaymentMemos, setIsLoadingMyPaymentMemos] = useState(false)
   const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -800,6 +802,25 @@ export function LeaveManagementClient({
     
     void fetchDefermentAndRecallRequests()
   }, [userId, userRole])
+
+  // Fetch staff's own approved payment advice memos for their dashboard
+  useEffect(() => {
+    const fetchMyPaymentMemos = async () => {
+      setIsLoadingMyPaymentMemos(true)
+      try {
+        const res = await fetch("/api/leave/payment-advice/my-memos", { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          setMyPaymentAdviceMemos(data.memos || [])
+        }
+      } catch (err) {
+        console.error("[v0] Failed to fetch my payment advice memos:", err)
+      } finally {
+        setIsLoadingMyPaymentMemos(false)
+      }
+    }
+    void fetchMyPaymentMemos()
+  }, [userId])
 
   // Fetch user's own recall and deferment requests (for My Requests tab)
   useEffect(() => {
@@ -2026,6 +2047,92 @@ export function LeaveManagementClient({
             </div>
           )}
           
+          {/* Staff Payment Advice Memos — visible on my-requests tab when there are approved memos */}
+          {selectedTab === "my-requests" && myPaymentAdviceMemos.length > 0 && (
+            <Card className="border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50/50">
+              <CardHeader className="border-b border-green-200">
+                <CardTitle className="flex items-center gap-2 text-green-800">
+                  <FileText className="h-5 w-5" />
+                  My Approved Payment Advice
+                </CardTitle>
+                <p className="text-sm text-green-700">Your approved leave payment advice memos — available for printing and download</p>
+              </CardHeader>
+              <CardContent className="py-4">
+                {isLoadingMyPaymentMemos ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-green-600" />
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {myPaymentAdviceMemos.map((memo: any) => {
+                      const downloadMemo = () => {
+                        try {
+                          const { jsPDF } = require("jspdf")
+                          const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+                          const pageWidth = doc.internal.pageSize.getWidth()
+                          let y = 20
+                          doc.setFont(undefined, "bold")
+                          doc.setFontSize(12)
+                          doc.text("QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, y, { align: "center" })
+                          y += 7
+                          doc.setFont(undefined, "normal")
+                          doc.setFontSize(10)
+                          doc.text("PAYMENT OF LEAVE ALLOWANCE - APPROVED", pageWidth / 2, y, { align: "center" })
+                          y += 8
+                          doc.setLineWidth(0.5)
+                          doc.line(20, y, pageWidth - 20, y)
+                          y += 7
+                          const rows = [
+                            ["Staff Name:", memo.staff_name || "N/A"],
+                            ["Staff Number:", memo.staff_number || "N/A"],
+                            ["Subject:", memo.memo_subject || "N/A"],
+                            ["Leave Period:", `${memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"} – ${memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString() : "N/A"}`],
+                            ["Approved Days:", `${memo.approved_days || 0} days`],
+                            ["Submitted By:", memo.hr_leave_office_name || "N/A"],
+                            ["Approved On:", memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"],
+                          ]
+                          rows.forEach(([label, value]) => {
+                            doc.setFont(undefined, "bold")
+                            doc.text(label, 20, y)
+                            doc.setFont(undefined, "normal")
+                            doc.text(value, 70, y)
+                            y += 6
+                          })
+                          doc.save(`payment-advice-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`)
+                        } catch (err) {
+                          console.error("[v0] Download error:", err)
+                        }
+                      }
+                      return (
+                        <div key={memo.id} className="border border-green-200 rounded-lg p-4 bg-white flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-semibold text-slate-900">{memo.memo_subject}</p>
+                              <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-semibold rounded">Approved</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
+                              <span>Leave Period: <strong>{memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}</strong></span>
+                              <span>Days: <strong>{memo.approved_days}</strong></span>
+                              <span>Submitted By: <strong>{memo.hr_leave_office_name || "N/A"}</strong></span>
+                              <span>Approved: <strong>{memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"}</strong></span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={downloadMemo}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white text-sm font-medium rounded hover:bg-green-800 transition-colors shrink-0"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download PDF
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {selectedTab === "approved" && (
             <>
               {approvedRequests.length === 0 ? (
