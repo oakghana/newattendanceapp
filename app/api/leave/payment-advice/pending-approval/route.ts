@@ -1,14 +1,16 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
 /**
- * GET: Fetch payment advice memos pending approval for the current HR Executive
+ * GET: Fetch ALL payment advice memos pending approval for HR Executives
+ * HR Executives (director_hr, manager_hr, hr_director) should see ALL pending memos
  */
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
 
     const {
       data: { user },
@@ -18,9 +20,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Fetch memos where approval_status is pending or null
-    // These are memos submitted by HR Leave Office waiting for HR Executive approval
-    const { data: pendingMemos, error } = await supabase
+    // Use admin client to bypass RLS and fetch ALL pending memos
+    // This ensures HR Executives can see all memos regardless of who submitted them
+    const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
         `
@@ -40,10 +42,13 @@ export async function GET(request: NextRequest) {
         approved_by_id,
         approved_by_name,
         approved_at,
-        rejection_reason
+        rejection_reason,
+        assigned_signer_id,
+        assigned_signer_name,
+        assigned_signer_position
       `
       )
-      .in("approval_status", [null, "pending", "submitted"])
+      .in("approval_status", ["pending", "submitted"])
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -53,6 +58,8 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    console.log("[v0] Pending memos fetched for HR Executive:", pendingMemos?.length || 0)
 
     return NextResponse.json({
       success: true,
@@ -74,6 +81,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const admin = await createAdminClient()
 
     const {
       data: { user },
@@ -82,6 +90,17 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Get user profile for full name
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .single()
+
+    const fullName = profile 
+      ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() 
+      : (user.user_metadata?.full_name || user.email || "Unknown")
 
     const { memoId, approved } = await request.json()
 
@@ -92,13 +111,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update memo approval status
-    const { data, error } = await supabase
+    // Update memo approval status using admin client to bypass RLS
+    const { data, error } = await admin
       .from("leave_payment_memos")
       .update({
         approval_status: approved ? "approved" : "rejected",
         approved_by_id: user.id,
-        approved_by_name: user.user_metadata?.full_name || user.email || "Unknown",
+        approved_by_name: fullName,
         approved_at: new Date().toISOString(),
       })
       .eq("id", memoId)
