@@ -53,8 +53,18 @@ export function AuditComplianceDashboard() {
       if (filterType !== 'ALL') url += `transaction_type=${encodeURIComponent(filterType)}&`
 
       const res = await fetch(url, { cache: 'no-store' })
-      const data = await res.json()
-      setTransactions(data.transactions || [])
+      if (!res.ok) {
+        console.error('[v0] Audit fetch error:', res.status, res.statusText)
+        toast({
+          title: 'Error',
+          description: `Failed to load audit trail: ${res.statusText}`,
+          variant: 'destructive',
+        })
+        setTransactions([])
+      } else {
+        const data = await res.json()
+        setTransactions(data.transactions || [])
+      }
     } catch (error) {
       console.error('[v0] Failed to fetch transactions:', error)
       toast({
@@ -62,6 +72,7 @@ export function AuditComplianceDashboard() {
         description: 'Failed to load audit trail',
         variant: 'destructive',
       })
+      setTransactions([])
     } finally {
       setLoading(false)
     }

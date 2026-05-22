@@ -48,8 +48,18 @@ export function CarryoverApprovalDashboard() {
     try {
       const status = filterStatus === 'ALL' ? '' : `status=${filterStatus}`
       const res = await fetch(`/api/leave/carryover/pending?${status}&limit=100`)
-      const data = await res.json()
-      setCarryoverRequests(data.carryover_requests || [])
+      if (!res.ok) {
+        console.error('[v0] Carryover fetch error:', res.status, res.statusText)
+        toast({
+          title: 'Error',
+          description: `Failed to load carryover requests: ${res.statusText}`,
+          variant: 'destructive',
+        })
+        setCarryoverRequests([])
+      } else {
+        const data = await res.json()
+        setCarryoverRequests(data.carryover_requests || [])
+      }
     } catch (error) {
       console.error('[v0] Failed to fetch carryover requests:', error)
       toast({
@@ -57,6 +67,7 @@ export function CarryoverApprovalDashboard() {
         description: 'Failed to load carryover requests',
         variant: 'destructive',
       })
+      setCarryoverRequests([])
     } finally {
       setLoading(false)
     }

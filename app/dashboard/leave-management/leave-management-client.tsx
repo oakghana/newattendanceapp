@@ -740,10 +740,11 @@ export function LeaveManagementClient({
     void loadTemplates()
   }, [canViewHrTemplates, toast])
 
-  // Fetch approved memos for HOD/RM
+  // Fetch approved memos for HOD/RM/HR staff
   useEffect(() => {
     const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-    if (["department_head", "regional_manager"].includes(normalizedRole)) {
+    const isManagerRole = ["department_head", "regional_manager", "admin", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_office", "hr"].includes(normalizedRole)
+    if (isManagerRole) {
       fetchStaffApprovedMemos()
     }
   }, [userId, userRole, userDepartment])
