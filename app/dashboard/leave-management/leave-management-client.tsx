@@ -1766,12 +1766,6 @@ export function LeaveManagementClient({
                         <p className="text-sm text-slate-500">Your submitted leave applications</p>
                       </div>
                     </div>
-                    <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm">
-                      <Link href="/dashboard/leave-planning">
-                        <Plus className="h-4 w-4" />
-                        New Request
-                      </Link>
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4">
@@ -1781,13 +1775,7 @@ export function LeaveManagementClient({
                         <Calendar className="h-8 w-8 text-blue-500" />
                       </div>
                       <h3 className="font-semibold text-slate-700 mb-1">No leave requests yet</h3>
-                      <p className="text-sm text-slate-500 mb-4 max-w-sm mx-auto">Submit your first leave request to see it tracked here</p>
-                      <Button asChild variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50">
-                        <Link href="/dashboard/leave-planning">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Apply for Leave
-                        </Link>
-                      </Button>
+                      <p className="text-sm text-slate-500 max-w-sm mx-auto">Use the &quot;Apply for Leave&quot; tab to submit a leave request</p>
                     </div>
                   ) : (
                     <div className="grid gap-3">
