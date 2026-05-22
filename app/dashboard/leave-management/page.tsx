@@ -192,7 +192,35 @@ export default async function LeaveManagementPage() {
           .select("id")
         staffIds = (allUsers || []).map((s: any) => s.id)
       } 
-      // For HOD/RM: get staff in their department
+      // For HOD: get staff in their department AND location
+      else if (roleNorm === "department_head" && profile.department_id && profile.assigned_location_id) {
+        const { data: deptLocStaff } = await admin
+          .from("user_profiles")
+          .select("id")
+          .eq("department_id", profile.department_id)
+          .eq("assigned_location_id", profile.assigned_location_id)
+        staffIds = (deptLocStaff || []).map((s: any) => s.id)
+      }
+      // For RM: get staff at their assigned locations only
+      else if (roleNorm === "regional_manager") {
+        // First get the locations assigned to this RM
+        const { data: rmLocations } = await admin
+          .from("regional_manager_locations")
+          .select("location_id")
+          .eq("regional_manager_id", user.id)
+          .eq("is_active", true)
+        
+        const rmLocationIds = (rmLocations || []).map((l: any) => l.location_id).filter(Boolean)
+        
+        if (rmLocationIds.length > 0) {
+          const { data: locStaff } = await admin
+            .from("user_profiles")
+            .select("id")
+            .in("assigned_location_id", rmLocationIds)
+          staffIds = (locStaff || []).map((s: any) => s.id)
+        }
+      }
+      // Fallback for HOD without location: get staff in their department only
       else if (profile.department_id) {
         const { data: deptStaff } = await admin
           .from("user_profiles")

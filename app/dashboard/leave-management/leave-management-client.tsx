@@ -17,9 +17,11 @@ import {
   FileClock,
   FileText,
   Loader2,
+  Pencil,
   Plus,
   Search,
   Sparkles,
+  Trash2,
   XCircle,
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
@@ -147,6 +149,11 @@ export function LeaveManagementClient({
   const [myDefermentRequests, setMyDefermentRequests] = useState<any[]>([])
   const [myRecallRequests, setMyRecallRequests] = useState<any[]>([])
   const [isLoadingMyRequests, setIsLoadingMyRequests] = useState(false)
+  const [editingDefermentId, setEditingDefermentId] = useState<string | null>(null)
+  const [editingRecallId, setEditingRecallId] = useState<string | null>(null)
+  const [editDefermentData, setEditDefermentData] = useState<{ deferral_year: string; reason: string }>({ deferral_year: "", reason: "" })
+  const [editRecallData, setEditRecallData] = useState<{ recall_date: string; reason: string }>({ recall_date: "", reason: "" })
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [isSubmittingDeferment, setIsSubmittingDeferment] = useState(false)
   const [isSubmittingRecall, setIsSubmittingRecall] = useState(false)
   const [selectedApprovedForDeferment, setSelectedApprovedForDeferment] = useState<string | null>(null)
@@ -808,6 +815,131 @@ export function LeaveManagementClient({
     
     void fetchMyRecallAndDefermentRequests()
   }, [userId])
+
+  // Determine if a deferment request can be edited (pending or pending_hod_review only)
+  const canEditDeferment = (status: string) => ["pending", "pending_hod_review"].includes(status)
+  const canEditRecall = (status: string) => ["pending"].includes(status)
+
+  // Start editing a deferment request
+  const startEditDeferment = (deferment: any) => {
+    setEditingDefermentId(deferment.id)
+    setEditDefermentData({
+      deferral_year: String(deferment.requested_deferment_year || ""),
+      reason: deferment.reason || "",
+    })
+  }
+
+  // Save edited deferment
+  const saveEditDeferment = async () => {
+    if (!editingDefermentId) return
+    setIsSavingEdit(true)
+    try {
+      const res = await fetch("/api/leave/deferment", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingDefermentId,
+          user_id: userId,
+          deferral_year: editDefermentData.deferral_year,
+          reason: editDefermentData.reason,
+        }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(result.error || "Failed to update deferment")
+
+      // Update local state
+      setMyDefermentRequests((prev) =>
+        prev.map((d) =>
+          d.id === editingDefermentId
+            ? { ...d, requested_deferment_year: parseInt(editDefermentData.deferral_year), reason: editDefermentData.reason }
+            : d
+        )
+      )
+      setEditingDefermentId(null)
+      toast({ title: "Success", description: "Deferment request updated" })
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Update failed", variant: "destructive" })
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  // Delete deferment request
+  const deleteDeferment = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this deferment request?")) return
+    try {
+      const res = await fetch(`/api/leave/deferment?id=${encodeURIComponent(id)}&user_id=${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(result.error || "Failed to delete deferment")
+
+      setMyDefermentRequests((prev) => prev.filter((d) => d.id !== id))
+      toast({ title: "Success", description: "Deferment request deleted" })
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Delete failed", variant: "destructive" })
+    }
+  }
+
+  // Start editing a recall request
+  const startEditRecall = (recall: any) => {
+    setEditingRecallId(recall.id)
+    setEditRecallData({
+      recall_date: recall.recall_date || "",
+      reason: recall.recall_reason || recall.recall_notes || "",
+    })
+  }
+
+  // Save edited recall
+  const saveEditRecall = async () => {
+    if (!editingRecallId) return
+    setIsSavingEdit(true)
+    try {
+      const res = await fetch("/api/leave/recall", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingRecallId,
+          user_id: userId,
+          recall_date: editRecallData.recall_date,
+          reason: editRecallData.reason,
+        }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(result.error || "Failed to update recall")
+
+      setMyRecallRequests((prev) =>
+        prev.map((r) =>
+          r.id === editingRecallId
+            ? { ...r, recall_date: editRecallData.recall_date, recall_reason: editRecallData.reason, recall_notes: editRecallData.reason }
+            : r
+        )
+      )
+      setEditingRecallId(null)
+      toast({ title: "Success", description: "Recall request updated" })
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Update failed", variant: "destructive" })
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  // Delete recall request
+  const deleteRecall = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this recall request?")) return
+    try {
+      const res = await fetch(`/api/leave/recall?id=${encodeURIComponent(id)}&user_id=${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(result.error || "Failed to delete recall")
+
+      setMyRecallRequests((prev) => prev.filter((r) => r.id !== id))
+      toast({ title: "Success", description: "Recall request deleted" })
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Delete failed", variant: "destructive" })
+    }
+  }
 
   const runTemplateAction = async (templateKey: string, action: "duplicate" | "deactivate" | "activate") => {
     setTemplateActionKey(`${action}:${templateKey}`)
@@ -1618,37 +1750,85 @@ export function LeaveManagementClient({
                     {myRecallRequests.map((recall: any) => (
                       <Card key={recall.id} className="border border-rose-200 bg-gradient-to-br from-rose-50/50 to-white hover:shadow-md transition-shadow">
                         <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  recall.status === "approved" ? "bg-emerald-100 text-emerald-700" :
-                                  recall.status === "rejected" ? "bg-red-100 text-red-700" :
-                                  recall.status === "pending" ? "bg-amber-100 text-amber-700" :
-                                  "bg-slate-100 text-slate-700"
-                                }`}>
-                                  {recall.status === "approved" ? "Approved" :
-                                   recall.status === "rejected" ? "Rejected" :
-                                   recall.status === "pending" ? "Pending HR Review" :
-                                   recall.status || "Pending"}
-                                </span>
+                          {editingRecallId === recall.id ? (
+                            // Edit mode
+                            <div className="space-y-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs font-medium text-slate-600">Recall Date</Label>
+                                <Input
+                                  type="date"
+                                  value={editRecallData.recall_date}
+                                  onChange={(e) => setEditRecallData((d) => ({ ...d, recall_date: e.target.value }))}
+                                  className="text-sm"
+                                />
                               </div>
-                              <p className="text-sm text-slate-600 mb-1">
-                                <span className="font-medium">Recall Date:</span> {recall.recall_date ? new Date(recall.recall_date).toLocaleDateString() : "Not set"}
-                              </p>
-                              <p className="text-sm text-slate-600 mb-1 line-clamp-2">
-                                <span className="font-medium">Reason:</span> {recall.recall_reason || recall.recall_notes || "No reason provided"}
-                              </p>
-                              <p className="text-xs text-slate-400 mt-2">
-                                Submitted: {recall.created_at ? new Date(recall.created_at).toLocaleDateString() : "Unknown"}
-                              </p>
-                              {recall.hr_decision_note && (
-                                <p className="text-xs text-slate-600 mt-1 bg-slate-100 p-2 rounded">
-                                  <span className="font-medium">HR Note:</span> {recall.hr_decision_note}
-                                </p>
-                              )}
+                              <div className="space-y-1">
+                                <Label className="text-xs font-medium text-slate-600">Reason</Label>
+                                <Textarea
+                                  value={editRecallData.reason}
+                                  onChange={(e) => setEditRecallData((d) => ({ ...d, reason: e.target.value }))}
+                                  rows={2}
+                                  className="text-sm"
+                                />
+                              </div>
+                              <div className="flex gap-2 pt-2">
+                                <Button size="sm" onClick={saveEditRecall} disabled={isSavingEdit} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                  {isSavingEdit ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                                  Save
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => setEditingRecallId(null)}>Cancel</Button>
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            // View mode
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    recall.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                                    recall.status === "rejected" ? "bg-red-100 text-red-700" :
+                                    recall.status === "pending" ? "bg-amber-100 text-amber-700" :
+                                    "bg-slate-100 text-slate-700"
+                                  }`}>
+                                    {recall.status === "approved" ? "Approved" :
+                                     recall.status === "rejected" ? "Rejected" :
+                                     recall.status === "pending" ? "Pending HR Review" :
+                                     recall.status || "Pending"}
+                                  </span>
+                                  {canEditRecall(recall.status) && (
+                                    <span className="text-xs text-emerald-600 font-medium">Editable</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-slate-600 mb-1">
+                                  <span className="font-medium">Recall Date:</span> {recall.recall_date ? new Date(recall.recall_date).toLocaleDateString() : "Not set"}
+                                </p>
+                                <p className="text-sm text-slate-600 mb-1 line-clamp-2">
+                                  <span className="font-medium">Reason:</span> {recall.recall_reason || recall.recall_notes || "No reason provided"}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-2">
+                                  Submitted: {recall.created_at ? new Date(recall.created_at).toLocaleDateString() : "Unknown"}
+                                </p>
+                                {recall.hr_decision_note && (
+                                  <p className="text-xs text-slate-600 mt-1 bg-slate-100 p-2 rounded">
+                                    <span className="font-medium">HR Note:</span> {recall.hr_decision_note}
+                                  </p>
+                                )}
+                                {/* Edit/Delete buttons for pending recalls */}
+                                {canEditRecall(recall.status) && (
+                                  <div className="flex gap-2 mt-3 pt-3 border-t border-rose-100">
+                                    <Button size="sm" variant="outline" onClick={() => startEditRecall(recall)} className="text-xs">
+                                      <Pencil className="h-3 w-3 mr-1" />
+                                      Edit
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => deleteRecall(recall.id)} className="text-xs text-red-600 border-red-200 hover:bg-red-50">
+                                      <Trash2 className="h-3 w-3 mr-1" />
+                                      Delete
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -1667,44 +1847,94 @@ export function LeaveManagementClient({
                     {myDefermentRequests.map((deferment: any) => (
                       <Card key={deferment.id} className="border border-amber-200 bg-gradient-to-br from-amber-50/50 to-white hover:shadow-md transition-shadow">
                         <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  deferment.status === "approved" ? "bg-emerald-100 text-emerald-700" :
-                                  deferment.status === "rejected" ? "bg-red-100 text-red-700" :
-                                  deferment.status === "pending" || deferment.status === "pending_hod_review" ? "bg-amber-100 text-amber-700" :
-                                  deferment.status === "pending_hr_review" || deferment.status === "hod_approved" ? "bg-blue-100 text-blue-700" :
-                                  "bg-slate-100 text-slate-700"
-                                }`}>
-                                  {deferment.status === "approved" ? "Approved" :
-                                   deferment.status === "rejected" ? "Rejected" :
-                                   deferment.status === "pending" || deferment.status === "pending_hod_review" ? "Pending HOD Review" :
-                                   deferment.status === "hod_approved" || deferment.status === "pending_hr_review" ? "Pending HR Review" :
-                                   deferment.status || "Pending"}
-                                </span>
+                          {editingDefermentId === deferment.id ? (
+                            // Edit mode
+                            <div className="space-y-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs font-medium text-slate-600">Deferment Year (YYYY)</Label>
+                                <Input
+                                  type="text"
+                                  maxLength={4}
+                                  placeholder="2027"
+                                  value={editDefermentData.deferral_year}
+                                  onChange={(e) => setEditDefermentData((d) => ({ ...d, deferral_year: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
+                                  className="text-sm"
+                                />
                               </div>
-                              <p className="text-sm text-slate-600 mb-1">
-                                <span className="font-medium">Deferment Year:</span> {deferment.requested_deferment_period || deferment.requested_deferment_year || "Not specified"}
-                              </p>
-                              <p className="text-sm text-slate-600 mb-1 line-clamp-2">
-                                <span className="font-medium">Reason:</span> {deferment.reason || "No reason provided"}
-                              </p>
-                              <p className="text-xs text-slate-400 mt-2">
-                                Submitted: {deferment.created_at ? new Date(deferment.created_at).toLocaleDateString() : "Unknown"}
-                              </p>
-                              {deferment.hod_decision_note && (
-                                <p className="text-xs text-slate-600 mt-1 bg-slate-100 p-2 rounded">
-                                  <span className="font-medium">HOD Note:</span> {deferment.hod_decision_note}
-                                </p>
-                              )}
-                              {deferment.hr_office_decision_note && (
-                                <p className="text-xs text-slate-600 mt-1 bg-blue-50 p-2 rounded">
-                                  <span className="font-medium">HR Note:</span> {deferment.hr_office_decision_note}
-                                </p>
-                              )}
+                              <div className="space-y-1">
+                                <Label className="text-xs font-medium text-slate-600">Reason</Label>
+                                <Textarea
+                                  value={editDefermentData.reason}
+                                  onChange={(e) => setEditDefermentData((d) => ({ ...d, reason: e.target.value }))}
+                                  rows={2}
+                                  className="text-sm"
+                                />
+                              </div>
+                              <div className="flex gap-2 pt-2">
+                                <Button size="sm" onClick={saveEditDeferment} disabled={isSavingEdit} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                  {isSavingEdit ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                                  Save
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => setEditingDefermentId(null)}>Cancel</Button>
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            // View mode
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    deferment.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                                    deferment.status === "rejected" ? "bg-red-100 text-red-700" :
+                                    deferment.status === "pending" || deferment.status === "pending_hod_review" ? "bg-amber-100 text-amber-700" :
+                                    deferment.status === "pending_hr_review" || deferment.status === "hod_approved" ? "bg-blue-100 text-blue-700" :
+                                    "bg-slate-100 text-slate-700"
+                                  }`}>
+                                    {deferment.status === "approved" ? "Approved" :
+                                     deferment.status === "rejected" ? "Rejected" :
+                                     deferment.status === "pending" || deferment.status === "pending_hod_review" ? "Pending HOD Review" :
+                                     deferment.status === "hod_approved" || deferment.status === "pending_hr_review" ? "Pending HR Review" :
+                                     deferment.status || "Pending"}
+                                  </span>
+                                  {canEditDeferment(deferment.status) && (
+                                    <span className="text-xs text-emerald-600 font-medium">Editable</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-slate-600 mb-1">
+                                  <span className="font-medium">Deferment Year:</span> {deferment.requested_deferment_period || deferment.requested_deferment_year || "Not specified"}
+                                </p>
+                                <p className="text-sm text-slate-600 mb-1 line-clamp-2">
+                                  <span className="font-medium">Reason:</span> {deferment.reason || "No reason provided"}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-2">
+                                  Submitted: {deferment.created_at ? new Date(deferment.created_at).toLocaleDateString() : "Unknown"}
+                                </p>
+                                {deferment.hod_decision_note && (
+                                  <p className="text-xs text-slate-600 mt-1 bg-slate-100 p-2 rounded">
+                                    <span className="font-medium">HOD Note:</span> {deferment.hod_decision_note}
+                                  </p>
+                                )}
+                                {deferment.hr_office_decision_note && (
+                                  <p className="text-xs text-slate-600 mt-1 bg-blue-50 p-2 rounded">
+                                    <span className="font-medium">HR Note:</span> {deferment.hr_office_decision_note}
+                                  </p>
+                                )}
+                                {/* Edit/Delete buttons for pending deferments */}
+                                {canEditDeferment(deferment.status) && (
+                                  <div className="flex gap-2 mt-3 pt-3 border-t border-amber-100">
+                                    <Button size="sm" variant="outline" onClick={() => startEditDeferment(deferment)} className="text-xs">
+                                      <Pencil className="h-3 w-3 mr-1" />
+                                      Edit
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => deleteDeferment(deferment.id)} className="text-xs text-red-600 border-red-200 hover:bg-red-50">
+                                      <Trash2 className="h-3 w-3 mr-1" />
+                                      Delete
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
