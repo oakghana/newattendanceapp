@@ -1746,127 +1746,118 @@ export function LeaveManagementClient({
               <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
-                  {isLeaveOfficeRole ? "Pending Leave Deferments" : "Defer Your Approved Leave"}
+                  Defer Staff Annual Leave
                 </CardTitle>
                 <CardDescription className="text-amber-100">
-                  {isLeaveOfficeRole ? "Review and process pending deferment requests from staff" : "Defer your approved leave to a future leave year"}
+                  Select a staff member&apos;s approved annual leave and defer it to a future leave year (HOD/RM/HR only)
                 </CardDescription>
               </CardHeader>
               <CardContent className="py-6">
-                {isLeaveOfficeRole ? (
-                  defermentRequests.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                      <p className="font-medium text-slate-700">No pending deferment requests</p>
-                      <p className="text-sm text-slate-500 mt-2">There are no deferment requests awaiting review</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {defermentRequests.map((req: any) => (
-                        <div key={req.id} className="bg-white rounded-lg border border-amber-200 p-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-sm text-slate-600">Staff Name</p>
-                              <p className="font-semibold text-slate-900">{req.user_name}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-600">Leave Type</p>
-                              <p className="font-semibold text-slate-900">{req.leave_type}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-600">Original Period</p>
-                              <p className="text-sm text-slate-700">{new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-600">Defer to Year</p>
-                              <p className="font-semibold text-slate-900">{req.deferral_year}</p>
-                            </div>
-                          </div>
-                          {req.deferment_reason && (
-                            <div className="mt-4 pt-4 border-t border-amber-100">
-                              <p className="text-sm text-slate-600">Reason</p>
-                              <p className="text-sm text-slate-700">{req.deferment_reason}</p>
-                            </div>
-                          )}
-                          <div className="flex gap-3 mt-4">
-                            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700">Approve</Button>
-                            <Button variant="outline" className="flex-1">Decline</Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
+                {!isManagerView ? (
+                  <Alert className="border-amber-200 bg-amber-50">
+                    <AlertDescription className="text-amber-900">Only Heads of Department, Regional Managers, and HR staff can submit leave deferment requests.</AlertDescription>
+                  </Alert>
+                ) : !Array.isArray(approvedRequests) || approvedRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                    <p className="font-medium text-slate-700">No approved leave available for deferment</p>
+                    <p className="text-sm text-slate-500 mt-2">There are no approved annual leave requests in your department to defer at this time</p>
+                  </div>
                 ) : (
-                  <>
-                    {typeof approvedRequests === "undefined" || approvedRequests.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                        <p className="font-medium text-slate-700">No approved leave to defer</p>
-                        <p className="text-sm text-slate-500 mt-2">You must have approved leave requests to create a deferment</p>
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
+
+                      {/* Step 1: Select Staff Leave Request */}
+                      <div className="space-y-3">
+                        <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">
+                          Select Staff Leave Request to Defer
+                        </Label>
+                        <select
+                          id="defer_request"
+                          value={selectedApprovedForDeferment || ""}
+                          onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
+                        >
+                          <option value="">-- Choose a staff leave request --</option>
+                          {approvedRequests.map((req) => {
+                            const name = (req.user_name && req.user_name !== "Staff" && req.user_name.trim() !== "")
+                              ? req.user_name
+                              : "Unknown Staff"
+                            const rank = req.rank ? ` | ${req.rank}` : ""
+                            const loc = req.location ? ` | ${req.location}` : ""
+                            const type = String(req.leave_type || "annual").replace(/_/g, " ")
+                            const start = req.start_date ? new Date(req.start_date).toLocaleDateString("en-GB") : "?"
+                            const end = req.end_date ? new Date(req.end_date).toLocaleDateString("en-GB") : "?"
+                            return (
+                              <option key={req.id} value={req.id}>
+                                {name}{rank}{loc} | {type} — {start} to {end}
+                              </option>
+                            )
+                          })}
+                        </select>
+                        {/* Show selected leave details inline */}
+                        {selectedApprovedForDeferment && (() => {
+                          const sel = approvedRequests.find((r) => r.id === selectedApprovedForDeferment)
+                          if (!sel) return null
+                          return (
+                            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-slate-700 space-y-1">
+                              <p><span className="font-medium text-slate-900">Staff:</span> {sel.user_name || "Unknown"}{sel.rank ? ` — ${sel.rank}` : ""}</p>
+                              <p><span className="font-medium text-slate-900">Location:</span> {sel.location || "—"}</p>
+                              <p><span className="font-medium text-slate-900">Leave Type:</span> {String(sel.leave_type || "annual").replace(/_/g, " ")}</p>
+                              <p><span className="font-medium text-slate-900">Approved Period:</span> {sel.start_date ? new Date(sel.start_date).toLocaleDateString("en-GB") : "?"} &ndash; {sel.end_date ? new Date(sel.end_date).toLocaleDateString("en-GB") : "?"}</p>
+                            </div>
+                          )
+                        })()}
                       </div>
-                    ) : (
-                      <div className="space-y-6">
-                        <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
-                          <div className="space-y-3">
-                            <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">Select Approved Leave Request</Label>
-                            <select
-                              id="defer_request"
-                              value={selectedApprovedForDeferment || ""}
-                              onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
-                              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
-                            >
-                              <option value="">-- Choose a leave request --</option>
-                              {Array.isArray(approvedRequests) && approvedRequests.map((req) => (
-                                <option key={req.id} value={req.id}>
-                                  {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
 
-                          <div className="space-y-3">
-                            <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">Deferral Year (YYYY)</Label>
-                            <Input
-                              id="deferral_year"
-                              type="text"
-                              placeholder="2027"
-                              value={deferralYear}
-                              onChange={(e) => setDeferralYear(e.target.value)}
-                              maxLength={4}
-                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                            />
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">Reason (Optional)</Label>
-                            <Textarea
-                              id="deferment_reason"
-                              placeholder="Explain why you want to defer this leave..."
-                              value={defermentReason}
-                              onChange={(e) => setDefermentReason(e.target.value)}
-                              rows={3}
-                              className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                            />
-                          </div>
-
-                          <Button
-                            onClick={submitDefermentRequest}
-                            disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear}
-                            className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-semibold py-2.5 rounded-lg transition-all"
-                          >
-                            {isSubmittingDeferment ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Submitting...
-                              </>
-                            ) : (
-                              "Submit Deferment Request"
-                            )}
-                          </Button>
-                        </div>
+                      {/* Step 2: Defer-to Date */}
+                      <div className="space-y-3">
+                        <Label htmlFor="deferral_year" className="text-sm font-semibold text-slate-700">
+                          Defer To Leave Year (YYYY)
+                        </Label>
+                        <Input
+                          id="deferral_year"
+                          type="text"
+                          placeholder={String(new Date().getFullYear() + 1)}
+                          value={deferralYear}
+                          onChange={(e) => setDeferralYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                          maxLength={4}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                        <p className="text-xs text-slate-500">Enter the 4-digit year the leave will be moved to (e.g. {new Date().getFullYear() + 1})</p>
                       </div>
-                    )}
-                  </>
+
+                      {/* Step 3: Reason */}
+                      <div className="space-y-3">
+                        <Label htmlFor="deferment_reason" className="text-sm font-semibold text-slate-700">
+                          Reason for Deferment
+                        </Label>
+                        <Textarea
+                          id="deferment_reason"
+                          placeholder="Explain why this leave is being deferred to a future year..."
+                          value={defermentReason}
+                          onChange={(e) => setDefermentReason(e.target.value)}
+                          rows={3}
+                          className="px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={submitDefermentRequest}
+                        disabled={isSubmittingDeferment || !selectedApprovedForDeferment || !deferralYear || deferralYear.length < 4}
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-lg transition-all"
+                      >
+                        {isSubmittingDeferment ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting Deferment...
+                          </>
+                        ) : (
+                          "Submit Deferment Request"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1904,11 +1895,21 @@ export function LeaveManagementClient({
                           className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
                         >
                           <option value="">-- Choose a leave request --</option>
-                          {Array.isArray(approvedRequests) && approvedRequests.map((req) => (
-                            <option key={req.id} value={req.id}>
-                              {req.user_name || "Staff"} {req.rank ? `| ${req.rank}` : ""} {req.location ? `| ${req.location}` : ""} | {req.leave_type} - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}
-                            </option>
-                          ))}
+                          {Array.isArray(approvedRequests) && approvedRequests.map((req) => {
+                            const name = (req.user_name && req.user_name !== "Staff" && req.user_name.trim() !== "")
+                              ? req.user_name
+                              : "Unknown Staff"
+                            const rank = req.rank ? ` | ${req.rank}` : ""
+                            const loc = req.location ? ` | ${req.location}` : ""
+                            const type = String(req.leave_type || "annual").replace(/_/g, " ")
+                            const start = req.start_date ? new Date(req.start_date).toLocaleDateString("en-GB") : "?"
+                            const end = req.end_date ? new Date(req.end_date).toLocaleDateString("en-GB") : "?"
+                            return (
+                              <option key={req.id} value={req.id}>
+                                {name}{rank}{loc} | {type} — {start} to {end}
+                              </option>
+                            )
+                          })}
                         </select>
                       </div>
 

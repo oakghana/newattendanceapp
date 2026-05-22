@@ -222,7 +222,7 @@ export default async function LeaveManagementPage() {
         // Fetch user profiles separately to get names, ranks, locations
         const { data: staffProfiles } = await admin
           .from("user_profiles")
-          .select("id, first_name, last_name, position, assigned_location_id")
+          .select("id, first_name, last_name, position, assigned_location_id, employee_id")
           .in("id", staffIds)
 
         // Create a map for quick lookup
@@ -252,6 +252,10 @@ export default async function LeaveManagementPage() {
           const locationName = staffProfile.assigned_location_id 
             ? locationMap.get(staffProfile.assigned_location_id) 
             : null
+          const firstName = String(staffProfile.first_name || "").trim()
+          const lastName = String(staffProfile.last_name || "").trim()
+          const fullName = [firstName, lastName].filter(Boolean).join(" ")
+          const empId = staffProfile.employee_id ? ` (#${staffProfile.employee_id})` : ""
 
           return {
             id: String(req.id),
@@ -262,7 +266,7 @@ export default async function LeaveManagementPage() {
             leave_type: req.leave_type_key || "annual",
             status: req.status,
             created_at: req.created_at,
-            user_name: `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim() || "Staff",
+            user_name: fullName ? `${fullName}${empId}` : `User${empId || " (Unknown)"}`,
             rank: staffProfile.position || undefined,
             location: locationName || undefined,
           }
