@@ -589,6 +589,8 @@ export function LeaveManagementClient({
     const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
     const isManagerRole = ["regional_manager", "department_head", "admin", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "hr_office", "hr"].includes(roleNorm)
     
+    console.log("[v0] Client approvedRequests memo - roleNorm:", roleNorm, "isManagerRole:", isManagerRole, "initialApprovedStaffRequests.length:", Array.isArray(initialApprovedStaffRequests) ? initialApprovedStaffRequests.length : "not an array")
+    
     if (isManagerRole && Array.isArray(initialApprovedStaffRequests) && initialApprovedStaffRequests.length > 0) {
       return initialApprovedStaffRequests
     }

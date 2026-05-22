@@ -210,6 +210,7 @@ export default async function LeaveManagementPage() {
 
       if (staffIds.length > 0) {
         // Fetch approved leaves (any type initially, filter to annual)
+        // Try multiple possible status values for approved leaves
         const { data: approvedLeaves, error: leaveError } = await admin
           .from("leave_plan_requests")
           .select(`
@@ -225,8 +226,10 @@ export default async function LeaveManagementPage() {
             hr_approved_at
           `)
           .in("user_id", staffIds)
-          .in("status", ["approved", "hr_approved"])
+          .in("status", ["approved", "hr_approved", "signed", "active", "confirmed"])
           .order("preferred_start_date", { ascending: true })
+
+        console.log("[v0] Page - Approved leaves query - staffIds.length:", staffIds.length, "results:", approvedLeaves?.length || 0, "error:", leaveError?.message)
 
         // Fetch user profiles separately to get names, ranks, locations, departments
         const { data: staffProfiles } = await admin
@@ -312,6 +315,8 @@ export default async function LeaveManagementPage() {
       approvedStaffRequests = []
     }
   }
+
+  console.log("[v0] Page.tsx - canReviewLeave:", canReviewLeave, "approvedStaffRequests count:", approvedStaffRequests.length)
 
   return (
     <div className="leave-theme">
