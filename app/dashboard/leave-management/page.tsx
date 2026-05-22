@@ -209,9 +209,8 @@ export default async function LeaveManagementPage() {
       }
 
       if (staffIds.length > 0) {
-        // Fetch approved leaves (any type initially, filter to annual)
-        // Try multiple possible status values for approved leaves
-        const { data: approvedLeaves, error: leaveError } = await admin
+        // Fetch ALL leave requests first (no status filter) to debug what statuses exist
+        const { data: allLeaves, error: leaveError } = await admin
           .from("leave_plan_requests")
           .select(`
             id,
@@ -226,10 +225,15 @@ export default async function LeaveManagementPage() {
             hr_approved_at
           `)
           .in("user_id", staffIds)
-          .in("status", ["approved", "hr_approved", "signed", "active", "confirmed"])
           .order("preferred_start_date", { ascending: true })
 
-        console.log("[v0] Page - Approved leaves query - staffIds.length:", staffIds.length, "results:", approvedLeaves?.length || 0, "error:", leaveError?.message)
+        console.log("[v0] Page - ALL leaves query - staffIds.length:", staffIds.length, "results:", allLeaves?.length || 0, "statuses found:", allLeaves?.map((l: any) => l.status).filter((v: any, i: any, a: any) => a.indexOf(v) === i) || [])
+
+        // Filter for approved-like statuses
+        const approvedLeaves = (allLeaves || []).filter((leave: any) => {
+          const status = String(leave.status || "").toLowerCase()
+          return ["approved", "hr_approved", "signed", "active", "confirmed", "accepted"].includes(status)
+        })
 
         // Fetch user profiles separately to get names, ranks, locations, departments
         const { data: staffProfiles } = await admin
@@ -315,8 +319,6 @@ export default async function LeaveManagementPage() {
       approvedStaffRequests = []
     }
   }
-
-  console.log("[v0] Page.tsx - canReviewLeave:", canReviewLeave, "approvedStaffRequests count:", approvedStaffRequests.length)
 
   return (
     <div className="leave-theme">
