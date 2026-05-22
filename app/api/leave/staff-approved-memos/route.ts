@@ -66,7 +66,6 @@ export async function GET(request: NextRequest) {
           hr_approval_note
         `)
         .in("status", ["approved", "hr_approved"])
-        .not("hr_signature_image_url", "is", null)
         .order("hr_approved_at", { ascending: false, nullsFirst: false })
         .limit(200)
 
@@ -187,7 +186,6 @@ export async function GET(request: NextRequest) {
       `)
       .in("user_id", staffIds)
       .in("status", ["approved", "hr_approved"])
-      .not("hr_signature_image_url", "is", null)
       .order("created_at", { ascending: false })
 
     if (requestError) {

@@ -247,7 +247,6 @@ export default async function LeaveManagementPage() {
           `)
           .in("user_id", staffIds)
           .in("status", ["approved", "hr_approved"])
-          .not("hr_signature_image_url", "is", null)
           .order("preferred_start_date", { ascending: true })
 
         // Fetch user profiles separately to get names, ranks, locations
