@@ -177,6 +177,14 @@ export function LeaveManagementClient({
   const [creatingTemplate, setCreatingTemplate] = useState(false)
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState("all")
   const [templateActionKey, setTemplateActionKey] = useState<string | null>(null)
+  // Signer assignment state for hr_leave_office
+  const [signerAssignId, setSignerAssignId] = useState<string | null>(null)
+  const [signerAssignType, setSignerAssignType] = useState<"deferment" | "recall" | null>(null)
+  const [signerName, setSignerName] = useState("")
+  const [signerTitle, setSignerTitle] = useState("")
+  const [signerWriteDate, setSignerWriteDate] = useState("")
+  const [signerNotes, setSignerNotes] = useState("")
+  const [isSavingSigner, setIsSavingSigner] = useState(false)
   const [showTemplateComposer, setShowTemplateComposer] = useState(false)
   const [showPlaceholderGuide, setShowPlaceholderGuide] = useState(false)
   const [expandedTemplateKey, setExpandedTemplateKey] = useState<string | null>(null)
@@ -765,27 +773,25 @@ export function LeaveManagementClient({
     }
   }, [userId, userRole, userDepartment])
 
-  // Fetch deferment and recall requests for leave office staff
+  // Fetch deferment and recall requests for hr_leave_office staff
   useEffect(() => {
     const fetchDefermentAndRecallRequests = async () => {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
       
-      // Only fetch for leave office staff
-      if (normalizedRole !== "leave_office") return
+      // Only fetch for hr_leave_office and related HR roles
+      const isHrLeaveRole = ["hr_leave_office", "hr_office", "leave_office"].includes(normalizedRole)
+      if (!isHrLeaveRole) return
       
       try {
-        // Fetch pending deferment requests
-        const defermentRes = await fetch(`/api/leave/deferment?status=pending&leave_office=${encodeURIComponent(userId)}`, { cache: "no-store" })
-        if (defermentRes.ok) {
-          const defermentData = await defermentRes.json()
-          setDefermentRequests(Array.isArray(defermentData) ? defermentData : defermentData.deferments || [])
-        }
-        
-        // Fetch pending recall requests
-        const recallRes = await fetch(`/api/leave/recall?status=pending&leave_office=${encodeURIComponent(userId)}`, { cache: "no-store" })
-        if (recallRes.ok) {
-          const recallData = await recallRes.json()
-          setRecallRequests(Array.isArray(recallData) ? recallData : recallData.recalls || [])
+        // Use the deferment-recall/all endpoint which handles hr_leave_office role
+        const res = await fetch(
+          `/api/leave/deferment-recall/all?type=all&user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(normalizedRole)}`,
+          { cache: "no-store" }
+        )
+        if (res.ok) {
+          const data = await res.json()
+          setDefermentRequests(Array.isArray(data.deferments) ? data.deferments : [])
+          setRecallRequests(Array.isArray(data.recalls) ? data.recalls : [])
         }
       } catch (error) {
         console.error("[v0] Failed to fetch deferment/recall requests:", error)
