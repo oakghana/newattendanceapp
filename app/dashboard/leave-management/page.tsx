@@ -180,109 +180,88 @@ export default async function LeaveManagementPage() {
   }
 
   // Fetch approved leaves from staff for HOD/RM to perform deferment/recall
+  // For ALL users who are HOD/RM/HR, fetch approved annual leaves from ALL staff
   if (canReviewLeave) {
     try {
-      let staffIds: any[] = []
-      
-      // For admin/hr roles: get all staff with approved leaves
-      if (["admin", "hr_leave_office", "hr_office", "hr", "hr_officer", "manager_hr", "director_hr"].includes(roleNorm)) {
-        // Get all users
-        const { data: allUsers } = await admin
-          .from("user_profiles")
-          .select("id")
-        staffIds = (allUsers || []).map((s: any) => s.id)
-      } 
-      // For HOD/RM: get ALL users so they can see all approved leaves and filter by search/department/location
-      else if (roleNorm === "department_head" || roleNorm === "regional_manager") {
-        const { data: allUsers } = await admin
-          .from("user_profiles")
-          .select("id")
-        staffIds = (allUsers || []).map((s: any) => s.id)
-      }
-      // Fallback for other roles with department: get staff in their department only
-      else if (profile.department_id) {
-        const { data: deptStaff } = await admin
-          .from("user_profiles")
-          .select("id")
-          .eq("department_id", profile.department_id)
-        staffIds = (deptStaff || []).map((s: any) => s.id)
-      }
+      // Simply fetch ALL approved annual leave requests regardless of department/location
+      // Users with search/filter capability can then find what they need
+      const { data: allApprovedLeaves, error: queryError } = await admin
+        .from("leave_plan_requests")
+        .select(`
+          id,
+          user_id,
+          preferred_start_date,
+          preferred_end_date,
+          leave_type_key,
+          reason,
+          status,
+          created_at,
+          hr_signature_image_url,
+          hr_approved_at
+        `)
+        // No user_id filter - get ALL approved leaves
+        .order("preferred_start_date", { ascending: true })
 
-      if (staffIds.length > 0) {
-        // Fetch ALL leave requests first (no status filter) to debug what statuses exist
-        const { data: allLeaves, error: leaveError } = await admin
-          .from("leave_plan_requests")
-          .select(`
-            id,
-            user_id,
-            preferred_start_date,
-            preferred_end_date,
-            leave_type_key,
-            reason,
-            status,
-            created_at,
-            hr_signature_image_url,
-            hr_approved_at
-          `)
-          .in("user_id", staffIds)
-          .order("preferred_start_date", { ascending: true })
+      if (queryError) {
+        console.error("[v0] Error fetching all approved leaves:", queryError)
+        approvedStaffRequests = []
+      } else {
+        // Get all unique statuses to understand what we have
+        const uniqueStatuses = new Set((allApprovedLeaves || []).map((l: any) => l.status))
 
-        console.log("[v0] Page - ALL leaves query - staffIds.length:", staffIds.length, "results:", allLeaves?.length || 0, "statuses found:", allLeaves?.map((l: any) => l.status).filter((v: any, i: any, a: any) => a.indexOf(v) === i) || [])
-
-        // Filter for approved-like statuses
-        const approvedLeaves = (allLeaves || []).filter((leave: any) => {
-          const status = String(leave.status || "").toLowerCase()
-          return ["approved", "hr_approved", "signed", "active", "confirmed", "accepted"].includes(status)
+        // Filter for approved-like statuses (be flexible with status names)
+        const approvedLeaves = (allApprovedLeaves || []).filter((leave: any) => {
+          const status = String(leave.status || "").toLowerCase().trim()
+          // Include any status that suggests approval/signing
+          return ["approved", "hr_approved", "signed", "active", "confirmed", "accepted", "processing"].includes(status)
         })
 
-        // Fetch user profiles separately to get names, ranks, locations, departments
+        // Get user IDs for profile lookup
+        const userIds = new Set((approvedLeaves || []).map((l: any) => l.user_id).filter(Boolean))
+
+        // Fetch user profiles
         const { data: staffProfiles } = await admin
           .from("user_profiles")
           .select("id, first_name, last_name, position, assigned_location_id, employee_id, department_id")
-          .in("id", staffIds)
+          .in("id", Array.from(userIds))
 
-        // Create a map for quick lookup
         const profileMap = new Map((staffProfiles || []).map((p: any) => [p.id, p]))
 
-        // Fetch locations if needed
+        // Fetch locations
         const locationIds = new Set((staffProfiles || []).map((p: any) => p.assigned_location_id).filter(Boolean))
         let locations: any[] = []
         if (locationIds.size > 0) {
           try {
-            const { data: locData, error: locError } = await admin
+            const { data: locData } = await admin
               .from("geofence_locations")
               .select("id, name")
               .in("id", Array.from(locationIds))
-            if (!locError && locData) {
-              locations = locData
-            }
+            locations = locData || []
           } catch (err) {
             console.error("[v0] Error fetching locations:", err)
           }
         }
         const locationMap = new Map((locations || []).map((l: any) => [l.id, l.name]))
 
-        // Fetch departments if needed
+        // Fetch departments
         const deptIds = new Set((staffProfiles || []).map((p: any) => p.department_id).filter(Boolean))
         let departments: any[] = []
         if (deptIds.size > 0) {
           try {
-            const { data: deptData, error: deptError } = await admin
+            const { data: deptData } = await admin
               .from("departments")
               .select("id, name")
               .in("id", Array.from(deptIds))
-            if (!deptError && deptData) {
-              departments = deptData
-            }
+            departments = deptData || []
           } catch (err) {
             console.error("[v0] Error fetching departments:", err)
           }
         }
         const departmentMap = new Map((departments || []).map((d: any) => [d.id, d.name]))
 
-        // Filter for annual leaves only and map to display format
+        // Filter for annual leaves and map to display format
         approvedStaffRequests = (approvedLeaves || [])
-          .filter((req: any) => req.leave_type_key === "annual")  // Filter annual only
+          .filter((req: any) => req.leave_type_key === "annual")  // Only annual leaves
           .map((req: any) => {
             const staffProfile = profileMap.get(req.user_id) || {}
             const locationName = staffProfile.assigned_location_id 
