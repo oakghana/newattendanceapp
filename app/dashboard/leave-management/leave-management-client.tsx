@@ -1651,7 +1651,6 @@ export function LeaveManagementClient({
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
                 }`}
                 variant={selectedTab === "deferrments" ? "default" : "outline"}
-                disabled={!approvedRequests || approvedRequests.length === 0}
               >
                 <Calendar className="h-4 w-4" />
                 Deferrments
