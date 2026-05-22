@@ -798,10 +798,7 @@ export function LeaveManagementClient({
   // Fetch user's own recall and deferment requests (for My Requests tab)
   useEffect(() => {
     const fetchMyRecallAndDefermentRequests = async () => {
-      if (!userId) return
-      setIsLoadingMyRequests(true)
       try {
-        // Fetch all user's deferment and recall requests (own requests and initiated requests)
         const res = await fetch(`/api/leave/my-deferment-recall-requests`, { cache: "no-store" })
         if (res.ok) {
           const data = await res.json()

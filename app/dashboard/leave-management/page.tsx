@@ -209,8 +209,8 @@ export default async function LeaveManagementPage() {
       }
 
       if (staffIds.length > 0) {
-        // Fetch approved leaves
-        const { data: approvedLeaves } = await admin
+        // Fetch approved leaves (any type initially, filter to annual)
+        const { data: approvedLeaves, error: leaveError } = await admin
           .from("leave_plan_requests")
           .select(`
             id,
@@ -273,36 +273,39 @@ export default async function LeaveManagementPage() {
         }
         const departmentMap = new Map((departments || []).map((d: any) => [d.id, d.name]))
 
-        approvedStaffRequests = (approvedLeaves || []).map((req: any) => {
-          const staffProfile = profileMap.get(req.user_id) || {}
-          const locationName = staffProfile.assigned_location_id 
-            ? locationMap.get(staffProfile.assigned_location_id) 
-            : null
-          const departmentName = staffProfile.department_id
-            ? departmentMap.get(staffProfile.department_id)
-            : null
-          const firstName = String(staffProfile.first_name || "").trim()
-          const lastName = String(staffProfile.last_name || "").trim()
-          const fullName = [firstName, lastName].filter(Boolean).join(" ")
-          const empId = staffProfile.employee_id ? ` (#${staffProfile.employee_id})` : ""
+        // Filter for annual leaves only and map to display format
+        approvedStaffRequests = (approvedLeaves || [])
+          .filter((req: any) => req.leave_type_key === "annual")  // Filter annual only
+          .map((req: any) => {
+            const staffProfile = profileMap.get(req.user_id) || {}
+            const locationName = staffProfile.assigned_location_id 
+              ? locationMap.get(staffProfile.assigned_location_id) 
+              : null
+            const departmentName = staffProfile.department_id
+              ? departmentMap.get(staffProfile.department_id)
+              : null
+            const firstName = String(staffProfile.first_name || "").trim()
+            const lastName = String(staffProfile.last_name || "").trim()
+            const fullName = [firstName, lastName].filter(Boolean).join(" ")
+            const empId = staffProfile.employee_id ? ` (#${staffProfile.employee_id})` : ""
 
-          return {
-            id: String(req.id),
-            user_id: String(req.user_id),
-            start_date: req.preferred_start_date,
-            end_date: req.preferred_end_date,
-            reason: req.reason || "",
-            leave_type: req.leave_type_key || "annual",
-            status: req.status,
-            created_at: req.created_at,
-            user_name: fullName ? `${fullName}${empId}` : `User${empId || " (Unknown)"}`,
-            rank: staffProfile.position || undefined,
-            location: locationName || undefined,
-            location_id: staffProfile.assigned_location_id || undefined,
-            department: departmentName || undefined,
-            department_id: staffProfile.department_id || undefined,
-          }
-        })
+            return {
+              id: String(req.id),
+              user_id: String(req.user_id),
+              start_date: req.preferred_start_date,
+              end_date: req.preferred_end_date,
+              reason: req.reason || "",
+              leave_type: req.leave_type_key || "annual",
+              status: req.status,
+              created_at: req.created_at,
+              user_name: fullName ? `${fullName}${empId}` : `User${empId || " (Unknown)"}`,
+              rank: staffProfile.position || undefined,
+              location: locationName || undefined,
+              location_id: staffProfile.assigned_location_id || undefined,
+              department: departmentName || undefined,
+              department_id: staffProfile.department_id || undefined,
+            }
+          })
       }
     } catch (error) {
       console.error("[v0] Error fetching approved staff requests:", error)
