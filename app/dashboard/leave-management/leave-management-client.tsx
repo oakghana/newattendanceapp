@@ -163,6 +163,13 @@ export function LeaveManagementClient({
   const [recallDateInput, setRecallDateInput] = useState<string>("")
   const [recallReasonInput, setRecallReasonInput] = useState<string>("")
   const [selectedApprovedForRecall, setSelectedApprovedForRecall] = useState<string | null>(null)
+  // Search / filter state for deferment + recall staff picker
+  const [deferSearch, setDeferSearch] = useState<string>("")
+  const [deferDeptFilter, setDeferDeptFilter] = useState<string>("")
+  const [deferLocFilter, setDeferLocFilter] = useState<string>("")
+  const [recallSearch, setRecallSearch] = useState<string>("")
+  const [recallDeptFilter, setRecallDeptFilter] = useState<string>("")
+  const [recallLocFilter, setRecallLocFilter] = useState<string>("")
   const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -2073,44 +2080,109 @@ export function LeaveManagementClient({
                   <div className="space-y-6">
                     <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
 
-                      {/* Step 1: Select Staff Leave Request */}
+                      {/* Step 1: Search + Filter + Select Staff Leave Request */}
                       <div className="space-y-3">
-                        <Label htmlFor="defer_request" className="text-sm font-semibold text-slate-700">
-                          Select Staff Leave Request to Defer
-                        </Label>
-                        <select
-                          id="defer_request"
-                          value={selectedApprovedForDeferment || ""}
-                          onChange={(e) => setSelectedApprovedForDeferment(e.target.value || null)}
-                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-900"
-                        >
-                          <option value="">-- Choose a staff leave request --</option>
-                          {approvedRequests.map((req) => {
-                            const name = (req.user_name && req.user_name !== "Staff" && req.user_name.trim() !== "")
-                              ? req.user_name
-                              : "Unknown Staff"
-                            const rank = req.rank ? ` | ${req.rank}` : ""
-                            const loc = req.location ? ` | ${req.location}` : ""
-                            const type = String(req.leave_type || "annual").replace(/_/g, " ")
-                            const start = req.start_date ? new Date(req.start_date).toLocaleDateString("en-GB") : "?"
-                            const end = req.end_date ? new Date(req.end_date).toLocaleDateString("en-GB") : "?"
-                            return (
-                              <option key={req.id} value={req.id}>
-                                {name}{rank}{loc} | {type} — {start} to {end}
-                              </option>
-                            )
-                          })}
-                        </select>
-                        {/* Show selected leave details inline */}
+                        <Label className="text-sm font-semibold text-slate-700">Select Staff Leave Request to Defer</Label>
+
+                        {/* Filter row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {/* Search */}
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                            <Input
+                              placeholder="Search staff name..."
+                              value={deferSearch}
+                              onChange={(e) => { setDeferSearch(e.target.value); setSelectedApprovedForDeferment(null) }}
+                              className="pl-9 h-9 text-sm border-slate-300 focus:ring-amber-500"
+                            />
+                          </div>
+                          {/* Department filter */}
+                          <select
+                            value={deferDeptFilter}
+                            onChange={(e) => { setDeferDeptFilter(e.target.value); setSelectedApprovedForDeferment(null) }}
+                            className="h-9 px-3 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-700"
+                          >
+                            <option value="">All Departments</option>
+                            {[...new Set(approvedRequests.map((r: any) => r.department).filter(Boolean))].sort().map((d: any) => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                          {/* Location filter */}
+                          <select
+                            value={deferLocFilter}
+                            onChange={(e) => { setDeferLocFilter(e.target.value); setSelectedApprovedForDeferment(null) }}
+                            className="h-9 px-3 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-700"
+                          >
+                            <option value="">All Locations</option>
+                            {[...new Set(approvedRequests.map((r: any) => r.location).filter(Boolean))].sort().map((l: any) => (
+                              <option key={l} value={l}>{l}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Filtered results list */}
+                        {(() => {
+                          const filtered = approvedRequests.filter((r: any) => {
+                            const nameMatch = !deferSearch || String(r.user_name || "").toLowerCase().includes(deferSearch.toLowerCase())
+                            const deptMatch = !deferDeptFilter || r.department === deferDeptFilter
+                            const locMatch = !deferLocFilter || r.location === deferLocFilter
+                            return nameMatch && deptMatch && locMatch
+                          })
+                          return (
+                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+                                <span className="text-xs text-slate-500 font-medium">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+                                {selectedApprovedForDeferment && <button onClick={() => setSelectedApprovedForDeferment(null)} className="text-xs text-amber-600 hover:underline">Clear selection</button>}
+                              </div>
+                              <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                                {filtered.length === 0 ? (
+                                  <div className="py-8 text-center text-sm text-slate-400">No matching leave requests found</div>
+                                ) : filtered.map((req: any) => {
+                                  const isSelected = selectedApprovedForDeferment === req.id
+                                  const type = String(req.leave_type || "annual").replace(/_/g, " ")
+                                  const start = req.start_date ? new Date(req.start_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                                  const end = req.end_date ? new Date(req.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                                  return (
+                                    <button
+                                      key={req.id}
+                                      type="button"
+                                      onClick={() => setSelectedApprovedForDeferment(isSelected ? null : req.id)}
+                                      className={`w-full text-left px-4 py-3 transition-colors ${isSelected ? "bg-amber-50 border-l-4 border-amber-500" : "hover:bg-slate-50 border-l-4 border-transparent"}`}
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-semibold text-slate-800 truncate">{req.user_name || "Unknown Staff"}</p>
+                                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                            {req.department && <span className="text-xs text-slate-500">{req.department}</span>}
+                                            {req.location && <span className="text-xs text-slate-500">{req.location}</span>}
+                                            {req.rank && <span className="text-xs text-slate-400 italic">{req.rank}</span>}
+                                          </div>
+                                          <p className="text-xs text-slate-600 mt-1 capitalize">{type} &bull; {start} &ndash; {end}</p>
+                                        </div>
+                                        {isSelected && <CheckCircle2 className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />}
+                                      </div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
+                        {/* Selected summary */}
                         {selectedApprovedForDeferment && (() => {
-                          const sel = approvedRequests.find((r) => r.id === selectedApprovedForDeferment)
+                          const sel = approvedRequests.find((r: any) => r.id === selectedApprovedForDeferment)
                           if (!sel) return null
                           return (
-                            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-slate-700 space-y-1">
-                              <p><span className="font-medium text-slate-900">Staff:</span> {sel.user_name || "Unknown"}{sel.rank ? ` — ${sel.rank}` : ""}</p>
-                              <p><span className="font-medium text-slate-900">Location:</span> {sel.location || "—"}</p>
-                              <p><span className="font-medium text-slate-900">Leave Type:</span> {String(sel.leave_type || "annual").replace(/_/g, " ")}</p>
-                              <p><span className="font-medium text-slate-900">Approved Period:</span> {sel.start_date ? new Date(sel.start_date).toLocaleDateString("en-GB") : "?"} &ndash; {sel.end_date ? new Date(sel.end_date).toLocaleDateString("en-GB") : "?"}</p>
+                            <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm space-y-1.5">
+                              <p className="font-semibold text-amber-800 flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Selected Leave</p>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700">
+                                <p><span className="font-medium">Staff:</span> {sel.user_name || "Unknown"}</p>
+                                <p><span className="font-medium">Dept:</span> {sel.department || "—"}</p>
+                                <p><span className="font-medium">Location:</span> {sel.location || "—"}</p>
+                                <p><span className="font-medium">Type:</span> {String(sel.leave_type || "annual").replace(/_/g, " ")}</p>
+                                <p className="col-span-2"><span className="font-medium">Period:</span> {sel.start_date ? new Date(sel.start_date).toLocaleDateString("en-GB") : "?"} &ndash; {sel.end_date ? new Date(sel.end_date).toLocaleDateString("en-GB") : "?"}</p>
+                              </div>
                             </div>
                           )
                         })()}
@@ -2193,30 +2265,107 @@ export function LeaveManagementClient({
                   <div className="space-y-6">
                     <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
                       <div className="space-y-3">
-                        <Label htmlFor="recall_request" className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
-                        <select
-                          id="recall_request"
-                          value={selectedApprovedForRecall || ""}
-                          onChange={(e) => setSelectedApprovedForRecall(e.target.value || null)}
-                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-900"
-                        >
-                          <option value="">-- Choose a leave request --</option>
-                          {Array.isArray(approvedRequests) && approvedRequests.map((req) => {
-                            const name = (req.user_name && req.user_name !== "Staff" && req.user_name.trim() !== "")
-                              ? req.user_name
-                              : "Unknown Staff"
-                            const rank = req.rank ? ` | ${req.rank}` : ""
-                            const loc = req.location ? ` | ${req.location}` : ""
-                            const type = String(req.leave_type || "annual").replace(/_/g, " ")
-                            const start = req.start_date ? new Date(req.start_date).toLocaleDateString("en-GB") : "?"
-                            const end = req.end_date ? new Date(req.end_date).toLocaleDateString("en-GB") : "?"
-                            return (
-                              <option key={req.id} value={req.id}>
-                                {name}{rank}{loc} | {type} — {start} to {end}
-                              </option>
-                            )
-                          })}
-                        </select>
+                        <Label className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
+
+                        {/* Filter row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                            <Input
+                              placeholder="Search staff name..."
+                              value={recallSearch}
+                              onChange={(e) => { setRecallSearch(e.target.value); setSelectedApprovedForRecall(null) }}
+                              className="pl-9 h-9 text-sm border-slate-300 focus:ring-rose-500"
+                            />
+                          </div>
+                          <select
+                            value={recallDeptFilter}
+                            onChange={(e) => { setRecallDeptFilter(e.target.value); setSelectedApprovedForRecall(null) }}
+                            className="h-9 px-3 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-700"
+                          >
+                            <option value="">All Departments</option>
+                            {[...new Set(approvedRequests.map((r: any) => r.department).filter(Boolean))].sort().map((d: any) => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={recallLocFilter}
+                            onChange={(e) => { setRecallLocFilter(e.target.value); setSelectedApprovedForRecall(null) }}
+                            className="h-9 px-3 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white text-slate-700"
+                          >
+                            <option value="">All Locations</option>
+                            {[...new Set(approvedRequests.map((r: any) => r.location).filter(Boolean))].sort().map((l: any) => (
+                              <option key={l} value={l}>{l}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Filtered results list */}
+                        {(() => {
+                          const filtered = approvedRequests.filter((r: any) => {
+                            const nameMatch = !recallSearch || String(r.user_name || "").toLowerCase().includes(recallSearch.toLowerCase())
+                            const deptMatch = !recallDeptFilter || r.department === recallDeptFilter
+                            const locMatch = !recallLocFilter || r.location === recallLocFilter
+                            return nameMatch && deptMatch && locMatch
+                          })
+                          return (
+                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+                                <span className="text-xs text-slate-500 font-medium">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+                                {selectedApprovedForRecall && <button onClick={() => setSelectedApprovedForRecall(null)} className="text-xs text-rose-600 hover:underline">Clear selection</button>}
+                              </div>
+                              <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                                {filtered.length === 0 ? (
+                                  <div className="py-8 text-center text-sm text-slate-400">No matching leave requests found</div>
+                                ) : filtered.map((req: any) => {
+                                  const isSelected = selectedApprovedForRecall === req.id
+                                  const type = String(req.leave_type || "annual").replace(/_/g, " ")
+                                  const start = req.start_date ? new Date(req.start_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                                  const end = req.end_date ? new Date(req.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                                  return (
+                                    <button
+                                      key={req.id}
+                                      type="button"
+                                      onClick={() => setSelectedApprovedForRecall(isSelected ? null : req.id)}
+                                      className={`w-full text-left px-4 py-3 transition-colors ${isSelected ? "bg-rose-50 border-l-4 border-rose-500" : "hover:bg-slate-50 border-l-4 border-transparent"}`}
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-semibold text-slate-800 truncate">{req.user_name || "Unknown Staff"}</p>
+                                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                            {req.department && <span className="text-xs text-slate-500">{req.department}</span>}
+                                            {req.location && <span className="text-xs text-slate-500">{req.location}</span>}
+                                            {req.rank && <span className="text-xs text-slate-400 italic">{req.rank}</span>}
+                                          </div>
+                                          <p className="text-xs text-slate-600 mt-1 capitalize">{type} &bull; {start} &ndash; {end}</p>
+                                        </div>
+                                        {isSelected && <CheckCircle2 className="h-5 w-5 text-rose-500 flex-shrink-0 mt-0.5" />}
+                                      </div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
+                        {/* Selected summary */}
+                        {selectedApprovedForRecall && (() => {
+                          const sel = approvedRequests.find((r: any) => r.id === selectedApprovedForRecall)
+                          if (!sel) return null
+                          return (
+                            <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm space-y-1.5">
+                              <p className="font-semibold text-rose-800 flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Selected Leave</p>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700">
+                                <p><span className="font-medium">Staff:</span> {sel.user_name || "Unknown"}</p>
+                                <p><span className="font-medium">Dept:</span> {sel.department || "—"}</p>
+                                <p><span className="font-medium">Location:</span> {sel.location || "—"}</p>
+                                <p><span className="font-medium">Type:</span> {String(sel.leave_type || "annual").replace(/_/g, " ")}</p>
+                                <p className="col-span-2"><span className="font-medium">Period:</span> {sel.start_date ? new Date(sel.start_date).toLocaleDateString("en-GB") : "?"} &ndash; {sel.end_date ? new Date(sel.end_date).toLocaleDateString("en-GB") : "?"}</p>
+                              </div>
+                            </div>
+                          )
+                        })()}
                       </div>
 
                       <div className="space-y-3">

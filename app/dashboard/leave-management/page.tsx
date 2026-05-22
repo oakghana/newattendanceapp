@@ -249,10 +249,10 @@ export default async function LeaveManagementPage() {
           .in("status", ["approved", "hr_approved"])
           .order("preferred_start_date", { ascending: true })
 
-        // Fetch user profiles separately to get names, ranks, locations
+        // Fetch user profiles separately to get names, ranks, locations, departments
         const { data: staffProfiles } = await admin
           .from("user_profiles")
-          .select("id, first_name, last_name, position, assigned_location_id, employee_id")
+          .select("id, first_name, last_name, position, assigned_location_id, employee_id, department_id")
           .in("id", staffIds)
 
         // Create a map for quick lookup
@@ -274,13 +274,33 @@ export default async function LeaveManagementPage() {
             console.error("[v0] Error fetching locations:", err)
           }
         }
-        
         const locationMap = new Map((locations || []).map((l: any) => [l.id, l.name]))
+
+        // Fetch departments if needed
+        const deptIds = new Set((staffProfiles || []).map((p: any) => p.department_id).filter(Boolean))
+        let departments: any[] = []
+        if (deptIds.size > 0) {
+          try {
+            const { data: deptData, error: deptError } = await admin
+              .from("departments")
+              .select("id, name")
+              .in("id", Array.from(deptIds))
+            if (!deptError && deptData) {
+              departments = deptData
+            }
+          } catch (err) {
+            console.error("[v0] Error fetching departments:", err)
+          }
+        }
+        const departmentMap = new Map((departments || []).map((d: any) => [d.id, d.name]))
 
         approvedStaffRequests = (approvedLeaves || []).map((req: any) => {
           const staffProfile = profileMap.get(req.user_id) || {}
           const locationName = staffProfile.assigned_location_id 
             ? locationMap.get(staffProfile.assigned_location_id) 
+            : null
+          const departmentName = staffProfile.department_id
+            ? departmentMap.get(staffProfile.department_id)
             : null
           const firstName = String(staffProfile.first_name || "").trim()
           const lastName = String(staffProfile.last_name || "").trim()
@@ -299,6 +319,9 @@ export default async function LeaveManagementPage() {
             user_name: fullName ? `${fullName}${empId}` : `User${empId || " (Unknown)"}`,
             rank: staffProfile.position || undefined,
             location: locationName || undefined,
+            location_id: staffProfile.assigned_location_id || undefined,
+            department: departmentName || undefined,
+            department_id: staffProfile.department_id || undefined,
           }
         })
       }
