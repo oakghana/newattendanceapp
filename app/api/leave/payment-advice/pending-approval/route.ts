@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
 
     // Use admin client to bypass RLS and fetch ALL pending memos
     // This ensures HR Executives can see all memos regardless of who submitted them
+    // The table uses "status" column, not "approval_status"
     // Fetch ALL memos that are NOT approved or rejected (includes NULL, pending, submitted)
     const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
@@ -39,17 +40,15 @@ export async function GET(request: NextRequest) {
         hr_leave_office_id,
         hr_leave_office_name,
         created_at,
-        approval_status,
-        approved_by_id,
-        approved_by_name,
-        approved_at,
-        rejection_reason,
-        assigned_signer_id,
-        assigned_signer_name,
-        assigned_signer_position
+        status,
+        updated_at,
+        forwarded_at,
+        acknowledged_at,
+        payment_amount,
+        payment_currency
       `
       )
-      .or("approval_status.is.null,approval_status.eq.pending,approval_status.eq.submitted")
+      .or("status.is.null,status.eq.pending,status.eq.submitted,status.eq.draft")
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -110,14 +109,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update memo approval status using admin client to bypass RLS
+    // Update memo status using admin client to bypass RLS
+    // The table uses "status" column, not "approval_status"
     const { data, error } = await admin
       .from("leave_payment_memos")
       .update({
-        approval_status: approved ? "approved" : "rejected",
-        approved_by_id: user.id,
-        approved_by_name: fullName,
-        approved_at: new Date().toISOString(),
+        status: approved ? "approved" : "rejected",
+        updated_at: new Date().toISOString(),
       })
       .eq("id", memoId)
       .select()

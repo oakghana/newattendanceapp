@@ -108,21 +108,16 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Load pending memos for HR Executives
   useEffect(() => {
-    console.log("[v0] PaymentAdviceClient - userRole:", userRole, "roleNorm:", roleNorm, "isHrExecutive:", isHrExecutive)
     if (isHrExecutive) {
       const fetchPendingMemos = async () => {
         setLoadingPendingMemos(true)
         try {
           const response = await fetch("/api/leave/payment-advice/pending-approval")
-          console.log("[v0] Pending approval API response status:", response.status)
           if (response.ok) {
             const data = await response.json()
-            console.log("[v0] Pending memos data:", data)
             setPendingMemos(data.memos || [])
-            console.log("[v0] Pending memos loaded:", data.memos?.length || 0)
           } else {
-            const errorData = await response.text()
-            console.error("[v0] Failed to fetch pending memos:", errorData)
+            console.error("[v0] Failed to fetch pending memos")
           }
         } catch (err) {
           console.error("[v0] Error fetching pending memos:", err)
@@ -132,7 +127,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       }
       fetchPendingMemos()
     }
-  }, [isHrExecutive, userRole, roleNorm])
+  }, [isHrExecutive])
 
   // Group staff by category
   const staffByCategory = useMemo(() => {
@@ -692,7 +687,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                           <p className="text-sm text-gray-600">{memo.staff_number}</p>
                         </div>
                         <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
-                          {memo.approval_status || "Pending"}
+                          {memo.status || "Pending"}
                         </span>
                       </div>
                       <p className="text-sm text-gray-700 mb-2">{memo.memo_subject}</p>
