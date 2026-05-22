@@ -127,6 +127,158 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        { error: "Server configuration error: missing Supabase credentials" },
+        { status: 500 }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    const body = await request.json()
+    const { id, recall_date, reason, user_id } = body
+
+    if (!id || !user_id) {
+      return NextResponse.json(
+        { error: "Missing required fields: id, user_id" },
+        { status: 400 }
+      )
+    }
+
+    // Fetch the existing recall request
+    const { data: existing, error: fetchError } = await supabase
+      .from("leave_recall_requests")
+      .select("*")
+      .eq("id", id)
+      .single()
+
+    if (fetchError || !existing) {
+      return NextResponse.json({ error: "Recall request not found" }, { status: 404 })
+    }
+
+    // Check if HR has already processed (not pending)
+    const hrProcessedStatuses = ["approved", "rejected", "hr_approved", "hr_rejected"]
+    if (hrProcessedStatuses.includes(existing.status)) {
+      return NextResponse.json(
+        { error: "Cannot edit recall request after HR has processed it" },
+        { status: 403 }
+      )
+    }
+
+    // Verify the user initiated this request
+    if (existing.initiated_by_user_id !== user_id) {
+      return NextResponse.json(
+        { error: "You can only edit recall requests you initiated" },
+        { status: 403 }
+      )
+    }
+
+    // Build update object
+    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (recall_date && /^\d{4}-\d{2}-\d{2}$/.test(recall_date)) {
+      updateData.recall_date = recall_date
+    }
+    if (reason !== undefined) {
+      updateData.recall_reason = reason || null
+      updateData.recall_notes = reason || null
+    }
+
+    const { data, error } = await supabase
+      .from("leave_recall_requests")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error("[v0] Recall update error:", error)
+      return NextResponse.json({ error: "Failed to update recall request" }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, data, message: "Recall request updated" })
+  } catch (error) {
+    console.error("[v0] Recall PATCH error:", error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal server error" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        { error: "Server configuration error: missing Supabase credentials" },
+        { status: 500 }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get("id")
+    const userId = searchParams.get("user_id")
+
+    if (!id || !userId) {
+      return NextResponse.json({ error: "Missing required: id, user_id" }, { status: 400 })
+    }
+
+    // Fetch the existing recall request
+    const { data: existing, error: fetchError } = await supabase
+      .from("leave_recall_requests")
+      .select("*")
+      .eq("id", id)
+      .single()
+
+    if (fetchError || !existing) {
+      return NextResponse.json({ error: "Recall request not found" }, { status: 404 })
+    }
+
+    // Check if HR has already processed (not pending)
+    const hrProcessedStatuses = ["approved", "rejected", "hr_approved", "hr_rejected"]
+    if (hrProcessedStatuses.includes(existing.status)) {
+      return NextResponse.json(
+        { error: "Cannot delete recall request after HR has processed it" },
+        { status: 403 }
+      )
+    }
+
+    // Verify ownership
+    if (existing.initiated_by_user_id !== userId) {
+      return NextResponse.json(
+        { error: "You can only delete recall requests you initiated" },
+        { status: 403 }
+      )
+    }
+
+    const { error } = await supabase
+      .from("leave_recall_requests")
+      .delete()
+      .eq("id", id)
+
+    if (error) {
+      console.error("[v0] Recall delete error:", error)
+      return NextResponse.json({ error: "Failed to delete recall request" }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: "Recall request deleted" })
+  } catch (error) {
+    console.error("[v0] Recall DELETE error:", error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal server error" },
+      { status: 500 }
+    )
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

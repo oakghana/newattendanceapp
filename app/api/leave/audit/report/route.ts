@@ -1,26 +1,28 @@
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  )
-}
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    const admin = await createAdminClient()
     const { searchParams } = new URL(request.url)
-    const startDate = searchParams.get('start_date')
-    const endDate = searchParams.get('end_date')
-    const transactionType = searchParams.get('transaction_type')
     const leaveYear = searchParams.get('leave_year') || '2025/2026'
+    const transactionType = searchParams.get('transaction_type')
     const format = searchParams.get('format') || 'json'
 
-    // Query leave_plan_requests for leave taken data
-    // This is where the actual leave records are stored
-    let leaveQuery = supabase
+    // Fetch leave balance transactions - this is the primary audit trail
+    const { data: balanceTransactions, error: balanceError } = await admin
+      .from('leave_balance_transactions')
+      .select('*')
+      .eq('leave_year', leaveYear)
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    if (balanceError) {
+      console.error('[v0] Balance transactions fetch error:', balanceError)
+    }
+
+    // Fetch leave plan requests for approved leave records
+    const { data: leaveRequests, error: leaveError } = await admin
       .from('leave_plan_requests')
       .select(`
         id,
@@ -31,245 +33,105 @@ export async function GET(request: NextRequest) {
         adjusted_days,
         preferred_start_date,
         preferred_end_date,
-        adjusted_start_date,
-        adjusted_end_date,
         status,
         is_carry_over_leave,
         reason,
         created_at,
-        submitted_at,
         hr_approved_at
       `)
-      .in('status', ['hr_approved', 'hod_approved', 'hr_office_reviewed', 'pending'])
+      .eq('leave_year_period', leaveYear)
+      .in('status', ['hr_approved', 'approved'])
       .order('created_at', { ascending: false })
-
-    if (leaveYear) {
-      leaveQuery = leaveQuery.eq('leave_year_period', leaveYear)
-    }
-
-    if (startDate) {
-      leaveQuery = leaveQuery.gte('created_at', new Date(startDate).toISOString())
-    }
-
-    if (endDate) {
-      leaveQuery = leaveQuery.lte('created_at', new Date(endDate).toISOString())
-    }
-
-    const { data: leaveData, error: leaveError } = await leaveQuery.limit(1000)
+      .limit(500)
 
     if (leaveError) {
       console.error('[v0] Leave requests fetch error:', leaveError)
     }
 
-    // Query outstanding_leave_balances for carryover data
-    let outstandingQuery = supabase
-      .from('outstanding_leave_balances')
-      .select(`
-        id,
-        user_id,
-        leave_year_period,
-        opening_balance,
-        entitlement_days,
-        used_this_period,
-        carryover_to_next_year,
-        max_carryover_allowed,
-        notes,
-        created_at
-      `)
-      .order('created_at', { ascending: false })
+    // Get all unique user IDs
+    const userIds = [
+      ...new Set([
+        ...(balanceTransactions || []).map((t: any) => t.staff_id),
+        ...(leaveRequests || []).map((r: any) => r.user_id),
+      ].filter(Boolean))
+    ]
 
-    if (leaveYear) {
-      outstandingQuery = outstandingQuery.eq('leave_year_period', leaveYear)
+    // Fetch user profiles
+    let profilesMap: Record<string, any> = {}
+    if (userIds.length > 0) {
+      const { data: profiles } = await admin
+        .from('user_profiles')
+        .select('id, first_name, last_name, employee_id, departments(name)')
+        .in('id', userIds)
+
+      if (profiles) {
+        profiles.forEach((p: any) => {
+          profilesMap[p.id] = p
+        })
+      }
     }
 
-    const { data: outstandingData, error: outstandingError } = await outstandingQuery.limit(1000)
-
-    if (outstandingError) {
-      console.error('[v0] Outstanding fetch error:', outstandingError)
-    }
+    // Transform balance transactions
+    const balanceTx = (balanceTransactions || []).map((t: any) => {
+      const profile = profilesMap[t.staff_id] || {}
+      return {
+        id: t.id,
+        created_at: t.created_at,
+        staff_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown',
+        employee_id: profile.employee_id || '',
+        department: profile.departments?.name || '',
+        leave_year: t.leave_year,
+        leave_type: t.leave_type_key || 'annual',
+        transaction_type: t.transaction_type || 'ADJUSTMENT',
+        days_change: t.days_change || 0,
+        running_balance: t.running_balance || 0,
+        reason_code: t.reason_code || '',
+        notes: t.notes || '',
+        status: 'APPROVED',
+      }
+    })
 
     // Transform leave requests to transactions
-    const leaveTransactions = await Promise.all(
-      (leaveData || []).map(async (record: any) => {
-        try {
-          const { data: userProfile } = await supabase
-            .from('user_profiles')
-            .select('first_name, last_name, employee_id, departments(name)')
-            .eq('id', record.user_id)
-            .single()
+    const leaveTx = (leaveRequests || []).map((r: any) => {
+      const profile = profilesMap[r.user_id] || {}
+      const days = r.adjusted_days || r.requested_days || 0
+      return {
+        id: r.id,
+        created_at: r.hr_approved_at || r.created_at,
+        staff_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown',
+        employee_id: profile.employee_id || '',
+        department: profile.departments?.name || '',
+        leave_year: r.leave_year_period,
+        leave_type: r.leave_type_key || 'annual',
+        transaction_type: r.is_carry_over_leave ? 'CARRYOVER' : 'LEAVE_TAKEN',
+        days_change: -Math.abs(days),
+        running_balance: 0,
+        reason_code: 'APPROVED',
+        notes: r.reason || '',
+        status: 'APPROVED',
+      }
+    })
 
-          const days = record.adjusted_days || record.requested_days || 0
-          const startDate = record.adjusted_start_date || record.preferred_start_date
-          const endDate = record.adjusted_end_date || record.preferred_end_date
-          
-          return {
-            id: record.id,
-            created_at: record.hr_approved_at || record.submitted_at || record.created_at,
-            staff_name: `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim(),
-            employee_id: userProfile?.employee_id || '',
-            department: userProfile?.departments?.name || '',
-            leave_year: record.leave_year_period,
-            leave_type: record.leave_type_key || 'annual',
-            transaction_type: record.is_carry_over_leave ? 'CARRYOVER' : 'LEAVE_TAKEN',
-            days_change: -Math.abs(days),
-            running_balance: 0,
-            reason_code: record.status === 'hr_approved' ? 'APPROVED' : record.status?.toUpperCase() || 'PENDING',
-            notes: record.reason || '',
-            status: record.status === 'hr_approved' ? 'APPROVED' : record.status?.toUpperCase() || 'PENDING',
-            start_date: startDate,
-            end_date: endDate,
-          }
-        } catch (err) {
-          console.error('[v0] Error fetching user profile:', err)
-          return {
-            id: record.id,
-            created_at: record.hr_approved_at || record.submitted_at || record.created_at,
-            staff_name: 'Unknown',
-            employee_id: '',
-            department: '',
-            leave_year: record.leave_year_period,
-            leave_type: record.leave_type_key || 'annual',
-            transaction_type: record.is_carry_over_leave ? 'CARRYOVER' : 'LEAVE_TAKEN',
-            days_change: -(record.adjusted_days || record.requested_days || 0),
-            running_balance: 0,
-            reason_code: record.status?.toUpperCase() || 'PENDING',
-            notes: record.reason || '',
-            status: record.status?.toUpperCase() || 'PENDING',
-            start_date: record.preferred_start_date,
-            end_date: record.preferred_end_date,
-          }
-        }
-      })
-    )
+    // Combine and sort
+    let transactions = [...balanceTx, ...leaveTx]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-    // Transform outstanding balances to carryover transactions
-    const carryoverTransactions = await Promise.all(
-      (outstandingData || [])
-        .filter((record: any) => record.carryover_to_next_year > 0)
-        .map(async (record: any) => {
-          try {
-            const { data: userProfile } = await supabase
-              .from('user_profiles')
-              .select('first_name, last_name, employee_id, departments(name)')
-              .eq('id', record.user_id)
-              .single()
-
-            return {
-              id: record.id,
-              created_at: record.created_at,
-              staff_name: `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim(),
-              employee_id: userProfile?.employee_id || '',
-              department: userProfile?.departments?.name || '',
-              leave_year: record.leave_year_period,
-              leave_type: 'annual',
-              transaction_type: 'CARRYOVER',
-              days_change: record.carryover_to_next_year || 0,
-              running_balance: record.opening_balance || 0,
-              reason_code: 'CARRYOVER_BALANCE',
-              notes: record.notes || `Carryover from ${record.leave_year_period}`,
-              status: 'APPROVED',
-            }
-          } catch (err) {
-            return {
-              id: record.id,
-              created_at: record.created_at,
-              staff_name: 'Unknown',
-              employee_id: '',
-              department: '',
-              leave_year: record.leave_year_period,
-              leave_type: 'annual',
-              transaction_type: 'CARRYOVER',
-              days_change: record.carryover_to_next_year || 0,
-              running_balance: record.opening_balance || 0,
-              reason_code: 'CARRYOVER_BALANCE',
-              notes: record.notes || `Carryover from ${record.leave_year_period}`,
-              status: 'APPROVED',
-            }
-          }
-        })
-    )
-
-    // Transform outstanding balances to outstanding transactions
-    const outstandingTransactions = await Promise.all(
-      (outstandingData || [])
-        .filter((record: any) => (record.opening_balance - record.used_this_period) > 0)
-        .map(async (record: any) => {
-          try {
-            const { data: userProfile } = await supabase
-              .from('user_profiles')
-              .select('first_name, last_name, employee_id, departments(name)')
-              .eq('id', record.user_id)
-              .single()
-
-            return {
-              id: `outstanding-${record.id}`,
-              created_at: record.created_at,
-              staff_name: `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim(),
-              employee_id: userProfile?.employee_id || '',
-              department: userProfile?.departments?.name || '',
-              leave_year: record.leave_year_period,
-              leave_type: 'annual',
-              transaction_type: 'OUTSTANDING',
-              days_change: (record.opening_balance || 0) - (record.used_this_period || 0),
-              running_balance: record.opening_balance || 0,
-              reason_code: 'OUTSTANDING_BALANCE',
-              notes: record.notes || `Outstanding balance for ${record.leave_year_period}`,
-              status: 'ACTIVE',
-            }
-          } catch (err) {
-            return {
-              id: `outstanding-${record.id}`,
-              created_at: record.created_at,
-              staff_name: 'Unknown',
-              employee_id: '',
-              department: '',
-              leave_year: record.leave_year_period,
-              leave_type: 'annual',
-              transaction_type: 'OUTSTANDING',
-              days_change: (record.opening_balance || 0) - (record.used_this_period || 0),
-              running_balance: record.opening_balance || 0,
-              reason_code: 'OUTSTANDING_BALANCE',
-              notes: record.notes || `Outstanding balance for ${record.leave_year_period}`,
-              status: 'ACTIVE',
-            }
-          }
-        })
-    )
-
-    // Combine all transactions
-    let allTransactions = [
-      ...leaveTransactions,
-      ...carryoverTransactions,
-      ...outstandingTransactions,
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-
-    // Filter by transaction type if specified
+    // Filter by transaction type
     if (transactionType && transactionType !== 'ALL') {
-      allTransactions = allTransactions.filter(t => t.transaction_type === transactionType)
+      transactions = transactions.filter(t => t.transaction_type === transactionType)
     }
 
-    // Calculate summary stats
-    const approvedLeave = leaveTransactions.filter(t => t.status === 'APPROVED')
-    const totalDaysTaken = approvedLeave.reduce((sum, t) => sum + Math.abs(t.days_change), 0)
-    const totalCarryovers = carryoverTransactions.length
-    const totalCarryoverDays = carryoverTransactions.reduce((sum, t) => sum + t.days_change, 0)
-    const totalOutstandingDays = outstandingTransactions.reduce((sum, t) => sum + t.days_change, 0)
+    // Calculate summary
+    const totalDaysTaken = transactions
+      .filter(t => t.transaction_type === 'LEAVE_TAKEN')
+      .reduce((sum, t) => sum + Math.abs(t.days_change), 0)
+
+    const carryovers = transactions.filter(t => t.transaction_type === 'CARRYOVER')
+    const adjustments = transactions.filter(t => t.transaction_type === 'ADJUSTMENT')
 
     if (format === 'csv') {
-      const headers = [
-        'Date',
-        'Staff Name',
-        'Employee ID',
-        'Department',
-        'Leave Year',
-        'Leave Type',
-        'Transaction Type',
-        'Days',
-        'Status',
-        'Notes',
-      ]
-
-      const rows = allTransactions.map((t: any) => [
+      const headers = ['Date', 'Staff Name', 'Employee ID', 'Department', 'Leave Year', 'Leave Type', 'Transaction Type', 'Days', 'Balance', 'Reason', 'Notes']
+      const rows = transactions.map(t => [
         new Date(t.created_at).toLocaleDateString(),
         t.staff_name,
         t.employee_id,
@@ -278,14 +140,12 @@ export async function GET(request: NextRequest) {
         t.leave_type,
         t.transaction_type,
         t.days_change,
-        t.status,
+        t.running_balance,
+        t.reason_code,
         t.notes,
       ])
 
-      const csv = [
-        headers.join(','),
-        ...rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')),
-      ].join('\n')
+      const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n')
 
       return new NextResponse(csv, {
         headers: {
@@ -296,16 +156,14 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      transactions: allTransactions,
-      total: allTransactions.length,
+      transactions,
+      total: transactions.length,
       summary: {
         total_days_taken: totalDaysTaken,
         days_forfeited: 0,
-        carryovers_approved: totalCarryovers,
-        total_carryover_days: totalCarryoverDays,
-        total_outstanding_days: totalOutstandingDays,
-        adjustments_made: 0,
-      }
+        carryovers_approved: carryovers.length,
+        adjustments_made: adjustments.length,
+      },
     })
   } catch (error: any) {
     console.error('[v0] Audit report error:', error)
