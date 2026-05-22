@@ -1,39 +1,39 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, Download, Search } from 'lucide-react'
+import { Loader2, Download, Search, TrendingDown, RefreshCw, Clock, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 interface Transaction {
   id: string
-  staff_id: string
+  created_at: string
+  staff_name: string
+  employee_id: string
+  department: string
   leave_year: string
-  leave_type_key: string
+  leave_type: string
   transaction_type: string
   days_change: number
   running_balance: number
   reason_code: string
   notes: string
-  created_at: string
-  approved_at: string
-  created_by_user: {
-    email: string
-  }
-  approved_by_user: {
-    email: string
-  }
-  staff: {
-    email: string
-  }
+  status: string
+}
+
+interface Summary {
+  total_days_taken: number
+  days_forfeited: number
+  carryovers_approved: number
+  adjustments_made: number
 }
 
 export function AuditComplianceDashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [summary, setSummary] = useState<Summary>({ total_days_taken: 0, days_forfeited: 0, carryovers_approved: 0, adjustments_made: 0 })
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -48,23 +48,27 @@ export function AuditComplianceDashboard() {
   const fetchTransactions = async () => {
     setLoading(true)
     try {
-      let url = '/api/leave/audit/report?'
-      if (leaveYear) url += `leave_year=${encodeURIComponent(leaveYear)}&`
-      if (filterType !== 'ALL') url += `transaction_type=${encodeURIComponent(filterType)}&`
+      const params = new URLSearchParams()
+      params.append('leave_year', leaveYear)
+      if (filterType !== 'ALL') params.append('transaction_type', filterType)
 
-      const res = await fetch(url, { cache: 'no-store' })
+      const res = await fetch(`/api/leave/audit/report?${params.toString()}`, { cache: 'no-store' })
+      
       if (!res.ok) {
-        console.error('[v0] Audit fetch error:', res.status, res.statusText)
+        const errorData = await res.json().catch(() => ({}))
+        console.error('[v0] Audit fetch error:', res.status, errorData)
         toast({
           title: 'Error',
-          description: `Failed to load audit trail: ${res.statusText}`,
+          description: errorData.error || `Failed to load audit trail (${res.status})`,
           variant: 'destructive',
         })
         setTransactions([])
-      } else {
-        const data = await res.json()
-        setTransactions(data.transactions || [])
+        return
       }
+      
+      const data = await res.json()
+      setTransactions(data.transactions || [])
+      setSummary(data.summary || { total_days_taken: 0, days_forfeited: 0, carryovers_approved: 0, adjustments_made: 0 })
     } catch (error) {
       console.error('[v0] Failed to fetch transactions:', error)
       toast({
@@ -81,24 +85,23 @@ export function AuditComplianceDashboard() {
   const handleExportCSV = async () => {
     setExporting(true)
     try {
-      let url = '/api/leave/audit/report?format=csv&'
-      if (leaveYear) url += `leave_year=${encodeURIComponent(leaveYear)}&`
-      if (filterType !== 'ALL') url += `transaction_type=${encodeURIComponent(filterType)}&`
+      const params = new URLSearchParams()
+      params.append('format', 'csv')
+      params.append('leave_year', leaveYear)
+      if (filterType !== 'ALL') params.append('transaction_type', filterType)
 
-      const res = await fetch(url)
+      const res = await fetch(`/api/leave/audit/report?${params.toString()}`)
       const blob = await res.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = `audit-report-${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
+      a.href = url
+      a.download = `audit-report-${leaveYear.replace('/', '-')}.csv`
       a.click()
-      window.URL.revokeObjectURL(downloadUrl)
-      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
 
       toast({
         title: 'Exported',
-        description: 'Audit report downloaded',
+        description: 'Audit report downloaded successfully',
       })
     } catch (error) {
       console.error('[v0] Export error:', error)
@@ -112,74 +115,71 @@ export function AuditComplianceDashboard() {
     }
   }
 
-  const getTypeColor = (type: string) => {
+  const getTypeBadge = (type: string) => {
     switch (type) {
-      case 'OPENING':
-        return 'bg-blue-100 text-blue-900'
-      case 'TAKEN':
-        return 'bg-red-100 text-red-900'
+      case 'LEAVE_TAKEN':
+        return <Badge className="bg-rose-100 text-rose-800 border-rose-200">Leave Taken</Badge>
+      case 'CARRYOVER':
+        return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Carryover</Badge>
       case 'ADJUSTMENT':
-        return 'bg-yellow-100 text-yellow-900'
-      case 'CARRYOVER_APPROVED':
-        return 'bg-emerald-100 text-emerald-900'
+        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Adjustment</Badge>
       case 'FORFEITED':
-        return 'bg-purple-100 text-purple-900'
+        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Forfeited</Badge>
+      case 'OUTSTANDING':
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Outstanding</Badge>
       default:
-        return 'bg-slate-100 text-slate-900'
+        return <Badge variant="outline">{type}</Badge>
     }
   }
 
+  // Filter by search
   const filteredTransactions = transactions.filter(t =>
     searchQuery === '' ||
-    t.staff?.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.leave_type_key.toLowerCase().includes(searchQuery.toLowerCase())
+    t.staff_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.employee_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.department?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   return (
     <div className="space-y-6">
       {/* Stats Summary */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card className="bg-rose-50 border-rose-200">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-slate-600">Total Days Taken</CardTitle>
+            <CardTitle className="text-sm font-medium text-rose-700 flex items-center gap-2">
+              <TrendingDown className="h-4 w-4" />
+              Total Days Taken
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-700">
-              {Math.abs(transactions.filter(t => t.transaction_type === 'TAKEN').reduce((sum, t) => sum + t.days_change, 0))}
-            </div>
+            <div className="text-3xl font-bold text-rose-700">{summary.total_days_taken}</div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-purple-50 border-purple-200">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-slate-600">Days Forfeited</CardTitle>
+            <CardTitle className="text-sm font-medium text-purple-700">Days Forfeited</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-purple-700">
-              {Math.abs(transactions.filter(t => t.transaction_type === 'FORFEITED').reduce((sum, t) => sum + t.days_change, 0))}
-            </div>
+            <div className="text-3xl font-bold text-purple-700">{summary.days_forfeited}</div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-emerald-50 border-emerald-200">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-slate-600">Carryovers Approved</CardTitle>
+            <CardTitle className="text-sm font-medium text-emerald-700">Carryovers Approved</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-emerald-700">
-              {transactions.filter(t => t.transaction_type === 'CARRYOVER_APPROVED').length}
-            </div>
+            <div className="text-3xl font-bold text-emerald-700">{summary.carryovers_approved}</div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-amber-50 border-amber-200">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-slate-600">Adjustments Made</CardTitle>
+            <CardTitle className="text-sm font-medium text-amber-700">Adjustments Made</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-yellow-700">
-              {transactions.filter(t => t.transaction_type === 'ADJUSTMENT').length}
-            </div>
+            <div className="text-3xl font-bold text-amber-700">{summary.adjustments_made}</div>
           </CardContent>
         </Card>
       </div>
@@ -189,56 +189,53 @@ export function AuditComplianceDashboard() {
         <CardHeader>
           <CardTitle className="text-base">Filters & Export</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
+        <CardContent>
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Search staff or leave type..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8"
+                className="pl-9"
               />
             </div>
 
-            <Select value={leaveYear} onValueChange={setLeaveYear}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2024/2025">2024/2025</SelectItem>
-                <SelectItem value="2025/2026">2025/2026</SelectItem>
-                <SelectItem value="2026/2027">2026/2027</SelectItem>
-              </SelectContent>
-            </Select>
+            <select
+              value={leaveYear}
+              onChange={(e) => setLeaveYear(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            >
+              <option value="2025/2026">2025/2026</option>
+              <option value="2024/2025">2024/2025</option>
+              <option value="2023/2024">2023/2024</option>
+            </select>
 
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Types</SelectItem>
-                <SelectItem value="OPENING">Opening Balance</SelectItem>
-                <SelectItem value="TAKEN">Leave Taken</SelectItem>
-                <SelectItem value="ADJUSTMENT">Adjustments</SelectItem>
-                <SelectItem value="CARRYOVER_APPROVED">Carryover Approved</SelectItem>
-                <SelectItem value="FORFEITED">Forfeited</SelectItem>
-              </SelectContent>
-            </Select>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            >
+              <option value="ALL">All Types</option>
+              <option value="LEAVE_TAKEN">Leave Taken</option>
+              <option value="CARRYOVER">Carryover</option>
+              <option value="ADJUSTMENT">Adjustments</option>
+              <option value="OUTSTANDING">Outstanding</option>
+            </select>
 
             <Button
               onClick={handleExportCSV}
               disabled={exporting}
-              className="gap-2 bg-blue-600 hover:bg-blue-700"
+              className="bg-emerald-600 hover:bg-emerald-700"
             >
               {exporting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Exporting...
                 </>
               ) : (
                 <>
-                  <Download className="h-4 w-4" />
+                  <Download className="h-4 w-4 mr-2" />
                   Export CSV
                 </>
               )}
@@ -255,65 +252,62 @@ export function AuditComplianceDashboard() {
         </div>
       )}
 
-      {/* Transactions Table */}
-      {!loading && filteredTransactions.length > 0 && (
-        <div className="rounded-lg border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Date</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Staff</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Leave Year</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Type</th>
-                  <th className="px-4 py-2 text-right font-semibold text-slate-700">Days</th>
-                  <th className="px-4 py-2 text-right font-semibold text-slate-700">Balance</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Reason</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Created By</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {filteredTransactions.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-xs text-slate-600">
-                      {new Date(t.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-slate-900">{t.staff?.email}</div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{t.leave_year}</td>
-                    <td className="px-4 py-3">
-                      <Badge className={getTypeColor(t.transaction_type)}>
-                        {t.transaction_type}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium">
-                      <span className={t.days_change > 0 ? 'text-emerald-700' : 'text-red-700'}>
-                        {t.days_change > 0 ? '+' : ''}{t.days_change}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-slate-900">
-                      {t.running_balance}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600 max-w-xs truncate">
-                      {t.reason_code}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">
-                      {t.created_by_user?.email || 'System'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {/* Empty State */}
       {!loading && filteredTransactions.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-slate-600">No transactions found</p>
+            <AlertCircle className="mx-auto h-8 w-8 text-slate-400 mb-2" />
+            <p className="text-slate-600 font-medium">No audit records found</p>
+            <p className="text-sm text-slate-500 mt-1">There are no leave transactions for this period</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Transactions Table */}
+      {!loading && filteredTransactions.length > 0 && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Staff</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Leave Year</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Type</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Days</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Balance</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Reason</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Created By</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredTransactions.map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {new Date(t.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-slate-900">{t.staff_name}</div>
+                        <div className="text-xs text-slate-500">{t.employee_id}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{t.leave_year}</td>
+                      <td className="px-4 py-3">{getTypeBadge(t.transaction_type)}</td>
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        <span className={t.days_change > 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          {t.days_change > 0 ? '+' : ''}{t.days_change}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-slate-700">
+                        {t.running_balance}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{t.reason_code || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">System</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
       )}

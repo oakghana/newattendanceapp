@@ -570,11 +570,11 @@ export function LeaveManagementClient({
 
   const pendingRequests = useMemo(() => staffRequests.filter((r) => pendingStatuses.has(String(r.status || ""))), [staffRequests])
   const approvedRequests = useMemo(() => {
-    // For HOD/RM: use staff's approved leaves for deferment/recall
+    // For HOD/RM/HR: use staff's approved leaves for deferment/recall
     const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isHodRm = ["regional_manager", "department_head", "admin", "hr_officer"].includes(roleNorm)
+    const isManagerRole = ["regional_manager", "department_head", "admin", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "hr_office", "hr"].includes(roleNorm)
     
-    if (isHodRm && initialApprovedStaffRequests && initialApprovedStaffRequests.length > 0) {
+    if (isManagerRole && Array.isArray(initialApprovedStaffRequests) && initialApprovedStaffRequests.length > 0) {
       return initialApprovedStaffRequests
     }
     
@@ -600,6 +600,7 @@ export function LeaveManagementClient({
   const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
   const isHrLeaveOfficeRole = normalizedRole === "hr_leave_office"
+  const isLeaveOfficeRole = ["hr_leave_office", "hr_office", "hr"].includes(normalizedRole)
   const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
   const canAccessPaymentAdvice = isHrLeaveOfficeRole || isHrExecutive
 
