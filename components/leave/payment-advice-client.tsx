@@ -47,8 +47,10 @@ interface HRExecutive {
 
 export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole?: string }) {
   const { toast } = useToast()
-  const isHrLeaveOffice = userRole === "hr_leave_office"
-  const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(userRole)
+  const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const isHrLeaveOffice = ["hr_leave_office", "leave_office"].includes(roleNorm)
+  // HR Executives who can approve payment advice - include all HR management roles
+  const isHrExecutive = ["director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [isLoading, setIsLoading] = useState(false)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])
@@ -106,17 +108,21 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Load pending memos for HR Executives
   useEffect(() => {
+    console.log("[v0] PaymentAdviceClient - userRole:", userRole, "roleNorm:", roleNorm, "isHrExecutive:", isHrExecutive)
     if (isHrExecutive) {
       const fetchPendingMemos = async () => {
         setLoadingPendingMemos(true)
         try {
           const response = await fetch("/api/leave/payment-advice/pending-approval")
+          console.log("[v0] Pending approval API response status:", response.status)
           if (response.ok) {
             const data = await response.json()
+            console.log("[v0] Pending memos data:", data)
             setPendingMemos(data.memos || [])
             console.log("[v0] Pending memos loaded:", data.memos?.length || 0)
           } else {
-            console.error("[v0] Failed to fetch pending memos")
+            const errorData = await response.text()
+            console.error("[v0] Failed to fetch pending memos:", errorData)
           }
         } catch (err) {
           console.error("[v0] Error fetching pending memos:", err)
@@ -126,7 +132,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       }
       fetchPendingMemos()
     }
-  }, [isHrExecutive])
+  }, [isHrExecutive, userRole, roleNorm])
 
   // Group staff by category
   const staffByCategory = useMemo(() => {
