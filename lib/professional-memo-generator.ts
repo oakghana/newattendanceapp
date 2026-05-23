@@ -22,12 +22,49 @@ export interface MemoData {
   memoType: "payment" | "deferment" | "general"
 }
 
+export interface GeneratedMemo {
+  mainPdf: Blob
+  attachmentPdf?: Blob
+  staffCount?: number
+  hasAttachment?: boolean
+}
+
 /**
  * Generate professional memo PDF with QCC logo
+ * If staff list > 6, creates main memo + separate attachment PDF
+ * If staff list <= 6, includes staff in memo table
  */
 export async function generateProfessionalMemoPDF(
   memoData: MemoData,
   fileName: string
+): Promise<GeneratedMemo> {
+  const staffCount = memoData.staffList?.length ?? 0
+  const hasAttachment = staffCount > 6
+  
+  // Generate main memo
+  const mainPdf = await generateMainMemo(memoData, fileName, hasAttachment)
+  
+  // Generate attachment if needed
+  let attachmentPdf: Blob | undefined
+  if (hasAttachment && memoData.staffList) {
+    attachmentPdf = await generateStaffAttachment(memoData.staffList, fileName)
+  }
+  
+  return {
+    mainPdf,
+    attachmentPdf,
+    staffCount,
+    hasAttachment,
+  }
+}
+
+/**
+ * Generate the main memo (with inline staff table if <= 6 staff)
+ */
+async function generateMainMemo(
+  memoData: MemoData,
+  fileName: string,
+  hasAttachment: boolean
 ): Promise<Blob> {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -114,7 +151,14 @@ export async function generateProfessionalMemoPDF(
   // Main body text
   doc.setFont("helvetica", "normal")
   doc.setFontSize(10)
-  const bodyLines = doc.splitTextToSize(memoData.body, contentWidth)
+  
+  let bodyText = memoData.body
+  // If staff > 6, add attachment note
+  if (hasAttachment && memoData.staffList) {
+    bodyText += `\n\nPlease find attached a list of ${memoData.staffList.length} staff members scheduled for leave.`
+  }
+  
+  const bodyLines = doc.splitTextToSize(bodyText, contentWidth)
   bodyLines.forEach((line: string) => {
     if (yPos > pageHeight - margin - 30) {
       doc.addPage()
@@ -124,8 +168,8 @@ export async function generateProfessionalMemoPDF(
     yPos += 5
   })
 
-  // Staff list table if provided
-  if (memoData.staffList && memoData.staffList.length > 0) {
+  // Staff list table if provided AND <= 6 staff
+  if (memoData.staffList && memoData.staffList.length > 0 && !hasAttachment) {
     yPos += 5
 
     if (yPos > pageHeight - margin - 60) {
@@ -190,9 +234,86 @@ export async function generateProfessionalMemoPDF(
     })
   }
 
-  // Save and return blob
-  const pdf = doc.output("blob")
-  return pdf
+  return doc.output("blob")
+}
+
+/**
+ * Generate staff attachment PDF with full list
+ */
+async function generateStaffAttachment(
+  staffList: Array<{
+    no: number
+    name: string
+    employeeId: string
+    position: string
+    department: string
+    leaveDate: string
+  }>,
+  fileName: string
+): Promise<Blob> {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  })
+
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const margin = 15
+
+  // Header
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(12)
+  doc.text("QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, 20, { align: "center" })
+  
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
+  doc.text("STAFF ON LEAVE - ATTACHMENT", pageWidth / 2, 30, { align: "center" })
+
+  // Create table with all staff
+  const tableData = staffList.map((staff) => [
+    String(staff.no),
+    staff.name,
+    staff.employeeId,
+    staff.position,
+    staff.department,
+    staff.leaveDate,
+  ])
+
+  autoTable(doc, {
+    startY: 40,
+    head: [["N", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]],
+    body: tableData,
+    margin: { left: margin, right: margin },
+    theme: "grid",
+    styles: { fontSize: 9, halign: "left" },
+    columnStyles: {
+      0: { halign: "center" }, // N
+      2: { halign: "center" }, // S/NO
+      5: { halign: "center" }, // LEAVE DATE
+    },
+    headStyles: { fillColor: [79, 39, 15], textColor: [255, 255, 255], fontStyle: "bold" },
+    didDrawPage: (data: any) => {
+      // Add page numbers
+      const pageCount = doc.internal.pages.length
+      const pageSize = doc.internal.pageSize
+      const pageHeight = pageSize.getHeight()
+      const pageWidth = pageSize.getWidth()
+      
+      for (let i = 1; i < pageCount; i++) {
+        doc.setPage(i)
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(8)
+        doc.text(
+          `Page ${i} of ${pageCount - 1}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: "center" }
+        )
+      }
+    },
+  })
+
+  return doc.output("blob")
 }
 
 function getMemoTypeText(memoType: string): string {
@@ -207,15 +328,51 @@ function getMemoTypeText(memoType: string): string {
 }
 
 /**
- * Download PDF memo
+ * Download PDF memo(s) - handles both main memo and optional attachment
  */
-export async function downloadMemoPDF(pdf: Blob, fileName: string) {
-  const url = URL.createObjectURL(pdf)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = fileName
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+export async function downloadMemoPDF(
+  memoResult: GeneratedMemo | Blob,
+  fileName: string
+) {
+  // Handle both old Blob format and new GeneratedMemo format
+  const isGeneratedMemo = memoResult instanceof Object && "mainPdf" in memoResult
+
+  if (isGeneratedMemo) {
+    const memo = memoResult as GeneratedMemo
+    
+    // Download main memo
+    const url = URL.createObjectURL(memo.mainPdf)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = fileName.replace(".pdf", "-memo.pdf")
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    // Download attachment if exists
+    if (memo.attachmentPdf && memo.hasAttachment) {
+      // Small delay before downloading attachment
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      
+      const attachUrl = URL.createObjectURL(memo.attachmentPdf)
+      const attachLink = document.createElement("a")
+      attachLink.href = attachUrl
+      attachLink.download = fileName.replace(".pdf", "-attachment.pdf")
+      document.body.appendChild(attachLink)
+      attachLink.click()
+      document.body.removeChild(attachLink)
+      URL.revokeObjectURL(attachUrl)
+    }
+  } else {
+    // Legacy format - just download blob
+    const url = URL.createObjectURL(memoResult as Blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 }
