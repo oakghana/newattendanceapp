@@ -76,89 +76,86 @@ async function generateMainMemo(
 
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
-  const margin = 15
+  const margin = 20
   const contentWidth = pageWidth - 2 * margin
 
   // Company Header - LEFT side
   doc.setFont("helvetica", "bold")
   doc.setFontSize(11)
-  doc.text("QUALITY CONTROL COMPANY LTD.", margin, 15)
+  doc.text("QUALITY CONTROL COMPANY LTD.", margin, 18)
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
-  doc.text("(COCOBOD)", margin, 20)
-  doc.text("P.O. BOX M54", margin, 24)
-  doc.text("ACCRA", margin, 28)
+  doc.text("(COCOBOD)", margin, 24)
+  doc.text("P. O. BOX M54", margin, 29)
+  doc.text("ACCRA", margin, 34)
 
   // "MEMORANDUM" - RIGHT side
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(12)
-  doc.text("MEMORANDUM", pageWidth - margin - 40, 15)
+  doc.setFontSize(14)
+  doc.text("MEMORANDUM", pageWidth - margin, 18, { align: "right" })
+
+  // Add QCC Logo on right side under MEMORANDUM
+  try {
+    const logoResponse = await fetch("/logos/qcc-logo.png")
+    const logoBlob = await logoResponse.blob()
+    const logoUrl = URL.createObjectURL(logoBlob)
+    const logoSize = 18
+    doc.addImage(logoUrl, "PNG", pageWidth - margin - logoSize, 22, logoSize, logoSize)
+  } catch (err) {
+    console.warn("Could not load logo:", err)
+  }
+
+  // DATE under logo on right
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  doc.text(`DATE: ${memoData.date}`, pageWidth - margin, 46, { align: "right" })
 
   // Vertical divider line in middle
   doc.setDrawColor(0)
-  doc.setLineWidth(1)
-  doc.line(pageWidth / 2 - 5, 12, pageWidth / 2 - 5, 33)
+  doc.setLineWidth(0.5)
+  doc.line(pageWidth / 2 + 10, 14, pageWidth / 2 + 10, 38)
+
+  // REF. NO on left
+  let yPos = 46
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  doc.text(`REF. NO: ${memoData.refNo || "QCC/"}`, margin, yPos)
+
+  yPos += 8
 
   // Horizontal divider line
-  doc.setLineWidth(0.7)
-  doc.line(margin, 34, pageWidth - margin, 34)
-
-  // REF NO and DATE in two columns - spaced out with vertical divider
-  let yPos = 42
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(10)
-  doc.text("REF. NO:", margin, yPos)
-  doc.setFont("helvetica", "normal")
-  doc.text(memoData.refNo || "QCC/", margin + 22, yPos)
-
-  // Vertical divider
   doc.setDrawColor(0)
   doc.setLineWidth(0.7)
-  doc.line(pageWidth / 2 - 5, 38, pageWidth / 2 - 5, 46)
-
-  doc.setFont("helvetica", "bold")
-  doc.text("DATE:", pageWidth / 2 + 5, yPos)
-  doc.setFont("helvetica", "normal")
-  doc.text(memoData.date, pageWidth / 2 + 22, yPos)
-
-  // Horizontal divider
-  doc.setLineWidth(0.7)
-  doc.line(margin, yPos + 5, pageWidth - margin, yPos + 5)
-  yPos += 14
+  doc.line(margin, yPos, pageWidth - margin, yPos)
+  yPos += 10
 
   // TO, FROM, SUBJECT
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.text("TO:", margin, yPos)
   doc.setFont("helvetica", "normal")
-  const toLines = doc.splitTextToSize(memoData.to, contentWidth - 20)
-  toLines.forEach((line: string, idx: number) => {
-    doc.text(line, margin + 15, yPos + idx * 5)
-  })
-  yPos += Math.max(5, toLines.length * 5 - 2)
+  doc.text(memoData.to, margin + 25, yPos)
+  yPos += 7
 
   doc.setFont("helvetica", "bold")
   doc.text("FROM:", margin, yPos)
   doc.setFont("helvetica", "normal")
-  const fromLines = doc.splitTextToSize(memoData.from, contentWidth - 20)
-  fromLines.forEach((line: string, idx: number) => {
-    doc.text(line, margin + 15, yPos + idx * 5)
-  })
-  yPos += Math.max(5, fromLines.length * 5 - 2)
+  doc.text(memoData.from, margin + 25, yPos)
+  yPos += 7
 
   doc.setFont("helvetica", "bold")
   doc.text("SUBJECT:", margin, yPos)
   doc.setFont("helvetica", "normal")
-  const subjectLines = doc.splitTextToSize(memoData.subject, contentWidth - 30)
+  const subjectLines = doc.splitTextToSize(memoData.subject, contentWidth - 35)
   subjectLines.forEach((line: string, idx: number) => {
-    doc.text(line, margin + 25, yPos + idx * 5)
+    doc.text(line, margin + 30, yPos + idx * 5)
   })
-  yPos += subjectLines.length * 5 + 3
+  yPos += subjectLines.length * 5 + 5
 
   // Divider
-  doc.setLineWidth(0.7)
+  doc.setLineWidth(0.5)
   doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 6
+  yPos += 8
 
   // Main body text
   doc.setFont("helvetica", "normal")
@@ -224,41 +221,50 @@ async function generateMainMemo(
       },
     })
 
-    yPos = (doc as any).lastAutoTable.finalY + 8
+    yPos = (doc as any).lastAutoTable.finalY + 10
   }
 
-  // Closing statement and signature
-  if (yPos > pageHeight - margin - 35) {
+  // Request and closing text
+  if (yPos > pageHeight - margin - 50) {
     doc.addPage()
     yPos = margin
   }
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(10)
-  const closingText = "We count on your co-operation."
-  doc.text(closingText, margin, yPos)
-  yPos += 10
+  doc.text("We, therefore, kindly request you to pay their leave allowances accordingly.", margin, yPos)
+  yPos += 7
+  doc.text("We count on your co-operation.", margin, yPos)
+  yPos += 15
+
+  // Signature line
+  doc.setDrawColor(0)
+  doc.setLineWidth(0.5)
+  doc.line(margin, yPos, margin + 50, yPos)
+  yPos += 5
 
   // Signature block - using dynamic signatory
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.text(memoData.signatory.name, margin, yPos)
-  yPos += 4
+  yPos += 5
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
   doc.text(memoData.signatory.title, margin, yPos)
-  yPos += 4
-  doc.text("FOR: MANAGING DIRECTOR", margin, yPos)
 
-  // CC list
+  // CC list with line separator
   if (memoData.ccList && memoData.ccList.length > 0) {
-    yPos += 6
+    yPos += 15
+    doc.setDrawColor(0)
+    doc.setLineWidth(0.5)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 8
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
-    doc.text("cc:", margin, yPos)
+    doc.text("CC:", margin, yPos)
     doc.setFont("helvetica", "normal")
     memoData.ccList.forEach((cc, idx) => {
-      doc.text(cc, margin + 5, yPos + (idx + 1) * 4)
+      doc.text(cc, margin + 20, yPos + (idx * 5))
     })
   }
 

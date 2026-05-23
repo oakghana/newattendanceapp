@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Admins and HR Executives can see ALL pending memos (admin client bypasses RLS)
-    // Valid pending statuses: draft, ready_for_review (not yet reviewed by HR Executive)
-    // ONLY show memos that have been forwarded by HR Leave Office (forwarded_at is not null)
+    // Show memos that are in ready_for_review status (submitted by HR Leave Office for approval)
+    // We filter for status = ready_for_review which indicates HR Leave Office has completed processing
     const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
@@ -51,8 +51,7 @@ export async function GET(request: NextRequest) {
         payment_currency
       `
       )
-      .or("status.is.null,status.eq.draft,status.eq.ready_for_review")
-      .not("forwarded_at", "is", null) // Only show memos that have been forwarded by HR Leave Office
+      .eq("status", "ready_for_review") // Only show memos submitted for HR Executive review
       .order("created_at", { ascending: false })
 
     if (error) {

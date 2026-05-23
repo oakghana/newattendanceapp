@@ -73,12 +73,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
-  const [selectedSignatory, setSelectedSignatory] = useState({
-    name: "FRANK FREDUA-MENSAH (ESQ.)",
-    title: "DEPUTY HUMAN RESOURCE MANAGER",
-  })
-  const [customSignatory, setCustomSignatory] = useState("")
-  const [customSignatoryTitle, setCustomSignatoryTitle] = useState("")
 
   // Load HR executives on mount
   useEffect(() => {
@@ -682,25 +676,25 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const downloadApprovedMemo = async (memo: any) => {
     try {
       const currentDate = new Date()
-      const dateStr = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`
+      const dateStr = `${currentDate.getDate()}-${new Date().toLocaleString('default', { month: 'short' })}-${currentDate.getFullYear()}`
 
-      // Determine signatory - use custom if provided, otherwise use selected
-      const signatoryName = customSignatory || selectedSignatory.name
-      const signatoryTitle = customSignatoryTitle || selectedSignatory.title
+      // Use selected HR Executive signer for the signatory
+      const signatoryName = selectedSigner?.full_name?.toUpperCase() || memo.hr_leave_office_name?.toUpperCase() || "HUMAN RESOURCE MANAGER"
+      const signatoryTitle = selectedSigner?.position?.toUpperCase() || "HUMAN RESOURCE MANAGER"
 
       // Prepare memo data for professional template
       const memoData = {
         to: "DEPUTY DIRECTOR, FINANCE",
-        from: "DEPUTY HUMAN RESOURCE MANAGER",
+        from: "HUMAN RESOURCE MANAGER",
         subject: `PAYMENT OF LEAVE ALLOWANCE - ${memo.memo_subject || "N/A"}`,
         date: dateStr,
         refNo: "QCC/",
-        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual leave.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.\n\nWe count on your co-operation.`,
+        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual leave.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.`,
         signatory: {
           name: signatoryName,
           title: signatoryTitle,
         },
-        ccList: ["Managing Director", "Deputy Director, HR", "Audit Manager"],
+        ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
         memoType: "payment" as const,
         staffList: [
           {
@@ -1044,63 +1038,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                 ))}
               </select>
             </div>
-            <div>
-              <Label htmlFor="signatory-select" className="mb-2 block font-medium">
-                Memo To Be Signed By
-              </Label>
-              <select
-                id="signatory-select"
-                value={`${selectedSignatory.name}|${selectedSignatory.title}`}
-                onChange={(e) => {
-                  const [name, title] = e.target.value.split("|")
-                  setSelectedSignatory({ name, title })
-                  setCustomSignatory("")
-                  setCustomSignatoryTitle("")
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
-              >
-                <option value="FRANK FREDUA-MENSAH (ESQ.)|DEPUTY HUMAN RESOURCE MANAGER">
-                  Frank Fredua-Mensah (DHR Manager)
-                </option>
-                <option value="custom|custom">Custom Signer</option>
-              </select>
-            </div>
           </div>
-
-          {/* Custom Signatory Fields */}
-          {selectedSignatory.name === "custom" && (
-            <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <Label className="mb-3 block font-medium text-blue-900">Custom Signatory Details</Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="custom-signer-name" className="mb-2 block text-sm font-medium">
-                    Full Name
-                  </Label>
-                  <Input
-                    id="custom-signer-name"
-                    type="text"
-                    placeholder="e.g., FRANK FREDUA-MENSAH (ESQ.)"
-                    value={customSignatory}
-                    onChange={(e) => setCustomSignatory(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="custom-signer-title" className="mb-2 block text-sm font-medium">
-                    Title/Position
-                  </Label>
-                  <Input
-                    id="custom-signer-title"
-                    type="text"
-                    placeholder="e.g., DEPUTY HUMAN RESOURCE MANAGER"
-                    value={customSignatoryTitle}
-                    onChange={(e) => setCustomSignatoryTitle(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Dynamic Reference Number Fields - show only for categories with staff */}
           {staffList.length > 0 && (
