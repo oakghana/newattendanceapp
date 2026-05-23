@@ -1169,7 +1169,6 @@ We count on your co-operation.`,
                                       }),
                                     }
 
-                                    const { generateProfessionalMemoPDF } = await import("@/lib/professional-memo-generator")
                                     const doc = await generateProfessionalMemoPDF(memoData)
                                     const pdfName = `payment-advice-${category.toLowerCase().replace(/\s+/g, "-")}-${month}.pdf`
                                     doc.save(pdfName)
@@ -1179,7 +1178,7 @@ We count on your co-operation.`,
                                       description: `Payment advice memo downloaded for ${category} (${month}) with ${memos.length} staff member${memos.length > 1 ? "s" : ""}.`,
                                     })
                                   } catch (error) {
-                                    console.error("Error downloading batch memo:", error)
+                                    console.error("[v0] Error downloading batch memo:", error)
                                     toast({ title: "Error", description: "Failed to download batch memo.", variant: "destructive" })
                                   }
                                 }}
