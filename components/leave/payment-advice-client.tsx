@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
 import { jsPDF } from "jspdf"
+import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -671,83 +672,47 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
   }
 
-  // Download an approved memo as PDF
-  const downloadApprovedMemo = (memo: any) => {
+  // Download an approved memo as professional PDF with QCC logo
+  const downloadApprovedMemo = async (memo: any) => {
     try {
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-      const pageWidth = doc.internal.pageSize.getWidth()
-      let yPos = 20
+      const approvedDate = memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : new Date().toLocaleDateString()
+      const currentDate = new Date()
+      const dateStr = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`
 
-      doc.setFont(undefined, "bold")
-      doc.setFontSize(13)
-      doc.setTextColor(0, 0, 0)
-      doc.text("GHANA COCOA BOARD - QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, yPos, { align: "center" })
-      yPos += 7
-      doc.setFont(undefined, "normal")
-      doc.setFontSize(10)
-      doc.text("PAYMENT OF LEAVE ALLOWANCE - APPROVED MEMO", pageWidth / 2, yPos, { align: "center" })
-      yPos += 10
-
-      doc.setDrawColor(0, 0, 0)
-      doc.setLineWidth(0.5)
-      doc.line(20, yPos, pageWidth - 20, yPos)
-      yPos += 8
-
-      doc.setFont(undefined, "bold")
-      doc.setFontSize(10)
-      doc.text("STAFF DETAILS", 20, yPos)
-      yPos += 6
-
-      const details = [
-        ["Staff Name:", memo.staff_name || "N/A"],
-        ["Staff Number:", memo.staff_number || "N/A"],
-        ["Memo Subject:", memo.memo_subject || "N/A"],
-        ["Leave Period:", `${memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"} - ${memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString() : "N/A"}`],
-        ["Approved Days:", `${memo.approved_days || 0} days`],
-        ["Processed By:", memo.hr_leave_office_name || "N/A"],
-        ["Submitted On:", memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"],
-        ["Approved On:", memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"],
-        ["Status:", "APPROVED"],
-      ]
-
-      doc.setFont(undefined, "normal")
-      doc.setFontSize(9)
-      details.forEach(([label, value]) => {
-        doc.setFont(undefined, "bold")
-        doc.text(label, 20, yPos)
-        doc.setFont(undefined, "normal")
-        doc.text(value, 75, yPos)
-        yPos += 6
-      })
-
-      yPos += 4
-      doc.setDrawColor(0, 0, 0)
-      doc.line(20, yPos, pageWidth - 20, yPos)
-      yPos += 8
-
-      if (memo.memo_body) {
-        try {
-          const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-          if (body.paragraphs) {
-            doc.setFontSize(9)
-            body.paragraphs.forEach((para: string) => {
-              const lines = doc.splitTextToSize(para, pageWidth - 40)
-              doc.text(lines, 20, yPos)
-              yPos += lines.length * 5 + 3
-            })
-          }
-        } catch {
-          // memo_body not JSON parseable, skip body content
-        }
+      // Prepare memo data for professional template
+      const memoData = {
+        to: "DEPUTY DIRECTOR, FINANCE",
+        from: "DEPUTY HUMAN RESOURCE MANAGER",
+        subject: `PAYMENT OF LEAVE ALLOWANCE - ${memo.memo_subject || "N/A"}`,
+        date: dateStr,
+        refNo: "QCC/",
+        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual leave.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.\n\nWe count on your co-operation.`,
+        signatory: "FRANK FREDUA-MENSAH (ESQ.)",
+        signatoryTitle: "DEPUTY HUMAN RESOURCE MANAGER",
+        ccList: ["Managing Director", "Deputy Director, HR", "Audit Manager"],
+        memoType: "payment" as const,
+        staffList: [
+          {
+            no: 1,
+            name: memo.staff_name || "N/A",
+            employeeId: memo.staff_number || "N/A",
+            position: "Staff Position",
+            department: "Department",
+            leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
+          },
+        ],
       }
 
-      const staffName = (memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")
-      doc.save(`approved-payment-advice-${staffName}-${memo.created_at?.slice(0, 7) || "unknown"}.pdf`)
-
-      toast({ title: "Downloaded", description: `Payment advice for ${memo.staff_name} downloaded.` })
+      // Generate PDF
+      const pdf = await generateProfessionalMemoPDF(memoData, `payment-advice-${memo.staff_name}.pdf`)
+      
+      // Download
+      await downloadMemoPDF(pdf, `payment-advice-${memo.staff_name}-${format(new Date(), "yyyyMMdd")}.pdf`)
+      
+      toast({ title: "Success", description: "Memo downloaded successfully" })
     } catch (err) {
-      console.error("[v0] Error downloading approved memo:", err)
-      toast({ title: "Error", description: "Failed to download memo.", variant: "destructive" })
+      console.error("[v0] Error downloading memo:", err)
+      toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
     }
   }
 
