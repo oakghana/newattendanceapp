@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         payment_currency
       `
       )
-      .eq("status", "approved")
+      .eq("status", "reviewed_by_hr")
       .order("updated_at", { ascending: false })
 
     // Optionally filter by month

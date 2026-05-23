@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all approved & signed leave payment memos
-    // These are records that have passed through HR Leave Office, been approved by HR Executive, and are ready for voucher processing
+    // These are records where HR Executive has reviewed (status = reviewed_by_hr)
     const { data: approvedMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
         memo_body
       `
       )
-      .eq("status", "approved")
+      .eq("status", "reviewed_by_hr")
       .order("updated_at", { ascending: false })
 
     if (error) {

@@ -20,6 +20,7 @@ export async function GET() {
     }
 
     // Fetch all approved payment advice memos for this staff member
+    // Status = reviewed_by_hr means HR Executive has approved it
     const { data: memos, error } = await admin
       .from("leave_payment_memos")
       .select(
@@ -41,7 +42,7 @@ export async function GET() {
       `
       )
       .eq("staff_id", user.id)
-      .eq("status", "approved")
+      .eq("status", "reviewed_by_hr")
       .order("updated_at", { ascending: false })
 
     if (error) {

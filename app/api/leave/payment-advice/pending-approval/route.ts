@@ -111,8 +111,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Update memo status using admin client to bypass RLS
-    // Valid status values: pending, submitted, draft, approved, rejected
-    const newStatus = approved ? "approved" : "rejected"
+    // Valid status values per database: draft, ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts
+    // Approval = reviewed_by_hr (HR Executive has reviewed and approved)
+    const newStatus = approved ? "reviewed_by_hr" : "draft"
 
     const { data, error } = await admin
       .from("leave_payment_memos")
