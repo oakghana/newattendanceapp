@@ -113,28 +113,6 @@ export async function POST(request: NextRequest) {
     // Update memo status using admin client to bypass RLS
     // Valid status values: pending, submitted, draft, approved, rejected
     const newStatus = approved ? "approved" : "rejected"
-    
-    // First fetch the current memo to verify it exists and is not already approved
-    const { data: currentMemo, error: fetchError } = await admin
-      .from("leave_payment_memos")
-      .select("id, status")
-      .eq("id", memoId)
-      .single()
-    
-    if (fetchError || !currentMemo) {
-      return NextResponse.json(
-        { error: "Memo not found", details: "The requested memo does not exist" },
-        { status: 404 }
-      )
-    }
-    
-    // Prevent double-approval
-    if (currentMemo.status === "approved" && approved) {
-      return NextResponse.json(
-        { error: "Already approved", details: "This memo has already been approved" },
-        { status: 400 }
-      )
-    }
 
     const { data, error } = await admin
       .from("leave_payment_memos")
@@ -143,7 +121,6 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", memoId)
-      .neq("status", "approved")  // Prevent re-updating already approved memos
       .select()
 
     if (error) {
