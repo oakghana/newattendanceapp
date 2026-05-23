@@ -48,19 +48,6 @@ interface HRExecutive {
 
 export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole?: string }) {
   const { toast } = useToast()
-  const [pendingMemos, setPendingMemos] = useState<any[]>([])
-  const [approvedMemos, setApprovedMemos] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<"pending" | "approved">("pending")
-  const [pendingStaff, setPendingStaff] = useState<any[]>([])
-  const [selectedSignatory, setSelectedSignatory] = useState({
-    name: "FRANK FREDUA-MENSAH (ESQ.)",
-    title: "DEPUTY HUMAN RESOURCE MANAGER",
-  })
-  const [customSignatory, setCustomSignatory] = useState("")
-  const [customSignatoryTitle, setCustomSignatoryTitle] = useState("")
-  const isHrExecutive = userRole === "hr_executive"
-  const isHrLeaveOffice = userRole === "hr_leave_office"
   const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
   const isHrLeaveOffice = ["hr_leave_office", "leave_office"].includes(roleNorm)
   // HR Executives who can approve payment advice - include all HR management roles
@@ -86,6 +73,12 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
+  const [selectedSignatory, setSelectedSignatory] = useState({
+    name: "FRANK FREDUA-MENSAH (ESQ.)",
+    title: "DEPUTY HUMAN RESOURCE MANAGER",
+  })
+  const [customSignatory, setCustomSignatory] = useState("")
+  const [customSignatoryTitle, setCustomSignatoryTitle] = useState("")
 
   // Load HR executives on mount
   useEffect(() => {
