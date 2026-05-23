@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Admins and HR Executives can see ALL pending memos (admin client bypasses RLS)
+    // Valid pending statuses: draft, ready_for_review (not yet reviewed by HR Executive)
     const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
         payment_currency
       `
       )
-      .or("status.is.null,status.eq.pending,status.eq.submitted,status.eq.draft")
+      .or("status.is.null,status.eq.draft,status.eq.ready_for_review")
       .order("created_at", { ascending: false })
 
     if (error) {

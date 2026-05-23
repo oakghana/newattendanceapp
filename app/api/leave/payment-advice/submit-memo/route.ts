@@ -87,8 +87,8 @@ export async function POST(request: NextRequest) {
           leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
           leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
           approved_days: staff.approved_days || staff.requested_days || 0,
-          // Set status for HR Executive approval (table uses "status" column)
-          status: "pending",
+          // Set status for HR Executive approval (valid statuses: draft, ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts)
+          status: "ready_for_review",
         })
       } else {
         console.log("[v0] Staff validation failed:", {

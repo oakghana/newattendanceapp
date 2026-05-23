@@ -871,7 +871,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                   })
                                   if (res.ok) {
                                     setPendingMemos((prev) => prev.filter((m) => m.id !== memo.id))
-                                    const updated = { ...memo, status: "approved", updated_at: new Date().toISOString() }
+                                    const updated = { ...memo, status: "reviewed_by_hr", updated_at: new Date().toISOString() }
                                     setApprovedMemos((prev) => [updated, ...prev])
                                     toast({ title: "Memo Approved", description: `Payment advice for ${memo.staff_name} has been approved.` })
                                   } else {
@@ -906,12 +906,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                               className="flex-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors"
                             >
                               Reject
-                            </button>
-                            <button
-                              onClick={() => downloadApprovedMemo(memo)}
-                              className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
-                            >
-                              <Download className="h-3 w-3" /> View/Download
                             </button>
                           </div>
                         </div>
