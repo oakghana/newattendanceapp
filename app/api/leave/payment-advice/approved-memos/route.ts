@@ -1,14 +1,19 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { isUserAdmin } from "@/lib/admin-bypass"
 
 export const dynamic = "force-dynamic"
 
 /**
  * GET: Fetch all approved payment advice memos for tracking and download
+ * ADMINS: See ALL approved memos without RLS restriction
+ * HR Executives: See all approved memos via admin client bypass
  */
 export async function GET(request: NextRequest) {
   try {
+    const userIsAdmin = await isUserAdmin()
     const supabase = await createClient()
+    // Always use admin client - admins bypass RLS, HR execs need bypass for permissions
     const admin = await createAdminClient()
 
     const {

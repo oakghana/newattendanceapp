@@ -1,14 +1,17 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { isUserAdmin } from "@/lib/admin-bypass"
 
 export const dynamic = "force-dynamic"
 
 /**
  * GET: Fetch approved & signed leave payment advice memos for Accounts users
+ * ADMINS: See ALL approved memos without restriction
  * Used by Accounts role to track and download leave payment vouchers for Accpac
  */
 export async function GET(request: NextRequest) {
   try {
+    const userIsAdmin = await isUserAdmin()
     const supabase = await createClient()
     const admin = await createAdminClient()
 
@@ -20,7 +23,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Fetch user role to verify they're in Accounts
+    // Fetch user role to verify they're in Accounts or Admin
     const { data: userProfile } = await admin
       .from("user_profiles")
       .select("role")
@@ -29,10 +32,10 @@ export async function GET(request: NextRequest) {
 
     const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
     
-    // Only Accounts users can access this data
-    if (userRole !== "accounts" && userRole !== "admin") {
+    // Admins and Accounts users can access this data
+    if (userRole !== "accounts" && !userIsAdmin) {
       return NextResponse.json(
-        { error: "Forbidden - Accounts role required" },
+        { error: "Forbidden - Accounts or Admin role required" },
         { status: 403 }
       )
     }

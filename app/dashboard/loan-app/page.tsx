@@ -1015,6 +1015,7 @@ export default function LoanAppPage() {
 
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
+    const isAdminUser = isAdmin // Use the calculated isAdmin flag
     const c = {
       hod: data?.inbox?.hod?.length || 0,
       loanOffice: data?.inbox?.loanOffice?.length || 0,
@@ -1026,6 +1027,22 @@ export default function LoanAppPage() {
       mine: data?.myTasks?.length || 0,
     }
     const tabs = [{ key: "staff", label: "My Loans" }, { key: "tracking", label: "Tracking" }]
+    
+    // ADMIN ACCESS: Admins see all tabs without restriction
+    if (isAdminUser) {
+      tabs.push({ key: "hod", label: `HOD (${c.hod})` })
+      tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
+      tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+      tabs.push({ key: "leave-payment", label: "Leave Payment" })
+      tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+      tabs.push({ key: "director", label: `Executive HR (${c.director})` })
+      tabs.push({ key: "setup", label: "Setup & Linkage" })
+      tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
+      tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+      return tabs
+    }
+    
+    // NON-ADMIN: Standard permission-based access
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
@@ -1040,7 +1057,7 @@ export default function LoanAppPage() {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs
-  }, [data, canAccessLoanOfficeWorkspace])
+  }, [data, canAccessLoanOfficeWorkspace, isAdmin])
 
   const defaultTab = visibleTabs[0]?.key || "staff"
 

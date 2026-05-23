@@ -619,15 +619,16 @@ export function LeaveManagementClient({
   const adminDelayedQueue = useMemo(() => pendingNotifications.filter((n) => Number(n.waiting_days || 0) >= inactivityDays), [pendingNotifications, inactivityDays])
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const isAdmin = normalizedRole === "admin"
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee"].includes(normalizedRole)
   const isManagerView = ["admin", "regional_manager", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
-  const isAdminView = normalizedRole === "admin"
-  const canViewHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
-  const canEditHrTemplates = ["admin", "hr_director", "hr_leave_office"].includes(normalizedRole)
+  const isAdminView = isAdmin
+  const canViewHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
+  const canEditHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
   const isHrLeaveOfficeRole = normalizedRole === "hr_leave_office"
   const isLeaveOfficeRole = ["hr_leave_office", "hr_office", "hr"].includes(normalizedRole)
-  const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
-  const canAccessPaymentAdvice = isHrLeaveOfficeRole || isHrExecutive
+  const isHrExecutive = isAdmin || ["director_hr", "manager_hr", "hr_director"].includes(normalizedRole)
+  const canAccessPaymentAdvice = isAdmin || isHrLeaveOfficeRole || isHrExecutive
 
   // ─── Deferment Handler ───
   const submitDefermentRequest = async () => {

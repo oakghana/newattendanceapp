@@ -1,15 +1,19 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { isUserAdmin } from "@/lib/admin-bypass"
 
 export const dynamic = "force-dynamic"
 
 /**
  * GET: Fetch ALL payment advice memos pending approval for HR Executives
- * HR Executives (director_hr, manager_hr, hr_director) should see ALL pending memos
+ * ADMINS: See ALL pending memos without RLS restriction
+ * HR Executives (director_hr, manager_hr, hr_director): See all pending memos via admin client bypass
  */
 export async function GET(request: NextRequest) {
   try {
+    const userIsAdmin = await isUserAdmin()
     const supabase = await createClient()
+    // Always use admin client for this endpoint - admins see everything, HR execs need bypass for RLS
     const admin = await createAdminClient()
 
     const {
@@ -20,10 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Use admin client to bypass RLS and fetch ALL pending memos
-    // This ensures HR Executives can see all memos regardless of who submitted them
-    // The table uses "status" column, not "approval_status"
-    // Fetch ALL memos that are NOT approved or rejected (includes NULL, pending, submitted)
+    // Admins and HR Executives can see ALL pending memos (admin client bypasses RLS)
     const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
