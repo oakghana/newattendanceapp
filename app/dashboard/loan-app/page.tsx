@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
+import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -3352,43 +3353,51 @@ export default function LoanAppPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => {
+                              onClick={async () => {
                                 try {
-                                  const { jsPDF } = require("jspdf")
-                                  const doc = new jsPDF()
-                                  const pageHeight = doc.internal.pageSize.getHeight()
-                                  const pageWidth = doc.internal.pageSize.getWidth()
-                                  let y = 20
-                                  doc.setFont(undefined, "bold")
-                                  doc.setFontSize(11)
-                                  doc.text("QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, y, { align: "center" })
-                                  y += 6
-                                  doc.setFont(undefined, "normal")
-                                  doc.setFontSize(9)
-                                  doc.text("APPROVED LEAVE PAYMENT ADVICE", pageWidth / 2, y, { align: "center" })
-                                  y += 10
-                                  doc.setLineWidth(0.5)
-                                  doc.line(15, y, pageWidth - 15, y)
-                                  y += 7
-                                  const rows = [
-                                    ["Employee Name:", memo.staff_name || "N/A"],
-                                    ["Staff Number:", memo.staff_number || "N/A"],
-                                    ["Leave Period:", `${memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"} – ${memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString() : "N/A"}`],
-                                    ["Approved Days:", `${memo.approved_days || 0} days`],
-                                    ["Processed By:", memo.hr_leave_office_name || "N/A"],
-                                    ["Approved Date:", memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"],
-                                    ["Status:", "APPROVED"],
-                                  ]
-                                  rows.forEach(([label, value]) => {
-                                    doc.setFont(undefined, "bold")
-                                    doc.text(label, 20, y)
-                                    doc.setFont(undefined, "normal")
-                                    doc.text(String(value), 75, y)
-                                    y += 6
-                                  })
-                                  doc.save(`leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`)
+                                  const currentDate = new Date()
+                                  const dateStr = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`
+
+                                  // Prepare memo data for professional template
+                                  const memoData = {
+                                    to: "DEPUTY DIRECTOR, FINANCE",
+                                    from: "ACCOUNTS DEPARTMENT",
+                                    subject: `PAYMENT OF LEAVE ALLOWANCE - ${memo.staff_name || "Staff"}`,
+                                    date: dateStr,
+                                    refNo: "QCC/",
+                                    body: `We wish to inform you that the undermentioned staff member has been approved for leave payment.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.\n\nWe count on your co-operation.`,
+                                    signatory: {
+                                      name: "ACCOUNTS MANAGER",
+                                      title: "FOR: FINANCE DIRECTOR",
+                                    },
+                                    ccList: ["Finance Director", "HR Department", "Internal Audit"],
+                                    memoType: "payment" as const,
+                                    staffList: [
+                                      {
+                                        no: 1,
+                                        name: memo.staff_name || "N/A",
+                                        employeeId: memo.staff_number || "N/A",
+                                        position: "Staff Position",
+                                        department: "Department",
+                                        leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
+                                      },
+                                    ],
+                                  }
+
+                                  // Generate professional PDF
+                                  const pdf = await generateProfessionalMemoPDF(
+                                    memoData,
+                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`
+                                  )
+
+                                  // Download
+                                  await downloadMemoPDF(
+                                    pdf,
+                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}${String(currentDate.getDate()).padStart(2, "0")}.pdf`
+                                  )
                                 } catch (err) {
                                   console.error("[v0] Download error:", err)
+                                  toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
                                 }
                               }}
                               className="gap-1"
