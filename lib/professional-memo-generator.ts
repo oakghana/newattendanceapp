@@ -16,8 +16,10 @@ export interface MemoData {
     department: string
     leaveDate: string
   }>
-  signatory: string
-  signatoryTitle: string
+  signatory: {
+    name: string
+    title: string
+  }
   ccList?: string[]
   memoType: "payment" | "deferment" | "general"
 }
@@ -108,8 +110,12 @@ async function generateMainMemo(
   const memoTypeText = getMemoTypeText(memoData.memoType)
   doc.text(memoTypeText, pageWidth / 2, 62, { align: "center" })
 
+  // Divider
+  doc.setDrawColor(0)
+  doc.line(15, 67, pageWidth - 15, 67)
+
   // REF NO and DATE in two columns
-  let yPos = 70
+  let yPos = 75
   doc.setFont("helvetica", "normal")
   doc.setFontSize(10)
   doc.text("REF. NO:", margin, yPos)
@@ -117,9 +123,11 @@ async function generateMainMemo(
   doc.text("DATE:", pageWidth / 2, yPos)
   doc.text(memoData.date, pageWidth / 2 + 20, yPos)
 
+  yPos += 10
+
   // Divider
-  doc.line(margin, yPos + 5, pageWidth - margin, yPos + 5)
-  yPos += 12
+  doc.line(margin, yPos, pageWidth - margin, yPos)
+  yPos += 8
 
   // TO, FROM, SUBJECT
   doc.setFont("helvetica", "bold")
@@ -211,14 +219,14 @@ async function generateMainMemo(
   doc.text(closingText, margin, yPos)
   yPos += 12
 
-  // Signature block
+  // Signature block - using dynamic signatory
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
-  doc.text(memoData.signatory, margin, yPos)
+  doc.text(memoData.signatory.name, margin, yPos)
   yPos += 5
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
-  doc.text(memoData.signatoryTitle, margin, yPos)
+  doc.text(memoData.signatory.title, margin, yPos)
   yPos += 5
   doc.text("FOR: MANAGING DIRECTOR", margin, yPos)
 
