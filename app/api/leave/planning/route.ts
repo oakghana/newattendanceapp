@@ -782,7 +782,7 @@ export async function GET(request: NextRequest) {
     // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
     const isAdmin = role === "admin"
     console.log("[v0] HOD Review check - role:", role, "isAdmin:", isAdmin, "isHr:", isHr, "isHodRole:", isHodRole(role))
-    // Admin always sees HOD reviews; other HOD roles only if they're not HR
+      // Admin always sees HOD reviews; other HOD roles only if they're not HR
     if ((isAdmin || (isHodRole(role) && !isHr))) {
       let nonArchivedReviews: any[] = []
 
@@ -803,8 +803,8 @@ export async function GET(request: NextRequest) {
             status,
             is_archived,
             submitted_at,
-            hod_approver_name,
-            hod_approved_at,
+            hod_reviewer_name,
+            hod_reviewed_at,
             user:user_profiles!leave_plan_requests_user_id_fkey (
               id,
               first_name,
