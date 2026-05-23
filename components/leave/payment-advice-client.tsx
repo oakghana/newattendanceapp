@@ -715,8 +715,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       const staffPosition = memoBodyParsed.staff_position || memo.staff_position || ""
       const staffDepartment = memoBodyParsed.staff_department || memo.staff_department || ""
       
-      // Determine "from" based on signatory title/role
-      const fromLabel = signatoryTitle.includes("DEPUTY") ? "DEPUTY HUMAN RESOURCE MANAGER" : "HUMAN RESOURCE MANAGER"
+      // Use the signatory's actual position as the FROM field
+      const fromLabel = signatoryTitle
 
       // Prepare memo data for professional template
       const memoData = {
@@ -740,7 +740,7 @@ We count on your co-operation.`,
             no: 1,
             name: memo.staff_name || "N/A",
             employeeId: memo.staff_number || "N/A",
-            position: staffPosition || rankLabel,
+            position: staffPosition || "N/A",
             department: staffDepartment || "N/A",
             leaveDate: memo.leave_period_start
               ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
@@ -1160,8 +1160,8 @@ We count on your co-operation.`,
                                           no: idx + 1,
                                           name: memo.staff_name || "N/A",
                                           employeeId: memo.staff_number || "N/A",
-                                          position: memoBody.staff_position || "",
-                                          department: memoBody.staff_department || "",
+                                          position: memoBody.staff_position || "N/A",
+                                          department: memoBody.staff_department || "N/A",
                                           leaveDate: memo.leave_period_start
                                             ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
                                             : "N/A",
