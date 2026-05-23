@@ -866,6 +866,8 @@ export default function LoanAppPage() {
   const [lookupLoading, setLookupLoading] = useState(false)
   const [registryData, setRegistryData] = useState<RegistryPayload | null>(null)
   const [registryLoading, setRegistryLoading] = useState(false)
+  const [leavePaymentMemos, setLeavePaymentMemos] = useState<any[]>([])
+  const [loadingLeavePaymentMemos, setLoadingLeavePaymentMemos] = useState(false)
   const [selectedLoanType, setSelectedLoanType] = useState("")
   const [setupFixedAmount, setSetupFixedAmount] = useState("")
   const [setupMaxAmount, setSetupMaxAmount] = useState("")
@@ -1027,6 +1029,7 @@ export default function LoanAppPage() {
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+    if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
@@ -1535,6 +1538,28 @@ export default function LoanAppPage() {
     setTemplateBody(activeTemplate.body || "")
   }, [activeTemplate])
 
+  // Fetch leave payment memos for Accounts users
+  useEffect(() => {
+    if (p?.accounts) {
+      const fetchLeavePaymentMemos = async () => {
+        setLoadingLeavePaymentMemos(true)
+        try {
+          const res = await fetch("/api/leave/payment-advice/for-accounts", { cache: "no-store" })
+          if (res.ok) {
+            const result = await res.json()
+            setLeavePaymentMemos(result.memos || [])
+          } else {
+            console.error("[v0] Failed to fetch leave payment memos")
+          }
+        } catch (err) {
+          console.error("[v0] Error fetching leave payment memos:", err)
+        } finally {
+          setLoadingLeavePaymentMemos(false)
+        }
+      }
+      void fetchLeavePaymentMemos()
+    }
+  }, [p?.accounts])
 
   const submitRequest = async () => {
     if (!loanTypeKey) {
@@ -3246,6 +3271,121 @@ export default function LoanAppPage() {
                 </div>
               ))}
               {(data?.inbox.accountsSigned || []).length === 0 && <p className="text-sm text-muted-foreground">No approved records yet.</p>}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="leave-payment" className="space-y-3">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-purple-600" />
+                Approved Leave Payment Advice
+              </CardTitle>
+              <CardDescription>
+                View and download approved leave payment advice records for voucher processing in Accpac
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loadingLeavePaymentMemos ? (
+                <div className="flex justify-center py-8">
+                  <div className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-purple-600 mx-auto" />
+                    <p className="mt-2 text-gray-600 text-sm">Loading leave payment records...</p>
+                  </div>
+                </div>
+              ) : leavePaymentMemos.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                  <p className="text-lg font-medium">No Approved Records</p>
+                  <p className="text-sm text-gray-400 mt-1">No approved leave payment advice records are available for processing.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50 hover:bg-slate-50">
+                        <TableHead className="font-semibold text-slate-900">Employee Name</TableHead>
+                        <TableHead className="font-semibold text-slate-900">Staff ID</TableHead>
+                        <TableHead className="font-semibold text-slate-900">Leave Period</TableHead>
+                        <TableHead className="text-right font-semibold text-slate-900">Days</TableHead>
+                        <TableHead className="font-semibold text-slate-900">Date Approved</TableHead>
+                        <TableHead className="text-center font-semibold text-slate-900">Status</TableHead>
+                        <TableHead className="text-center font-semibold text-slate-900">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {leavePaymentMemos.map((memo: any) => (
+                        <TableRow key={memo.id} className="hover:bg-slate-50">
+                          <TableCell className="font-medium">{memo.staff_name || "N/A"}</TableCell>
+                          <TableCell>{memo.staff_number || "N/A"}</TableCell>
+                          <TableCell>
+                            {memo.leave_period_start && memo.leave_period_end
+                              ? `${new Date(memo.leave_period_start).toLocaleDateString()} – ${new Date(memo.leave_period_end).toLocaleDateString()}`
+                              : "N/A"}
+                          </TableCell>
+                          <TableCell className="text-right">{memo.approved_days || 0}</TableCell>
+                          <TableCell>
+                            {memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : new Date(memo.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                try {
+                                  const { jsPDF } = require("jspdf")
+                                  const doc = new jsPDF()
+                                  const pageHeight = doc.internal.pageSize.getHeight()
+                                  const pageWidth = doc.internal.pageSize.getWidth()
+                                  let y = 20
+                                  doc.setFont(undefined, "bold")
+                                  doc.setFontSize(11)
+                                  doc.text("QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, y, { align: "center" })
+                                  y += 6
+                                  doc.setFont(undefined, "normal")
+                                  doc.setFontSize(9)
+                                  doc.text("APPROVED LEAVE PAYMENT ADVICE", pageWidth / 2, y, { align: "center" })
+                                  y += 10
+                                  doc.setLineWidth(0.5)
+                                  doc.line(15, y, pageWidth - 15, y)
+                                  y += 7
+                                  const rows = [
+                                    ["Employee Name:", memo.staff_name || "N/A"],
+                                    ["Staff Number:", memo.staff_number || "N/A"],
+                                    ["Leave Period:", `${memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"} – ${memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString() : "N/A"}`],
+                                    ["Approved Days:", `${memo.approved_days || 0} days`],
+                                    ["Processed By:", memo.hr_leave_office_name || "N/A"],
+                                    ["Approved Date:", memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"],
+                                    ["Status:", "APPROVED"],
+                                  ]
+                                  rows.forEach(([label, value]) => {
+                                    doc.setFont(undefined, "bold")
+                                    doc.text(label, 20, y)
+                                    doc.setFont(undefined, "normal")
+                                    doc.text(String(value), 75, y)
+                                    y += 6
+                                  })
+                                  doc.save(`leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`)
+                                } catch (err) {
+                                  console.error("[v0] Download error:", err)
+                                }
+                              }}
+                              className="gap-1"
+                            >
+                              <Download className="h-3 w-3" />
+                              Download
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
