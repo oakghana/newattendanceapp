@@ -66,24 +66,27 @@ export default async function LeaveManagementPage() {
   }
 
   const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const isAdminRole = roleNorm === "admin"
 
-  const canReviewLeave = [
-    "admin",
-    "regional_manager",
-    "department_head",
-    "hr_officer",
-    "hr_leave_office",
-    "hr_office",
-    "hr",
-    "manager_hr",
-    "director_hr",
-    "hr_director",
-    "it_admin",
-  ].includes(roleNorm)
+  const canReviewLeave = isAdminRole ||
+    [
+      "regional_manager",
+      "department_head",
+      "hr_officer",
+      "hr_leave_office",
+      "hr_office",
+      "hr",
+      "manager_hr",
+      "director_hr",
+      "hr_director",
+      "it_admin",
+    ].includes(roleNorm)
 
   // Fetch leave planning review assignments for HOD/HR/admin metrics and queue summaries.
   if (canReviewLeave) {
-    const reviewerFilter = ["admin", "hr_leave_office", "hr_office", "hr"].includes(roleNorm)
+    // ADMIN: See ALL reviews without restriction
+    // Non-admin HR roles: Only see their own reviews
+    const reviewerFilter = isAdminRole || ["hr_leave_office", "hr_office", "hr"].includes(roleNorm)
       ? undefined
       : user.id
     const { data: planningReviews } = reviewerFilter
@@ -260,8 +263,10 @@ export default async function LeaveManagementPage() {
         const departmentMap = new Map((departments || []).map((d: any) => [d.id, d.name]))
 
         // Filter for annual leaves and map to display format
+        // ADMINS: See ALL approved leaves regardless of type (for full visibility)
+        // Non-admins: Only annual leaves (for deferment/recall operations)
         approvedStaffRequests = (approvedLeaves || [])
-          .filter((req: any) => req.leave_type_key === "annual")  // Only annual leaves
+          .filter((req: any) => isAdminRole || req.leave_type_key === "annual")  // Admins see ALL, non-admins see only annual
           .map((req: any) => {
             const staffProfile = profileMap.get(req.user_id) || {}
             const locationName = staffProfile.assigned_location_id 
