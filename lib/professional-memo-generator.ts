@@ -79,69 +79,72 @@ async function generateMainMemo(
   const margin = 15
   const contentWidth = pageWidth - 2 * margin
 
-  // Add QCC Logo (top center)
-  try {
-    const logoResponse = await fetch("/logos/qcc-logo.png")
-    const logoBlob = await logoResponse.blob()
-    const logoUrl = URL.createObjectURL(logoBlob)
-    const logoSize = 25
-    doc.addImage(logoUrl, "PNG", (pageWidth - logoSize) / 2, 10, logoSize, logoSize)
-  } catch (err) {
-    console.warn("Could not load logo:", err)
-  }
-
-  // Company Header
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(12)
-  doc.text("QUALITY CONTROL COMPANY LIMITED", pageWidth / 2, 42, { align: "center" })
-
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
-  doc.text("(GHANA COCOA BOARD)", pageWidth / 2, 47, { align: "center" })
-  doc.text("P.O. BOX M54, ACCRA", pageWidth / 2, 51, { align: "center" })
-
-  // Divider line
-  doc.setDrawColor(0)
-  doc.line(margin, 55, pageWidth - margin, 55)
-
-  // Memo type header
+  // Company Header - LEFT side
   doc.setFont("helvetica", "bold")
   doc.setFontSize(11)
-  const memoTypeText = getMemoTypeText(memoData.memoType)
-  doc.text(memoTypeText, pageWidth / 2, 62, { align: "center" })
-
-  // Divider
-  doc.setDrawColor(0)
-  doc.line(15, 67, pageWidth - 15, 67)
-
-  // REF NO and DATE in two columns
-  let yPos = 75
+  doc.text("QUALITY CONTROL COMPANY LTD.", margin, 15)
   doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
+  doc.text("(COCOBOD)", margin, 20)
+  doc.text("P.O. BOX M54", margin, 24)
+  doc.text("ACCRA", margin, 28)
+
+  // "MEMORANDUM" - RIGHT side
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(12)
+  doc.text("MEMORANDUM", pageWidth - margin - 40, 15)
+
+  // Vertical divider line in middle
+  doc.setDrawColor(0)
+  doc.setLineWidth(1)
+  doc.line(pageWidth / 2 - 5, 12, pageWidth / 2 - 5, 33)
+
+  // Horizontal divider line
+  doc.setLineWidth(0.7)
+  doc.line(margin, 34, pageWidth - margin, 34)
+
+  // REF NO and DATE in two columns - spaced out with vertical divider
+  let yPos = 42
+  doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.text("REF. NO:", margin, yPos)
-  doc.text(memoData.refNo || "QCC/", margin + 40, yPos)
-  doc.text("DATE:", pageWidth / 2, yPos)
-  doc.text(memoData.date, pageWidth / 2 + 20, yPos)
+  doc.setFont("helvetica", "normal")
+  doc.text(memoData.refNo || "QCC/", margin + 22, yPos)
 
-  yPos += 10
+  // Vertical divider
+  doc.setDrawColor(0)
+  doc.setLineWidth(0.7)
+  doc.line(pageWidth / 2 - 5, 38, pageWidth / 2 - 5, 46)
 
-  // Divider
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 8
+  doc.setFont("helvetica", "bold")
+  doc.text("DATE:", pageWidth / 2 + 5, yPos)
+  doc.setFont("helvetica", "normal")
+  doc.text(memoData.date, pageWidth / 2 + 22, yPos)
+
+  // Horizontal divider
+  doc.setLineWidth(0.7)
+  doc.line(margin, yPos + 5, pageWidth - margin, yPos + 5)
+  yPos += 14
 
   // TO, FROM, SUBJECT
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.text("TO:", margin, yPos)
   doc.setFont("helvetica", "normal")
-  doc.text(memoData.to, margin + 15, yPos)
-  yPos += 7
+  const toLines = doc.splitTextToSize(memoData.to, contentWidth - 20)
+  toLines.forEach((line: string, idx: number) => {
+    doc.text(line, margin + 15, yPos + idx * 5)
+  })
+  yPos += Math.max(5, toLines.length * 5 - 2)
 
   doc.setFont("helvetica", "bold")
   doc.text("FROM:", margin, yPos)
   doc.setFont("helvetica", "normal")
-  doc.text(memoData.from, margin + 15, yPos)
-  yPos += 7
+  const fromLines = doc.splitTextToSize(memoData.from, contentWidth - 20)
+  fromLines.forEach((line: string, idx: number) => {
+    doc.text(line, margin + 15, yPos + idx * 5)
+  })
+  yPos += Math.max(5, fromLines.length * 5 - 2)
 
   doc.setFont("helvetica", "bold")
   doc.text("SUBJECT:", margin, yPos)
@@ -150,11 +153,12 @@ async function generateMainMemo(
   subjectLines.forEach((line: string, idx: number) => {
     doc.text(line, margin + 25, yPos + idx * 5)
   })
-  yPos += subjectLines.length * 5 + 5
+  yPos += subjectLines.length * 5 + 3
 
   // Divider
+  doc.setLineWidth(0.7)
   doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 8
+  yPos += 6
 
   // Main body text
   doc.setFont("helvetica", "normal")
@@ -167,8 +171,8 @@ async function generateMainMemo(
   }
   
   const bodyLines = doc.splitTextToSize(bodyText, contentWidth)
-  bodyLines.forEach((line: string) => {
-    if (yPos > pageHeight - margin - 30) {
+  bodyLines.forEach((line: string, idx: number) => {
+    if (yPos > pageHeight - margin - 50) {
       doc.addPage()
       yPos = margin
     }
@@ -176,11 +180,11 @@ async function generateMainMemo(
     yPos += 5
   })
 
+  yPos += 5
+
   // Staff list table if provided AND <= 6 staff
   if (memoData.staffList && memoData.staffList.length > 0 && !hasAttachment) {
-    yPos += 5
-
-    if (yPos > pageHeight - margin - 60) {
+    if (yPos > pageHeight - margin - 80) {
       doc.addPage()
       yPos = margin
     }
@@ -200,15 +204,31 @@ async function generateMainMemo(
       body: tableData,
       margin: { left: margin, right: margin },
       theme: "grid",
-      styles: { fontSize: 9, halign: "center" },
-      headStyles: { fillColor: [79, 39, 15], textColor: [255, 255, 255], fontStyle: "bold" },
+      styles: { 
+        fontSize: 9, 
+        halign: "left",
+        cellPadding: 3,
+        lineColor: [100, 100, 100],
+        lineWidth: 0.5,
+      },
+      headStyles: { 
+        fillColor: [79, 39, 15], // Brown color matching templates
+        textColor: [255, 255, 255], 
+        fontStyle: "bold",
+        halign: "center",
+      },
+      columnStyles: {
+        0: { halign: "center" }, // N
+        2: { halign: "center" }, // S/NO
+        5: { halign: "center" }, // LEAVE DATE
+      },
     })
 
-    yPos = (doc as any).lastAutoTable.finalY + 10
+    yPos = (doc as any).lastAutoTable.finalY + 8
   }
 
-  // Closing statement
-  if (yPos > pageHeight - margin - 40) {
+  // Closing statement and signature
+  if (yPos > pageHeight - margin - 35) {
     doc.addPage()
     yPos = margin
   }
@@ -217,22 +237,22 @@ async function generateMainMemo(
   doc.setFontSize(10)
   const closingText = "We count on your co-operation."
   doc.text(closingText, margin, yPos)
-  yPos += 12
+  yPos += 10
 
   // Signature block - using dynamic signatory
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.text(memoData.signatory.name, margin, yPos)
-  yPos += 5
+  yPos += 4
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
   doc.text(memoData.signatory.title, margin, yPos)
-  yPos += 5
+  yPos += 4
   doc.text("FOR: MANAGING DIRECTOR", margin, yPos)
 
   // CC list
   if (memoData.ccList && memoData.ccList.length > 0) {
-    yPos += 8
+    yPos += 6
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
     doc.text("cc:", margin, yPos)
