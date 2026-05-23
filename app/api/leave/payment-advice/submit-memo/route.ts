@@ -55,8 +55,26 @@ export async function POST(request: NextRequest) {
     // Create individual payment memo records for each staff member
     const memoRecords: any[] = []
     const errors: string[] = []
+    const skippedDuplicates: string[] = []
+
+    // Check for existing memos to prevent duplicates
+    const staffIds = staffList.map((s: any) => s.user_id).filter(Boolean)
+    const { data: existingMemos } = await admin
+      .from("leave_payment_memos")
+      .select("staff_id, memo_subject, status")
+      .in("staff_id", staffIds)
+      .like("memo_subject", `%${month}%`)
+      .in("status", ["ready_for_review", "reviewed_by_hr", "forwarded_to_accounts"])
+
+    const existingStaffIds = new Set(existingMemos?.map((m) => m.staff_id) || [])
 
     for (const staff of staffList) {
+      // Skip if this staff already has a memo for this month
+      if (existingStaffIds.has(staff.user_id)) {
+        skippedDuplicates.push(`${staff.full_name} already has a pending/approved payment memo for ${month}`)
+        continue
+      }
+
       // Get the reference number for this staff's category
       const category = staff.category || staff.staff_category || "Junior"
       const refNumber = referenceNumbers[category] || ""
@@ -128,7 +146,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       memoCount: data?.length || 0,
-      warnings: errors.length > 0 ? errors : undefined
+      warnings: errors.length > 0 ? errors : undefined,
+      skippedDuplicates: skippedDuplicates.length > 0 ? skippedDuplicates : undefined
     })
   } catch (err: any) {
     console.error("[v0] Error submitting memo:", err.message || err)

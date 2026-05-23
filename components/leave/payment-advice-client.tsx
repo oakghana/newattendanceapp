@@ -793,94 +793,153 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                     <p className="text-sm text-gray-400 mt-1">All submitted payment advice memos have been reviewed.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600 font-medium">Pending Memos ({pendingMemos.length})</p>
-                    <div className="grid gap-3">
-                      {pendingMemos.map((memo) => (
-                        <div key={memo.id} className="border rounded-lg p-4 bg-white hover:shadow-md transition-shadow">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <p className="font-semibold text-gray-900">{memo.staff_name}</p>
-                              <p className="text-sm text-gray-500">{memo.staff_number}</p>
+                  <div className="space-y-4">
+                    {/* Group memos by month and category for batch approval */}
+                    {(() => {
+                      // Group by month-category key
+                      const grouped = pendingMemos.reduce((acc: Record<string, any[]>, memo) => {
+                        // Extract month from memo_subject like "Payment of Leave Allowance (Junior Staff) - 2026-07"
+                        const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
+                        const category = subjectMatch?.[1] || "Unknown"
+                        const month = subjectMatch?.[2] || "Unknown"
+                        const key = `${month}|${category}`
+                        if (!acc[key]) acc[key] = []
+                        acc[key].push(memo)
+                        return acc
+                      }, {})
+
+                      // Convert to array and sort by month/category
+                      const groupedArray = Object.entries(grouped).map(([key, memos]) => {
+                        const [month, category] = key.split("|")
+                        return { key, month, category, memos }
+                      }).sort((a, b) => b.month.localeCompare(a.month))
+
+                      return groupedArray.map(({ key, month, category, memos }) => (
+                        <Card key={key} className="border-l-4 border-l-orange-500 shadow-sm">
+                          <CardHeader className="pb-2">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  <Users className="h-5 w-5 text-orange-600" />
+                                  {category} - {month}
+                                </CardTitle>
+                                <CardDescription>{memos.length} staff member{memos.length > 1 ? "s" : ""} pending approval</CardDescription>
+                              </div>
+                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                                Ready for Review
+                              </Badge>
                             </div>
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded capitalize">
-                              {memo.status || "draft"}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded">
-                            <div>
-                              <span className="text-gray-500">To be signed by</span>
-                              <p className="font-medium">{memo.hr_leave_office_name}</p>
+                          </CardHeader>
+                          <CardContent>
+                            {/* Staff list in compact table */}
+                            <div className="mb-4 rounded-lg border overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {memos.map((memo, idx) => (
+                                    <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                      <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
+                                      <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
+                                      <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
+                                      <td className="px-3 py-2 text-gray-600">
+                                        {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
-                            <div>
-                              <span className="text-gray-500">Leave Days</span>
-                              <p className="font-medium">{memo.approved_days} days</p>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Leave Period</span>
-                              <p className="font-medium">
-                                {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
-                              </p>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Submitted</span>
-                              <p className="font-medium">
-                                {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch("/api/leave/payment-advice/pending-approval", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ memoId: memo.id, approved: true }),
-                                  })
-                                  if (res.ok) {
-                                    setPendingMemos((prev) => prev.filter((m) => m.id !== memo.id))
-                                    const updated = { ...memo, status: "reviewed_by_hr", updated_at: new Date().toISOString() }
-                                    setApprovedMemos((prev) => [updated, ...prev])
-                                    toast({ title: "Memo Approved", description: `Payment advice for ${memo.staff_name} has been approved.` })
-                                  } else {
-                                    toast({ title: "Error", description: "Failed to approve memo.", variant: "destructive" })
+
+                            {/* Batch approval buttons */}
+                            <div className="flex gap-3">
+                              <Button
+                                className="flex-1 bg-green-600 hover:bg-green-700"
+                                onClick={async () => {
+                                  try {
+                                    // Approve all memos in this group
+                                    const promises = memos.map((memo) =>
+                                      fetch("/api/leave/payment-advice/pending-approval", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ memoId: memo.id, approved: true }),
+                                      })
+                                    )
+                                    const results = await Promise.all(promises)
+                                    const allSuccess = results.every((r) => r.ok)
+                                    
+                                    if (allSuccess) {
+                                      // Remove all approved memos from pending
+                                      const approvedIds = new Set(memos.map((m) => m.id))
+                                      setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
+                                      
+                                      // Add to approved list
+                                      const approvedMemosList = memos.map((m) => ({
+                                        ...m,
+                                        status: "reviewed_by_hr",
+                                        updated_at: new Date().toISOString(),
+                                      }))
+                                      setApprovedMemos((prev) => [...approvedMemosList, ...prev])
+                                      
+                                      toast({
+                                        title: "Batch Approved",
+                                        description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
+                                      })
+                                    } else {
+                                      toast({ title: "Error", description: "Some memos failed to approve.", variant: "destructive" })
+                                    }
+                                  } catch {
+                                    toast({ title: "Error", description: "Failed to approve memos.", variant: "destructive" })
                                   }
-                                } catch {
-                                  toast({ title: "Error", description: "Failed to approve memo.", variant: "destructive" })
-                                }
-                              }}
-                              className="flex-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch("/api/leave/payment-advice/pending-approval", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ memoId: memo.id, approved: false }),
-                                  })
-                                  if (res.ok) {
-                                    setPendingMemos((prev) => prev.filter((m) => m.id !== memo.id))
-                                    toast({ title: "Memo Rejected", description: `Payment advice for ${memo.staff_name} has been rejected.` })
-                                  } else {
-                                    toast({ title: "Error", description: "Failed to reject memo.", variant: "destructive" })
+                                }}
+                              >
+                                <Check className="h-4 w-4 mr-2" />
+                                Approve All ({memos.length})
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                                onClick={async () => {
+                                  try {
+                                    // Reject all memos in this group
+                                    const promises = memos.map((memo) =>
+                                      fetch("/api/leave/payment-advice/pending-approval", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ memoId: memo.id, approved: false }),
+                                      })
+                                    )
+                                    const results = await Promise.all(promises)
+                                    const allSuccess = results.every((r) => r.ok)
+                                    
+                                    if (allSuccess) {
+                                      const rejectedIds = new Set(memos.map((m) => m.id))
+                                      setPendingMemos((prev) => prev.filter((m) => !rejectedIds.has(m.id)))
+                                      toast({
+                                        title: "Batch Rejected",
+                                        description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} rejected.`,
+                                      })
+                                    } else {
+                                      toast({ title: "Error", description: "Some memos failed to reject.", variant: "destructive" })
+                                    }
+                                  } catch {
+                                    toast({ title: "Error", description: "Failed to reject memos.", variant: "destructive" })
                                   }
-                                } catch {
-                                  toast({ title: "Error", description: "Failed to reject memo.", variant: "destructive" })
-                                }
-                              }}
-                              className="flex-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                                }}
+                              >
+                                Reject All
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    })()}
                   </div>
                 )}
               </>
