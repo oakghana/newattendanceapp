@@ -805,7 +805,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                           <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded">
                             <div>
-                              <span className="text-gray-500">Processed By</span>
+                              <span className="text-gray-500">To be signed by</span>
                               <p className="font-medium">{memo.hr_leave_office_name}</p>
                             </div>
                             <div>
@@ -942,7 +942,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                           <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-white p-2 rounded border border-green-100">
                             <div>
-                              <span className="text-gray-500">Processed By</span>
+                              <span className="text-gray-500">To be signed by</span>
                               <p className="font-medium">{memo.hr_leave_office_name}</p>
                             </div>
                             <div>
