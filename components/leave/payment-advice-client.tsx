@@ -879,21 +879,34 @@ We count on your co-operation.`,
                                   <tr>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                  {memos.map((memo, idx) => (
-                                    <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                      <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
-                                      <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
-                                      <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
-                                      <td className="px-3 py-2 text-gray-600">
-                                        {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {memos.map((memo, idx) => {
+                                    // Parse memo_body to extract staff rank
+                                    let memoBody: any = {}
+                                    try {
+                                      memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+                                    } catch {
+                                      memoBody = {}
+                                    }
+                                    const staffRank = memoBody.staff_rank_label || category
+                                    
+                                    return (
+                                      <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                        <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
+                                        <td className="px-3 py-2 text-gray-600">{staffRank}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                          {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -1025,58 +1038,160 @@ We count on your co-operation.`,
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-600 font-medium">
-                        Approved Memos ({approvedMemos.length})
-                        {approvedFilterMonth && ` — ${approvedFilterMonth}`}
-                      </p>
-                    </div>
-                    <div className="grid gap-3">
-                      {approvedMemos.map((memo) => (
-                        <div key={memo.id} className="border border-green-200 rounded-lg p-4 bg-green-50 hover:shadow-md transition-shadow">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <p className="font-semibold text-gray-900">{memo.staff_name}</p>
-                              <p className="text-sm text-gray-500">{memo.staff_number}</p>
+                  <div className="space-y-4">
+                    {/* Group approved memos by month and category for batch download */}
+                    {(() => {
+                      // Group by month-category key
+                      const grouped = approvedMemos.reduce((acc: Record<string, any[]>, memo) => {
+                        const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
+                        const category = subjectMatch?.[1] || "Unknown"
+                        const month = subjectMatch?.[2] || "Unknown"
+                        const key = `${month}|${category}`
+                        if (!acc[key]) acc[key] = []
+                        acc[key].push(memo)
+                        return acc
+                      }, {})
+
+                      // Convert to array and sort by month/category
+                      const groupedArray = Object.entries(grouped).map(([key, memos]) => {
+                        const [month, category] = key.split("|")
+                        return { key, month, category, memos }
+                      }).sort((a, b) => b.month.localeCompare(a.month))
+
+                      // Filter by selected month if any
+                      const filteredGroupedArray = approvedFilterMonth
+                        ? groupedArray.filter(({ month }) => month === approvedFilterMonth)
+                        : groupedArray
+
+                      return filteredGroupedArray.map(({ key, month, category, memos }) => (
+                        <Card key={key} className="border-l-4 border-l-green-500 shadow-sm">
+                          <CardHeader className="pb-2">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  <CheckCircle className="h-5 w-5 text-green-600" />
+                                  {category} - {month}
+                                </CardTitle>
+                                <CardDescription>{memos.length} staff member{memos.length > 1 ? "s" : ""} approved</CardDescription>
+                              </div>
+                              <Badge className="bg-green-100 text-green-800 border-green-300">
+                                ✓ Approved
+                              </Badge>
                             </div>
-                            <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
-                              <CheckCircle className="h-3 w-3" /> Approved
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700 mb-3">{memo.memo_subject}</p>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-white p-2 rounded border border-green-100">
-                            <div>
-                              <span className="text-gray-500">To be signed by</span>
-                              <p className="font-medium">{memo.hr_leave_office_name}</p>
+                          </CardHeader>
+                          <CardContent>
+                            {/* Staff list in compact table */}
+                            <div className="mb-4 rounded-lg border overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Approved On</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {memos.map((memo, idx) => {
+                                    let memoBody: any = {}
+                                    try {
+                                      memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+                                    } catch {
+                                      memoBody = {}
+                                    }
+                                    const staffRank = memoBody.staff_rank_label || category
+                                    
+                                    return (
+                                      <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                        <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
+                                        <td className="px-3 py-2 text-gray-600">{staffRank}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                          {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                          {memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
                             </div>
-                            <div>
-                              <span className="text-gray-500">Leave Days</span>
-                              <p className="font-medium">{memo.approved_days} days</p>
+
+                            {/* Batch download button */}
+                            <div className="flex gap-3">
+                              <Button
+                                className="flex-1 bg-green-600 hover:bg-green-700"
+                                onClick={async () => {
+                                  try {
+                                    // Download combined PDF with all staff in this group
+                                    const memoData = {
+                                      to: "DEPUTY DIRECTOR, FINANCE",
+                                      from: "HUMAN RESOURCE MANAGER",
+                                      subject: `PAYMENT OF LEAVE ALLOWANCE (${category.toUpperCase()}) – ${
+                                        month.includes("-")
+                                          ? new Date(month + "-01").toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase()
+                                          : month
+                                      }`,
+                                      date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+                                      refNo: `QCC/`,
+                                      body: `We wish to inform you that the undermentioned staff members are scheduled to proceed on their annual vacation leave.
+
+We, therefore, kindly request you to pay their leave allowances accordingly.
+We count on your co-operation.`,
+                                      signatory: {
+                                        name: memos[0]?.hr_leave_office_name?.toUpperCase() || "HUMAN RESOURCE MANAGER",
+                                        title: "HUMAN RESOURCE MANAGER",
+                                      },
+                                      ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
+                                      memoType: "payment" as const,
+                                      staffList: memos.map((memo, idx) => {
+                                        let memoBody: any = {}
+                                        try {
+                                          memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+                                        } catch {
+                                          memoBody = {}
+                                        }
+                                        return {
+                                          no: idx + 1,
+                                          name: memo.staff_name || "N/A",
+                                          employeeId: memo.staff_number || "N/A",
+                                          position: memoBody.staff_position || "",
+                                          department: memoBody.staff_department || "",
+                                          leaveDate: memo.leave_period_start
+                                            ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                                            : "N/A",
+                                        }
+                                      }),
+                                    }
+
+                                    const { generateProfessionalMemoPDF } = await import("@/lib/professional-memo-generator")
+                                    const doc = await generateProfessionalMemoPDF(memoData)
+                                    const pdfName = `payment-advice-${category.toLowerCase().replace(/\s+/g, "-")}-${month}.pdf`
+                                    doc.save(pdfName)
+
+                                    toast({
+                                      title: "PDF Downloaded",
+                                      description: `Payment advice memo downloaded for ${category} (${month}) with ${memos.length} staff member${memos.length > 1 ? "s" : ""}.`,
+                                    })
+                                  } catch (error) {
+                                    console.error("Error downloading batch memo:", error)
+                                    toast({ title: "Error", description: "Failed to download batch memo.", variant: "destructive" })
+                                  }
+                                }}
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download All ({memos.length})
+                              </Button>
                             </div>
-                            <div>
-                              <span className="text-gray-500">Leave Period</span>
-                              <p className="font-medium">
-                                {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
-                              </p>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Approved On</span>
-                              <p className="font-medium">
-                                {memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => downloadApprovedMemo(memo)}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-700 text-white text-sm font-medium rounded hover:bg-green-800 transition-colors"
-                          >
-                            <Download className="h-4 w-4" />
-                            Download PDF
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    })()}
                   </div>
                 )}
               </>
