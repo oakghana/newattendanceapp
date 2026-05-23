@@ -678,18 +678,57 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       const currentDate = new Date()
       const dateStr = `${currentDate.getDate()}-${new Date().toLocaleString('default', { month: 'short' })}-${currentDate.getFullYear()}`
 
-      // Use selected HR Executive signer for the signatory
-      const signatoryName = selectedSigner?.full_name?.toUpperCase() || memo.hr_leave_office_name?.toUpperCase() || "HUMAN RESOURCE MANAGER"
-      const signatoryTitle = selectedSigner?.position?.toUpperCase() || "HUMAN RESOURCE MANAGER"
+      // Parse memo_body JSON to get stored staff details
+      let memoBodyParsed: any = {}
+      try {
+        memoBodyParsed = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+      } catch {
+        memoBodyParsed = {}
+      }
+
+      // Use selected HR Executive as signatory; fall back to stored signer or HR Leave Office submitter
+      const storedSigner = memoBodyParsed.selectedSigner || {}
+      const signatoryName =
+        (selectedSigner?.full_name || storedSigner.name || memo.hr_leave_office_name || "HUMAN RESOURCE MANAGER").toUpperCase()
+      const signatoryTitle =
+        (selectedSigner?.position || storedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
+
+      // Build clean subject from the stored category/month — avoid duplication
+      const category = memoBodyParsed.category || "Staff"
+      const month = memoBodyParsed.month || ""
+      // Format month label: "2026-07" -> "JULY 2026"
+      let monthLabel = month
+      if (/^\d{4}-\d{2}$/.test(month)) {
+        const [yr, mo] = month.split("-")
+        monthLabel = `${new Date(Number(yr), Number(mo) - 1).toLocaleString("default", { month: "long" }).toUpperCase()} ${yr}`
+      }
+      // Map category to proper staff rank label
+      const rankLabel =
+        category.toLowerCase().includes("junior") ? "JUNIOR STAFF" :
+        category.toLowerCase().includes("senior") ? "SENIOR STAFF" :
+        category.toLowerCase().includes("manage") ? "MANAGEMENT STAFF" :
+        `${category.toUpperCase()} STAFF`
+
+      const subject = `PAYMENT OF LEAVE ALLOWANCE (${rankLabel}) – ${monthLabel}`
+
+      // Get real position and department from stored memo_body
+      const staffPosition = memoBodyParsed.staff_position || memo.staff_position || ""
+      const staffDepartment = memoBodyParsed.staff_department || memo.staff_department || ""
+      
+      // Determine "from" based on signatory title/role
+      const fromLabel = signatoryTitle.includes("DEPUTY") ? "DEPUTY HUMAN RESOURCE MANAGER" : "HUMAN RESOURCE MANAGER"
 
       // Prepare memo data for professional template
       const memoData = {
         to: "DEPUTY DIRECTOR, FINANCE",
-        from: "HUMAN RESOURCE MANAGER",
-        subject: `PAYMENT OF LEAVE ALLOWANCE - ${memo.memo_subject || "N/A"}`,
+        from: fromLabel,
+        subject,
         date: dateStr,
-        refNo: "QCC/",
-        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual leave.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.`,
+        refNo: `QCC/${memoBodyParsed.referenceNumber || ""}`,
+        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual vacation leave in ${monthLabel}.
+
+We, therefore, kindly request you to pay their leave allowances accordingly.
+We count on your co-operation.`,
         signatory: {
           name: signatoryName,
           title: signatoryTitle,
@@ -701,9 +740,11 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
             no: 1,
             name: memo.staff_name || "N/A",
             employeeId: memo.staff_number || "N/A",
-            position: "Staff Position",
-            department: "Department",
-            leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
+            position: staffPosition || rankLabel,
+            department: staffDepartment || "N/A",
+            leaveDate: memo.leave_period_start
+              ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+              : "N/A",
           },
         ],
       }

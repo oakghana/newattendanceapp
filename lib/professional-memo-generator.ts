@@ -197,7 +197,7 @@ async function generateMainMemo(
 
     autoTable(doc, {
       startY: yPos,
-      head: [["N", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]],
       body: tableData,
       margin: { left: margin, right: margin },
       theme: "grid",
@@ -224,18 +224,12 @@ async function generateMainMemo(
     yPos = (doc as any).lastAutoTable.finalY + 10
   }
 
-  // Request and closing text
-  if (yPos > pageHeight - margin - 50) {
+  // Spacing before signature
+  if (yPos > pageHeight - margin - 40) {
     doc.addPage()
     yPos = margin
   }
-
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(10)
-  doc.text("We, therefore, kindly request you to pay their leave allowances accordingly.", margin, yPos)
-  yPos += 7
-  doc.text("We count on your co-operation.", margin, yPos)
-  yPos += 15
+  yPos += 10
 
   // Signature line
   doc.setDrawColor(0)

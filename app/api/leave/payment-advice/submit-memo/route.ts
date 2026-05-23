@@ -79,11 +79,14 @@ export async function POST(request: NextRequest) {
       const category = staff.category || staff.staff_category || "Junior"
       const refNumber = referenceNumbers[category] || ""
       
-      // Build memo body with all relevant info
+      // Build memo body with all relevant info including staff details for PDF generation
       const memoBody = {
         month,
         referenceNumber: refNumber,
         category,
+        staff_position: staff.position || staff.rank || "",
+        staff_department: staff.department_name || staff.department || "",
+        staff_rank_label: staff.staff_category || category,
         selectedSigner: {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
