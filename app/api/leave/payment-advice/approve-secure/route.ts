@@ -65,10 +65,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // CRITICAL: Validate that ALL memos are assigned to THIS user
+    // CRITICAL: Validate that ALL memos exist and are in correct status
     const { data: memos, error: fetchErr } = await admin
       .from("leave_payment_memos")
-      .select("id, hr_executive_signer_id, staff_name, status")
+      .select("id, staff_name, status")
       .in("id", memoIds)
 
     if (fetchErr) {
@@ -78,6 +78,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Build signer name early for use in error messages
+    const signerName = `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
 
     // CRITICAL: Verify signer has a saved signature before allowing approval
     const { data: signatureRecord, error: sigError } = await admin
@@ -105,7 +108,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Update memos with approval and store approver info in memo_body
-    const signerName = `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
     
     // Fetch all memos to update their memo_body with approver info
     const { data: memosToUpdate } = await admin
