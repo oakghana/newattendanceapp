@@ -83,13 +83,11 @@ export async function POST(request: NextRequest) {
 
     let result
     if (existingSignature) {
-      // Update existing signature
+      // Update existing signature - only update what matters
       result = await admin
         .from("approval_signature_registry")
         .update({
           signature_data_url: signatureUrl,
-          signature_text: signature_text || null,
-          signature_mode: signatureUrl ? "draw" : "typed",
           is_active: true,
           updated_at: new Date().toISOString(),
         })
@@ -97,16 +95,12 @@ export async function POST(request: NextRequest) {
         .select()
         .single()
     } else {
-      // Create new signature record
+      // Create new signature record - only insert required fields
       result = await admin
         .from("approval_signature_registry")
         .insert({
           user_id: user.id,
           signature_data_url: signatureUrl,
-          signature_text: signature_text || null,
-          signature_mode: signatureUrl ? "draw" : "typed",
-          workflow_domain: "payment_advice",
-          approval_stage: "hr_executive",
           is_active: true,
         })
         .select()
@@ -114,7 +108,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.error) {
-      throw result.error
+      console.error("[v0] Database error saving signature:", {
+        code: result.error.code,
+        message: result.error.message,
+        details: result.error.details,
+      })
+      throw new Error(`Database error: ${result.error.message || result.error.code}`)
     }
 
     console.log("[v0] Signature saved successfully to database:", result.data)
