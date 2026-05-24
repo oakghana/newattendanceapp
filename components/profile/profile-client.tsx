@@ -91,8 +91,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
     confirmPassword: "",
   })
   const [showPasswordChange, setShowPasswordChange] = useState(false)
-  const [signatureMode, setSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
-  const [signatureText, setSignatureText] = useState("")
+  const [signatureMode, setSignatureMode] = useState<"draw" | "upload">("draw")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [savedSignatureUrl, setSavedSignatureUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
@@ -810,17 +809,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   <p className="text-sm text-muted-foreground mb-4">Create a new signature to replace your current one:</p>
                 </div>
               )}
-              {/* Signature Mode Selection */}
+              {/* Signature Mode Selection: Draw & Upload Only */}
               <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
-                <button
-                  onClick={() => {
-                    setSignatureMode("typed")
-                    setSignatureText("")
-                  }}
-                  className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "typed" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                >
-                  Type
-                </button>
                 <button
                   onClick={() => setSignatureMode("draw")}
                   className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
@@ -834,20 +824,6 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   Upload
                 </button>
               </div>
-
-              {/* Typed Signature */}
-              {signatureMode === "typed" && (
-                <div className="space-y-2">
-                  <Label>Enter your full name as signature</Label>
-                  <Input
-                    value={signatureText}
-                    onChange={(e) => setSignatureText(e.target.value)}
-                    placeholder="e.g. Frank Fredua"
-                    className="text-lg"
-                  />
-                  {signatureText && <div className="text-2xl font-script italic p-3 bg-white border rounded">{signatureText}</div>}
-                </div>
-              )}
 
               {/* Draw Signature */}
               {signatureMode === "draw" && (
@@ -888,7 +864,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
               <div className="space-y-3 pt-4 border-t border-green-200">
                 <Button
                   onClick={async () => {
-                    if (!signatureText && !signatureDataUrl) {
+                    if (!signatureDataUrl) {
                       toast.error("Please create or upload a signature first")
                       return
                     }
@@ -896,8 +872,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     setIsSavingSignature(true)
                     try {
                       const signaturePayload = {
-                        signature_text: signatureMode === "typed" ? signatureText : null,
-                        signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
+                        signature_data_url: signatureDataUrl,
                       }
                       
                       console.log("[v0] Saving signature via new API endpoint")
