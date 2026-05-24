@@ -83,19 +83,29 @@ export async function POST(request: NextRequest) {
     const signerName = `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
 
     // CRITICAL: Verify signer has a saved signature before allowing approval
-    const { data: signatureRecord, error: sigError } = await admin
+    console.log("[v0] Checking signature for user:", user.id, "- signerName:", signerName)
+    
+    const { data: signatureRecords, error: sigError } = await admin
       .from("approval_signature_registry")
-      .select("id, signature_data_url")
+      .select("id, signature_data_url, user_id, is_active, workflow_domain")
       .eq("user_id", user.id)
       .eq("is_active", true)
-      .single()
+    
+    console.log("[v0] Signature query result:", {
+      recordCount: signatureRecords?.length,
+      error: sigError?.message,
+      records: signatureRecords,
+    })
 
-    if (sigError || !signatureRecord || !signatureRecord.signature_data_url) {
+    const signatureRecord = signatureRecords && signatureRecords.length > 0 ? signatureRecords[0] : null
+
+    if (!signatureRecord || !signatureRecord.signature_data_url) {
       console.warn("[v0] Signature validation failed for user:", {
         userId: user.id,
         userName: signerName,
         sigError: sigError?.message,
         hasSignature: !!signatureRecord?.signature_data_url,
+        recordCount: signatureRecords?.length,
       })
       return NextResponse.json(
         { 
@@ -106,6 +116,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    
+    console.log("[v0] Signature validation passed for user:", user.id, "- signature:", signatureRecord.signature_data_url)
 
     // Update memos with approval and store approver info in memo_body
     
