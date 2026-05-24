@@ -49,6 +49,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // VALIDATION: Verify the selected signer is a valid HR Executive
+    if (!selectedSigner.id) {
+      return NextResponse.json(
+        { error: "Invalid signer", details: "HR Executive signer must be selected" },
+        { status: 400 }
+      )
+    }
+
+    // Fetch the signer's user profile to validate their role
+    const { data: signerProfile, error: signerError } = await admin
+      .from("user_profiles")
+      .select("id, first_name, last_name, role, position, email")
+      .eq("id", selectedSigner.id)
+      .single()
+
+    if (signerError || !signerProfile) {
+      return NextResponse.json(
+        { error: "Signer not found", details: "The selected HR Executive does not exist in the system" },
+        { status: 404 }
+      )
+    }
+
+    // CRITICAL VALIDATION: Verify signer has HR Executive role
+    const validHrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer"]
+    if (!validHrRoles.includes(signerProfile.role)) {
+      console.warn("[v0] Invalid signer role attempt:", {
+        signerId: selectedSigner.id,
+        signerRole: signerProfile.role,
+        attemptedRole: selectedSigner.role,
+      })
+      return NextResponse.json(
+        { 
+          error: "Invalid signer role", 
+          details: `The selected signer (${signerProfile.first_name} ${signerProfile.last_name}) has role "${signerProfile.role}" but only HR Executives can sign payment memos.` 
+        },
+        { status: 403 }
+      )
+    }
+
     // Group staff by category
     const categories = groupStaffByCategory(staffList)
     
@@ -94,6 +133,12 @@ export async function POST(request: NextRequest) {
         },
       }
 
+      // Validate that selectedSigner has required fields and proper role
+      if (!selectedSigner || !selectedSigner.id) {
+        errors.push("HR Executive signer not selected for memo submission")
+        continue
+      }
+
       // Only insert if we have required fields
       if (staff.leave_plan_request_id && staff.user_id) {
         memoRecords.push({
@@ -108,6 +153,12 @@ export async function POST(request: NextRequest) {
           leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
           leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
           approved_days: staff.approved_days || staff.requested_days || 0,
+          // HR Executive signer fields - track who is assigned to approve
+          hr_executive_signer_id: selectedSigner.id,
+          hr_executive_signer_name: selectedSigner.name || selectedSigner.full_name || "",
+          hr_executive_signer_position: selectedSigner.position || "",
+          hr_executive_signer_email: selectedSigner.email || "",
+          assigned_for_approval_at: new Date().toISOString(),
           // Set status for HR Executive approval (valid statuses: draft, ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts)
           status: "ready_for_review",
         })

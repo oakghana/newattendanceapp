@@ -117,15 +117,23 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       const fetchPendingMemos = async () => {
         setLoadingPendingMemos(true)
         try {
-          const response = await fetch("/api/leave/payment-advice/pending-approval")
+          // Use the restricted endpoint that only shows memos assigned to this HR Executive
+          const response = await fetch("/api/leave/payment-advice/pending-assigned")
           if (response.ok) {
             const data = await response.json()
             setPendingMemos(data.memos || [])
+            console.log("[v0] Fetched pending memos assigned to current HR Executive:", data.count, "memos")
           } else {
-            console.error("[v0] Failed to fetch pending memos")
+            if (response.status === 403) {
+              console.warn("[v0] User is not authorized to view payment memos:", response.statusText)
+            } else {
+              console.error("[v0] Failed to fetch pending memos:", response.statusText)
+            }
+            setPendingMemos([])
           }
         } catch (err) {
           console.error("[v0] Error fetching pending memos:", err)
+          setPendingMemos([])
         } finally {
           setLoadingPendingMemos(false)
         }
@@ -917,18 +925,17 @@ We count on your co-operation.`,
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                                 onClick={async () => {
                                   try {
-                                    // Approve all memos in this group
-                                    const promises = memos.map((memo) =>
-                                      fetch("/api/leave/payment-advice/pending-approval", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ memoId: memo.id, approved: true }),
-                                      })
-                                    )
-                                    const results = await Promise.all(promises)
-                                    const allSuccess = results.every((r) => r.ok)
+                                    // Approve all memos in this group using secure endpoint
+                                    const memoIds = memos.map((m) => m.id)
+                                    const response = await fetch("/api/leave/payment-advice/approve-secure", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ memoIds }),
+                                    })
+
+                                    const result = await response.json()
                                     
-                                    if (allSuccess) {
+                                    if (response.ok) {
                                       // Remove all approved memos from pending
                                       const approvedIds = new Set(memos.map((m) => m.id))
                                       setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
@@ -946,9 +953,14 @@ We count on your co-operation.`,
                                         description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
                                       })
                                     } else {
-                                      toast({ title: "Error", description: "Some memos failed to approve.", variant: "destructive" })
+                                      const errorMsg = response.status === 403 
+                                        ? "You are not authorized to approve these memos. Only the assigned signer can approve."
+                                        : result.error || "Failed to approve memos."
+                                      toast({ title: "Error", description: errorMsg, variant: "destructive" })
+                                      console.error("[v0] Approval error:", result)
                                     }
-                                  } catch {
+                                  } catch (err) {
+                                    console.error("[v0] Error approving memos:", err)
                                     toast({ title: "Error", description: "Failed to approve memos.", variant: "destructive" })
                                   }
                                 }}
