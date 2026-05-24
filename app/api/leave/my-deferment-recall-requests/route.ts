@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 export async function GET() {
@@ -9,6 +9,17 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Get user's role to determine what they can see
+    const admin = await createAdminClient()
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const isManagerRole = ["regional_manager", "department_head", "admin", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "hr_office", "hr", "it_admin"].includes(roleNorm)
 
     // Fetch user's deferment requests
     const { data: defermentRequests, error: deferErr } = await supabase
@@ -64,29 +75,63 @@ export async function GET() {
     }
 
     // Also fetch requests initiated by this user (if HOD/RM)
-    const { data: initiatedRecalls, error: initErr } = await supabase
-      .from("leave_recall_requests")
-      .select(`
-        id,
-        leave_plan_request_id,
-        staff_user_id,
-        recall_date,
-        recall_reason,
-        recall_notes,
-        status,
-        hr_decision,
-        hr_decision_note,
-        hr_reviewed_at,
-        staff_acknowledged,
-        staff_acknowledged_at,
-        created_at,
-        updated_at
-      `)
-      .eq("initiated_by_user_id", user.id)
-      .order("created_at", { ascending: false })
+    // For manager roles, fetch ALL recall requests in the organization
+    let initiatedRecalls: any[] = []
+    if (isManagerRole) {
+      const { data: allRecalls, error: allRecallErr } = await admin
+        .from("leave_recall_requests")
+        .select(`
+          id,
+          leave_plan_request_id,
+          staff_user_id,
+          initiated_by_user_id,
+          recall_date,
+          recall_reason,
+          recall_notes,
+          status,
+          hr_decision,
+          hr_decision_note,
+          hr_reviewed_at,
+          staff_acknowledged,
+          staff_acknowledged_at,
+          created_at,
+          updated_at
+        `)
+        .order("created_at", { ascending: false })
 
-    if (initErr) {
-      console.error("[v0] Error fetching initiated recalls:", initErr)
+      if (allRecallErr) {
+        console.error("[v0] Error fetching all recalls for manager:", allRecallErr)
+      } else {
+        initiatedRecalls = allRecalls || []
+      }
+    } else {
+      // For regular users, only fetch recalls they initiated
+      const { data: userInitRecalls, error: initErr } = await supabase
+        .from("leave_recall_requests")
+        .select(`
+          id,
+          leave_plan_request_id,
+          staff_user_id,
+          recall_date,
+          recall_reason,
+          recall_notes,
+          status,
+          hr_decision,
+          hr_decision_note,
+          hr_reviewed_at,
+          staff_acknowledged,
+          staff_acknowledged_at,
+          created_at,
+          updated_at
+        `)
+        .eq("initiated_by_user_id", user.id)
+        .order("created_at", { ascending: false })
+
+      if (initErr) {
+        console.error("[v0] Error fetching initiated recalls:", initErr)
+      } else {
+        initiatedRecalls = userInitRecalls || []
+      }
     }
 
     // Fetch initiated deferments by HOD/RM

@@ -135,8 +135,19 @@ export async function POST(request: NextRequest) {
       // Construct full name from first_name and last_name
       const fullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "Unknown"
       
-      // Get department name from the map
-      const departmentName = profile?.department_id ? (departmentMap.get(profile.department_id) || "N/A") : "N/A"
+      // Get department name from the map - ENSURE THIS IS POPULATED
+      const departmentName = profile?.department_id ? (departmentMap.get(profile.department_id) || "N/A") : (profile?.department_name || "N/A")
+      
+      // Get position from profile - ENSURE THIS IS POPULATED
+      const position = profile?.position || "N/A"
+
+      console.log("[v0] Staff record mapping:", {
+        fullName,
+        staffNumber: profile?.employee_id,
+        position,
+        departmentName,
+        departmentId: profile?.department_id,
+      })
 
       return {
         // Required fields for payment memo creation
@@ -147,7 +158,7 @@ export async function POST(request: NextRequest) {
         staff_number: profile?.employee_id || "N/A",
         employee_id: profile?.employee_id || "N/A",
         department_name: departmentName,
-        position: profile?.position || "N/A",
+        position: position,
         category: staffCategory,
         staff_category: staffCategory,
         // Leave details

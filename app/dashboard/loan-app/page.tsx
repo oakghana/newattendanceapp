@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
+import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -866,6 +867,8 @@ export default function LoanAppPage() {
   const [lookupLoading, setLookupLoading] = useState(false)
   const [registryData, setRegistryData] = useState<RegistryPayload | null>(null)
   const [registryLoading, setRegistryLoading] = useState(false)
+  const [leavePaymentMemos, setLeavePaymentMemos] = useState<any[]>([])
+  const [loadingLeavePaymentMemos, setLoadingLeavePaymentMemos] = useState(false)
   const [selectedLoanType, setSelectedLoanType] = useState("")
   const [setupFixedAmount, setSetupFixedAmount] = useState("")
   const [setupMaxAmount, setSetupMaxAmount] = useState("")
@@ -1013,6 +1016,7 @@ export default function LoanAppPage() {
 
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
+    const isAdminUser = isAdmin // Use the calculated isAdmin flag
     const c = {
       hod: data?.inbox?.hod?.length || 0,
       loanOffice: data?.inbox?.loanOffice?.length || 0,
@@ -1024,9 +1028,26 @@ export default function LoanAppPage() {
       mine: data?.myTasks?.length || 0,
     }
     const tabs = [{ key: "staff", label: "My Loans" }, { key: "tracking", label: "Tracking" }]
+    
+    // ADMIN ACCESS: Admins see all tabs without restriction
+    if (isAdminUser) {
+      tabs.push({ key: "hod", label: `HOD (${c.hod})` })
+      tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
+      tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+      tabs.push({ key: "leave-payment", label: "Leave Payment" })
+      tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+      tabs.push({ key: "director", label: `Executive HR (${c.director})` })
+      tabs.push({ key: "setup", label: "Setup & Linkage" })
+      tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
+      tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+      return tabs
+    }
+    
+    // NON-ADMIN: Standard permission-based access
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+    if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
@@ -1037,7 +1058,7 @@ export default function LoanAppPage() {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs
-  }, [data, canAccessLoanOfficeWorkspace])
+  }, [data, canAccessLoanOfficeWorkspace, isAdmin])
 
   const defaultTab = visibleTabs[0]?.key || "staff"
 
@@ -1535,6 +1556,28 @@ export default function LoanAppPage() {
     setTemplateBody(activeTemplate.body || "")
   }, [activeTemplate])
 
+  // Fetch leave payment memos for Accounts users
+  useEffect(() => {
+    if (p?.accounts) {
+      const fetchLeavePaymentMemos = async () => {
+        setLoadingLeavePaymentMemos(true)
+        try {
+          const res = await fetch("/api/leave/payment-advice/for-accounts", { cache: "no-store" })
+          if (res.ok) {
+            const result = await res.json()
+            setLeavePaymentMemos(result.memos || [])
+          } else {
+            console.error("[v0] Failed to fetch leave payment memos")
+          }
+        } catch (err) {
+          console.error("[v0] Error fetching leave payment memos:", err)
+        } finally {
+          setLoadingLeavePaymentMemos(false)
+        }
+      }
+      void fetchLeavePaymentMemos()
+    }
+  }, [p?.accounts])
 
   const submitRequest = async () => {
     if (!loanTypeKey) {
@@ -3246,6 +3289,129 @@ export default function LoanAppPage() {
                 </div>
               ))}
               {(data?.inbox.accountsSigned || []).length === 0 && <p className="text-sm text-muted-foreground">No approved records yet.</p>}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="leave-payment" className="space-y-3">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-purple-600" />
+                Approved Leave Payment Advice
+              </CardTitle>
+              <CardDescription>
+                View and download approved leave payment advice records for voucher processing in Accpac
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loadingLeavePaymentMemos ? (
+                <div className="flex justify-center py-8">
+                  <div className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-purple-600 mx-auto" />
+                    <p className="mt-2 text-gray-600 text-sm">Loading leave payment records...</p>
+                  </div>
+                </div>
+              ) : leavePaymentMemos.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                  <p className="text-lg font-medium">No Approved Records</p>
+                  <p className="text-sm text-gray-400 mt-1">No approved leave payment advice records are available for processing.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50 hover:bg-slate-50">
+                        <TableHead className="font-semibold text-slate-900">Employee Name</TableHead>
+                        <TableHead className="font-semibold text-slate-900">Staff ID</TableHead>
+                        <TableHead className="font-semibold text-slate-900">Leave Period</TableHead>
+                        <TableHead className="text-right font-semibold text-slate-900">Days</TableHead>
+                        <TableHead className="font-semibold text-slate-900">Date Approved</TableHead>
+                        <TableHead className="text-center font-semibold text-slate-900">Status</TableHead>
+                        <TableHead className="text-center font-semibold text-slate-900">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {leavePaymentMemos.map((memo: any) => (
+                        <TableRow key={memo.id} className="hover:bg-slate-50">
+                          <TableCell className="font-medium">{memo.staff_name || "N/A"}</TableCell>
+                          <TableCell>{memo.staff_number || "N/A"}</TableCell>
+                          <TableCell>
+                            {memo.leave_period_start && memo.leave_period_end
+                              ? `${new Date(memo.leave_period_start).toLocaleDateString()} – ${new Date(memo.leave_period_end).toLocaleDateString()}`
+                              : "N/A"}
+                          </TableCell>
+                          <TableCell className="text-right">{memo.approved_days || 0}</TableCell>
+                          <TableCell>
+                            {memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : new Date(memo.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={async () => {
+                                try {
+                                  const currentDate = new Date()
+                                  const dateStr = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`
+
+                                  // Prepare memo data for professional template
+                                  const memoData = {
+                                    to: "DEPUTY DIRECTOR, FINANCE",
+                                    from: "ACCOUNTS DEPARTMENT",
+                                    subject: `PAYMENT OF LEAVE ALLOWANCE - ${memo.staff_name || "Staff"}`,
+                                    date: dateStr,
+                                    refNo: "QCC/",
+                                    body: `We wish to inform you that the undermentioned staff member has been approved for leave payment.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.\n\nWe count on your co-operation.`,
+                                    signatory: {
+                                      name: "ACCOUNTS MANAGER",
+                                      title: "FOR: FINANCE DIRECTOR",
+                                    },
+                                    ccList: ["Finance Director", "HR Department", "Internal Audit"],
+                                    memoType: "payment" as const,
+                                    staffList: [
+                                      {
+                                        no: 1,
+                                        name: memo.staff_name || "N/A",
+                                        employeeId: memo.staff_number || "N/A",
+                                        position: "Staff Position",
+                                        department: "Department",
+                                        leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
+                                      },
+                                    ],
+                                  }
+
+                                  // Generate professional PDF
+                                  const pdf = await generateProfessionalMemoPDF(
+                                    memoData,
+                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`
+                                  )
+
+                                  // Download
+                                  await downloadMemoPDF(
+                                    pdf,
+                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}${String(currentDate.getDate()).padStart(2, "0")}.pdf`
+                                  )
+                                } catch (err) {
+                                  console.error("[v0] Download error:", err)
+                                  toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
+                                }
+                              }}
+                              className="gap-1"
+                            >
+                              <Download className="h-3 w-3" />
+                              Download
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

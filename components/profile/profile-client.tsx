@@ -91,8 +91,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
     confirmPassword: "",
   })
   const [showPasswordChange, setShowPasswordChange] = useState(false)
-  const [signatureMode, setSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
-  const [signatureText, setSignatureText] = useState("")
+  const [signatureMode, setSignatureMode] = useState<"draw" | "upload">("draw")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
@@ -743,17 +742,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 </CardDescription>
               </CardHeader>
             <CardContent className="space-y-6">
-              {/* Signature Mode Selection */}
+              {/* Signature Mode Selection: Draw & Upload Only */}
               <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
-                <button
-                  onClick={() => {
-                    setSignatureMode("typed")
-                    setSignatureText("")
-                  }}
-                  className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "typed" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                >
-                  Type
-                </button>
                 <button
                   onClick={() => setSignatureMode("draw")}
                   className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
@@ -768,19 +758,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 </button>
               </div>
 
-              {/* Typed Signature */}
-              {signatureMode === "typed" && (
-                <div className="space-y-2">
-                  <Label>Enter your full name as signature</Label>
-                  <Input
-                    value={signatureText}
-                    onChange={(e) => setSignatureText(e.target.value)}
-                    placeholder="e.g. Frank Fredua"
-                    className="text-lg"
-                  />
-                  {signatureText && <div className="text-2xl font-script italic p-3 bg-white border rounded">{signatureText}</div>}
-                </div>
-              )}
+              {/* Typed Signature - REMOVED */}
 
               {/* Draw Signature */}
               {signatureMode === "draw" && (
@@ -821,47 +799,37 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
               <div className="space-y-3 pt-4 border-t border-green-200">
                 <Button
                   onClick={async () => {
-                    if (!signatureText && !signatureDataUrl) {
+                    if (!signatureDataUrl) {
                       toast.error("Please create or upload a signature first")
                       return
                     }
 
                     setIsSavingSignature(true)
                     try {
-                      // Determine approval stage based on user role
-                      let approvalStage = "director_hr"
-                      if (["department_head", "regional_manager"].includes(initialUser.role)) {
-                        approvalStage = "hod"
-                      }
-                      
-                      const signaturePayload = {
-                        action: "upsert_signature",
-                        workflow_domain: "loan",
-                        approval_stage: approvalStage,
-                        signature_mode: signatureMode,
-                        signature_text: signatureMode === "typed" ? signatureText : null,
-                        signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
-                      }
-                      
-                      console.log("[v0] Saving signature via API with payload:", signaturePayload)
+                      console.log("[v0] Saving signature via workflow/registry endpoint")
                       
                       const response = await fetch("/api/workflow/registry", {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
                         },
-                        body: JSON.stringify(signaturePayload),
+                        body: JSON.stringify({
+                          action: "upsert_signature",
+                          workflow_domain: "loan",
+                          approval_stage: "director_hr",
+                          signature_mode: signatureMode,
+                          signature_data_url: signatureDataUrl,
+                        }),
                       })
 
                       const result = await response.json()
-                      console.log("[v0] API response status:", response.status, "data:", result)
+                      console.log("[v0] API response:", result)
 
                       if (!response.ok) {
                         throw new Error(result.error || `Failed to save signature: ${response.statusText}`)
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
-                      setSignatureText("")
                       setSignatureDataUrl(null)
                     } catch (err) {
                       const errorMsg = err instanceof Error ? err.message : String(err)
@@ -872,7 +840,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     }
                   }}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
-                  disabled={(!signatureText.trim() && !signatureDataUrl) || isSavingSignature}
+                  disabled={!signatureDataUrl || isSavingSignature}
                 >
                   {isSavingSignature ? "Saving..." : "Save Signature"}
                 </Button>

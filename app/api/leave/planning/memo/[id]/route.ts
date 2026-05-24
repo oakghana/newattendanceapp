@@ -346,9 +346,52 @@ export async function GET(
       return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
     }
 
+    // CRITICAL: Also fetch the related leave_payment_memo to get the SELECTED SIGNER data
+    // The selectedSigner is stored in leave_payment_memos.memo_body, NOT leave_plan_requests
+    const { data: paymentMemo } = await admin
+      .from("leave_payment_memos")
+      .select("id, memo_body, status")
+      .eq("leave_plan_request_id", leaveId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
     const role = normalizeRole((currentProfile as any).role)
     const deptName = (currentProfile as any)?.departments?.name || null
     const deptCode = (currentProfile as any)?.departments?.code || null
+
+    // Try to parse memo_body from PAYMENT MEMO to get preferred approver data (selectedSigner)
+    // This is where the selected HR Executive signer info is stored
+    let memoBodyApprover: any = null
+    let selectedSignerFromMemo: any = null
+    try {
+      if (paymentMemo?.memo_body) {
+        const memoBodies = typeof paymentMemo.memo_body === 'string' 
+          ? JSON.parse(paymentMemo.memo_body)
+          : paymentMemo.memo_body
+        
+        // Check for selectedSigner first (from submit-memo)
+        if (memoBodies?.selectedSigner) {
+          selectedSignerFromMemo = memoBodies.selectedSigner
+          console.log("[v0] Found selectedSigner from payment memo:", selectedSignerFromMemo)
+        }
+        
+        // Check for approver (added during approve-secure)
+        if (memoBodies?.approver) {
+          memoBodyApprover = memoBodies.approver
+          console.log("[v0] Found approver from payment memo:", memoBodyApprover)
+        }
+        
+        // Check if it's an array
+        if (Array.isArray(memoBodies)) {
+          const lastMemo = memoBodies[memoBodies.length - 1]
+          if (lastMemo?.selectedSigner) selectedSignerFromMemo = lastMemo.selectedSigner
+          if (lastMemo?.approver) memoBodyApprover = lastMemo.approver
+        }
+      }
+    } catch (parseErr) {
+      console.warn("[v0] Failed to parse payment memo_body:", parseErr)
+    }
 
     // Access control: applicant, HR approver, HR leave office, HOD, admin
     const isApplicant = (leaveRequest as any).user_id === user.id
@@ -419,9 +462,24 @@ export async function GET(
     }
 
     // Resolve HR approver profile + signature
-    const hrApproverId = String((leaveRequest as any).hr_approver_id || "")
+    // PRIORITY: selectedSignerFromMemo > memoBodyApprover > leave_plan_requests.hr_approver_id
+    // The selectedSigner is the HR Executive selected during memo submission
+    const signerToUse = selectedSignerFromMemo || memoBodyApprover
+    
+    // CRITICAL: Only use selectedSigner ID from memo, NEVER fall back to stale leave_plan_requests data
+    let hrApproverId = signerToUse?.id || ""
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
+    
+    console.log("[v0] Memo[id] signer resolution:", {
+      hasSelectedSigner: !!selectedSignerFromMemo,
+      selectedSignerName: selectedSignerFromMemo?.name,
+      hasApprover: !!memoBodyApprover,
+      approverName: memoBodyApprover?.name,
+      signerToUse: signerToUse?.name,
+      hrApproverId,
+    })
+    
     if (hrApproverId) {
       const [{ data: hrProf }, { data: hrSigRows }] = await Promise.all([
         admin
@@ -438,6 +496,11 @@ export async function GET(
       ])
       hrApproverProfile = hrProf
       hrSignatureData = pickBestSignature(hrSigRows || [])
+      
+      console.log("[v0] Resolved signer profile:", hrApproverProfile?.first_name, hrApproverProfile?.last_name)
+      console.log("[v0] Resolved signature data:", hrSignatureData ? "found" : "not found")
+    } else {
+      console.warn("[v0] WARNING: No signer found in memo_body! This should not happen for submitted memos")
     }
 
     // Load QCC logo
@@ -710,72 +773,65 @@ export async function GET(
     y += closingLines.length * 5.5 + 12
 
     // ── Signature block ───────────────────────────────────────────────
-    const requestSigMode = String(lr.hr_signature_mode || "").trim().toLowerCase()
-    const requestSigText = String(lr.hr_signature_text || "").trim()
-    const requestSigDataUrl = String(lr.hr_signature_data_url || "").trim()
-    const registrySigMode = String((hrSignatureData as any)?.signature_mode || "").trim().toLowerCase()
-    const registrySigText = String((hrSignatureData as any)?.signature_text || "").trim()
+    // CRITICAL: Use selectedSigner from memo_body ONLY, never fall back to stale leave_plan_requests data
+    // signerToUse contains selectedSignerFromMemo or memoBodyApprover
+    
+    let signerNameForMemo = ""
+    let signerPositionForMemo = ""
+    let signerSignatureUrl = ""
+    
+    // Use selectedSigner data (which is stored during submit-memo and approve-secure)
+    if (signerToUse?.name) {
+      signerNameForMemo = signerToUse.name
+      signerPositionForMemo = signerToUse.position || "HR EXECUTIVE"
+      signerSignatureUrl = signerToUse.signature_image_url || ""
+      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo)
+    }
+    // Fallback: Use hrApproverProfile only if we fetched it (hrApproverId was found)
+    else if (hrApproverProfile) {
+      signerNameForMemo = fmtName(hrApproverProfile)
+      signerPositionForMemo = String((hrApproverProfile as any)?.position || "HR EXECUTIVE")
+      console.log("[v0] Using hrApproverProfile:", signerNameForMemo)
+    }
+    // SHOULD NOT REACH HERE for properly submitted memos
+    else {
+      console.error("[v0] CRITICAL: No signer found! Memo was not properly submitted with a selectedSigner")
+      signerNameForMemo = "HR EXECUTIVE"
+      signerPositionForMemo = "PENDING SIGNATURE"
+    }
+
+    // Get signature image: PRIORITY - signerSignatureUrl from memo > registry signature
     const registrySigDataUrl = String((hrSignatureData as any)?.signature_data_url || "").trim()
-
-    const requestHasImageSignature =
-      (requestSigMode === "draw" || requestSigMode === "upload") && requestSigDataUrl.length > 0
-    const registryHasImageSignature =
-      (registrySigMode === "draw" || registrySigMode === "upload") && registrySigDataUrl.length > 0
-
-    const sigMode = requestHasImageSignature
-      ? requestSigMode
-      : registryHasImageSignature
-        ? registrySigMode
-        : (requestSigMode || registrySigMode || "typed")
-
-    const sigDataUrl = requestHasImageSignature
-      ? requestSigDataUrl
-      : registryHasImageSignature
-        ? registrySigDataUrl
-        : ""
-
-    const sigText = sigMode === "typed"
-      ? (requestSigText || registrySigText)
-      : ""
-    const hrName    = fmtName(hrApproverProfile || {
-      first_name: (lr.hr_approver_name || "").split(" ")[0],
-      last_name:  (lr.hr_approver_name || "").split(" ").slice(1).join(" "),
-    })
-    const hrPosition = String((hrApproverProfile as any)?.position || "HR Officer")
-
+    const finalSignatureUrl = signerSignatureUrl || registrySigDataUrl
+    
     let sigImgY = -1
-    if (sigMode !== "typed" && sigDataUrl) {
+    
+    // Add signature image if available (NO border line fallback)
+    if (finalSignatureUrl && finalSignatureUrl.length > 10) {
       try {
-        const b64 = sigDataUrl.replace(/^data:image\/\w+;base64,/, "")
+        const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
         sigImgY = y
         doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
         y += 20
-      } catch {
-        doc.setFont("times", "italic")
-        doc.setTextColor(20, 20, 120)
-        doc.text(sigText || hrName, marginLeft, y)
-        doc.setTextColor(0, 0, 0)
-        y += 7
+        console.log("[v0] Added signature image to PDF")
+      } catch (err) {
+        console.warn("[v0] Failed to add signature image:", err)
       }
     } else {
-      doc.setFont("times", "italic")
-      doc.setFontSize(11)
-      doc.setTextColor(20, 20, 120)
-      doc.text(sigText || hrName, marginLeft, y)
-      doc.setTextColor(0, 0, 0)
-      y += 7
+      console.warn("[v0] No signature image URL available for:", signerNameForMemo)
     }
-
+    
+    // Add signer name (ONLY name and position, NO underlines/border lines)
+    doc.setFont("times", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(0, 0, 0)
+    doc.text(signerNameForMemo.toUpperCase(), marginLeft, y)
+    y += 5
+    
+    // Add position
     doc.setFont("times", "normal")
     doc.setFontSize(9.5)
-    doc.setTextColor(0, 0, 0)
-    doc.text("_".repeat(35), marginLeft, y)
-    y += 5.5
-    doc.setFont("times", "bold")
-    doc.text((hrName || "HR OFFICER").toUpperCase(), marginLeft, y)
-    y += 5
-    doc.setFont("times", "normal")
-    doc.text((hrPosition || "HUMAN RESOURCES").toUpperCase(), marginLeft, y)
+    doc.text(signerPositionForMemo.toUpperCase(), marginLeft, y)
     y += 5
     doc.text("FOR: MANAGING DIRECTOR", marginLeft, y)
     y += 14

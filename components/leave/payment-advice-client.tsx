@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
-import { Download, Loader2, FileText, Users, Calendar, Check } from "lucide-react"
+import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
 import { jsPDF } from "jspdf"
+import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -47,8 +48,10 @@ interface HRExecutive {
 
 export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole?: string }) {
   const { toast } = useToast()
-  const isHrLeaveOffice = userRole === "hr_leave_office"
-  const isHrExecutive = ["director_hr", "manager_hr", "hr_director"].includes(userRole)
+  const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
+  const isHrLeaveOffice = ["hr_leave_office", "leave_office"].includes(roleNorm)
+  // HR Executives who can approve payment advice - include all HR management roles
+  const isHrExecutive = ["director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [isLoading, setIsLoading] = useState(false)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])
@@ -66,6 +69,15 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   })
   const [pendingMemos, setPendingMemos] = useState<any[]>([])
   const [loadingPendingMemos, setLoadingPendingMemos] = useState(false)
+  const [approvedMemos, setApprovedMemos] = useState<any[]>([])
+  const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
+  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
+  const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
+  
+  // Pagination states
+  const [pendingPage, setPendingPage] = useState(1)
+  const [approvedPage, setApprovedPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
 
   // Load HR executives on mount
   useEffect(() => {
@@ -110,16 +122,23 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       const fetchPendingMemos = async () => {
         setLoadingPendingMemos(true)
         try {
-          const response = await fetch("/api/leave/payment-advice/pending-approval")
+          // Use the restricted endpoint that only shows memos assigned to this HR Executive
+          const response = await fetch("/api/leave/payment-advice/pending-assigned")
           if (response.ok) {
             const data = await response.json()
             setPendingMemos(data.memos || [])
-            console.log("[v0] Pending memos loaded:", data.memos?.length || 0)
+            console.log("[v0] Fetched pending memos assigned to current HR Executive:", data.count, "memos")
           } else {
-            console.error("[v0] Failed to fetch pending memos")
+            if (response.status === 403) {
+              console.warn("[v0] User is not authorized to view payment memos:", response.statusText)
+            } else {
+              console.error("[v0] Failed to fetch pending memos:", response.statusText)
+            }
+            setPendingMemos([])
           }
         } catch (err) {
           console.error("[v0] Error fetching pending memos:", err)
+          setPendingMemos([])
         } finally {
           setLoadingPendingMemos(false)
         }
@@ -127,6 +146,32 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       fetchPendingMemos()
     }
   }, [isHrExecutive])
+
+  // Load approved memos for tracking/download
+  useEffect(() => {
+    if (isHrExecutive) {
+      const fetchApprovedMemos = async () => {
+        setLoadingApprovedMemos(true)
+        try {
+          const url = approvedFilterMonth
+            ? `/api/leave/payment-advice/approved-memos?month=${approvedFilterMonth}`
+            : "/api/leave/payment-advice/approved-memos"
+          const response = await fetch(url)
+          if (response.ok) {
+            const data = await response.json()
+            setApprovedMemos(data.memos || [])
+          } else {
+            console.error("[v0] Failed to fetch approved memos")
+          }
+        } catch (err) {
+          console.error("[v0] Error fetching approved memos:", err)
+        } finally {
+          setLoadingApprovedMemos(false)
+        }
+      }
+      fetchApprovedMemos()
+    }
+  }, [isHrExecutive, approvedFilterMonth])
 
   // Group staff by category
   const staffByCategory = useMemo(() => {
@@ -561,11 +606,40 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       // ============ SIGNATURE BLOCK WITH PROPER FORMATTING ============
       yPos += 4
       
-      // Signature line (for handwritten signature)
-      doc.setDrawColor(0, 0, 0)
-      doc.setLineWidth(0.5)
-      doc.line(20, yPos, 50, yPos)
-      yPos += 5
+      // Fetch and add signer's signature image if available (for approved memos)
+      let signatureAdded = false
+      if (selectedSigner && approvedMemos.some(m => m.id)) {
+        try {
+          // Fetch the signer's signature from their profile
+          const sigRes = await fetch(`/api/user/signature/${selectedSigner.id}`)
+          if (sigRes.ok) {
+            const sigData = await sigRes.json()
+            if (sigData.signature_image_url) {
+              const sigResponse = await fetch(sigData.signature_image_url)
+              if (sigResponse.ok) {
+                const sigBlob = await sigResponse.blob()
+                const sigUrl = URL.createObjectURL(sigBlob)
+                // Add signature image (40mm wide, 15mm high)
+                doc.addImage(sigUrl, "PNG", 20, yPos, 40, 12)
+                console.log("[v0] Signature image added to approved memo")
+                signatureAdded = true
+                yPos += 14
+                URL.revokeObjectURL(sigUrl)
+              }
+            }
+          }
+        } catch (err) {
+          console.log("[v0] Could not fetch signature, will show line instead:", err)
+        }
+      }
+      
+      // Signature line (for handwritten signature if no image available)
+      if (!signatureAdded) {
+        doc.setDrawColor(0, 0, 0)
+        doc.setLineWidth(0.5)
+        doc.line(20, yPos, 50, yPos)
+        yPos += 5
+      }
       
       // Signer name (no border above)
       doc.setFont(undefined, "bold")
@@ -640,112 +714,646 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
   }
 
-  // HR Executives View - Show pending memos for approval (read-only)
+  // Download an approved memo as professional PDF with QCC logo
+  const downloadApprovedMemo = async (memo: any) => {
+    try {
+      const currentDate = new Date()
+      const dateStr = `${currentDate.getDate()}-${new Date().toLocaleString('default', { month: 'short' })}-${currentDate.getFullYear()}`
+
+      // Parse memo_body JSON to get stored staff details
+      let memoBodyParsed: any = {}
+      try {
+        memoBodyParsed = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+      } catch {
+        memoBodyParsed = {}
+      }
+
+      // Use selected HR Executive as signatory; fall back to stored signer or HR Leave Office submitter
+      const storedSigner = memoBodyParsed.selectedSigner || {}
+      const signatoryName =
+        (selectedSigner?.full_name || storedSigner.name || memo.hr_leave_office_name || "HUMAN RESOURCE MANAGER").toUpperCase()
+      const signatoryTitle =
+        (selectedSigner?.position || storedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
+
+      // Build clean subject from the stored category/month — avoid duplication
+      const category = memoBodyParsed.category || "Staff"
+      const month = memoBodyParsed.month || ""
+      // Format month label: "2026-07" -> "JULY 2026"
+      let monthLabel = month
+      if (/^\d{4}-\d{2}$/.test(month)) {
+        const [yr, mo] = month.split("-")
+        monthLabel = `${new Date(Number(yr), Number(mo) - 1).toLocaleString("default", { month: "long" }).toUpperCase()} ${yr}`
+      }
+      // Map category to proper staff rank label
+      const rankLabel =
+        category.toLowerCase().includes("junior") ? "JUNIOR STAFF" :
+        category.toLowerCase().includes("senior") ? "SENIOR STAFF" :
+        category.toLowerCase().includes("manage") ? "MANAGEMENT STAFF" :
+        `${category.toUpperCase()} STAFF`
+
+      const subject = `PAYMENT OF LEAVE ALLOWANCE (${rankLabel}) – ${monthLabel}`
+
+      // Get real position and department from stored memo_body
+      const staffPosition = memoBodyParsed.staff_position || memo.staff_position || ""
+      const staffDepartment = memoBodyParsed.staff_department || memo.staff_department || ""
+      
+      // Use the signatory's actual position as the FROM field
+      const fromLabel = signatoryTitle
+
+      // Prepare memo data for professional template
+      const memoData = {
+        to: "DEPUTY DIRECTOR, FINANCE",
+        from: fromLabel,
+        subject,
+        date: dateStr,
+        refNo: `QCC/${memoBodyParsed.referenceNumber || ""}`,
+        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual vacation leave in ${monthLabel}.
+
+We, therefore, kindly request you to pay their leave allowances accordingly.
+We count on your co-operation.`,
+        signatory: {
+          name: signatoryName,
+          title: signatoryTitle,
+        },
+        ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
+        memoType: "payment" as const,
+        staffList: [
+          {
+            no: 1,
+            name: memo.staff_name || "N/A",
+            employeeId: memo.staff_number || "N/A",
+            position: staffPosition || "N/A",
+            department: staffDepartment || "N/A",
+            leaveDate: memo.leave_period_start
+              ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+              : "N/A",
+          },
+        ],
+      }
+
+      // Generate PDF
+      const pdf = await generateProfessionalMemoPDF(memoData, `payment-advice-${memo.staff_name}.pdf`)
+      
+      // Download
+      await downloadMemoPDF(pdf, `payment-advice-${memo.staff_name}-${format(new Date(), "yyyyMMdd")}.pdf`)
+      
+      toast({ title: "Success", description: "Memo downloaded successfully" })
+    } catch (err) {
+      console.error("[v0] Error downloading memo:", err)
+      toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
+    }
+  }
+
+  // HR Executives View - Tabbed: Pending Approval + Approved/Download
   if (isHrExecutive) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-purple-600" />
-            Payment Advice Approval
+            Payment Advice Management
           </CardTitle>
-          <CardDescription>Review and approve payment advice memos submitted by HR Leave Office</CardDescription>
+          <CardDescription>Review, approve, and download payment advice memos submitted by HR Leave Office</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <Alert className="border-blue-200 bg-blue-50">
               <AlertDescription>
-                As an HR Executive, you can review and approve payment advice memos submitted by the HR Leave Office staff. You cannot create new memos from this interface.
+                As an HR Executive, you can approve pending memos and download all approved payment advice for tracking.
               </AlertDescription>
             </Alert>
-            
-            {loadingPendingMemos ? (
-              <div className="flex justify-center py-8">
-                <div className="text-center">
-                  <div className="inline-block animate-spin">
-                    <FileText className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <p className="mt-2 text-gray-600">Loading pending memos...</p>
-                </div>
-              </div>
-            ) : pendingMemos.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg">No Pending Memos</p>
-                <p className="text-sm text-gray-400 mt-2">All submitted payment advice memos have been reviewed.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <h3 className="font-semibold text-gray-800">Pending Memos ({pendingMemos.length})</h3>
-                <div className="grid gap-3">
-                  {pendingMemos.map((memo) => (
-                    <div key={memo.id} className="border rounded-lg p-4 bg-white hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-medium text-gray-900">{memo.staff_name}</p>
-                          <p className="text-sm text-gray-600">{memo.staff_number}</p>
-                        </div>
-                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
-                          {memo.approval_status || "Pending"}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700 mb-2">{memo.memo_subject}</p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded">
-                        <div>
-                          <span className="text-gray-500">Submitted By</span>
-                          <p className="font-medium">{memo.hr_leave_office_name}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Leave Days</span>
-                          <p className="font-medium">{memo.approved_days} days</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Leave Period</span>
-                          <p className="font-medium">
-                            {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Submitted</span>
-                          <p className="font-medium">
-                            {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            // Approve memo
-                            toast({ title: "Memo Approved", description: `Payment advice for ${memo.staff_name} has been approved.` })
-                          }}
-                          className="flex-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => {
-                            // Reject memo
-                            toast({ title: "Memo Rejected", description: `Payment advice for ${memo.staff_name} has been rejected.` })
-                          }}
-                          className="flex-1 px-3 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors"
-                        >
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => {
-                            // View details
-                            toast({ title: "Memo Details", description: `Full memo content: ${memo.memo_subject}` })
-                          }}
-                          className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                        >
-                          View
-                        </button>
-                      </div>
+
+            {/* Tab buttons */}
+            <div className="flex gap-2 border-b pb-2">
+              <button
+                onClick={() => setActivePaymentTab("pending")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t text-sm font-medium transition-colors ${
+                  activePaymentTab === "pending"
+                    ? "bg-orange-100 text-orange-800 border-b-2 border-orange-500"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                }`}
+              >
+                <Clock className="h-4 w-4" />
+                Pending Approval
+                {pendingMemos.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 bg-orange-500 text-white text-xs rounded-full">
+                    {pendingMemos.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActivePaymentTab("approved")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t text-sm font-medium transition-colors ${
+                  activePaymentTab === "approved"
+                    ? "bg-green-100 text-green-800 border-b-2 border-green-500"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                }`}
+              >
+                <CheckCircle className="h-4 w-4" />
+                Approved & Download
+                {approvedMemos.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 bg-green-500 text-white text-xs rounded-full">
+                    {approvedMemos.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* PENDING TAB */}
+            {activePaymentTab === "pending" && (
+              <>
+                {loadingPendingMemos ? (
+                  <div className="flex justify-center py-8">
+                    <div className="text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
+                      <p className="mt-2 text-gray-600 text-sm">Loading pending memos...</p>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                ) : pendingMemos.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                    <p className="text-lg font-medium">No Pending Memos</p>
+                    <p className="text-sm text-gray-400 mt-1">All submitted payment advice memos have been reviewed.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Group memos by month and category for batch approval */}
+                    {(() => {
+                      // Group by month-category key
+                      const grouped = pendingMemos.reduce((acc: Record<string, any[]>, memo) => {
+                        // Extract month from memo_subject like "Payment of Leave Allowance (Junior Staff) - 2026-07"
+                        const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
+                        const category = subjectMatch?.[1] || "Unknown"
+                        const month = subjectMatch?.[2] || "Unknown"
+                        const key = `${month}|${category}`
+                        if (!acc[key]) acc[key] = []
+                        acc[key].push(memo)
+                        return acc
+                      }, {})
+
+                      // Convert to array and sort by month/category
+                      const groupedArray = Object.entries(grouped).map(([key, memos]) => {
+                        const [month, category] = key.split("|")
+                        return { key, month, category, memos }
+                      }).sort((a, b) => b.month.localeCompare(a.month))
+
+                      // Pagination for grouped items
+                      const totalPages = Math.ceil(groupedArray.length / ITEMS_PER_PAGE)
+                      const startIdx = (pendingPage - 1) * ITEMS_PER_PAGE
+                      const paginatedGroups = groupedArray.slice(startIdx, startIdx + ITEMS_PER_PAGE)
+
+                      return (
+                        <>
+                          {paginatedGroups.map(({ key, month, category, memos }) => (
+                        <Card key={key} className="border-l-4 border-l-orange-500 shadow-sm">
+                          <CardHeader className="pb-2">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  <Users className="h-5 w-5 text-orange-600" />
+                                  {category} - {month}
+                                </CardTitle>
+                                <CardDescription>{memos.length} staff member{memos.length > 1 ? "s" : ""} pending approval</CardDescription>
+                              </div>
+                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                                Ready for Review
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            {/* Staff list in compact table */}
+                            <div className="mb-4 rounded-lg border overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {memos.map((memo, idx) => {
+                                    // Parse memo_body to extract staff rank
+                                    let memoBody: any = {}
+                                    try {
+                                      memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+                                    } catch {
+                                      memoBody = {}
+                                    }
+                                    const staffRank = memoBody.staff_rank_label || category
+                                    
+                                    return (
+                                      <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                        <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
+                                        <td className="px-3 py-2 text-gray-600">{staffRank}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                          {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Batch approval buttons */}
+                            <div className="flex gap-3">
+                              <Button
+                                className="flex-1 bg-green-600 hover:bg-green-700"
+                                onClick={async () => {
+                                  try {
+                                    // Verify signer is selected
+                                    if (!selectedSigner) {
+                                      toast({
+                                        title: "Error",
+                                        description: "Please select an HR Executive signer before approving memos.",
+                                        variant: "destructive",
+                                      })
+                                      return
+                                    }
+
+                                    // Approve all memos in this group using secure endpoint
+                                    const memoIds = memos.map((m) => m.id)
+                                    const response = await fetch("/api/leave/payment-advice/approve-secure", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ 
+                                        memoIds,
+                                        selectedSigner: {
+                                          id: selectedSigner.id,
+                                          name: selectedSigner.full_name || selectedSigner.name,
+                                          position: selectedSigner.position,
+                                        },
+                                      }),
+                                    })
+
+                                    const result = await response.json()
+                                    
+                                    if (response.ok) {
+                                      // Remove all approved memos from pending
+                                      const approvedIds = new Set(memos.map((m) => m.id))
+                                      setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
+                                      
+                                      // Add to approved list
+                                      const approvedMemosList = memos.map((m) => ({
+                                        ...m,
+                                        status: "reviewed_by_hr",
+                                        updated_at: new Date().toISOString(),
+                                      }))
+                                      setApprovedMemos((prev) => [...approvedMemosList, ...prev])
+                                      
+                                      toast({
+                                        title: "Batch Approved",
+                                        description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
+                                      })
+                                    } else {
+                                      const errorData = result as any
+                                      let errorMsg = errorData.error || "Failed to approve memos."
+                                      
+                                      // Handle signature requirement error
+                                      if (response.status === 400 && errorData.requiresSignatureSave) {
+                                        errorMsg = "⚠️ Signature Required: " + errorData.details
+                                        toast({ 
+                                          title: "Action Required: Save Your Signature", 
+                                          description: errorMsg, 
+                                          variant: "destructive" 
+                                        })
+                                        console.warn("[v0] User needs to save signature before approving")
+                                      } else if (response.status === 403) {
+                                        errorMsg = "You are not authorized to approve these memos. Only the assigned signer can approve."
+                                        toast({ title: "Access Denied", description: errorMsg, variant: "destructive" })
+                                      } else {
+                                        toast({ title: "Error", description: errorMsg, variant: "destructive" })
+                                      }
+                                      console.error("[v0] Approval error:", result)
+                                    }
+                                  } catch (err) {
+                                    console.error("[v0] Error approving memos:", err)
+                                    toast({ title: "Error", description: "Failed to approve memos.", variant: "destructive" })
+                                  }
+                                }}
+                              >
+                                <Check className="h-4 w-4 mr-2" />
+                                Approve All ({memos.length})
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                                onClick={async () => {
+                                  try {
+                                    // Reject all memos in this group
+                                    const promises = memos.map((memo) =>
+                                      fetch("/api/leave/payment-advice/pending-approval", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ memoId: memo.id, approved: false }),
+                                      })
+                                    )
+                                    const results = await Promise.all(promises)
+                                    const allSuccess = results.every((r) => r.ok)
+                                    
+                                    if (allSuccess) {
+                                      const rejectedIds = new Set(memos.map((m) => m.id))
+                                      setPendingMemos((prev) => prev.filter((m) => !rejectedIds.has(m.id)))
+                                      toast({
+                                        title: "Batch Rejected",
+                                        description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} rejected.`,
+                                      })
+                                    } else {
+                                      toast({ title: "Error", description: "Some memos failed to reject.", variant: "destructive" })
+                                    }
+                                  } catch {
+                                    toast({ title: "Error", description: "Failed to reject memos.", variant: "destructive" })
+                                  }
+                                }}
+                              >
+                                Reject All
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                          }
+                          
+                          {/* Pagination for pending memos */}
+                          {totalPages > 1 && (
+                            <div className="flex justify-between items-center mt-6 px-4 py-3 bg-gray-50 rounded-lg border">
+                              <span className="text-sm text-gray-600">
+                                Page {pendingPage} of {totalPages} ({groupedArray.length} total groups)
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setPendingPage((p) => Math.max(1, p - 1))}
+                                  disabled={pendingPage === 1}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Previous
+                                </button>
+                                <button
+                                  onClick={() => setPendingPage((p) => Math.min(totalPages, p + 1))}
+                                  disabled={pendingPage === totalPages}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
+              </>
             )}
+
+            {/* APPROVED TAB */}
+            {activePaymentTab === "approved" && (
+              <>
+                {/* Month filter */}
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <Filter className="h-4 w-4 text-gray-500" />
+                  <label className="text-sm font-medium text-gray-700">Filter by Month:</label>
+                  <input
+                    type="month"
+                    value={approvedFilterMonth}
+                    onChange={(e) => setApprovedFilterMonth(e.target.value)}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
+                  />
+                  {approvedFilterMonth && (
+                    <button
+                      onClick={() => {
+                        setApprovedFilterMonth("")
+                        setApprovedPage(1)
+                      }}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {loadingApprovedMemos ? (
+                  <div className="flex justify-center py-8">
+                    <div className="text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-green-500 mx-auto" />
+                      <p className="mt-2 text-gray-600 text-sm">Loading approved memos...</p>
+                    </div>
+                  </div>
+                ) : approvedMemos.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                    <p className="text-lg font-medium">No Approved Memos</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {approvedFilterMonth ? `No approved memos found for ${approvedFilterMonth}.` : "No payment advice memos have been approved yet."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Group approved memos by month and category for batch download */}
+                    {(() => {
+                      // Group by month-category key
+                      const grouped = approvedMemos.reduce((acc: Record<string, any[]>, memo) => {
+                        const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
+                        const category = subjectMatch?.[1] || "Unknown"
+                        const month = subjectMatch?.[2] || "Unknown"
+                        const key = `${month}|${category}`
+                        if (!acc[key]) acc[key] = []
+                        acc[key].push(memo)
+                        return acc
+                      }, {})
+
+                      // Convert to array and sort by month/category
+                      const groupedArray = Object.entries(grouped).map(([key, memos]) => {
+                        const [month, category] = key.split("|")
+                        return { key, month, category, memos }
+                      }).sort((a, b) => b.month.localeCompare(a.month))
+
+                      // Filter by selected month if any
+                      const filteredGroupedArray = approvedFilterMonth
+                        ? groupedArray.filter(({ month }) => month === approvedFilterMonth)
+                        : groupedArray
+
+                      // Pagination for approved memos
+                      const totalPages = Math.ceil(filteredGroupedArray.length / ITEMS_PER_PAGE)
+                      const startIdx = (approvedPage - 1) * ITEMS_PER_PAGE
+                      const paginatedGroups = filteredGroupedArray.slice(startIdx, startIdx + ITEMS_PER_PAGE)
+
+                      return (
+                        <>
+                          {paginatedGroups.map(({ key, month, category, memos }) => (
+                        <Card key={key} className="border-l-4 border-l-green-500 shadow-sm">
+                          <CardHeader className="pb-2">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  <CheckCircle className="h-5 w-5 text-green-600" />
+                                  {category} - {month}
+                                </CardTitle>
+                                <CardDescription>{memos.length} staff member{memos.length > 1 ? "s" : ""} approved</CardDescription>
+                              </div>
+                              <Badge className="bg-green-100 text-green-800 border-green-300">
+                                ✓ Approved
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            {/* Staff list in compact table */}
+                            <div className="mb-4 rounded-lg border overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Position</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Approved On</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {memos.map((memo, idx) => {
+                                    let memoBody: any = {}
+                                    try {
+                                      memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+                                    } catch {
+                                      memoBody = {}
+                                    }
+                                    const staffRank = memoBody.staff_rank_label || category
+                                    const staffPosition = memoBody.staff_position || "N/A"
+                                    
+                                    return (
+                                      <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                        <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
+                                        <td className="px-3 py-2 text-gray-600">{staffRank}</td>
+                                        <td className="px-3 py-2 text-gray-600">{staffPosition}</td>
+                                        <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                          {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                          {memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Batch download button */}
+                            <div className="flex gap-3">
+                              <Button
+                                className="flex-1 bg-green-600 hover:bg-green-700"
+                                onClick={async () => {
+                                  try {
+                                    console.log("[v0] Starting batch download for", category, month, "with", memos.length, "staff")
+                                    
+                                    // Download combined PDF with all staff in this group
+                                    const memoData = {
+                                      to: "DEPUTY DIRECTOR, FINANCE",
+                                      from: "HUMAN RESOURCE MANAGER",
+                                      subject: `PAYMENT OF LEAVE ALLOWANCE (${category.toUpperCase()}) – ${
+                                        month.includes("-")
+                                          ? new Date(month + "-01").toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase()
+                                          : month
+                                      }`,
+                                      date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+                                      refNo: `QCC/`,
+                                      body: `We wish to inform you that the undermentioned staff members are scheduled to proceed on their annual vacation leave.
+
+We, therefore, kindly request you to pay their leave allowances accordingly.
+We count on your co-operation.`,
+                                      signatory: {
+                                        name: memos[0]?.hr_leave_office_name?.toUpperCase() || "HUMAN RESOURCE MANAGER",
+                                        title: "HUMAN RESOURCE MANAGER",
+                                      },
+                                      ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
+                                      memoType: "payment" as const,
+                                      staffList: memos.map((memo, idx) => {
+                                        let memoBody: any = {}
+                                        try {
+                                          memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+                                        } catch {
+                                          memoBody = {}
+                                        }
+                                        return {
+                                          no: idx + 1,
+                                          name: memo.staff_name || "N/A",
+                                          employeeId: memo.staff_number || "N/A",
+                                          position: memoBody.staff_position || "N/A",
+                                          department: memoBody.staff_department || "N/A",
+                                          leaveDate: memo.leave_period_start
+                                            ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                                            : "N/A",
+                                        }
+                                      }),
+                                    }
+
+                                    console.log("[v0] Memo data prepared:", memoData)
+                                    const pdfName = `payment-advice-${category.toLowerCase().replace(/\s+/g, "-")}-${month}.pdf`
+                                    const memoResult = await generateProfessionalMemoPDF(memoData, pdfName)
+                                    console.log("[v0] PDF generated, result type:", typeof memoResult, "has mainPdf:", !!memoResult?.mainPdf)
+                                    
+                                    await downloadMemoPDF(memoResult, pdfName)
+
+                                    toast({
+                                      title: "PDF Downloaded",
+                                      description: `Payment advice memo downloaded for ${category} (${month}) with ${memos.length} staff member${memos.length > 1 ? "s" : ""}.`,
+                                    })
+                                  } catch (error) {
+                                    console.error("[v0] Error downloading batch memo:", error)
+                                    toast({ title: "Error", description: `Failed to download batch memo: ${error instanceof Error ? error.message : String(error)}`, variant: "destructive" })
+                                  }
+                                }}
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download All ({memos.length})
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                          }
+                          
+                          {/* Pagination for approved memos */}
+                          {totalPages > 1 && (
+                            <div className="flex justify-between items-center mt-6 px-4 py-3 bg-gray-50 rounded-lg border">
+                              <span className="text-sm text-gray-600">
+                                Page {approvedPage} of {totalPages} ({filteredGroupedArray.length} total groups)
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setApprovedPage((p) => Math.max(1, p - 1))}
+                                  disabled={approvedPage === 1}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Previous
+                                </button>
+                                <button
+                                  onClick={() => setApprovedPage((p) => Math.min(totalPages, p + 1))}
+                                  disabled={approvedPage === totalPages}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
+              </>
+            )}
+
           </div>
         </CardContent>
       </Card>
