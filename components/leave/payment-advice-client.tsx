@@ -966,12 +966,29 @@ We count on your co-operation.`,
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                                 onClick={async () => {
                                   try {
+                                    // Verify signer is selected
+                                    if (!selectedSigner) {
+                                      toast({
+                                        title: "Error",
+                                        description: "Please select an HR Executive signer before approving memos.",
+                                        variant: "destructive",
+                                      })
+                                      return
+                                    }
+
                                     // Approve all memos in this group using secure endpoint
                                     const memoIds = memos.map((m) => m.id)
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ memoIds }),
+                                      body: JSON.stringify({ 
+                                        memoIds,
+                                        selectedSigner: {
+                                          id: selectedSigner.id,
+                                          name: selectedSigner.full_name || selectedSigner.name,
+                                          position: selectedSigner.position,
+                                        },
+                                      }),
                                     })
 
                                     const result = await response.json()

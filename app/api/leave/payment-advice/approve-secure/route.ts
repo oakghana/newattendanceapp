@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { memoIds } = requestBody
+    const { memoIds, selectedSigner } = requestBody
 
     if (!memoIds || !Array.isArray(memoIds) || memoIds.length === 0) {
       return NextResponse.json(
@@ -65,30 +65,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // CRITICAL: Validate that ALL memos exist and are in correct status
-    const { data: memos, error: fetchErr } = await admin
-      .from("leave_payment_memos")
-      .select("id, staff_name, status")
-      .in("id", memoIds)
-
-    if (fetchErr) {
-      console.error("[v0] Error fetching memos for validation:", fetchErr)
+    if (!selectedSigner || !selectedSigner.id) {
       return NextResponse.json(
-        { error: "Failed to validate memos", details: fetchErr.message },
-        { status: 500 }
+        { error: "No HR Executive signer selected", details: "An HR Executive must be selected to approve memos" },
+        { status: 400 }
       )
     }
 
-    // Build signer name early for use in error messages
-    const signerName = `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
+    // Fetch the selected signer's profile to get their name and signature
+    console.log("[v0] Fetching selected signer profile:", selectedSigner.id)
+    const { data: signerProfile, error: signerProfileErr } = await admin
+      .from("user_profiles")
+      .select("id, first_name, last_name, position, role")
+      .eq("id", selectedSigner.id)
+      .single()
+
+    if (signerProfileErr || !signerProfile) {
+      return NextResponse.json(
+        { error: "Selected signer profile not found" },
+        { status: 404 }
+      )
+    }
+
+    // Build signer name from selected signer (NOT current user)
+    const signerName = `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim()
 
     // CRITICAL: Verify signer has a saved signature before allowing approval
-    console.log("[v0] Checking signature for user:", user.id, "- signerName:", signerName)
+    console.log("[v0] Checking signature for selected signer:", selectedSigner.id, "- signerName:", signerName)
     
     const { data: signatureRecords, error: sigError } = await admin
       .from("approval_signature_registry")
       .select("id, signature_data_url, user_id, is_active, workflow_domain")
-      .eq("user_id", user.id)
+      .eq("user_id", selectedSigner.id)
       .eq("is_active", true)
     
     console.log("[v0] Signature query result:", {
@@ -137,10 +145,10 @@ export async function POST(request: NextRequest) {
         
         // Add approver info to memo_body for later use in PDF generation
         memoBody.approver = {
-          id: user.id,
+          id: selectedSigner.id,
           name: signerName,
-          position: userProfile.position || "",
-          role: userProfile.role,
+          position: signerProfile.position || "",
+          role: signerProfile.role,
           approved_at: new Date().toISOString(),
         }
 
@@ -160,29 +168,30 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      // CRITICAL: Also update the leave_plan_requests with the current approver name
+      // CRITICAL: Also update the leave_plan_requests with the selected signer's name
       // This ensures the PDF generation shows the correct signer, not a stale value
       if (leaveRequestIds.length > 0) {
         await admin
           .from("leave_plan_requests")
           .update({
             hr_approver_name: signerName,
-            hr_approver_id: user.id,
+            hr_approver_id: selectedSigner.id,
             hr_approved_at: new Date().toISOString(),
           })
           .in("id", leaveRequestIds)
         
-        console.log("[v0] Updated leave_plan_requests with current approver:", {
+        console.log("[v0] Updated leave_plan_requests with selected signer:", {
           signerName,
-          userId: user.id,
+          signerId: selectedSigner.id,
           requestCount: leaveRequestIds.length,
         })
       }
     }
 
-    console.log("[v0] Memos approved by HR Executive:", {
+    console.log("[v0] Memos approved by selected HR Executive:", {
       signerName,
-      signerRole: userProfile.role,
+      signerId: selectedSigner.id,
+      signerRole: signerProfile.role,
       memoCount: memoIds.length,
       timestamp: new Date().toISOString(),
     })
