@@ -40,14 +40,17 @@ export async function POST(request: NextRequest) {
         // Delete old signature if exists
         const { data: existingSignature } = await admin
           .from("approval_signature_registry")
-          .select("signature_image_url")
+          .select("signature_data_url")
           .eq("user_id", user.id)
           .single()
 
-        if (existingSignature?.signature_image_url) {
+        if (existingSignature?.signature_data_url) {
           try {
-            await del(existingSignature.signature_image_url)
-            console.log("[v0] Old signature deleted from blob")
+            // Only delete if it's a blob URL (not a data URL)
+            if (existingSignature.signature_data_url?.startsWith("https://")) {
+              await del(existingSignature.signature_data_url)
+              console.log("[v0] Old signature deleted from blob")
+            }
           } catch (err) {
             console.warn("[v0] Could not delete old signature:", err)
           }
@@ -84,9 +87,10 @@ export async function POST(request: NextRequest) {
       result = await admin
         .from("approval_signature_registry")
         .update({
-          signature_image_url: signatureUrl,
+          signature_data_url: signatureUrl,
           signature_text: signature_text || null,
-          status: "approved",
+          signature_mode: signatureUrl ? "draw" : "typed",
+          is_active: true,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", user.id)
@@ -98,9 +102,12 @@ export async function POST(request: NextRequest) {
         .from("approval_signature_registry")
         .insert({
           user_id: user.id,
-          signature_image_url: signatureUrl,
+          signature_data_url: signatureUrl,
           signature_text: signature_text || null,
-          status: "approved",
+          signature_mode: signatureUrl ? "draw" : "typed",
+          workflow_domain: "payment_advice",
+          approval_stage: "hr_executive",
+          is_active: true,
         })
         .select()
         .single()
@@ -142,6 +149,7 @@ export async function GET(request: NextRequest) {
       .from("approval_signature_registry")
       .select("*")
       .eq("user_id", user.id)
+      .eq("is_active", true)
       .single()
 
     if (error) {
@@ -158,7 +166,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      signature: signature,
+      signature: {
+        ...signature,
+        // Map signature_data_url to signature_image_url for frontend compatibility
+        signature_image_url: signature.signature_data_url,
+      },
     })
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)

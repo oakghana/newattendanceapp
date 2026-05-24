@@ -23,20 +23,20 @@ export async function GET(
 
     const admin = await createAdminClient()
 
-    // Fetch the user's approved signature
+    // Fetch the user's active signature
     const { data: signature, error } = await admin
       .from("approval_signature_registry")
-      .select("id, signature_image_url, user_id, status, created_at")
+      .select("id, signature_data_url, user_id, is_active, created_at")
       .eq("user_id", userId)
-      .eq("status", "approved")
+      .eq("is_active", true)
       .single()
 
     if (error || !signature) {
-      console.log("[v0] No approved signature found for user:", userId)
+      console.log("[v0] No active signature found for user:", userId)
       return NextResponse.json(
         {
           success: false,
-          message: "No approved signature found for this user",
+          message: "No active signature found for this user",
           signature_image_url: null,
         },
         { status: 404 }
@@ -45,7 +45,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      signature_image_url: signature.signature_image_url,
+      signature_image_url: signature.signature_data_url,
       userId: signature.user_id,
       createdAt: signature.created_at,
     })

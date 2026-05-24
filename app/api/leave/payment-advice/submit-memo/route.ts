@@ -92,13 +92,13 @@ export async function POST(request: NextRequest) {
     let signerSignatureUrl: string | undefined
     const { data: signatureRecord } = await admin
       .from("approval_signature_registry")
-      .select("signature_image_url")
+      .select("signature_data_url")
       .eq("user_id", selectedSigner.id)
-      .eq("status", "approved")
+      .eq("is_active", true)
       .single()
 
-    if (signatureRecord?.signature_image_url) {
-      signerSignatureUrl = signatureRecord.signature_image_url
+    if (signatureRecord?.signature_data_url) {
+      signerSignatureUrl = signatureRecord.signature_data_url
       console.log("[v0] Signer signature found and will be included in memos:", signerSignatureUrl)
     } else {
       console.warn("[v0] Signer has no saved signature - memos will be generated without signature image:", selectedSigner.id)

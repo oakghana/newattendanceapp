@@ -85,17 +85,17 @@ export async function POST(request: NextRequest) {
     // CRITICAL: Verify signer has a saved signature before allowing approval
     const { data: signatureRecord, error: sigError } = await admin
       .from("approval_signature_registry")
-      .select("id, signature_image_url")
+      .select("id, signature_data_url")
       .eq("user_id", user.id)
-      .eq("status", "approved")
+      .eq("is_active", true)
       .single()
 
-    if (sigError || !signatureRecord || !signatureRecord.signature_image_url) {
+    if (sigError || !signatureRecord || !signatureRecord.signature_data_url) {
       console.warn("[v0] Signature validation failed for user:", {
         userId: user.id,
         userName: signerName,
         sigError: sigError?.message,
-        hasSignature: !!signatureRecord?.signature_image_url,
+        hasSignature: !!signatureRecord?.signature_data_url,
       })
       return NextResponse.json(
         { 
