@@ -73,6 +73,11 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
+  
+  // Pagination states
+  const [pendingPage, setPendingPage] = useState(1)
+  const [approvedPage, setApprovedPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
 
   // Load HR executives on mount
   useEffect(() => {
@@ -863,7 +868,14 @@ We count on your co-operation.`,
                         return { key, month, category, memos }
                       }).sort((a, b) => b.month.localeCompare(a.month))
 
-                      return groupedArray.map(({ key, month, category, memos }) => (
+                      // Pagination for grouped items
+                      const totalPages = Math.ceil(groupedArray.length / ITEMS_PER_PAGE)
+                      const startIdx = (pendingPage - 1) * ITEMS_PER_PAGE
+                      const paginatedGroups = groupedArray.slice(startIdx, startIdx + ITEMS_PER_PAGE)
+
+                      return (
+                        <>
+                          {paginatedGroups.map(({ key, month, category, memos }) => (
                         <Card key={key} className="border-l-4 border-l-orange-500 shadow-sm">
                           <CardHeader className="pb-2">
                             <div className="flex justify-between items-center">
@@ -1005,6 +1017,34 @@ We count on your co-operation.`,
                           </CardContent>
                         </Card>
                       ))
+                          }
+                          
+                          {/* Pagination for pending memos */}
+                          {totalPages > 1 && (
+                            <div className="flex justify-between items-center mt-6 px-4 py-3 bg-gray-50 rounded-lg border">
+                              <span className="text-sm text-gray-600">
+                                Page {pendingPage} of {totalPages} ({groupedArray.length} total groups)
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setPendingPage((p) => Math.max(1, p - 1))}
+                                  disabled={pendingPage === 1}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Previous
+                                </button>
+                                <button
+                                  onClick={() => setPendingPage((p) => Math.min(totalPages, p + 1))}
+                                  disabled={pendingPage === totalPages}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
                     })()}
                   </div>
                 )}
@@ -1026,7 +1066,10 @@ We count on your co-operation.`,
                   />
                   {approvedFilterMonth && (
                     <button
-                      onClick={() => setApprovedFilterMonth("")}
+                      onClick={() => {
+                        setApprovedFilterMonth("")
+                        setApprovedPage(1)
+                      }}
                       className="text-xs text-gray-500 hover:text-gray-700 underline"
                     >
                       Clear
@@ -1075,7 +1118,14 @@ We count on your co-operation.`,
                         ? groupedArray.filter(({ month }) => month === approvedFilterMonth)
                         : groupedArray
 
-                      return filteredGroupedArray.map(({ key, month, category, memos }) => (
+                      // Pagination for approved memos
+                      const totalPages = Math.ceil(filteredGroupedArray.length / ITEMS_PER_PAGE)
+                      const startIdx = (approvedPage - 1) * ITEMS_PER_PAGE
+                      const paginatedGroups = filteredGroupedArray.slice(startIdx, startIdx + ITEMS_PER_PAGE)
+
+                      return (
+                        <>
+                          {paginatedGroups.map(({ key, month, category, memos }) => (
                         <Card key={key} className="border-l-4 border-l-green-500 shadow-sm">
                           <CardHeader className="pb-2">
                             <div className="flex justify-between items-center">
@@ -1210,6 +1260,34 @@ We count on your co-operation.`,
                           </CardContent>
                         </Card>
                       ))
+                          }
+                          
+                          {/* Pagination for approved memos */}
+                          {totalPages > 1 && (
+                            <div className="flex justify-between items-center mt-6 px-4 py-3 bg-gray-50 rounded-lg border">
+                              <span className="text-sm text-gray-600">
+                                Page {approvedPage} of {totalPages} ({filteredGroupedArray.length} total groups)
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setApprovedPage((p) => Math.max(1, p - 1))}
+                                  disabled={approvedPage === 1}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Previous
+                                </button>
+                                <button
+                                  onClick={() => setApprovedPage((p) => Math.min(totalPages, p + 1))}
+                                  disabled={approvedPage === totalPages}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
                     })()}
                   </div>
                 )}

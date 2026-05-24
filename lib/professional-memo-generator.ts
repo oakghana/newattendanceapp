@@ -129,26 +129,30 @@ async function generateMainMemo(
   doc.line(margin, yPos, pageWidth - margin, yPos)
   yPos += 10
 
-  // TO, FROM, SUBJECT
+  // TO, FROM, SUBJECT - with professional alignment
+  const labelWidth = 28 // Width reserved for labels
+  const labelX = margin
+  const contentX = margin + labelWidth
+  
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
-  doc.text("TO:", margin, yPos)
+  doc.text("TO:", labelX, yPos)
   doc.setFont("helvetica", "normal")
-  doc.text(memoData.to, margin + 25, yPos)
+  doc.text(memoData.to, contentX, yPos)
   yPos += 7
 
   doc.setFont("helvetica", "bold")
-  doc.text("FROM:", margin, yPos)
+  doc.text("FROM:", labelX, yPos)
   doc.setFont("helvetica", "normal")
-  doc.text(memoData.from, margin + 25, yPos)
+  doc.text(memoData.from, contentX, yPos)
   yPos += 7
 
   doc.setFont("helvetica", "bold")
-  doc.text("SUBJECT:", margin, yPos)
+  doc.text("SUBJECT:", labelX, yPos)
   doc.setFont("helvetica", "normal")
-  const subjectLines = doc.splitTextToSize(memoData.subject, contentWidth - 35)
+  const subjectLines = doc.splitTextToSize(memoData.subject, contentWidth - labelWidth - 5)
   subjectLines.forEach((line: string, idx: number) => {
-    doc.text(line, margin + 30, yPos + idx * 5)
+    doc.text(line, contentX, yPos + idx * 5)
   })
   yPos += subjectLines.length * 5 + 5
 
@@ -157,11 +161,18 @@ async function generateMainMemo(
   doc.line(margin, yPos, pageWidth - margin, yPos)
   yPos += 8
 
-  // Main body text
+  // Main body text - only the opening part, NOT the closing
   doc.setFont("helvetica", "normal")
   doc.setFontSize(10)
   
-  let bodyText = memoData.body
+  // Extract only the opening paragraph from body (before "We count on")
+  let openingText = memoData.body
+  const closingIndex = memoData.body.indexOf("We count on")
+  if (closingIndex > 0) {
+    openingText = memoData.body.substring(0, closingIndex).trim()
+  }
+  
+  let bodyText = openingText
   // If staff > 6, add attachment note
   if (hasAttachment && memoData.staffList) {
     bodyText += `\n\nPlease find attached a list of ${memoData.staffList.length} staff members scheduled for leave.`
@@ -222,6 +233,34 @@ async function generateMainMemo(
     })
 
     yPos = (doc as any).lastAutoTable.finalY + 10
+  }
+
+  // CLOSING TEXT - AFTER THE TABLE
+  yPos += 5
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  
+  // Extract closing paragraph from body (after first occurrence of "We count on")
+  let closingText = ""
+  if (closingIndex > 0) {
+    closingText = memoData.body.substring(closingIndex).trim()
+  }
+  
+  if (closingText) {
+    if (yPos > pageHeight - margin - 50) {
+      doc.addPage()
+      yPos = margin
+    }
+    
+    const closingLines = doc.splitTextToSize(closingText, contentWidth)
+    closingLines.forEach((line: string, idx: number) => {
+      if (yPos > pageHeight - margin - 50) {
+        doc.addPage()
+        yPos = margin
+      }
+      doc.text(line, margin, yPos)
+      yPos += 5
+    })
   }
 
   // Spacing before signature
