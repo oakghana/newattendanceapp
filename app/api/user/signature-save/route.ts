@@ -98,13 +98,15 @@ export async function POST(request: NextRequest) {
         .select()
         .single()
     } else {
-      // Create new signature record - only insert required fields
+      // Create new signature record - include required fields
       result = await admin
         .from("approval_signature_registry")
         .insert({
           user_id: user.id,
           signature_data_url: signatureUrl,
           is_active: true,
+          workflow_domain: "payment_advice",
+          approval_stage: "hr_executive",
         })
         .select()
         .single()
