@@ -94,9 +94,47 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [signatureMode, setSignatureMode] = useState<"typed" | "draw" | "upload">("typed")
   const [signatureText, setSignatureText] = useState("")
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [savedSignatureUrl, setSavedSignatureUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
+  const [isLoadingSignature, setIsLoadingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const searchParams = useSearchParams()
+
+  // Load saved signature when component mounts or signature tab opens
+  useEffect(() => {
+    if (activeTab === "signature") {
+      loadSavedSignature()
+    }
+  }, [activeTab])
+
+  const loadSavedSignature = async () => {
+    try {
+      setIsLoadingSignature(true)
+      console.log("[v0] Loading saved signature...")
+      const response = await fetch("/api/user/signature-save", {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to load signature")
+      }
+
+      const { signature } = await response.json()
+      if (signature?.signature_image_url) {
+        setSavedSignatureUrl(signature.signature_image_url)
+        console.log("[v0] Saved signature loaded:", signature.signature_image_url)
+      } else {
+        setSavedSignatureUrl(null)
+        console.log("[v0] No saved signature found")
+      }
+    } catch (err) {
+      console.warn("[v0] Could not load saved signature:", err)
+      setSavedSignatureUrl(null)
+    } finally {
+      setIsLoadingSignature(false)
+    }
+  }
 
   // if redirected with forceChange flag, open password form automatically
   // or if requesting signature tab, open it
@@ -743,6 +781,35 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 </CardDescription>
               </CardHeader>
             <CardContent className="space-y-6">
+              {/* Display Saved Signature */}
+              {isLoadingSignature ? (
+                <div className="p-4 bg-blue-50 rounded-lg text-sm text-muted-foreground border border-blue-200">
+                  Loading saved signature...
+                </div>
+              ) : savedSignatureUrl ? (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-green-900">✓ Your Saved Signature</Label>
+                  <div className="p-4 bg-white border-2 border-green-300 rounded-lg">
+                    <img 
+                      src={savedSignatureUrl} 
+                      alt="Your saved signature" 
+                      className="max-h-20 max-w-full object-contain"
+                      onError={(e) => {
+                        console.warn("[v0] Failed to load saved signature image")
+                        setSavedSignatureUrl(null)
+                      }}
+                    />
+                    <p className="text-xs text-green-700 mt-2 font-medium">Your signature is saved and ready to use for approvals</p>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Create New Signature Section */}
+              {savedSignatureUrl && (
+                <div className="border-t border-green-200 pt-6">
+                  <p className="text-sm text-muted-foreground mb-4">Create a new signature to replace your current one:</p>
+                </div>
+              )}
               {/* Signature Mode Selection */}
               <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
                 <button
@@ -828,24 +895,14 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
 
                     setIsSavingSignature(true)
                     try {
-                      // Determine approval stage based on user role
-                      let approvalStage = "director_hr"
-                      if (["department_head", "regional_manager"].includes(initialUser.role)) {
-                        approvalStage = "hod"
-                      }
-                      
                       const signaturePayload = {
-                        action: "upsert_signature",
-                        workflow_domain: "loan",
-                        approval_stage: approvalStage,
-                        signature_mode: signatureMode,
                         signature_text: signatureMode === "typed" ? signatureText : null,
                         signature_data_url: signatureMode !== "typed" ? signatureDataUrl : null,
                       }
                       
-                      console.log("[v0] Saving signature via API with payload:", signaturePayload)
+                      console.log("[v0] Saving signature via new API endpoint")
                       
-                      const response = await fetch("/api/workflow/registry", {
+                      const response = await fetch("/api/user/signature-save", {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
@@ -863,6 +920,9 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
                       setSignatureText("")
                       setSignatureDataUrl(null)
+                      
+                      // Reload the saved signature to display it
+                      loadSavedSignature()
                     } catch (err) {
                       const errorMsg = err instanceof Error ? err.message : String(err)
                       console.error("[v0] Error saving signature:", errorMsg)
