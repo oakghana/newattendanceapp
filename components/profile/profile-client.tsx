@@ -815,8 +815,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                         },
                         body: JSON.stringify({
                           action: "upsert_signature",
-                          workflow_domain: "payment_advice",
-                          approval_stage: "hr_executive",
+                          workflow_domain: "loan",
+                          approval_stage: "director_hr",
                           signature_mode: signatureMode,
                           signature_data_url: signatureDataUrl,
                         }),
