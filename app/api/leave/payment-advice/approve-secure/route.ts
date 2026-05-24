@@ -121,13 +121,16 @@ export async function POST(request: NextRequest) {
 
     // Update memos with approval and store approver info in memo_body
     
-    // Fetch all memos to update their memo_body with approver info
+    // Fetch all memos to update their memo_body with approver info, ALSO get the leave_plan_request_id
     const { data: memosToUpdate } = await admin
       .from("leave_payment_memos")
-      .select("id, memo_body")
+      .select("id, memo_body, leave_plan_request_id")
       .in("id", memoIds)
 
     if (memosToUpdate && memosToUpdate.length > 0) {
+      // Collect all leave_plan_request_ids to update
+      const leaveRequestIds: string[] = []
+      
       // Update each memo with approver information
       for (const memo of memosToUpdate) {
         const memoBody = typeof memo.memo_body === 'string' ? JSON.parse(memo.memo_body) : memo.memo_body
@@ -150,6 +153,30 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq("id", memo.id)
+        
+        // Track the leave_plan_request_id so we can update it too
+        if (memo.leave_plan_request_id) {
+          leaveRequestIds.push(memo.leave_plan_request_id)
+        }
+      }
+      
+      // CRITICAL: Also update the leave_plan_requests with the current approver name
+      // This ensures the PDF generation shows the correct signer, not a stale value
+      if (leaveRequestIds.length > 0) {
+        await admin
+          .from("leave_plan_requests")
+          .update({
+            hr_approver_name: signerName,
+            hr_approver_id: user.id,
+            hr_approved_at: new Date().toISOString(),
+          })
+          .in("id", leaveRequestIds)
+        
+        console.log("[v0] Updated leave_plan_requests with current approver:", {
+          signerName,
+          userId: user.id,
+          requestCount: leaveRequestIds.length,
+        })
       }
     }
 
