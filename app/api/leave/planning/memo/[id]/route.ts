@@ -831,11 +831,33 @@ export async function GET(
     // Add signature image if available (NO border line fallback)
     if (finalSignatureUrl && finalSignatureUrl.length > 10) {
       try {
-        const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
-        sigImgY = y
-        doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
-        y += 20
-        console.log("[v0] Added signature image to PDF")
+        // Handle both base64 data URLs and blob URLs
+        if (finalSignatureUrl.startsWith("data:")) {
+          // Base64 data URL
+          const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
+          sigImgY = y
+          doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
+          y += 20
+          console.log("[v0] Added base64 signature image to PDF")
+        } else if (finalSignatureUrl.startsWith("http")) {
+          // Blob URL - fetch and convert to base64
+          try {
+            const response = await fetch(finalSignatureUrl)
+            if (response.ok) {
+              const blob = await response.blob()
+              const arrayBuffer = await blob.arrayBuffer()
+              const base64 = Buffer.from(arrayBuffer).toString("base64")
+              sigImgY = y
+              doc.addImage(`data:image/png;base64,${base64}`, "PNG", marginLeft, y, 50, 18)
+              y += 20
+              console.log("[v0] Added blob URL signature image to PDF")
+            } else {
+              console.warn("[v0] Failed to fetch blob signature URL:", response.status)
+            }
+          } catch (blobErr) {
+            console.warn("[v0] Error fetching blob signature:", blobErr)
+          }
+        }
       } catch (err) {
         console.warn("[v0] Failed to add signature image:", err)
       }
