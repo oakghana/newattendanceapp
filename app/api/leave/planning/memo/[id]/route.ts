@@ -741,72 +741,58 @@ export async function GET(
     y += closingLines.length * 5.5 + 12
 
     // ── Signature block ───────────────────────────────────────────────
-    const requestSigMode = String(lr.hr_signature_mode || "").trim().toLowerCase()
-    const requestSigText = String(lr.hr_signature_text || "").trim()
-    const requestSigDataUrl = String(lr.hr_signature_data_url || "").trim()
+    // CRITICAL: Use memoBodyApprover if available (selected signer from memo approval)
+    // Otherwise fall back to hrApproverProfile (from leave_plan_requests)
+    
+    let signerNameForMemo = ""
+    let signerPositionForMemo = ""
+    
+    if (memoBodyApprover?.name) {
+      signerNameForMemo = memoBodyApprover.name
+      signerPositionForMemo = memoBodyApprover.position || "HR EXECUTIVE"
+    } else if (hrApproverProfile) {
+      signerNameForMemo = fmtName(hrApproverProfile)
+      signerPositionForMemo = String((hrApproverProfile as any)?.position || "HR Officer")
+    } else {
+      // Last resort: parse stale data
+      signerNameForMemo = (lr.hr_approver_name || "HR OFFICER").split(" ")[0] + " " + (lr.hr_approver_name || "HR OFFICER").split(" ").slice(1).join(" ")
+      signerPositionForMemo = String((hrApproverProfile as any)?.position || "HUMAN RESOURCES")
+    }
+
+    // Get signature: prefer registry data (which has the selected signer's signature)
     const registrySigMode = String((hrSignatureData as any)?.signature_mode || "").trim().toLowerCase()
     const registrySigText = String((hrSignatureData as any)?.signature_text || "").trim()
     const registrySigDataUrl = String((hrSignatureData as any)?.signature_data_url || "").trim()
 
-    const requestHasImageSignature =
-      (requestSigMode === "draw" || requestSigMode === "upload") && requestSigDataUrl.length > 0
     const registryHasImageSignature =
       (registrySigMode === "draw" || registrySigMode === "upload") && registrySigDataUrl.length > 0
 
-    const sigMode = requestHasImageSignature
-      ? requestSigMode
-      : registryHasImageSignature
-        ? registrySigMode
-        : (requestSigMode || registrySigMode || "typed")
-
-    const sigDataUrl = requestHasImageSignature
-      ? requestSigDataUrl
-      : registryHasImageSignature
-        ? registrySigDataUrl
-        : ""
-
-    const sigText = sigMode === "typed"
-      ? (requestSigText || registrySigText)
-      : ""
-    const hrName    = fmtName(hrApproverProfile || {
-      first_name: (lr.hr_approver_name || "").split(" ")[0],
-      last_name:  (lr.hr_approver_name || "").split(" ").slice(1).join(" "),
-    })
-    const hrPosition = String((hrApproverProfile as any)?.position || "HR Officer")
-
     let sigImgY = -1
-    if (sigMode !== "typed" && sigDataUrl) {
+    
+    // Add signature image if available
+    if (registryHasImageSignature && registrySigDataUrl) {
       try {
-        const b64 = sigDataUrl.replace(/^data:image\/\w+;base64,/, "")
+        const b64 = registrySigDataUrl.replace(/^data:image\/\w+;base64,/, "")
         sigImgY = y
         doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
         y += 20
-      } catch {
-        doc.setFont("times", "italic")
-        doc.setTextColor(20, 20, 120)
-        doc.text(sigText || hrName, marginLeft, y)
-        doc.setTextColor(0, 0, 0)
-        y += 7
+      } catch (err) {
+        console.warn("[v0] Failed to add signature image:", err)
+        // Fall through to text display
       }
-    } else {
-      doc.setFont("times", "italic")
-      doc.setFontSize(11)
-      doc.setTextColor(20, 20, 120)
-      doc.text(sigText || hrName, marginLeft, y)
-      doc.setTextColor(0, 0, 0)
-      y += 7
     }
-
+    
+    // Add signer name (ONLY name and position, no typed signature text, no underlines)
+    doc.setFont("times", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(0, 0, 0)
+    doc.text(signerNameForMemo.toUpperCase(), marginLeft, y)
+    y += 5
+    
+    // Add position
     doc.setFont("times", "normal")
     doc.setFontSize(9.5)
-    doc.setTextColor(0, 0, 0)
-    doc.text("_".repeat(35), marginLeft, y)
-    y += 5.5
-    doc.setFont("times", "bold")
-    doc.text((hrName || "HR OFFICER").toUpperCase(), marginLeft, y)
-    y += 5
-    doc.setFont("times", "normal")
-    doc.text((hrPosition || "HUMAN RESOURCES").toUpperCase(), marginLeft, y)
+    doc.text(signerPositionForMemo.toUpperCase(), marginLeft, y)
     y += 5
     doc.text("FOR: MANAGING DIRECTOR", marginLeft, y)
     y += 14
