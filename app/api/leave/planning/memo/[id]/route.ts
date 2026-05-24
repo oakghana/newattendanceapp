@@ -462,23 +462,44 @@ export async function GET(
     }
 
     // Resolve HR approver profile + signature
-    // PRIORITY: selectedSignerFromMemo > memoBodyApprover > leave_plan_requests.hr_approver_id
-    // The selectedSigner is the HR Executive selected during memo submission
-    const signerToUse = selectedSignerFromMemo || memoBodyApprover
+    // PRIORITY for leave approval memos: leave_plan_requests.hr_approver_id
+    // PRIORITY for payment advice memos: selectedSigner from payment memo memo_body
     
-    // Use selectedSigner ID from memo, or fall back to leave_plan_requests.hr_approver_id for leave approval memos
-    let hrApproverId = signerToUse?.id || String((leaveRequest as any).hr_approver_id || "")
+    let signerToUse: any = null
+    
+    // For payment advice memos: use selectedSigner from memo_body (highest priority)
+    if (paymentMemo && selectedSignerFromMemo) {
+      signerToUse = selectedSignerFromMemo
+      console.log("[v0] Using selectedSigner from payment memo:", selectedSignerFromMemo?.name)
+    }
+    // For leave approval memos: use hr_approver_id from leave_plan_requests
+    else if (!paymentMemo) {
+      const hrApproverId = String((leaveRequest as any).hr_approver_id || "")
+      if (hrApproverId) {
+        signerToUse = { id: hrApproverId }
+        console.log("[v0] Using hr_approver_id from leave request:", hrApproverId)
+      }
+    }
+    // Last resort: use memoBodyApprover if available
+    else if (memoBodyApprover) {
+      signerToUse = memoBodyApprover
+      console.log("[v0] Using approver from memo_body:", memoBodyApprover?.name)
+    }
+    
+    let hrApproverId = signerToUse?.id || ""
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
     
     console.log("[v0] Memo[id] signer resolution:", {
+      memoType: paymentMemo ? "payment_advice" : "leave_approval",
+      hasPaymentMemo: !!paymentMemo,
       hasSelectedSigner: !!selectedSignerFromMemo,
       selectedSignerName: selectedSignerFromMemo?.name,
       hasApprover: !!memoBodyApprover,
       approverName: memoBodyApprover?.name,
       signerToUse: signerToUse?.name,
       hrApproverId,
-      isPaymentMemo: !!paymentMemo,
+      leaveRequestHrApproverId: (leaveRequest as any).hr_approver_id,
     })
     
     if (hrApproverId) {
