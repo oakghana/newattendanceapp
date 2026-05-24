@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { put, del } from "@vercel/blob"
 
 /**
  * POST: Save user signature to approval_signature_registry
@@ -29,39 +30,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Upload signature image to blob storage if provided
+    // Upload signature image to Vercel Blob if provided
     let signatureUrl: string | null = null
     if (signature_data_url) {
-      // Convert data URL to blob and upload
       try {
         const base64Data = signature_data_url.split(",")[1]
         const binaryData = Buffer.from(base64Data, "base64")
         
-        // Use blob storage for signature images
+        // Delete old signature if exists
+        const { data: existingSignature } = await admin
+          .from("approval_signature_registry")
+          .select("signature_image_url")
+          .eq("user_id", user.id)
+          .single()
+
+        if (existingSignature?.signature_image_url) {
+          try {
+            await del(existingSignature.signature_image_url)
+            console.log("[v0] Old signature deleted from blob")
+          } catch (err) {
+            console.warn("[v0] Could not delete old signature:", err)
+          }
+        }
+
+        // Upload new signature to Vercel Blob
         const timestamp = Date.now()
         const fileName = `signatures/${user.id}/${timestamp}.png`
         
-        const { data: uploadedFile, error: uploadError } = await admin
-          .storage
-          .from("signatures")
-          .upload(fileName, binaryData, {
-            contentType: "image/png",
-            upsert: true,
-          })
+        const blob = await put(fileName, binaryData, {
+          contentType: "image/png",
+          access: "public",
+        })
 
-        if (uploadError) {
-          console.warn("[v0] Signature upload warning:", uploadError)
-        } else {
-          const { data: publicUrl } = admin
-            .storage
-            .from("signatures")
-            .getPublicUrl(fileName)
-          signatureUrl = publicUrl.publicUrl
-          console.log("[v0] Signature uploaded successfully:", signatureUrl)
-        }
+        signatureUrl = blob.url
+        console.log("[v0] Signature uploaded to Blob successfully:", signatureUrl)
       } catch (err) {
-        console.warn("[v0] Could not upload signature image, will store data URL instead:", err)
-        signatureUrl = signature_data_url
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        console.error("[v0] Error uploading signature to Blob:", errorMsg)
+        throw new Error(`Failed to upload signature: ${errorMsg}`)
       }
     }
 
@@ -104,7 +110,7 @@ export async function POST(request: NextRequest) {
       throw result.error
     }
 
-    console.log("[v0] Signature saved successfully:", result.data)
+    console.log("[v0] Signature saved successfully to database:", result.data)
 
     return NextResponse.json({
       success: true,
