@@ -806,22 +806,24 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
 
                     setIsSavingSignature(true)
                     try {
-                      const signaturePayload = {
-                        signature_data_url: signatureDataUrl,
-                      }
+                      console.log("[v0] Saving signature via workflow/registry endpoint")
                       
-                      console.log("[v0] Saving signature via API endpoint")
-                      
-                      const response = await fetch("/api/user/signature-save", {
+                      const response = await fetch("/api/workflow/registry", {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
                         },
-                        body: JSON.stringify(signaturePayload),
+                        body: JSON.stringify({
+                          action: "upsert_signature",
+                          workflow_domain: "payment_advice",
+                          approval_stage: "hr_executive",
+                          signature_mode: signatureMode,
+                          signature_data_url: signatureDataUrl,
+                        }),
                       })
 
                       const result = await response.json()
-                      console.log("[v0] API response status:", response.status, "data:", result)
+                      console.log("[v0] API response:", result)
 
                       if (!response.ok) {
                         throw new Error(result.error || `Failed to save signature: ${response.statusText}`)
