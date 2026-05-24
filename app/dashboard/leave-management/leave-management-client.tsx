@@ -2562,9 +2562,10 @@ export function LeaveManagementClient({
                         </div>
                       ) : (
                         paginatedMemos.map((memo: any) => {
-                          // A memo is signed if it has a memo_url (downloadable) OR has approval/signature data
-                          const isSigned = memo.memo_url || memo.approver_signature || memo.approval_date || memo.hr_signature_image_url
-                          const isYetToSign = !isSigned
+                          // All memos from the API are already approved (filtered by status at API level)
+                          // Check if they have been signed/approved by HR
+                          const hasHrApproval = memo.hr_approved_at || memo.hr_approver_name || memo.hr_signature_image_url
+                          const approvalStatus = hasHrApproval ? "Signed" : "Approved"
                           
                           return (
                           <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
@@ -2572,14 +2573,14 @@ export function LeaveManagementClient({
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-3 mb-1">
                                   <p className="font-semibold text-slate-900">{memo.staff_name}</p>
-                                  {isYetToSign && (
-                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800">
-                                      Yet to Sign
+                                  {hasHrApproval && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                                      ✓ Approved & Signed
                                     </span>
                                   )}
-                                  {isSigned && (
-                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
-                                      ✓ Signed
+                                  {!hasHrApproval && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
+                                      ✓ Approved
                                     </span>
                                   )}
                                 </div>
@@ -2587,8 +2588,8 @@ export function LeaveManagementClient({
                                 <p className="text-sm text-slate-700 mt-2">{memo.leave_type} Leave</p>
                                 <p className="text-xs text-slate-600 mt-1">{new Date(memo.start_date).toLocaleDateString()} to {new Date(memo.end_date).toLocaleDateString()}</p>
                                 <p className="text-xs text-slate-500 mt-1">Location: {memo.location}</p>
-                                {isYetToSign && memo.assigned_to && (
-                                  <p className="text-xs text-amber-600 mt-2 font-medium">Awaiting approval from: {memo.assigned_to}</p>
+                                {hasHrApproval && memo.hr_approver_name && (
+                                  <p className="text-xs text-green-600 mt-2 font-medium">Approved by: {memo.hr_approver_name}</p>
                                 )}
                               </div>
                               <div className="flex gap-2 flex-shrink-0">

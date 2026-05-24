@@ -715,88 +715,26 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
   }
 
-  // Download an approved memo as professional PDF with QCC logo
+  // Download an approved memo using server-side API for professional rendering with real signatures
   const downloadApprovedMemo = async (memo: any) => {
     try {
-      const currentDate = new Date()
-      const dateStr = `${currentDate.getDate()}-${new Date().toLocaleString('default', { month: 'short' })}-${currentDate.getFullYear()}`
-
-      // Parse memo_body JSON to get stored staff details
-      let memoBodyParsed: any = {}
-      try {
-        memoBodyParsed = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
-      } catch {
-        memoBodyParsed = {}
+      // Use the server-side memo[id] API route which provides:
+      // - Professional jsPDF rendering with proper formatting
+      // - Real signer information from leave_payment_memos
+      // - Actual signature images from approval registry
+      // - Consistent formatting with leave approval memos
+      
+      const memoId = memo.id || memo.leave_plan_request_id
+      if (!memoId) {
+        toast({ title: "Error", description: "No memo ID found", variant: "destructive" })
+        return
       }
 
-      // Use selected HR Executive as signatory; prefer memo_body.selectedSigner
-      const storedSigner = memoBodyParsed.selectedSigner || memoBodyParsed.approver || {}
-      const signatoryName = (storedSigner.name || memo.hr_leave_office_name || "HR EXECUTIVE").toUpperCase()
-      const signatoryTitle = (storedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
-
-      // Build clean subject from the stored category/month — avoid duplication
-      const category = memoBodyParsed.category || "Staff"
-      const month = memoBodyParsed.month || ""
-      // Format month label: "2026-07" -> "JULY 2026"
-      let monthLabel = month
-      if (/^\d{4}-\d{2}$/.test(month)) {
-        const [yr, mo] = month.split("-")
-        monthLabel = `${new Date(Number(yr), Number(mo) - 1).toLocaleString("default", { month: "long" }).toUpperCase()} ${yr}`
-      }
-      // Map category to proper staff rank label
-      const rankLabel =
-        category.toLowerCase().includes("junior") ? "JUNIOR STAFF" :
-        category.toLowerCase().includes("senior") ? "SENIOR STAFF" :
-        category.toLowerCase().includes("manage") ? "MANAGEMENT STAFF" :
-        `${category.toUpperCase()} STAFF`
-
-      const subject = `PAYMENT OF LEAVE ALLOWANCE (${rankLabel}) – ${monthLabel}`
-
-      // Get real position and department from stored memo_body
-      const staffPosition = memoBodyParsed.staff_position || memo.staff_position || ""
-      const staffDepartment = memoBodyParsed.staff_department || memo.staff_department || ""
+      // Open the server-side generated PDF
+      // This route handles both leave approval and payment advice memos professionally
+      window.open(`/api/leave/planning/memo/${memoId}`, "_blank")
       
-      // Use the signatory's actual position as the FROM field
-      const fromLabel = signatoryTitle
-
-      // Prepare memo data for professional template
-      const memoData = {
-        to: "DEPUTY DIRECTOR, FINANCE",
-        from: fromLabel,
-        subject,
-        date: dateStr,
-        refNo: `QCC/${memoBodyParsed.referenceNumber || ""}`,
-        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual vacation leave in ${monthLabel}.
-
-We, therefore, kindly request you to pay their leave allowances accordingly.
-We count on your co-operation.`,
-        signatory: {
-          name: signatoryName,
-          title: signatoryTitle,
-        },
-        ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
-        memoType: "payment" as const,
-        staffList: [
-          {
-            no: 1,
-            name: memo.staff_name || "N/A",
-            employeeId: memo.staff_number || "N/A",
-            position: staffPosition || "N/A",
-            department: staffDepartment || "N/A",
-            leaveDate: memo.leave_period_start
-              ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-              : "N/A",
-          },
-        ],
-      }
-
-      // Generate PDF
-      const pdf = await generateProfessionalMemoPDF(memoData, `payment-advice-${memo.staff_name}.pdf`)
-      
-      // Download
-      await downloadMemoPDF(pdf, `payment-advice-${memo.staff_name}-${format(new Date(), "yyyyMMdd")}.pdf`)
-      
-      toast({ title: "Success", description: "Memo downloaded successfully" })
+      toast({ title: "Success", description: "Memo downloading..." })
     } catch (err) {
       console.error("[v0] Error downloading memo:", err)
       toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
