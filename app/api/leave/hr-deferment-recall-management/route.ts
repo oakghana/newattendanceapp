@@ -1,10 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextResponse, NextRequest } from "next/server"
+import { generateDefermentMemo, generateRecallMemo } from "@/lib/deferment-recall-memo-service"
+import { distributeMemoToRecipients } from "@/lib/memo-distribution-service"
 
 /**
  * HR-exclusive endpoint for managing all deferment and recall requests
  * Only HR executives can access all pending requests for approval
  * This endpoint handles both viewing and approving requests
+ * Auto-generates professional memos and distributes to staff/HOD on approval
  */
 
 export async function GET(request: NextRequest) {
@@ -167,8 +170,93 @@ export async function POST(request: NextRequest) {
 
       // If approved, auto-generate deferment memo
       if (decision === "approved" && updated) {
-        console.log("[v0] Auto-generating deferment memo for:", requestId)
-        // TODO: Call memo generation service
+        try {
+          console.log("[v0] Auto-generating deferment memo for:", requestId)
+          
+          // Get full deferment request data with staff info
+          const { data: fullDeferment } = await admin
+            .from("leave_deferment_requests")
+            .select(`
+              id,
+              user_id,
+              leave_plan_request_id,
+              deferment_start_date,
+              deferment_end_date,
+              reason,
+              leave_plan_requests!inner(
+                user_id,
+                leave_type_key,
+                user_profiles:user_id(
+                  first_name,
+                  last_name,
+                  email,
+                  employee_id,
+                  position,
+                  departments(name)
+                )
+              )
+            `)
+            .eq("id", requestId)
+            .single()
+
+          if (fullDeferment) {
+            // Generate memo using deferment-recall-memo-service
+            const memoData = await generateDefermentMemo({
+              staffName: fullDeferment.leave_plan_requests?.user_profiles?.first_name + " " + fullDeferment.leave_plan_requests?.user_profiles?.last_name,
+              defermentStart: fullDeferment.deferment_start_date,
+              defermentEnd: fullDeferment.deferment_end_date,
+              reason: fullDeferment.reason,
+            })
+
+            // Get HR signer info and signature
+            const { data: signerProfile } = await admin
+              .from("user_profiles")
+              .select("id, first_name, last_name, position")
+              .eq("id", approverUserId)
+              .single()
+
+            const { data: signerSignature } = await admin
+              .from("approval_signature_registry")
+              .select("signature_image_url, signature_data_url")
+              .eq("user_id", approverUserId)
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .single()
+
+            // Create deferment memo record
+            const { data: createdMemo, error: memoErr } = await admin
+              .from("deferment_memos")
+              .insert({
+                deferment_request_id: requestId,
+                staff_id: fullDeferment.user_id,
+                hr_signer_id: approverUserId,
+                memo_body: JSON.stringify(memoData),
+                signer_name: `${signerProfile?.first_name} ${signerProfile?.last_name}`,
+                signer_position: signerProfile?.position || "HR EXECUTIVE",
+                signature_image_url: signerSignature?.signature_image_url,
+                status: "pending"
+              })
+              .select()
+              .single()
+
+            if (!memoErr && createdMemo) {
+              // Distribute memo to staff and HOD
+              await distributeMemoToRecipients({
+                memoType: "deferment",
+                memoId: createdMemo.id,
+                staffId: fullDeferment.user_id,
+                hodId: updated.hod_reviewed_by, // HOD who reviewed it
+                memoData,
+                signatureImageUrl: signerSignature?.signature_image_url
+              })
+
+              console.log("[v0] Deferment memo generated and distributed successfully")
+            }
+          }
+        } catch (memoError) {
+          console.error("[v0] Error generating/distributing deferment memo:", memoError)
+          // Don't fail the entire request if memo generation fails
+        }
       }
 
       return NextResponse.json({
@@ -200,8 +288,90 @@ export async function POST(request: NextRequest) {
 
       // If approved, auto-generate recall memo
       if (decision === "approved" && updated) {
-        console.log("[v0] Auto-generating recall memo for:", requestId)
-        // TODO: Call memo generation service
+        try {
+          console.log("[v0] Auto-generating recall memo for:", requestId)
+          
+          // Get full recall request data with staff info
+          const { data: fullRecall } = await admin
+            .from("leave_recall_requests")
+            .select(`
+              id,
+              staff_user_id,
+              leave_plan_request_id,
+              recall_date,
+              recall_reason,
+              leave_plan_requests!inner(
+                user_id,
+                leave_type_key,
+                user_profiles:user_id(
+                  first_name,
+                  last_name,
+                  email,
+                  employee_id,
+                  position,
+                  departments(name)
+                )
+              )
+            `)
+            .eq("id", requestId)
+            .single()
+
+          if (fullRecall) {
+            // Generate memo using deferment-recall-memo-service
+            const memoData = await generateRecallMemo({
+              staffName: fullRecall.leave_plan_requests?.user_profiles?.first_name + " " + fullRecall.leave_plan_requests?.user_profiles?.last_name,
+              recallDate: fullRecall.recall_date,
+              reason: fullRecall.recall_reason,
+            })
+
+            // Get HR signer info and signature
+            const { data: signerProfile } = await admin
+              .from("user_profiles")
+              .select("id, first_name, last_name, position")
+              .eq("id", approverUserId)
+              .single()
+
+            const { data: signerSignature } = await admin
+              .from("approval_signature_registry")
+              .select("signature_image_url, signature_data_url")
+              .eq("user_id", approverUserId)
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .single()
+
+            // Create recall memo record
+            const { data: createdMemo, error: memoErr } = await admin
+              .from("recall_memos")
+              .insert({
+                recall_request_id: requestId,
+                staff_id: fullRecall.staff_user_id,
+                hr_signer_id: approverUserId,
+                memo_body: JSON.stringify(memoData),
+                signer_name: `${signerProfile?.first_name} ${signerProfile?.last_name}`,
+                signer_position: signerProfile?.position || "HR EXECUTIVE",
+                signature_image_url: signerSignature?.signature_image_url,
+                status: "pending"
+              })
+              .select()
+              .single()
+
+            if (!memoErr && createdMemo) {
+              // Distribute memo to staff
+              await distributeMemoToRecipients({
+                memoType: "recall",
+                memoId: createdMemo.id,
+                staffId: fullRecall.staff_user_id,
+                memoData,
+                signatureImageUrl: signerSignature?.signature_image_url
+              })
+
+              console.log("[v0] Recall memo generated and distributed successfully")
+            }
+          }
+        } catch (memoError) {
+          console.error("[v0] Error generating/distributing recall memo:", memoError)
+          // Don't fail the entire request if memo generation fails
+        }
       }
 
       return NextResponse.json({
