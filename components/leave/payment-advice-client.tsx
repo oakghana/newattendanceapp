@@ -965,10 +965,24 @@ We count on your co-operation.`,
                                         description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
                                       })
                                     } else {
-                                      const errorMsg = response.status === 403 
-                                        ? "You are not authorized to approve these memos. Only the assigned signer can approve."
-                                        : result.error || "Failed to approve memos."
-                                      toast({ title: "Error", description: errorMsg, variant: "destructive" })
+                                      const errorData = result as any
+                                      let errorMsg = errorData.error || "Failed to approve memos."
+                                      
+                                      // Handle signature requirement error
+                                      if (response.status === 400 && errorData.requiresSignatureSave) {
+                                        errorMsg = "⚠️ Signature Required: " + errorData.details
+                                        toast({ 
+                                          title: "Action Required: Save Your Signature", 
+                                          description: errorMsg, 
+                                          variant: "destructive" 
+                                        })
+                                        console.warn("[v0] User needs to save signature before approving")
+                                      } else if (response.status === 403) {
+                                        errorMsg = "You are not authorized to approve these memos. Only the assigned signer can approve."
+                                        toast({ title: "Access Denied", description: errorMsg, variant: "destructive" })
+                                      } else {
+                                        toast({ title: "Error", description: errorMsg, variant: "destructive" })
+                                      }
                                       console.error("[v0] Approval error:", result)
                                     }
                                   } catch (err) {

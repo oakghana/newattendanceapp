@@ -88,6 +88,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // FETCH SIGNER'S SIGNATURE IMAGE for inclusion in memo
+    let signerSignatureUrl: string | undefined
+    const { data: signatureRecord } = await admin
+      .from("approval_signature_registry")
+      .select("signature_image_url")
+      .eq("user_id", selectedSigner.id)
+      .eq("status", "approved")
+      .single()
+
+    if (signatureRecord?.signature_image_url) {
+      signerSignatureUrl = signatureRecord.signature_image_url
+      console.log("[v0] Signer signature found and will be included in memos:", signerSignatureUrl)
+    } else {
+      console.warn("[v0] Signer has no saved signature - memos will be generated without signature image:", selectedSigner.id)
+    }
+
     // Group staff by category
     const categories = groupStaffByCategory(staffList)
     
@@ -130,6 +146,7 @@ export async function POST(request: NextRequest) {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
           position: selectedSigner.position || "",
+          signature_image_url: signerSignatureUrl, // Include signer's signature in memo data
         },
       }
 

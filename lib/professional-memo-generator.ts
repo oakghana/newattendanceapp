@@ -19,6 +19,7 @@ export interface MemoData {
   signatory: {
     name: string
     title: string
+    signature_image_url?: string // Signer's saved signature image URL from approval_signature_registry
   }
   ccList?: string[]
   memoType: "payment" | "deferment" | "general"
@@ -110,20 +111,20 @@ async function generateMainMemo(
   doc.setFontSize(10)
   doc.text(`DATE: ${memoData.date}`, pageWidth - margin, 46, { align: "right" })
 
-  // Vertical divider line in middle
+  // Vertical divider line in middle - sits on border between top and middle sections
   doc.setDrawColor(0)
   doc.setLineWidth(0.5)
-  doc.line(pageWidth / 2 + 10, 14, pageWidth / 2 + 10, 38)
+  doc.line(pageWidth / 2 + 10, 14, pageWidth / 2 + 10, 56) // Extended to sit on the horizontal divider below
 
   // REF. NO on left
-  let yPos = 46
+  let yPos = 52
   doc.setFont("helvetica", "normal")
   doc.setFontSize(10)
   doc.text(`REF. NO: ${memoData.refNo || "QCC/"}`, margin, yPos)
 
   yPos += 8
 
-  // Horizontal divider line
+  // Horizontal divider line - sits on the vertical line
   doc.setDrawColor(0)
   doc.setLineWidth(0.7)
   doc.line(margin, yPos, pageWidth - margin, yPos)
@@ -269,6 +270,26 @@ async function generateMainMemo(
     yPos = margin
   }
   yPos += 10
+
+  // Signature image if available - render above the signature line
+  if (memoData.signatory.signature_image_url) {
+    try {
+      console.log("[v0] Loading signature from:", memoData.signatory.signature_image_url)
+      const signatureResponse = await fetch(memoData.signatory.signature_image_url)
+      if (signatureResponse.ok) {
+        const signatureBlob = await signatureResponse.blob()
+        const signatureUrl = URL.createObjectURL(signatureBlob)
+        // Render signature image (40mm wide, 20mm high) above the line
+        doc.addImage(signatureUrl, "PNG", margin, yPos - 8, 40, 15)
+        console.log("[v0] Signature image added to memo")
+        URL.revokeObjectURL(signatureUrl)
+      } else {
+        console.warn("[v0] Failed to fetch signature image:", signatureResponse.status)
+      }
+    } catch (err) {
+      console.warn("[v0] Could not load signature image:", err)
+    }
+  }
 
   // Signature line
   doc.setDrawColor(0)

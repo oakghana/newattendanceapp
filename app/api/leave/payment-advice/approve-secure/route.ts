@@ -97,6 +97,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // CRITICAL: Verify signer has a saved signature before allowing approval
+    const { data: signatureRecord, error: sigError } = await admin
+      .from("approval_signature_registry")
+      .select("id, signature_image_url")
+      .eq("user_id", user.id)
+      .eq("status", "approved")
+      .single()
+
+    if (sigError || !signatureRecord || !signatureRecord.signature_image_url) {
+      console.warn("[v0] Signature validation failed for user:", {
+        userId: user.id,
+        userName: signerName,
+        sigError: sigError?.message,
+        hasSignature: !!signatureRecord?.signature_image_url,
+      })
+      return NextResponse.json(
+        { 
+          error: "Signature required",
+          details: "You must save your signature in the system before you can approve payment memos. Please visit Settings > My Profile to upload your signature.",
+          requiresSignatureSave: true,
+        },
+        { status: 400 }
+      )
+    }
+
     // Update memos with approval
     const signerName = `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
     const { error: updateErr } = await admin
