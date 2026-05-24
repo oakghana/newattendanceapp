@@ -1,7 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextResponse, NextRequest } from "next/server"
-import { generateDefermentMemo, generateRecallMemo } from "@/lib/deferment-recall-memo-service"
-import { distributeMemoToRecipients } from "@/lib/memo-distribution-service"
+
+// Dynamically import memo services to avoid build-time evaluation
+const getMemoServices = async () => {
+  const { generateDefermentMemo, generateRecallMemo } = await import("@/lib/deferment-recall-memo-service")
+  const { distributeMemoToRecipients } = await import("@/lib/memo-distribution-service")
+  return { generateDefermentMemo, generateRecallMemo, distributeMemoToRecipients }
+}
 
 /**
  * HR-exclusive endpoint for managing all deferment and recall requests
@@ -134,6 +139,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const admin = await createAdminClient()
+    // Dynamically import memo services at runtime
+    const { generateDefermentMemo, generateRecallMemo, distributeMemoToRecipients } = await getMemoServices()
+    
     const body = await request.json()
     
     const {
