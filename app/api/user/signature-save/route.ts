@@ -75,14 +75,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Save or update signature in approval_signature_registry
-    const { data: existingSignature } = await admin
+    const { data: existingSignature, error: fetchErr } = await admin
       .from("approval_signature_registry")
       .select("id")
       .eq("user_id", user.id)
       .single()
 
+    // fetchErr with PGRST116 means no record found - that's OK
+    const hasExistingSignature = !fetchErr || fetchErr.code !== "PGRST116"
+
     let result
-    if (existingSignature) {
+    if (hasExistingSignature && existingSignature?.id) {
       // Update existing signature - only update what matters
       result = await admin
         .from("approval_signature_registry")
