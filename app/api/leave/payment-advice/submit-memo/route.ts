@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // CRITICAL VALIDATION: Verify signer has HR Executive role
-    const validHrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer"]
+    const validHrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer", "manager_hr", "manager", "deputy_hr"]
     if (!validHrRoles.includes(signerProfile.role)) {
       console.warn("[v0] Invalid signer role attempt:", {
         signerId: selectedSigner.id,
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           error: "Invalid signer role", 
-          details: `The selected signer (${signerProfile.first_name} ${signerProfile.last_name}) has role "${signerProfile.role}" but only HR Executives can sign payment memos.` 
+          details: `The selected signer (${signerProfile.first_name} ${signerProfile.last_name}) has role "${signerProfile.role}" but only HR managers/executives can sign payment memos.` 
         },
         { status: 403 }
       )

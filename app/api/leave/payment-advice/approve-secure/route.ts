@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const hrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer"]
+    const hrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer", "manager_hr", "manager", "deputy_hr"]
     if (!hrRoles.includes(userProfile.role)) {
       return NextResponse.json(
         { 
