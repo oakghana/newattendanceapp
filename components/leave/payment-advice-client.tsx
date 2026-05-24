@@ -606,11 +606,40 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       // ============ SIGNATURE BLOCK WITH PROPER FORMATTING ============
       yPos += 4
       
-      // Signature line (for handwritten signature)
-      doc.setDrawColor(0, 0, 0)
-      doc.setLineWidth(0.5)
-      doc.line(20, yPos, 50, yPos)
-      yPos += 5
+      // Fetch and add signer's signature image if available (for approved memos)
+      let signatureAdded = false
+      if (selectedSigner && approvedMemos.some(m => m.id)) {
+        try {
+          // Fetch the signer's signature from their profile
+          const sigRes = await fetch(`/api/user/signature/${selectedSigner.id}`)
+          if (sigRes.ok) {
+            const sigData = await sigRes.json()
+            if (sigData.signature_image_url) {
+              const sigResponse = await fetch(sigData.signature_image_url)
+              if (sigResponse.ok) {
+                const sigBlob = await sigResponse.blob()
+                const sigUrl = URL.createObjectURL(sigBlob)
+                // Add signature image (40mm wide, 15mm high)
+                doc.addImage(sigUrl, "PNG", 20, yPos, 40, 12)
+                console.log("[v0] Signature image added to approved memo")
+                signatureAdded = true
+                yPos += 14
+                URL.revokeObjectURL(sigUrl)
+              }
+            }
+          }
+        } catch (err) {
+          console.log("[v0] Could not fetch signature, will show line instead:", err)
+        }
+      }
+      
+      // Signature line (for handwritten signature if no image available)
+      if (!signatureAdded) {
+        doc.setDrawColor(0, 0, 0)
+        doc.setLineWidth(0.5)
+        doc.line(20, yPos, 50, yPos)
+        yPos += 5
+      }
       
       // Signer name (no border above)
       doc.setFont(undefined, "bold")

@@ -104,22 +104,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update memos with approval
+    // Update memos with approval and store approver info in memo_body
     const signerName = `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
-    const { error: updateErr } = await admin
+    
+    // Fetch all memos to update their memo_body with approver info
+    const { data: memosToUpdate } = await admin
       .from("leave_payment_memos")
-      .update({
-        status: "reviewed_by_hr",
-        updated_at: new Date().toISOString(),
-      })
+      .select("id, memo_body")
       .in("id", memoIds)
 
-    if (updateErr) {
-      console.error("[v0] Error updating memo status:", updateErr)
-      return NextResponse.json(
-        { error: "Failed to approve memos", details: updateErr.message },
-        { status: 500 }
-      )
+    if (memosToUpdate && memosToUpdate.length > 0) {
+      // Update each memo with approver information
+      for (const memo of memosToUpdate) {
+        const memoBody = typeof memo.memo_body === 'string' ? JSON.parse(memo.memo_body) : memo.memo_body
+        
+        // Add approver info to memo_body for later use in PDF generation
+        memoBody.approver = {
+          id: user.id,
+          name: signerName,
+          position: userProfile.position || "",
+          role: userProfile.role,
+          approved_at: new Date().toISOString(),
+        }
+
+        // Update memo with new status and updated memo_body
+        await admin
+          .from("leave_payment_memos")
+          .update({
+            status: "reviewed_by_hr",
+            memo_body: JSON.stringify(memoBody),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", memo.id)
+      }
     }
 
     console.log("[v0] Memos approved by HR Executive:", {
