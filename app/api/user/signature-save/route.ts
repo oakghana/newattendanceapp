@@ -92,13 +92,14 @@ export async function POST(request: NextRequest) {
         .update({
           signature_data_url: signatureUrl,
           is_active: true,
+          signature_mode: "draw",
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", user.id)
         .select()
         .single()
     } else {
-      // Create new signature record - include required fields
+      // Create new signature record - include ALL required fields
       result = await admin
         .from("approval_signature_registry")
         .insert({
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
           is_active: true,
           workflow_domain: "payment_advice",
           approval_stage: "hr_executive",
+          signature_mode: "draw",
         })
         .select()
         .single()
