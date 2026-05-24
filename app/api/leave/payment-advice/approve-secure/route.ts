@@ -79,24 +79,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check that all memos are assigned to the current user
-    const unauthorizedMemos = memos.filter((m) => m.hr_executive_signer_id !== user.id)
-    if (unauthorizedMemos.length > 0) {
-      console.warn("[v0] Unauthorized approval attempt:", {
-        userId: user.id,
-        attemptedMemoIds: memoIds,
-        unauthorizedMemos: unauthorizedMemos.map((m) => ({ id: m.id, assignedTo: m.hr_executive_signer_id })),
-      })
-      return NextResponse.json(
-        { 
-          error: "Access denied",
-          details: `You are not authorized to approve ${unauthorizedMemos.length} of these memo(s). Only the assigned signer can approve their memos.`,
-          unauthorizedCount: unauthorizedMemos.length,
-        },
-        { status: 403 }
-      )
-    }
-
     // CRITICAL: Verify signer has a saved signature before allowing approval
     const { data: signatureRecord, error: sigError } = await admin
       .from("approval_signature_registry")
@@ -128,9 +110,7 @@ export async function POST(request: NextRequest) {
       .from("leave_payment_memos")
       .update({
         status: "reviewed_by_hr",
-        reviewed_by_hr_executive_id: user.id,
-        reviewed_by_hr_executive_name: signerName,
-        reviewed_by_hr_executive_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .in("id", memoIds)
 

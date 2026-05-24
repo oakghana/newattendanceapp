@@ -4,9 +4,8 @@ import { type NextRequest, NextResponse } from "next/server"
 export const dynamic = "force-dynamic"
 
 /**
- * GET: Fetch pending payment advice memos assigned to the currently authenticated HR Executive
- * Only returns memos where hr_executive_signer_id matches the current user
- * Enforces strict access control: non-assigned users cannot see memos not assigned to them
+ * GET: Fetch pending payment advice memos 
+ * Only HR executives can view memos in "ready_for_review" status
  */
 export async function GET(request: NextRequest) {
   try {
@@ -36,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only allow HR executives to see pending memos
-    const hrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer"]
+    const hrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer", "manager_hr", "manager", "deputy_hr"]
     if (!hrRoles.includes(userProfile.role)) {
       return NextResponse.json(
         { error: `Access denied. Your role (${userProfile.role}) is not authorized to approve payment memos.` },
@@ -44,11 +43,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { searchParams } = new URL(request.url)
-    const month = searchParams.get("month") || ""
-
-    // Query pending memos assigned SPECIFICALLY to this HR Executive
-    let query = admin
+    // Query pending memos in "ready_for_review" status
+    const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
         `
@@ -63,34 +59,16 @@ export async function GET(request: NextRequest) {
         approved_days,
         hr_leave_office_id,
         hr_leave_office_name,
-        hr_executive_signer_id,
-        hr_executive_signer_name,
-        hr_executive_signer_position,
-        hr_executive_signer_email,
-        assigned_for_approval_at,
         status,
         created_at,
         updated_at
       `
       )
-      .eq("hr_executive_signer_id", user.id) // Only memos assigned to THIS user
-      .eq("status", "ready_for_review") // Only pending memos
-      .order("assigned_for_approval_at", { ascending: false })
-
-    // Optional month filter
-    if (month) {
-      const startOfMonth = `${month}-01`
-      const [year, mon] = month.split("-").map(Number)
-      const endOfMonth = new Date(year, mon, 0).toISOString().slice(0, 10)
-      query = query
-        .gte("created_at", startOfMonth)
-        .lte("created_at", endOfMonth + "T23:59:59")
-    }
-
-    const { data: pendingMemos, error } = await query
+      .eq("status", "ready_for_review")
+      .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("[v0] Error fetching assigned pending memos:", error)
+      console.error("[v0] Error fetching pending memos:", error)
       return NextResponse.json(
         { error: "Failed to fetch pending memos", details: error.message },
         { status: 500 }
@@ -101,11 +79,11 @@ export async function GET(request: NextRequest) {
       success: true,
       memos: pendingMemos || [],
       count: pendingMemos?.length || 0,
-      assignedTo: user.id,
+      currentUserRole: userProfile.role,
       signerPosition: userProfile.position,
     })
   } catch (err) {
-    console.error("[v0] Unexpected error in pending-assigned-memos:", err)
+    console.error("[v0] Unexpected error fetching pending memos:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

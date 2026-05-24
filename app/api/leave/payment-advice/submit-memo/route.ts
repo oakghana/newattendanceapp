@@ -170,13 +170,7 @@ export async function POST(request: NextRequest) {
           leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
           leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
           approved_days: staff.approved_days || staff.requested_days || 0,
-          // HR Executive signer fields - track who is assigned to approve
-          hr_executive_signer_id: selectedSigner.id,
-          hr_executive_signer_name: selectedSigner.name || selectedSigner.full_name || "",
-          hr_executive_signer_position: selectedSigner.position || "",
-          hr_executive_signer_email: selectedSigner.email || "",
-          assigned_for_approval_at: new Date().toISOString(),
-          // Set status for HR Executive approval (valid statuses: draft, ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts)
+          // Status for HR Executive approval (valid statuses: draft, ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts)
           status: "ready_for_review",
         })
       } else {
