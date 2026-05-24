@@ -1088,6 +1088,7 @@ We count on your co-operation.`,
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Position</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Approved On</th>
@@ -1102,12 +1103,14 @@ We count on your co-operation.`,
                                       memoBody = {}
                                     }
                                     const staffRank = memoBody.staff_rank_label || category
+                                    const staffPosition = memoBody.staff_position || "N/A"
                                     
                                     return (
                                       <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                                         <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
                                         <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
                                         <td className="px-3 py-2 text-gray-600">{staffRank}</td>
+                                        <td className="px-3 py-2 text-gray-600">{staffPosition}</td>
                                         <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
                                         <td className="px-3 py-2 text-gray-600">
                                           {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
@@ -1128,6 +1131,8 @@ We count on your co-operation.`,
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                                 onClick={async () => {
                                   try {
+                                    console.log("[v0] Starting batch download for", category, month, "with", memos.length, "staff")
+                                    
                                     // Download combined PDF with all staff in this group
                                     const memoData = {
                                       to: "DEPUTY DIRECTOR, FINANCE",
@@ -1169,9 +1174,12 @@ We count on your co-operation.`,
                                       }),
                                     }
 
-                                    const doc = await generateProfessionalMemoPDF(memoData)
+                                    console.log("[v0] Memo data prepared:", memoData)
                                     const pdfName = `payment-advice-${category.toLowerCase().replace(/\s+/g, "-")}-${month}.pdf`
-                                    doc.save(pdfName)
+                                    const memoResult = await generateProfessionalMemoPDF(memoData, pdfName)
+                                    console.log("[v0] PDF generated, result type:", typeof memoResult, "has mainPdf:", !!memoResult?.mainPdf)
+                                    
+                                    await downloadMemoPDF(memoResult, pdfName)
 
                                     toast({
                                       title: "PDF Downloaded",
@@ -1179,7 +1187,7 @@ We count on your co-operation.`,
                                     })
                                   } catch (error) {
                                     console.error("[v0] Error downloading batch memo:", error)
-                                    toast({ title: "Error", description: "Failed to download batch memo.", variant: "destructive" })
+                                    toast({ title: "Error", description: `Failed to download batch memo: ${error instanceof Error ? error.message : String(error)}`, variant: "destructive" })
                                   }
                                 }}
                               >
