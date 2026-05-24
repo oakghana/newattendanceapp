@@ -2596,8 +2596,13 @@ export function LeaveManagementClient({
                                   size="sm"
                                   className="bg-teal-600 hover:bg-teal-700 text-white"
                                   onClick={() => {
-                                    // Download memo
-                                    window.open(memo.memo_url, "_blank")
+                                    // Download memo using the memo[id] API route
+                                    const memoId = memo.id || memo.leave_plan_request_id
+                                    if (memoId) {
+                                      window.open(`/api/leave/planning/memo/${memoId}`, "_blank")
+                                    } else {
+                                      console.error("[v0] No memo ID found for download")
+                                    }
                                   }}
                                 >
                                   <Download className="h-3.5 w-3.5 mr-1" />

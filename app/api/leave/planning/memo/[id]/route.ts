@@ -466,8 +466,8 @@ export async function GET(
     // The selectedSigner is the HR Executive selected during memo submission
     const signerToUse = selectedSignerFromMemo || memoBodyApprover
     
-    // CRITICAL: Only use selectedSigner ID from memo, NEVER fall back to stale leave_plan_requests data
-    let hrApproverId = signerToUse?.id || ""
+    // Use selectedSigner ID from memo, or fall back to leave_plan_requests.hr_approver_id for leave approval memos
+    let hrApproverId = signerToUse?.id || String((leaveRequest as any).hr_approver_id || "")
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
     
@@ -478,6 +478,7 @@ export async function GET(
       approverName: memoBodyApprover?.name,
       signerToUse: signerToUse?.name,
       hrApproverId,
+      isPaymentMemo: !!paymentMemo,
     })
     
     if (hrApproverId) {
@@ -500,7 +501,7 @@ export async function GET(
       console.log("[v0] Resolved signer profile:", hrApproverProfile?.first_name, hrApproverProfile?.last_name)
       console.log("[v0] Resolved signature data:", hrSignatureData ? "found" : "not found")
     } else {
-      console.warn("[v0] WARNING: No signer found in memo_body! This should not happen for submitted memos")
+      console.warn("[v0] WARNING: No signer ID found for memo")
     }
 
     // Load QCC logo
