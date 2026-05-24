@@ -728,12 +728,10 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         memoBodyParsed = {}
       }
 
-      // Use selected HR Executive as signatory; fall back to stored signer or HR Leave Office submitter
-      const storedSigner = memoBodyParsed.selectedSigner || {}
-      const signatoryName =
-        (selectedSigner?.full_name || storedSigner.name || memo.hr_leave_office_name || "HUMAN RESOURCE MANAGER").toUpperCase()
-      const signatoryTitle =
-        (selectedSigner?.position || storedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
+      // Use selected HR Executive as signatory; prefer memo_body.selectedSigner
+      const storedSigner = memoBodyParsed.selectedSigner || memoBodyParsed.approver || {}
+      const signatoryName = (storedSigner.name || memo.hr_leave_office_name || "HR EXECUTIVE").toUpperCase()
+      const signatoryTitle = (storedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
 
       // Build clean subject from the stored category/month — avoid duplication
       const category = memoBodyParsed.category || "Staff"
@@ -1256,9 +1254,25 @@ We count on your co-operation.`,
                                     console.log("[v0] Starting batch download for", category, month, "with", memos.length, "staff")
                                     
                                     // Download combined PDF with all staff in this group
+                                    // Use the first memo's selected signer, or fall back to HR Leave Office
+                                    let batchSignerName = "HUMAN RESOURCE MANAGER"
+                                    let batchSignerTitle = "HUMAN RESOURCE MANAGER"
+                                    
+                                    // Try to get signer from first memo
+                                    if (memos.length > 0) {
+                                      let firstMemoBody: any = {}
+                                      try {
+                                        firstMemoBody = typeof memos[0].memo_body === "string" ? JSON.parse(memos[0].memo_body) : (memos[0].memo_body || {})
+                                      } catch {}
+                                      
+                                      const firstMemoSigner = firstMemoBody.selectedSigner || firstMemoBody.approver || {}
+                                      batchSignerName = (firstMemoSigner.name || memos[0]?.hr_leave_office_name || "HR EXECUTIVE").toUpperCase()
+                                      batchSignerTitle = (firstMemoSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
+                                    }
+                                    
                                     const memoData = {
                                       to: "DEPUTY DIRECTOR, FINANCE",
-                                      from: "HUMAN RESOURCE MANAGER",
+                                      from: batchSignerTitle,
                                       subject: `PAYMENT OF LEAVE ALLOWANCE (${category.toUpperCase()}) – ${
                                         month.includes("-")
                                           ? new Date(month + "-01").toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase()
@@ -1271,8 +1285,8 @@ We count on your co-operation.`,
 We, therefore, kindly request you to pay their leave allowances accordingly.
 We count on your co-operation.`,
                                       signatory: {
-                                        name: memos[0]?.hr_leave_office_name?.toUpperCase() || "HUMAN RESOURCE MANAGER",
-                                        title: "HUMAN RESOURCE MANAGER",
+                                        name: batchSignerName,
+                                        title: batchSignerTitle,
                                       },
                                       ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
                                       memoType: "payment" as const,
