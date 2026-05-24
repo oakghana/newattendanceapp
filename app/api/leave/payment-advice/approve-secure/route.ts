@@ -45,12 +45,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const hrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer", "manager_hr", "manager", "deputy_hr"]
+    const hrRoles = ["manager_hr", "director_hr", "hr_executive", "deputy_hr"]
     if (!hrRoles.includes(userProfile.role)) {
       return NextResponse.json(
         { 
           error: "Access denied",
-          details: `Your role (${userProfile.role}) is not authorized to approve payment memos. Only HR staff can approve.` 
+          details: `Your role (${userProfile.role}) is not authorized to approve payment memos. Only HR Executives can approve.` 
         },
         { status: 403 }
       )
@@ -84,6 +84,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Selected signer profile not found" },
         { status: 404 }
+      )
+    }
+
+    // CRITICAL: Verify selected signer has ONLY HR Executive role (manager_hr or director_hr)
+    const HR_EXECUTIVE_ROLES = ["manager_hr", "director_hr"]
+    if (!signerProfile.role || !HR_EXECUTIVE_ROLES.includes(signerProfile.role)) {
+      console.warn("[v0] Non-HR Executive role attempted to sign memo:", {
+        signerId: selectedSigner.id,
+        signerRole: signerProfile.role,
+        allowedRoles: HR_EXECUTIVE_ROLES,
+      })
+      return NextResponse.json(
+        { 
+          error: "Invalid signer role",
+          details: `Only users with HR Executive roles (manager_hr or director_hr) can approve memos. Selected user has role: ${signerProfile.role}`,
+        },
+        { status: 403 }
       )
     }
 

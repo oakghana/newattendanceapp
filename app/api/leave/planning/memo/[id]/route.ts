@@ -350,6 +350,28 @@ export async function GET(
     const deptName = (currentProfile as any)?.departments?.name || null
     const deptCode = (currentProfile as any)?.departments?.code || null
 
+    // Try to parse memo_body to get preferred approver data
+    let memoBodyApprover: any = null
+    try {
+      if ((leaveRequest as any).memo_body) {
+        const memoBodies = typeof (leaveRequest as any).memo_body === 'string' 
+          ? JSON.parse((leaveRequest as any).memo_body)
+          : (leaveRequest as any).memo_body
+        
+        // Check if it's an array or object
+        if (Array.isArray(memoBodies)) {
+          // If array, get the last one which should be the payment advice memo
+          const lastMemo = memoBodies[memoBodies.length - 1]
+          memoBodyApprover = lastMemo?.approver
+        } else if (memoBodies?.approver) {
+          // If object, get approver directly
+          memoBodyApprover = memoBodies.approver
+        }
+      }
+    } catch (parseErr) {
+      console.warn("[v0] Failed to parse memo_body:", parseErr)
+    }
+
     // Access control: applicant, HR approver, HR leave office, HOD, admin
     const isApplicant = (leaveRequest as any).user_id === user.id
     const canAccess =
@@ -419,9 +441,11 @@ export async function GET(
     }
 
     // Resolve HR approver profile + signature
-    const hrApproverId = String((leaveRequest as any).hr_approver_id || "")
+    // PREFER memo_body.approver data (from payment advice memos) over leave_plan_requests data
+    let hrApproverId = memoBodyApprover?.id || String((leaveRequest as any).hr_approver_id || "")
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
+    
     if (hrApproverId) {
       const [{ data: hrProf }, { data: hrSigRows }] = await Promise.all([
         admin
@@ -438,6 +462,13 @@ export async function GET(
       ])
       hrApproverProfile = hrProf
       hrSignatureData = pickBestSignature(hrSigRows || [])
+      
+      if (memoBodyApprover) {
+        console.log("[v0] Using approver from memo_body:", {
+          approverId: memoBodyApprover.id,
+          approverName: memoBodyApprover.name,
+        })
+      }
     }
 
     // Load QCC logo
