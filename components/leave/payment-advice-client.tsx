@@ -252,6 +252,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         body: JSON.stringify({
           month: selectedMonth,
           staffList,
+          selectedSigner, // Pass the selected HR Executive signer
         }),
       })
 
