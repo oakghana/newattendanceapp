@@ -160,13 +160,24 @@ export async function POST(request: NextRequest) {
       for (const memo of memosToUpdate) {
         const memoBody = typeof memo.memo_body === 'string' ? JSON.parse(memo.memo_body) : memo.memo_body
         
-        // Add approver info to memo_body for later use in PDF generation
+        // Preserve the original selectedSigner if it exists (set during submit-memo)
+        // Add approver info for the final PDF signer
         memoBody.approver = {
           id: selectedSigner.id,
           name: signerName,
           position: signerProfile.position || "",
           role: signerProfile.role,
           approved_at: new Date().toISOString(),
+        }
+        
+        // If selectedSigner not yet set, set it now (for initial approval flow)
+        if (!memoBody.selectedSigner) {
+          memoBody.selectedSigner = {
+            id: selectedSigner.id,
+            name: signerName,
+            position: signerProfile.position || "",
+            signature_image_url: hrSignatureData?.signature_data_url || "",
+          }
         }
 
         // Update memo with new status and updated memo_body

@@ -465,11 +465,20 @@ export async function GET(
     // PRIORITY: selectedSignerFromMemo > memoBodyApprover > leave_plan_requests.hr_approver_id
     // The selectedSigner is the HR Executive selected during memo submission
     const signerToUse = selectedSignerFromMemo || memoBodyApprover
-    let hrApproverId = signerToUse?.id || String((leaveRequest as any).hr_approver_id || "")
+    
+    // CRITICAL: Only use selectedSigner ID from memo, NEVER fall back to stale leave_plan_requests data
+    let hrApproverId = signerToUse?.id || ""
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
     
-    console.log("[v0] Resolving signer - signerToUse:", signerToUse, "hrApproverId:", hrApproverId)
+    console.log("[v0] Memo[id] signer resolution:", {
+      hasSelectedSigner: !!selectedSignerFromMemo,
+      selectedSignerName: selectedSignerFromMemo?.name,
+      hasApprover: !!memoBodyApprover,
+      approverName: memoBodyApprover?.name,
+      signerToUse: signerToUse?.name,
+      hrApproverId,
+    })
     
     if (hrApproverId) {
       const [{ data: hrProf }, { data: hrSigRows }] = await Promise.all([
@@ -490,6 +499,8 @@ export async function GET(
       
       console.log("[v0] Resolved signer profile:", hrApproverProfile?.first_name, hrApproverProfile?.last_name)
       console.log("[v0] Resolved signature data:", hrSignatureData ? "found" : "not found")
+    } else {
+      console.warn("[v0] WARNING: No signer found in memo_body! This should not happen for submitted memos")
     }
 
     // Load QCC logo
@@ -762,31 +773,31 @@ export async function GET(
     y += closingLines.length * 5.5 + 12
 
     // ── Signature block ───────────────────────────────────────────────
-    // PRIORITY: selectedSignerFromMemo > memoBodyApprover > hrApproverProfile > stale data
-    // signerToUse was already defined above as: selectedSignerFromMemo || memoBodyApprover
+    // CRITICAL: Use selectedSigner from memo_body ONLY, never fall back to stale leave_plan_requests data
+    // signerToUse contains selectedSignerFromMemo or memoBodyApprover
     
     let signerNameForMemo = ""
     let signerPositionForMemo = ""
     let signerSignatureUrl = ""
     
-    // First try: Use selectedSigner data (from submit-memo or approve-secure)
+    // Use selectedSigner data (which is stored during submit-memo and approve-secure)
     if (signerToUse?.name) {
       signerNameForMemo = signerToUse.name
       signerPositionForMemo = signerToUse.position || "HR EXECUTIVE"
       signerSignatureUrl = signerToUse.signature_image_url || ""
-      console.log("[v0] Using signer from memo:", signerNameForMemo, "position:", signerPositionForMemo)
-    } 
-    // Second try: Use hrApproverProfile (fetched from approval_signature_registry)
+      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo)
+    }
+    // Fallback: Use hrApproverProfile only if we fetched it (hrApproverId was found)
     else if (hrApproverProfile) {
       signerNameForMemo = fmtName(hrApproverProfile)
       signerPositionForMemo = String((hrApproverProfile as any)?.position || "HR EXECUTIVE")
       console.log("[v0] Using hrApproverProfile:", signerNameForMemo)
-    } 
-    // Last resort: Should NOT happen if memo was properly approved
+    }
+    // SHOULD NOT REACH HERE for properly submitted memos
     else {
+      console.error("[v0] CRITICAL: No signer found! Memo was not properly submitted with a selectedSigner")
       signerNameForMemo = "HR EXECUTIVE"
-      signerPositionForMemo = "HUMAN RESOURCES"
-      console.warn("[v0] No signer found - using fallback")
+      signerPositionForMemo = "PENDING SIGNATURE"
     }
 
     // Get signature image: PRIORITY - signerSignatureUrl from memo > registry signature
@@ -805,10 +816,9 @@ export async function GET(
         console.log("[v0] Added signature image to PDF")
       } catch (err) {
         console.warn("[v0] Failed to add signature image:", err)
-        // NO fallback to border line - just show name only
       }
     } else {
-      console.warn("[v0] No signature image URL available")
+      console.warn("[v0] No signature image URL available for:", signerNameForMemo)
     }
     
     // Add signer name (ONLY name and position, NO underlines/border lines)
