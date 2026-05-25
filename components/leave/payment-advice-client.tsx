@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
 import { jsPDF } from "jspdf"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
+import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,11 +74,27 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
+  const [showSignatureRequiredDialog, setShowSignatureRequiredDialog] = useState(false)
   
   // Pagination states
   const [pendingPage, setPendingPage] = useState(1)
   const [approvedPage, setApprovedPage] = useState(1)
   const ITEMS_PER_PAGE = 10
+
+  // Helper: Check if signer has a saved signature
+  const checkSignerSignature = async (signerId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/user/signature-check/${signerId}`)
+      if (res.ok) {
+        const data = await res.json()
+        return data.hasSignature === true
+      }
+      return false
+    } catch (err) {
+      console.error("[v0] Error checking signer signature:", err)
+      return false
+    }
+  }
 
   // Load HR executives on mount
   useEffect(() => {
@@ -290,6 +307,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         description: "Please select an HR executive signer first.",
         variant: "destructive",
       })
+      return
+    }
+
+    // CHECK: Verify signer has a saved signature
+    const hasSignature = await checkSignerSignature(selectedSigner.id)
+    if (!hasSignature) {
+      setShowSignatureRequiredDialog(true)
       return
     }
 
@@ -1538,6 +1562,18 @@ We count on your co-operation.`,
           </CardContent>
         </Card>
       )}
+
+      {/* Signature Required Dialog */}
+      <SignatureRequiredDialog
+        open={showSignatureRequiredDialog}
+        onOpenChange={setShowSignatureRequiredDialog}
+        hrName={selectedSigner?.full_name || selectedSigner?.name || "HR Executive"}
+        onSignatureSaved={() => {
+          setShowSignatureRequiredDialog(false)
+          // Retry submit after signature is saved
+          setTimeout(() => handleSubmitMemos(), 500)
+        }}
+      />
     </div>
   )
 }
