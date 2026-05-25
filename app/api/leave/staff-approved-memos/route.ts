@@ -227,7 +227,6 @@ export async function GET(request: NextRequest) {
         hr_approver_name: req.hr_approver_name,
         hr_approved_at: req.hr_approved_at,
         hr_signature_image_url: req.hr_signature_image_url,
-        memo_url: `/api/leave/memo-document/${req.id}`,
       }
     })
 

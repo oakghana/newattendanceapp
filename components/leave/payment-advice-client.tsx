@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
 import { jsPDF } from "jspdf"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
+import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,11 +74,27 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
+  const [showSignatureRequiredDialog, setShowSignatureRequiredDialog] = useState(false)
   
   // Pagination states
   const [pendingPage, setPendingPage] = useState(1)
   const [approvedPage, setApprovedPage] = useState(1)
   const ITEMS_PER_PAGE = 10
+
+  // Helper: Check if signer has a saved signature
+  const checkSignerSignature = async (signerId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/user/signature-check/${signerId}`)
+      if (res.ok) {
+        const data = await res.json()
+        return data.hasSignature === true
+      }
+      return false
+    } catch (err) {
+      console.error("[v0] Error checking signer signature:", err)
+      return false
+    }
+  }
 
   // Load HR executives on mount
   useEffect(() => {
@@ -252,6 +269,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         body: JSON.stringify({
           month: selectedMonth,
           staffList,
+          selectedSigner, // Pass the selected HR Executive signer
         }),
       })
 
@@ -289,6 +307,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         description: "Please select an HR executive signer first.",
         variant: "destructive",
       })
+      return
+    }
+
+    // CHECK: Verify signer has a saved signature
+    const hasSignature = await checkSignerSignature(selectedSigner.id)
+    if (!hasSignature) {
+      setShowSignatureRequiredDialog(true)
       return
     }
 
@@ -714,90 +739,26 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
   }
 
-  // Download an approved memo as professional PDF with QCC logo
+  // Download an approved memo using server-side API for professional rendering with real signatures
   const downloadApprovedMemo = async (memo: any) => {
     try {
-      const currentDate = new Date()
-      const dateStr = `${currentDate.getDate()}-${new Date().toLocaleString('default', { month: 'short' })}-${currentDate.getFullYear()}`
-
-      // Parse memo_body JSON to get stored staff details
-      let memoBodyParsed: any = {}
-      try {
-        memoBodyParsed = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
-      } catch {
-        memoBodyParsed = {}
+      // Use the server-side memo[id] API route which provides:
+      // - Professional jsPDF rendering with proper formatting
+      // - Real signer information from leave_payment_memos
+      // - Actual signature images from approval registry
+      // - Consistent formatting with leave approval memos
+      
+      const memoId = memo.id || memo.leave_plan_request_id
+      if (!memoId) {
+        toast({ title: "Error", description: "No memo ID found", variant: "destructive" })
+        return
       }
 
-      // Use selected HR Executive as signatory; fall back to stored signer or HR Leave Office submitter
-      const storedSigner = memoBodyParsed.selectedSigner || {}
-      const signatoryName =
-        (selectedSigner?.full_name || storedSigner.name || memo.hr_leave_office_name || "HUMAN RESOURCE MANAGER").toUpperCase()
-      const signatoryTitle =
-        (selectedSigner?.position || storedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
-
-      // Build clean subject from the stored category/month — avoid duplication
-      const category = memoBodyParsed.category || "Staff"
-      const month = memoBodyParsed.month || ""
-      // Format month label: "2026-07" -> "JULY 2026"
-      let monthLabel = month
-      if (/^\d{4}-\d{2}$/.test(month)) {
-        const [yr, mo] = month.split("-")
-        monthLabel = `${new Date(Number(yr), Number(mo) - 1).toLocaleString("default", { month: "long" }).toUpperCase()} ${yr}`
-      }
-      // Map category to proper staff rank label
-      const rankLabel =
-        category.toLowerCase().includes("junior") ? "JUNIOR STAFF" :
-        category.toLowerCase().includes("senior") ? "SENIOR STAFF" :
-        category.toLowerCase().includes("manage") ? "MANAGEMENT STAFF" :
-        `${category.toUpperCase()} STAFF`
-
-      const subject = `PAYMENT OF LEAVE ALLOWANCE (${rankLabel}) – ${monthLabel}`
-
-      // Get real position and department from stored memo_body
-      const staffPosition = memoBodyParsed.staff_position || memo.staff_position || ""
-      const staffDepartment = memoBodyParsed.staff_department || memo.staff_department || ""
+      // Open the server-side generated PDF
+      // This route handles both leave approval and payment advice memos professionally
+      window.open(`/api/leave/planning/memo/${memoId}`, "_blank")
       
-      // Use the signatory's actual position as the FROM field
-      const fromLabel = signatoryTitle
-
-      // Prepare memo data for professional template
-      const memoData = {
-        to: "DEPUTY DIRECTOR, FINANCE",
-        from: fromLabel,
-        subject,
-        date: dateStr,
-        refNo: `QCC/${memoBodyParsed.referenceNumber || ""}`,
-        body: `We wish to inform you that the undermentioned staff member is scheduled to proceed on their annual vacation leave in ${monthLabel}.
-
-We, therefore, kindly request you to pay their leave allowances accordingly.
-We count on your co-operation.`,
-        signatory: {
-          name: signatoryName,
-          title: signatoryTitle,
-        },
-        ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
-        memoType: "payment" as const,
-        staffList: [
-          {
-            no: 1,
-            name: memo.staff_name || "N/A",
-            employeeId: memo.staff_number || "N/A",
-            position: staffPosition || "N/A",
-            department: staffDepartment || "N/A",
-            leaveDate: memo.leave_period_start
-              ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-              : "N/A",
-          },
-        ],
-      }
-
-      // Generate PDF
-      const pdf = await generateProfessionalMemoPDF(memoData, `payment-advice-${memo.staff_name}.pdf`)
-      
-      // Download
-      await downloadMemoPDF(pdf, `payment-advice-${memo.staff_name}-${format(new Date(), "yyyyMMdd")}.pdf`)
-      
-      toast({ title: "Success", description: "Memo downloaded successfully" })
+      toast({ title: "Success", description: "Memo downloading..." })
     } catch (err) {
       console.error("[v0] Error downloading memo:", err)
       toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
@@ -1256,9 +1217,25 @@ We count on your co-operation.`,
                                     console.log("[v0] Starting batch download for", category, month, "with", memos.length, "staff")
                                     
                                     // Download combined PDF with all staff in this group
+                                    // Use the first memo's selected signer, or fall back to HR Leave Office
+                                    let batchSignerName = "HUMAN RESOURCE MANAGER"
+                                    let batchSignerTitle = "HUMAN RESOURCE MANAGER"
+                                    
+                                    // Try to get signer from first memo
+                                    if (memos.length > 0) {
+                                      let firstMemoBody: any = {}
+                                      try {
+                                        firstMemoBody = typeof memos[0].memo_body === "string" ? JSON.parse(memos[0].memo_body) : (memos[0].memo_body || {})
+                                      } catch {}
+                                      
+                                      const firstMemoSigner = firstMemoBody.selectedSigner || firstMemoBody.approver || {}
+                                      batchSignerName = (firstMemoSigner.name || memos[0]?.hr_leave_office_name || "HR EXECUTIVE").toUpperCase()
+                                      batchSignerTitle = (firstMemoSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
+                                    }
+                                    
                                     const memoData = {
                                       to: "DEPUTY DIRECTOR, FINANCE",
-                                      from: "HUMAN RESOURCE MANAGER",
+                                      from: batchSignerTitle,
                                       subject: `PAYMENT OF LEAVE ALLOWANCE (${category.toUpperCase()}) – ${
                                         month.includes("-")
                                           ? new Date(month + "-01").toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase()
@@ -1271,8 +1248,8 @@ We count on your co-operation.`,
 We, therefore, kindly request you to pay their leave allowances accordingly.
 We count on your co-operation.`,
                                       signatory: {
-                                        name: memos[0]?.hr_leave_office_name?.toUpperCase() || "HUMAN RESOURCE MANAGER",
-                                        title: "HUMAN RESOURCE MANAGER",
+                                        name: batchSignerName,
+                                        title: batchSignerTitle,
                                       },
                                       ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
                                       memoType: "payment" as const,
@@ -1585,6 +1562,18 @@ We count on your co-operation.`,
           </CardContent>
         </Card>
       )}
+
+      {/* Signature Required Dialog */}
+      <SignatureRequiredDialog
+        open={showSignatureRequiredDialog}
+        onOpenChange={setShowSignatureRequiredDialog}
+        hrName={selectedSigner?.full_name || selectedSigner?.name || "HR Executive"}
+        onSignatureSaved={() => {
+          setShowSignatureRequiredDialog(false)
+          // Retry submit after signature is saved
+          setTimeout(() => handleSubmitMemos(), 500)
+        }}
+      />
     </div>
   )
 }

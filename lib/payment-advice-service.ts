@@ -87,16 +87,24 @@ export async function detectStaffOnLeaveForMonth(month: string): Promise<StaffOn
 
 /**
  * Generate professional payment advice memos per category
+ * @param staffList - List of staff on leave
+ * @param month - Month in YYYY-MM format
+ * @param signer - The HR Executive signer info (name, position) - if not provided, uses "HUMAN RESOURCE MANAGER"
  */
 export function generateProfessionalMemos(
   staffList: StaffOnLeave[],
-  month: string
+  month: string,
+  signer?: { name?: string; position?: string }
 ): Record<string, string> {
   const monthDate = new Date(`${month}-01`)
   const monthName = monthDate.toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
   })
+
+  // Use provided signer info, or fall back to defaults if not provided
+  const signerName = signer?.name?.toUpperCase() || "HUMAN RESOURCE MANAGER"
+  const signerPosition = signer?.position?.toUpperCase() || "HUMAN RESOURCE MANAGER"
 
   const categories = groupStaffByCategory(staffList)
   const memos: Record<string, string> = {}
@@ -123,7 +131,7 @@ REF. NO: QCC/                         DATE: ${dateStr}
 
 TO:      DEPUTY DIRECTOR, FINANCE
 
-FROM:    DEPUTY HUMAN RESOURCE MANAGER
+FROM:    ${signerPosition}
 
 SUBJECT: PAYMENT OF LEAVE ALLOWANCE (${categoryLabel}) – ${monthName.toUpperCase()}
 
@@ -145,8 +153,8 @@ We, therefore, kindly request you to pay their leave allowances accordingly.
 We count on your co-operation.
 
 
-FRANK FREDUA-MENSAH (ESQ.)
-DEPUTY HUMAN RESOURCE MANAGER
+${signerName}
+${signerPosition}
 FOR: MANAGING DIRECTOR
 
 cc:    Managing Director

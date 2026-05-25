@@ -462,22 +462,44 @@ export async function GET(
     }
 
     // Resolve HR approver profile + signature
-    // PRIORITY: selectedSignerFromMemo > memoBodyApprover > leave_plan_requests.hr_approver_id
-    // The selectedSigner is the HR Executive selected during memo submission
-    const signerToUse = selectedSignerFromMemo || memoBodyApprover
+    // PRIORITY for leave approval memos: leave_plan_requests.hr_approver_id
+    // PRIORITY for payment advice memos: selectedSigner from payment memo memo_body
     
-    // CRITICAL: Only use selectedSigner ID from memo, NEVER fall back to stale leave_plan_requests data
+    let signerToUse: any = null
+    
+    // For payment advice memos: use selectedSigner from memo_body (highest priority)
+    if (paymentMemo && selectedSignerFromMemo) {
+      signerToUse = selectedSignerFromMemo
+      console.log("[v0] Using selectedSigner from payment memo:", selectedSignerFromMemo?.name)
+    }
+    // For leave approval memos: use hr_approver_id from leave_plan_requests
+    else if (!paymentMemo) {
+      const hrApproverId = String((leaveRequest as any).hr_approver_id || "")
+      if (hrApproverId) {
+        signerToUse = { id: hrApproverId }
+        console.log("[v0] Using hr_approver_id from leave request:", hrApproverId)
+      }
+    }
+    // Last resort: use memoBodyApprover if available
+    else if (memoBodyApprover) {
+      signerToUse = memoBodyApprover
+      console.log("[v0] Using approver from memo_body:", memoBodyApprover?.name)
+    }
+    
     let hrApproverId = signerToUse?.id || ""
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
     
     console.log("[v0] Memo[id] signer resolution:", {
+      memoType: paymentMemo ? "payment_advice" : "leave_approval",
+      hasPaymentMemo: !!paymentMemo,
       hasSelectedSigner: !!selectedSignerFromMemo,
       selectedSignerName: selectedSignerFromMemo?.name,
       hasApprover: !!memoBodyApprover,
       approverName: memoBodyApprover?.name,
       signerToUse: signerToUse?.name,
       hrApproverId,
+      leaveRequestHrApproverId: (leaveRequest as any).hr_approver_id,
     })
     
     if (hrApproverId) {
@@ -500,7 +522,7 @@ export async function GET(
       console.log("[v0] Resolved signer profile:", hrApproverProfile?.first_name, hrApproverProfile?.last_name)
       console.log("[v0] Resolved signature data:", hrSignatureData ? "found" : "not found")
     } else {
-      console.warn("[v0] WARNING: No signer found in memo_body! This should not happen for submitted memos")
+      console.warn("[v0] WARNING: No signer ID found for memo")
     }
 
     // Load QCC logo
@@ -618,7 +640,13 @@ export async function GET(
 
     let y = 51
 
-    // Ref No + Date row
+    // Modern header separator line
+    doc.setDrawColor(200, 0, 0)  // Red accent line
+    doc.setLineWidth(0.8)
+    doc.line(marginLeft, y - 2, pageWidth - marginRight, y - 2)
+    y += 1
+
+    // Ref No + Date row (modern styling)
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
@@ -632,7 +660,7 @@ export async function GET(
     doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10
 
-    // ── Recipient block ──────────────────────────────────────────────
+    // ── Recipient block (modern styling) ──────────────────────────────────────────────
     const applicantFullName = fmtName(ap).toUpperCase() || "REQUESTING STAFF"
     const staffNo           = String(ap?.employee_id || ap?.staff_number || "")
     const applicantPosition = String(ap?.position || "STAFF").toUpperCase()
@@ -640,11 +668,18 @@ export async function GET(
 
     doc.setFont("times", "bold")
     doc.setFontSize(9.5)
+    doc.setTextColor(0, 0, 0)
     doc.text(staffNo ? `${applicantFullName}  (S/NO.:  ${staffNo})` : applicantFullName, marginLeft, y)
     y += 5.5
+    doc.setFont("times", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(60, 60, 60)  // Slightly muted for secondary info
     doc.text(applicantPosition, marginLeft, y)
     y += 5.5
-    if (applicantDept) { doc.text(applicantDept, marginLeft, y); y += 5.5 }
+    if (applicantDept) { 
+      doc.text(applicantDept, marginLeft, y)
+      y += 5.5
+    }
     y += 4
 
     // ── THRO block ───────────────────────────────────────────────────
@@ -654,11 +689,13 @@ export async function GET(
       if (hodPos) {
         doc.setFont("times", "normal")
         doc.setFontSize(9.2)
+        doc.setTextColor(0, 0, 0)
         doc.text("THRO:", marginLeft, y)
         doc.text(hodPos, marginLeft + 14, y)
         y += 5.5
         doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
         y += 5.5
+        doc.setTextColor(60, 60, 60)
         doc.text(hodLoc, marginLeft + 14, y)
         y += 10
       }
@@ -785,7 +822,7 @@ export async function GET(
       signerNameForMemo = signerToUse.name
       signerPositionForMemo = signerToUse.position || "HR EXECUTIVE"
       signerSignatureUrl = signerToUse.signature_image_url || ""
-      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo)
+      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo, "signature:", signerSignatureUrl)
     }
     // Fallback: Use hrApproverProfile only if we fetched it (hrApproverId was found)
     else if (hrApproverProfile) {
@@ -806,22 +843,64 @@ export async function GET(
     
     let sigImgY = -1
     
-    // Add signature image if available (NO border line fallback)
+    // Add modern signature block - PROFESSIONAL APPEARANCE
     if (finalSignatureUrl && finalSignatureUrl.length > 10) {
       try {
-        const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
-        sigImgY = y
-        doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
-        y += 20
-        console.log("[v0] Added signature image to PDF")
+        // Handle both base64 data URLs and blob URLs
+        if (finalSignatureUrl.startsWith("data:")) {
+          // Base64 data URL
+          const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
+          sigImgY = y
+          doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
+          y += 22
+          console.log("[v0] Added base64 signature image to PDF")
+        } else if (finalSignatureUrl.startsWith("http")) {
+          // Blob URL - fetch and convert to base64
+          try {
+            const response = await fetch(finalSignatureUrl)
+            if (response.ok) {
+              const blob = await response.blob()
+              const arrayBuffer = await blob.arrayBuffer()
+              const base64 = Buffer.from(arrayBuffer).toString("base64")
+              sigImgY = y
+              doc.addImage(`data:image/png;base64,${base64}`, "PNG", marginLeft, y, 50, 18)
+              y += 22
+              console.log("[v0] Added blob URL signature image to PDF")
+            } else {
+              console.warn("[v0] Failed to fetch blob signature URL:", response.status)
+              // Show placeholder if fetch fails
+              doc.setDrawColor(100, 100, 100)
+              doc.setLineWidth(0.3)
+              doc.line(marginLeft, y, marginLeft + 50, y)
+              y += 2
+            }
+          } catch (blobErr) {
+            console.warn("[v0] Error fetching blob signature:", blobErr)
+            // Show placeholder
+            doc.setDrawColor(100, 100, 100)
+            doc.setLineWidth(0.3)
+            doc.line(marginLeft, y, marginLeft + 50, y)
+            y += 2
+          }
+        }
       } catch (err) {
         console.warn("[v0] Failed to add signature image:", err)
+        // Show placeholder
+        doc.setDrawColor(100, 100, 100)
+        doc.setLineWidth(0.3)
+        doc.line(marginLeft, y, marginLeft + 50, y)
+        y += 2
       }
     } else {
       console.warn("[v0] No signature image URL available for:", signerNameForMemo)
+      // No signature - show light placeholder line
+      doc.setDrawColor(150, 150, 150)
+      doc.setLineWidth(0.2)
+      doc.line(marginLeft, y + 8, marginLeft + 50, y + 8)
+      y += 2
     }
     
-    // Add signer name (ONLY name and position, NO underlines/border lines)
+    // Add signer name (modern styling)
     doc.setFont("times", "bold")
     doc.setFontSize(10)
     doc.setTextColor(0, 0, 0)
@@ -830,7 +909,8 @@ export async function GET(
     
     // Add position
     doc.setFont("times", "normal")
-    doc.setFontSize(9.5)
+    doc.setFontSize(9)
+    doc.setTextColor(60, 60, 60)
     doc.text(signerPositionForMemo.toUpperCase(), marginLeft, y)
     y += 5
     doc.text("FOR: MANAGING DIRECTOR", marginLeft, y)

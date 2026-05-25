@@ -172,6 +172,10 @@ export function LeaveManagementClient({
   const [recallLocFilter, setRecallLocFilter] = useState<string>("")
   const [myPaymentAdviceMemos, setMyPaymentAdviceMemos] = useState<any[]>([])
   const [isLoadingMyPaymentMemos, setIsLoadingMyPaymentMemos] = useState(false)
+  const [myDefermentMemos, setMyDefermentMemos] = useState<any[]>([])
+  const [isLoadingMyDefermentMemos, setIsLoadingMyDefermentMemos] = useState(false)
+  const [myRecallMemos, setMyRecallMemos] = useState<any[]>([])
+  const [isLoadingMyRecallMemos, setIsLoadingMyRecallMemos] = useState(false)
   const [hrTemplates, setHrTemplates] = useState<HrMemoTemplate[]>([])
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, HrMemoTemplate>>({})
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -822,6 +826,60 @@ export function LeaveManagementClient({
     }
     void fetchMyPaymentMemos()
   }, [userId])
+
+  // Fetch staff's own approved deferment memos
+  useEffect(() => {
+    const fetchMyDefermentMemos = async () => {
+      setIsLoadingMyDefermentMemos(true)
+      try {
+        const res = await fetch("/api/leave/deferment-memos/my-memos", { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          setMyDefermentMemos(data.memos || [])
+          // Show toast if deferment memos are ready
+          if (data.memos && data.memos.length > 0) {
+            toast({
+              title: "Deferment Approved",
+              description: `You have ${data.memos.length} approved deferment memo(s) ready`,
+              duration: 5000,
+            })
+          }
+        }
+      } catch (err) {
+        console.error("[v0] Failed to fetch my deferment memos:", err)
+      } finally {
+        setIsLoadingMyDefermentMemos(false)
+      }
+    }
+    void fetchMyDefermentMemos()
+  }, [userId, toast])
+
+  // Fetch staff's own approved recall memos
+  useEffect(() => {
+    const fetchMyRecallMemos = async () => {
+      setIsLoadingMyRecallMemos(true)
+      try {
+        const res = await fetch("/api/leave/recall-memos/my-memos", { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          setMyRecallMemos(data.memos || [])
+          // Show toast if recall memos are ready
+          if (data.memos && data.memos.length > 0) {
+            toast({
+              title: "Recall Approved",
+              description: `You have ${data.memos.length} approved recall memo(s) ready`,
+              duration: 5000,
+            })
+          }
+        }
+      } catch (err) {
+        console.error("[v0] Failed to fetch my recall memos:", err)
+      } finally {
+        setIsLoadingMyRecallMemos(false)
+      }
+    }
+    void fetchMyRecallMemos()
+  }, [userId, toast])
 
   // Fetch user's own recall and deferment requests (for My Requests tab)
   useEffect(() => {
@@ -2153,6 +2211,90 @@ export function LeaveManagementClient({
             </>
           )}
 
+          {/* Staff Deferment Approved Notifications — visible on my-requests tab */}
+          {selectedTab === "my-requests" && myDefermentMemos.length > 0 && (
+            <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
+              <CardHeader className="border-b border-amber-200">
+                <CardTitle className="flex items-center gap-2 text-amber-800">
+                  <Calendar className="h-5 w-5" />
+                  My Approved Deferrments
+                </CardTitle>
+                <p className="text-sm text-amber-700">Your leave deferment requests have been approved</p>
+              </CardHeader>
+              <CardContent className="py-4">
+                {isLoadingMyDefermentMemos ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-amber-600" />
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {myDefermentMemos.map((memo: any) => (
+                      <div key={memo.id} className="border border-amber-200 rounded-lg p-4 bg-white">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <p className="font-semibold text-slate-900">{memo.title}</p>
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-semibold rounded">Approved</span>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-2">{memo.description}</p>
+                            {memo.reason && (
+                              <p className="text-xs text-slate-500">Reason: {memo.reason}</p>
+                            )}
+                            {memo.approved_at && (
+                              <p className="text-xs text-slate-500 mt-1">Approved: {new Date(memo.approved_at).toLocaleDateString()}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Staff Recall Approved Notifications — visible on my-requests tab */}
+          {selectedTab === "my-requests" && myRecallMemos.length > 0 && (
+            <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-pink-50/50">
+              <CardHeader className="border-b border-rose-200">
+                <CardTitle className="flex items-center gap-2 text-rose-800">
+                  <ArrowUpRight className="h-5 w-5" />
+                  My Approved Recalls
+                </CardTitle>
+                <p className="text-sm text-rose-700">Your leave recall requests have been approved</p>
+              </CardHeader>
+              <CardContent className="py-4">
+                {isLoadingMyRecallMemos ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-rose-600" />
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {myRecallMemos.map((memo: any) => (
+                      <div key={memo.id} className="border border-rose-200 rounded-lg p-4 bg-white">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <p className="font-semibold text-slate-900">{memo.title}</p>
+                              <span className="px-2 py-0.5 bg-rose-100 text-rose-800 text-xs font-semibold rounded">Approved</span>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-2">{memo.description}</p>
+                            {memo.reason && (
+                              <p className="text-xs text-slate-500">Reason: {memo.reason}</p>
+                            )}
+                            {memo.recall_date && (
+                              <p className="text-xs text-slate-500">Recall Date: {new Date(memo.recall_date).toLocaleDateString()}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {selectedTab === "deferrments" && (
             <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
               <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
@@ -2562,9 +2704,10 @@ export function LeaveManagementClient({
                         </div>
                       ) : (
                         paginatedMemos.map((memo: any) => {
-                          // A memo is signed if it has a memo_url (downloadable) OR has approval/signature data
-                          const isSigned = memo.memo_url || memo.approver_signature || memo.approval_date || memo.hr_signature_image_url
-                          const isYetToSign = !isSigned
+                          // All memos from the API are already approved (filtered by status at API level)
+                          // Check if they have been signed/approved by HR
+                          const hasHrApproval = memo.hr_approved_at || memo.hr_approver_name || memo.hr_signature_image_url
+                          const approvalStatus = hasHrApproval ? "Signed" : "Approved"
                           
                           return (
                           <div key={memo.id} className="border border-teal-200 rounded-lg p-4 hover:bg-teal-50/50 transition-colors">
@@ -2572,14 +2715,14 @@ export function LeaveManagementClient({
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-3 mb-1">
                                   <p className="font-semibold text-slate-900">{memo.staff_name}</p>
-                                  {isYetToSign && (
-                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800">
-                                      Yet to Sign
+                                  {hasHrApproval && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                                      ✓ Approved & Signed
                                     </span>
                                   )}
-                                  {isSigned && (
-                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
-                                      ✓ Signed
+                                  {!hasHrApproval && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
+                                      ✓ Approved
                                     </span>
                                   )}
                                 </div>
@@ -2587,8 +2730,8 @@ export function LeaveManagementClient({
                                 <p className="text-sm text-slate-700 mt-2">{memo.leave_type} Leave</p>
                                 <p className="text-xs text-slate-600 mt-1">{new Date(memo.start_date).toLocaleDateString()} to {new Date(memo.end_date).toLocaleDateString()}</p>
                                 <p className="text-xs text-slate-500 mt-1">Location: {memo.location}</p>
-                                {isYetToSign && memo.assigned_to && (
-                                  <p className="text-xs text-amber-600 mt-2 font-medium">Awaiting approval from: {memo.assigned_to}</p>
+                                {hasHrApproval && memo.hr_approver_name && (
+                                  <p className="text-xs text-green-600 mt-2 font-medium">Approved by: {memo.hr_approver_name}</p>
                                 )}
                               </div>
                               <div className="flex gap-2 flex-shrink-0">
@@ -2596,8 +2739,13 @@ export function LeaveManagementClient({
                                   size="sm"
                                   className="bg-teal-600 hover:bg-teal-700 text-white"
                                   onClick={() => {
-                                    // Download memo
-                                    window.open(memo.memo_url, "_blank")
+                                    // Download memo using the memo[id] API route
+                                    const memoId = memo.id || memo.leave_plan_request_id
+                                    if (memoId) {
+                                      window.open(`/api/leave/planning/memo/${memoId}`, "_blank")
+                                    } else {
+                                      console.error("[v0] No memo ID found for download")
+                                    }
                                   }}
                                 >
                                   <Download className="h-3.5 w-3.5 mr-1" />

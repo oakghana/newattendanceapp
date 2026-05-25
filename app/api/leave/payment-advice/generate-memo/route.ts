@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
   try {
-    const { month, staffList } = await request.json()
+    const { month, staffList, selectedSigner } = await request.json()
 
     if (!month || !staffList || staffList.length === 0) {
       return NextResponse.json(
@@ -14,8 +14,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate professional memos per category
-    const memos = generateProfessionalMemos(staffList, month)
+    // Generate professional memos per category using the selected HR Executive signer
+    // If no signer provided, falls back to "HUMAN RESOURCE MANAGER"
+    const memos = generateProfessionalMemos(staffList, month, selectedSigner)
 
     if (Object.keys(memos).length === 0) {
       return NextResponse.json(
@@ -33,7 +34,11 @@ export async function POST(request: NextRequest) {
       junior: categories.Junior.length,
     }
 
-    console.log("[v0] Generated professional memos:", { month, summary })
+    console.log("[v0] Generated professional memos:", { 
+      month, 
+      summary,
+      signerName: selectedSigner?.name || "Not provided",
+    })
 
     return NextResponse.json({
       success: true,
