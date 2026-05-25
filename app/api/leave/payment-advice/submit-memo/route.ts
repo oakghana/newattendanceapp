@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
           position: selectedSigner.position || "",
-          signature_image_url: signerSignatureUrl, // Include signer's signature in memo data
+          signature_data_url: signerSignatureUrl, // Include signer's signature in memo data
         },
       }
 
