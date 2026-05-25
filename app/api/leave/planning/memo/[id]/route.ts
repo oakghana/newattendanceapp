@@ -640,7 +640,13 @@ export async function GET(
 
     let y = 51
 
-    // Ref No + Date row
+    // Modern header separator line
+    doc.setDrawColor(200, 0, 0)  // Red accent line
+    doc.setLineWidth(0.8)
+    doc.line(marginLeft, y - 2, pageWidth - marginRight, y - 2)
+    y += 1
+
+    // Ref No + Date row (modern styling)
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
     doc.setFontSize(9)
@@ -654,7 +660,7 @@ export async function GET(
     doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10
 
-    // ── Recipient block ──────────────────────────────────────────────
+    // ── Recipient block (modern styling) ──────────────────────────────────────────────
     const applicantFullName = fmtName(ap).toUpperCase() || "REQUESTING STAFF"
     const staffNo           = String(ap?.employee_id || ap?.staff_number || "")
     const applicantPosition = String(ap?.position || "STAFF").toUpperCase()
@@ -662,11 +668,18 @@ export async function GET(
 
     doc.setFont("times", "bold")
     doc.setFontSize(9.5)
+    doc.setTextColor(0, 0, 0)
     doc.text(staffNo ? `${applicantFullName}  (S/NO.:  ${staffNo})` : applicantFullName, marginLeft, y)
     y += 5.5
+    doc.setFont("times", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(60, 60, 60)  // Slightly muted for secondary info
     doc.text(applicantPosition, marginLeft, y)
     y += 5.5
-    if (applicantDept) { doc.text(applicantDept, marginLeft, y); y += 5.5 }
+    if (applicantDept) { 
+      doc.text(applicantDept, marginLeft, y)
+      y += 5.5
+    }
     y += 4
 
     // ── THRO block ───────────────────────────────────────────────────
@@ -676,11 +689,13 @@ export async function GET(
       if (hodPos) {
         doc.setFont("times", "normal")
         doc.setFontSize(9.2)
+        doc.setTextColor(0, 0, 0)
         doc.text("THRO:", marginLeft, y)
         doc.text(hodPos, marginLeft + 14, y)
         y += 5.5
         doc.text("QUALITY CONTROL COMPANY LIMITED", marginLeft + 14, y)
         y += 5.5
+        doc.setTextColor(60, 60, 60)
         doc.text(hodLoc, marginLeft + 14, y)
         y += 10
       }
@@ -807,7 +822,7 @@ export async function GET(
       signerNameForMemo = signerToUse.name
       signerPositionForMemo = signerToUse.position || "HR EXECUTIVE"
       signerSignatureUrl = signerToUse.signature_image_url || ""
-      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo)
+      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo, "signature:", signerSignatureUrl)
     }
     // Fallback: Use hrApproverProfile only if we fetched it (hrApproverId was found)
     else if (hrApproverProfile) {
@@ -828,7 +843,7 @@ export async function GET(
     
     let sigImgY = -1
     
-    // Add signature image if available (NO border line fallback)
+    // Add modern signature block - PROFESSIONAL APPEARANCE
     if (finalSignatureUrl && finalSignatureUrl.length > 10) {
       try {
         // Handle both base64 data URLs and blob URLs
@@ -837,7 +852,7 @@ export async function GET(
           const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
           sigImgY = y
           doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
-          y += 20
+          y += 22
           console.log("[v0] Added base64 signature image to PDF")
         } else if (finalSignatureUrl.startsWith("http")) {
           // Blob URL - fetch and convert to base64
@@ -849,23 +864,43 @@ export async function GET(
               const base64 = Buffer.from(arrayBuffer).toString("base64")
               sigImgY = y
               doc.addImage(`data:image/png;base64,${base64}`, "PNG", marginLeft, y, 50, 18)
-              y += 20
+              y += 22
               console.log("[v0] Added blob URL signature image to PDF")
             } else {
               console.warn("[v0] Failed to fetch blob signature URL:", response.status)
+              // Show placeholder if fetch fails
+              doc.setDrawColor(100, 100, 100)
+              doc.setLineWidth(0.3)
+              doc.line(marginLeft, y, marginLeft + 50, y)
+              y += 2
             }
           } catch (blobErr) {
             console.warn("[v0] Error fetching blob signature:", blobErr)
+            // Show placeholder
+            doc.setDrawColor(100, 100, 100)
+            doc.setLineWidth(0.3)
+            doc.line(marginLeft, y, marginLeft + 50, y)
+            y += 2
           }
         }
       } catch (err) {
         console.warn("[v0] Failed to add signature image:", err)
+        // Show placeholder
+        doc.setDrawColor(100, 100, 100)
+        doc.setLineWidth(0.3)
+        doc.line(marginLeft, y, marginLeft + 50, y)
+        y += 2
       }
     } else {
       console.warn("[v0] No signature image URL available for:", signerNameForMemo)
+      // No signature - show light placeholder line
+      doc.setDrawColor(150, 150, 150)
+      doc.setLineWidth(0.2)
+      doc.line(marginLeft, y + 8, marginLeft + 50, y + 8)
+      y += 2
     }
     
-    // Add signer name (ONLY name and position, NO underlines/border lines)
+    // Add signer name (modern styling)
     doc.setFont("times", "bold")
     doc.setFontSize(10)
     doc.setTextColor(0, 0, 0)
@@ -874,7 +909,8 @@ export async function GET(
     
     // Add position
     doc.setFont("times", "normal")
-    doc.setFontSize(9.5)
+    doc.setFontSize(9)
+    doc.setTextColor(60, 60, 60)
     doc.text(signerPositionForMemo.toUpperCase(), marginLeft, y)
     y += 5
     doc.text("FOR: MANAGING DIRECTOR", marginLeft, y)
