@@ -849,9 +849,9 @@ export async function GET(
         console.log("[v0] SIGNATURE RENDERING: URL found, length:", finalSignatureUrl.length, "starts with:", finalSignatureUrl.substring(0, 30))
         // Handle both base64 data URLs and blob URLs
         if (finalSignatureUrl.startsWith("data:")) {
-          // Base64 data URL
-          const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
-          console.log("[v0] Base64 signature detected, length after cleaning:", b64.length)
+          // Base64 data URL - properly extract base64 content
+          const b64 = finalSignatureUrl.replace(/^data:image\/[^;]+;base64,/, "")
+          console.log("[v0] Base64 signature detected, length after cleaning:", b64.length, "first 50 chars:", b64.substring(0, 50))
           sigImgY = y
           doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
           y += 22
