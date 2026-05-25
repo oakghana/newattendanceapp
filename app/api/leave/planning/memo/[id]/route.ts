@@ -821,8 +821,8 @@ export async function GET(
     if (signerToUse?.name) {
       signerNameForMemo = signerToUse.name
       signerPositionForMemo = signerToUse.position || "HR EXECUTIVE"
-      signerSignatureUrl = signerToUse.signature_image_url || ""
-      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo, "signature:", signerSignatureUrl)
+      signerSignatureUrl = signerToUse.signature_data_url || signerToUse.signature_image_url || ""
+      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo, "signature:", signerSignatureUrl ? "found" : "not found")
     }
     // Fallback: Use hrApproverProfile only if we fetched it (hrApproverId was found)
     else if (hrApproverProfile) {
