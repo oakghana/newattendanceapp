@@ -846,14 +846,16 @@ export async function GET(
     // Add modern signature block - PROFESSIONAL APPEARANCE
     if (finalSignatureUrl && finalSignatureUrl.length > 10) {
       try {
+        console.log("[v0] SIGNATURE RENDERING: URL found, length:", finalSignatureUrl.length, "starts with:", finalSignatureUrl.substring(0, 30))
         // Handle both base64 data URLs and blob URLs
         if (finalSignatureUrl.startsWith("data:")) {
           // Base64 data URL
           const b64 = finalSignatureUrl.replace(/^data:image\/\w+;base64,/, "")
+          console.log("[v0] Base64 signature detected, length after cleaning:", b64.length)
           sigImgY = y
           doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
           y += 22
-          console.log("[v0] Added base64 signature image to PDF")
+          console.log("[v0] SUCCESS: Added base64 signature image to PDF at y:", sigImgY)
         } else if (finalSignatureUrl.startsWith("http")) {
           // Blob URL - fetch and convert to base64
           try {
@@ -865,7 +867,7 @@ export async function GET(
               sigImgY = y
               doc.addImage(`data:image/png;base64,${base64}`, "PNG", marginLeft, y, 50, 18)
               y += 22
-              console.log("[v0] Added blob URL signature image to PDF")
+              console.log("[v0] SUCCESS: Added blob URL signature image to PDF")
             } else {
               console.warn("[v0] Failed to fetch blob signature URL:", response.status)
               // Show placeholder if fetch fails
@@ -882,9 +884,16 @@ export async function GET(
             doc.line(marginLeft, y, marginLeft + 50, y)
             y += 2
           }
+        } else {
+          console.warn("[v0] Signature URL has unknown format:", finalSignatureUrl.substring(0, 50))
+          // Unknown format - show placeholder
+          doc.setDrawColor(150, 150, 150)
+          doc.setLineWidth(0.2)
+          doc.line(marginLeft, y + 8, marginLeft + 50, y + 8)
+          y += 2
         }
       } catch (err) {
-        console.warn("[v0] Failed to add signature image:", err)
+        console.error("[v0] CRITICAL: Failed to add signature image:", err)
         // Show placeholder
         doc.setDrawColor(100, 100, 100)
         doc.setLineWidth(0.3)
@@ -892,7 +901,7 @@ export async function GET(
         y += 2
       }
     } else {
-      console.warn("[v0] No signature image URL available for:", signerNameForMemo)
+      console.warn("[v0] No signature image URL available for:", signerNameForMemo, "URL length:", finalSignatureUrl?.length || 0)
       // No signature - show light placeholder line
       doc.setDrawColor(150, 150, 150)
       doc.setLineWidth(0.2)
