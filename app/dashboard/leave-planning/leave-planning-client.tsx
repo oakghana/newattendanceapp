@@ -2068,7 +2068,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const priorDeducted = Number(officePriorDays[requestId] || 0)
     const travelAdded = Number(officeTravelDays[requestId] || 0)
     const outstandingAdded = Number(officeOutstandingDays[requestId] || 0)
-    const baseDays = adjStart && adjEnd ? computeLeaveDays(adjStart, adjEnd) : 0
+    // Use calendar days (total days including weekends) as base, consistent with the UI breakdown
+    const baseDays = adjStart && adjEnd 
+      ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
+      : 0
     const finalDays = Math.max(0, baseDays + outstandingAdded - holidayDeducted - priorDeducted + travelAdded)
 
     // Get selected HR executive name for confirmation
