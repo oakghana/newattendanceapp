@@ -1405,6 +1405,7 @@ We count on your co-operation.`,
                                       signatory: {
                                         name: batchSignerName,
                                         title: batchSignerTitle,
+                                        signature_image_url: memos[0]?.signature_data_url || undefined, // Include signer's saved signature for PDF rendering
                                       },
                                       ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
                                       memoType: "payment" as const,
@@ -1428,7 +1429,13 @@ We count on your co-operation.`,
                                       }),
                                     }
 
-                                    console.log("[v0] Memo data prepared:", memoData)
+                                    console.log("[v0] Memo data prepared:", {
+                                      signerName: memoData.signatory.name,
+                                      signerTitle: memoData.signatory.title,
+                                      hasSignature: !!memoData.signatory.signature_image_url,
+                                      signaturePreview: memoData.signatory.signature_image_url?.substring(0, 50) + "...",
+                                      staffCount: memos.length,
+                                    })
                                     const pdfName = `payment-advice-${category.toLowerCase().replace(/\s+/g, "-")}-${month}.pdf`
                                     const memoResult = await generateProfessionalMemoPDF(memoData, pdfName)
                                     console.log("[v0] PDF generated, result type:", typeof memoResult, "has mainPdf:", !!memoResult?.mainPdf)
@@ -1513,19 +1520,9 @@ We count on your co-operation.`,
       {isHrLeaveOffice && (
         <div className="flex gap-2 border-b mb-4">
           <button
-            onClick={() => setActivePaymentTab("pending")}
+            onClick={() => setActivePaymentTab("pending" as any)}
             className={`px-4 py-2 font-medium text-sm transition-colors ${
-              activePaymentTab === "pending"
-                ? "border-b-2 border-green-600 text-green-600"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Create Payment Advice
-          </button>
-          <button
-            onClick={() => setActivePaymentTab("approved")}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
-              activePaymentTab === "approved"
+              activePaymentTab === "pending" || (activePaymentTab as any) === "pending"
                 ? "border-b-2 border-blue-600 text-blue-600"
                 : "text-gray-600 hover:text-gray-900"
             }`}
@@ -1545,8 +1542,8 @@ We count on your co-operation.`,
         </div>
       )}
 
-      {/* Create Payment Advice Tab - shows by default or when "pending" tab is selected */}
-      {(!isHrLeaveOffice || activePaymentTab === "pending") && (
+      {/* Create Payment Advice Tab */}
+      {(!isHrLeaveOffice || (activePaymentTab as any) === "pending") && (
       <>
       {/* Month Selection & HR Signer */}
       <Card>
@@ -1772,7 +1769,7 @@ We count on your co-operation.`,
       )}
 
       {/* Monthly Summary Tab - for HR LEAVE_OFFICE to see submitted memos */}
-      {isHrLeaveOffice && activePaymentTab === "approved" && (
+      {isHrLeaveOffice && (activePaymentTab as any) === "approved" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
