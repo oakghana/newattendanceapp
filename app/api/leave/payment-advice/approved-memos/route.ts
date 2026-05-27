@@ -48,7 +48,10 @@ export async function GET(request: NextRequest) {
         forwarded_at,
         acknowledged_at,
         payment_amount,
-        payment_currency
+        payment_currency,
+        signature_data_url,
+        signer_id,
+        signer_name
       `
       )
       .eq("status", "reviewed_by_hr")
