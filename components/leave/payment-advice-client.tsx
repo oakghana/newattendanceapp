@@ -1513,9 +1513,19 @@ We count on your co-operation.`,
       {isHrLeaveOffice && (
         <div className="flex gap-2 border-b mb-4">
           <button
-            onClick={() => setActivePaymentTab("pending" as any)}
+            onClick={() => setActivePaymentTab("pending")}
             className={`px-4 py-2 font-medium text-sm transition-colors ${
-              activePaymentTab === "pending" || (activePaymentTab as any) === "pending"
+              activePaymentTab === "pending"
+                ? "border-b-2 border-green-600 text-green-600"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Create Payment Advice
+          </button>
+          <button
+            onClick={() => setActivePaymentTab("approved")}
+            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              activePaymentTab === "approved"
                 ? "border-b-2 border-blue-600 text-blue-600"
                 : "text-gray-600 hover:text-gray-900"
             }`}
@@ -1535,8 +1545,8 @@ We count on your co-operation.`,
         </div>
       )}
 
-      {/* Create Payment Advice Tab */}
-      {(!isHrLeaveOffice || (activePaymentTab as any) === "pending") && (
+      {/* Create Payment Advice Tab - shows by default or when "pending" tab is selected */}
+      {(!isHrLeaveOffice || activePaymentTab === "pending") && (
       <>
       {/* Month Selection & HR Signer */}
       <Card>
@@ -1762,7 +1772,7 @@ We count on your co-operation.`,
       )}
 
       {/* Monthly Summary Tab - for HR LEAVE_OFFICE to see submitted memos */}
-      {isHrLeaveOffice && (activePaymentTab as any) === "approved" && (
+      {isHrLeaveOffice && activePaymentTab === "approved" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
