@@ -56,7 +56,17 @@ export function SignatureRequiredDialog({
     }
   }
 
-  // If user has existing signature, auto-proceed
+  // If user has existing signature, auto-proceed (smart feature)
+  useEffect(() => {
+    if (existingSignature && open) {
+      console.log("[v0] Smart signature feature: Found saved signature, auto-approving without dialog")
+      // Auto-proceed with existing signature without showing dialog
+      setTimeout(() => {
+        handleUseExistingSignature()
+      }, 500)
+    }
+  }, [existingSignature, open])
+
   const handleUseExistingSignature = () => {
     toast({
       title: "Using your saved signature",

@@ -214,12 +214,15 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Update memo with new status and updated memo_body
+        // Update memo with new status, signature, and updated memo_body
         await admin
           .from("leave_payment_memos")
           .update({
             status: "reviewed_by_hr",
             memo_body: JSON.stringify(memoBody),
+            signature_data_url: hrSignatureData?.signature_data_url || null, // Store signature in DB column for PDF rendering
+            signer_id: selectedSigner.id,
+            signer_name: signerName,
             updated_at: new Date().toISOString(),
           })
           .eq("id", memo.id)
