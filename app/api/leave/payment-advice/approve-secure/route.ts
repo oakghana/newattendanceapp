@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
             id: selectedSigner.id,
             name: signerName,
             position: signerProfile.position || "",
-            signature_image_url: hrSignatureData?.signature_data_url || "",
+            signature_image_url: signatureRecord?.signature_data_url || "",
           }
         }
 
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
           .update({
             status: "reviewed_by_hr",
             memo_body: JSON.stringify(memoBody),
-            signature_data_url: hrSignatureData?.signature_data_url || null, // Store signature in DB column for PDF rendering
+            signature_data_url: signatureRecord?.signature_data_url || null, // Store signature in DB column for PDF rendering
             signer_id: selectedSigner.id,
             signer_name: signerName,
             updated_at: new Date().toISOString(),
