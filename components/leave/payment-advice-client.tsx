@@ -89,17 +89,32 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Load submitted memos for Monthly Summary tab
   useEffect(() => {
-    if (!isHrLeaveOffice || !summaryMonth) return
+    console.log("[v0] Monthly Summary useEffect triggered:", {
+      isHrLeaveOffice,
+      summaryMonth,
+      shouldLoad: isHrLeaveOffice && summaryMonth,
+    })
+
+    if (!isHrLeaveOffice || !summaryMonth) {
+      console.log("[v0] Skipping memo load - missing conditions")
+      return
+    }
 
     const loadSubmittedMemos = async () => {
+      console.log("[v0] Loading submitted memos for month:", summaryMonth)
       setLoadingSubmittedMemos(true)
       try {
         const response = await fetch(`/api/leave/payment-advice/my-memos?month=${summaryMonth}`)
         if (response.ok) {
           const data = await response.json()
+          console.log("[v0] Submitted memos loaded:", {
+            count: data.memos?.length || 0,
+            memos: data.memos,
+          })
           setSubmittedMemos(data.memos || [])
         } else {
-          console.error("[v0] Failed to load submitted memos:", await response.json())
+          const error = await response.json()
+          console.error("[v0] Failed to load submitted memos:", error)
           setSubmittedMemos([])
         }
       } catch (err) {
@@ -1769,7 +1784,7 @@ We count on your co-operation.`,
       )}
 
       {/* Monthly Summary Tab - for HR LEAVE_OFFICE to see submitted memos */}
-      {isHrLeaveOffice && (activePaymentTab as any) === "approved" && (
+      {isHrLeaveOffice && activePaymentTab === "approved" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
