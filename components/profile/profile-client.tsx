@@ -117,6 +117,29 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       // ignore
     }
   }, [searchParams])
+
+  // Load existing signature when Signature tab is active
+  useEffect(() => {
+    if (activeTab === "signature") {
+      loadExistingSignature()
+    }
+  }, [activeTab])
+
+  const loadExistingSignature = async () => {
+    try {
+      const res = await fetch("/api/user/signature-save", { method: "GET" })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.signature?.signature_data_url) {
+          setSignatureDataUrl(data.signature.signature_data_url)
+          console.log("[v0] Loaded existing signature from database")
+        }
+      }
+    } catch (err) {
+      console.error("[v0] Error loading existing signature:", err)
+    }
+  }
+
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -758,45 +781,83 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 </button>
               </div>
 
-              {/* Typed Signature - REMOVED */}
-
-              {/* Draw Signature */}
-              {signatureMode === "draw" && (
-                <div className="space-y-2">
-                  <Label>Draw your signature below</Label>
-                  <SignaturePad value={signatureDataUrl} onChange={setSignatureDataUrl} />
+              {/* Signature Display and Editor */}
+              {signatureDataUrl ? (
+                // EXISTING SIGNATURE - Show and allow update
+                <div className="space-y-4">
+                  <div className="p-4 bg-white border-2 border-green-200 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-2">Your saved signature:</p>
+                    <img 
+                      src={signatureDataUrl} 
+                      alt="Your saved signature" 
+                      className="max-h-32 max-w-full object-contain"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        setSignatureDataUrl(null)
+                        setSignatureMode("draw")
+                      }}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Update Signature
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setSignatureDataUrl(null)
+                      }}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      Clear Signature
+                    </Button>
+                  </div>
                 </div>
-              )}
-
-              {/* Upload Signature */}
-              {signatureMode === "upload" && (
-                <div className="space-y-2">
-                  <Label>Upload signature image</Label>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) {
-                        const reader = new FileReader()
-                        reader.onload = (event) => {
-                          setSignatureDataUrl(event.target?.result as string)
-                        }
-                        reader.readAsDataURL(file)
-                      }
-                    }}
-                    className="cursor-pointer"
-                  />
-                  {signatureDataUrl && (
-                    <div className="mt-3 p-3 bg-white border rounded">
-                      <img src={signatureDataUrl} alt="Uploaded signature" className="max-h-24 max-w-full" />
+              ) : (
+                // NO SIGNATURE - Show draw/upload options
+                <>
+                  {/* Draw Signature */}
+                  {signatureMode === "draw" && (
+                    <div className="space-y-2">
+                      <Label>Draw your signature below</Label>
+                      <SignaturePad onChange={setSignatureDataUrl} />
                     </div>
                   )}
-                </div>
+
+                  {/* Upload Signature */}
+                  {signatureMode === "upload" && (
+                    <div className="space-y-2">
+                      <Label>Upload signature image</Label>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            const reader = new FileReader()
+                            reader.onload = (event) => {
+                              setSignatureDataUrl(event.target?.result as string)
+                            }
+                            reader.readAsDataURL(file)
+                          }
+                        }}
+                        className="cursor-pointer"
+                      />
+                      {signatureDataUrl && (
+                        <div className="mt-3 p-3 bg-white border rounded">
+                          <img src={signatureDataUrl} alt="Uploaded signature" className="max-h-24 max-w-full" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* Preview and Save */}
-              <div className="space-y-3 pt-4 border-t border-green-200">
+              {/* Preview and Save - Only show if signature is being created/edited */}
+              {!signatureDataUrl || signatureMode === "draw" || signatureMode === "upload" ? (
+                <div className="space-y-3 pt-4 border-t border-green-200">
                 <Button
                   onClick={async () => {
                     if (!signatureDataUrl) {
@@ -806,35 +867,32 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
 
                     setIsSavingSignature(true)
                     try {
-                      console.log("[v0] Saving signature via workflow/registry endpoint")
+                      console.log("[v0] Saving signature to /api/user/signature-save")
                       
-                      const response = await fetch("/api/workflow/registry", {
+                      const response = await fetch("/api/user/signature-save", {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
                         },
                         body: JSON.stringify({
-                          action: "upsert_signature",
-                          workflow_domain: "loan",
-                          approval_stage: "director_hr",
-                          signature_mode: signatureMode,
                           signature_data_url: signatureDataUrl,
                         }),
                       })
 
                       const result = await response.json()
-                      console.log("[v0] API response:", result)
+                      console.log("[v0] Signature save response:", result)
 
                       if (!response.ok) {
                         throw new Error(result.error || `Failed to save signature: ${response.statusText}`)
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
-                      setSignatureDataUrl(null)
+                      // Keep the saved signature displayed instead of clearing it
+                      setSignatureDataUrl(result.signature?.signature_data_url || signatureDataUrl)
                     } catch (err) {
                       const errorMsg = err instanceof Error ? err.message : String(err)
                       console.error("[v0] Error saving signature:", errorMsg)
-                      toast.error("Failed to save signature. Please try again.")
+                      toast.error(errorMsg || "Failed to save signature. Please try again.")
                     } finally {
                       setIsSavingSignature(false)
                     }
@@ -845,6 +903,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   {isSavingSignature ? "Saving..." : "Save Signature"}
                 </Button>
               </div>
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>

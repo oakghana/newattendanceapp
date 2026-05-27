@@ -75,32 +75,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Save or update signature in approval_signature_registry
-    const { data: existingSignature, error: fetchErr } = await admin
-      .from("approval_signature_registry")
-      .select("id")
-      .eq("user_id", user.id)
-      .single()
-
-    // fetchErr with PGRST116 means no record found - that's OK
-    const hasExistingSignature = !fetchErr || fetchErr.code !== "PGRST116"
-
-    let result
-    if (hasExistingSignature && existingSignature?.id) {
-      // Update existing signature - only update what matters
-      result = await admin
+    // The table has a unique constraint on (user_id, workflow_domain, approval_stage)
+    // So we need to delete existing record first before inserting new one
+    console.log("[v0] Upserting signature for user:", user.id)
+    
+    try {
+      // First, try to delete existing signature for this user/workflow/stage combination
+      const { error: deleteError } = await admin
         .from("approval_signature_registry")
-        .update({
-          signature_data_url: signatureUrl,
-          is_active: true,
-          signature_mode: "draw",
-          updated_at: new Date().toISOString(),
-        })
+        .delete()
         .eq("user_id", user.id)
-        .select()
-        .single()
-    } else {
-      // Create new signature record - include ALL required fields
-      result = await admin
+        .eq("workflow_domain", "loan")
+        .eq("approval_stage", "director_hr")
+
+      if (deleteError && deleteError.code !== "PGRST116") {
+        console.warn("[v0] Warning deleting old signature:", deleteError)
+      }
+
+      // Now insert the new signature
+      const { data: result, error: insertError } = await admin
         .from("approval_signature_registry")
         .insert({
           user_id: user.id,
@@ -112,24 +105,26 @@ export async function POST(request: NextRequest) {
         })
         .select()
         .single()
-    }
 
-    if (result.error) {
-      console.error("[v0] Database error saving signature:", {
-        code: result.error.code,
-        message: result.error.message,
-        details: result.error.details,
+      if (insertError) {
+        console.error("[v0] Database error inserting signature:", {
+          code: insertError.code,
+          message: insertError.message,
+          details: insertError.details,
+        })
+        throw new Error(`Database error: ${insertError.message || insertError.code}`)
+      }
+
+      console.log("[v0] Signature saved successfully to database:", result)
+
+      return NextResponse.json({
+        success: true,
+        message: "Signature saved successfully",
+        signature: result,
       })
-      throw new Error(`Database error: ${result.error.message || result.error.code}`)
+    } catch (err) {
+      throw err
     }
-
-    console.log("[v0] Signature saved successfully to database:", result.data)
-
-    return NextResponse.json({
-      success: true,
-      message: "Signature saved successfully",
-      signature: result.data,
-    })
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
     console.error("[v0] Error saving signature:", error)

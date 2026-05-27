@@ -110,6 +110,36 @@ export async function POST(request: NextRequest) {
     // CRITICAL: Verify signer has a saved signature before allowing approval
     console.log("[v0] Checking signature for selected signer:", selectedSigner.id, "- signerName:", signerName)
     
+    // First, verify that the selected signer is actually assigned to approve these memos
+    const { data: memosToValidate } = await admin
+      .from("leave_payment_memos")
+      .select("id, assigned_signers")
+      .in("id", memoIds)
+
+    if (memosToValidate && memosToValidate.length > 0) {
+      // Check if selectedSigner.id is in the assigned_signers array for ALL memos
+      const unauthorizedMemos = memosToValidate.filter(memo => {
+        const assignedSigners = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
+        return !assignedSigners.includes(selectedSigner.id)
+      })
+
+      if (unauthorizedMemos.length > 0) {
+        console.warn("[v0] Unauthorized approval attempt:", {
+          attemptingUserId: user.id,
+          selectedSignerId: selectedSigner.id,
+          unauthorizedMemoIds: unauthorizedMemos.map(m => m.id),
+          assignedSignersForMemos: unauthorizedMemos.map(m => m.assigned_signers),
+        })
+        return NextResponse.json(
+          {
+            error: "You are not authorized to approve these memos",
+            details: `The selected signer (${signerName}) is not assigned to approve ${unauthorizedMemos.length} of the selected memos. Only the assigned signer can approve.`,
+          },
+          { status: 403 }
+        )
+      }
+    }
+    
     const { data: signatureRecords, error: sigError } = await admin
       .from("approval_signature_registry")
       .select("id, signature_data_url, user_id, is_active, workflow_domain")

@@ -43,7 +43,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Query pending memos in "ready_for_review" status
+    // Query pending memos in "ready_for_review" status where current user is assigned as signer
+    // Check if user.id is in the assigned_signers JSONB array
     const { data: pendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
@@ -60,11 +61,14 @@ export async function GET(request: NextRequest) {
         hr_leave_office_id,
         hr_leave_office_name,
         status,
+        assigned_signers,
         created_at,
         updated_at
       `
       )
       .eq("status", "ready_for_review")
+      // Filter: assigned_signers JSONB array must contain current user's ID
+      .filter("assigned_signers", "cs", `"${user.id}"`)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -74,6 +78,10 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    console.log(
+      `[v0] Found ${pendingMemos?.length || 0} pending memos assigned to user ${user.id}`
+    )
 
     return NextResponse.json({
       success: true,
