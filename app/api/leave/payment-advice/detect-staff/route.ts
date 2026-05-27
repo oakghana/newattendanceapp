@@ -168,7 +168,12 @@ export async function POST(request: NextRequest) {
         leave_end_date: record.preferred_end_date,
         leave_type: record.leave_type_key,
         requested_days: record.requested_days || record.entitlement_days || 0,
-        approved_days: record.adjusted_days || record.requested_days || record.entitlement_days || 0,
+        // FIXED: Approved days now includes outstanding balance + adjusted days + travelling allowance
+        approved_days: (
+          (record.year_outstanding_balance || 0) + 
+          (record.adjusted_days || record.requested_days || record.entitlement_days || 0) + 
+          (record.travelling_days_added || 0)
+        ),
       }
     })
 
