@@ -1429,8 +1429,16 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                           ? new Date(month + "-01").toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase()
                                           : month
                                       }`,
-                                      date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-                                      refNo: `QCC/`,
+                                      date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }),
+                                      // Generate professional reference number
+                                      refNo: (() => {
+                                        const monthDate = month.includes("-") ? new Date(month + "-01") : new Date()
+                                        const year = monthDate.getFullYear()
+                                        const monthNum = String(monthDate.getMonth() + 1).padStart(2, "0")
+                                        const categoryCode = category === "Junior" ? "JNR" : category === "Senior" ? "SNR" : "MGT"
+                                        const sequence = String(memos.length).padStart(3, "0")
+                                        return `QCC/HR/PA/${year}/${monthNum}/${categoryCode}/${sequence}`
+                                      })(),
                                       body: `We wish to inform you that the undermentioned staff members are scheduled to proceed on their annual vacation leave.
 
 We, therefore, kindly request you to process and pay their leave allowance accordingly.
@@ -1439,7 +1447,20 @@ We count on your co-operation.`,
                                       signatory: {
                                         name: batchSignerName,
                                         title: batchSignerTitle,
-                                        signature_image_url: memos[0]?.signature_data_url || undefined, // Include signer's saved signature for PDF rendering
+                                        // Fetch signature from memo_body or direct field - check multiple sources
+                                        signature_image_url: (() => {
+                                          // First check direct signature_data_url field
+                                          if (memos[0]?.signature_data_url) return memos[0].signature_data_url
+                                          // Then check memo_body for signature
+                                          try {
+                                            const body = typeof memos[0]?.memo_body === "string" 
+                                              ? JSON.parse(memos[0].memo_body) 
+                                              : memos[0]?.memo_body
+                                            return body?.signature_data_url || body?.selectedSigner?.signature_image_url || undefined
+                                          } catch {
+                                            return undefined
+                                          }
+                                        })(),
                                       },
                                       ccList: ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"],
                                       memoType: "payment" as const,

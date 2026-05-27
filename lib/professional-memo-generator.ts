@@ -271,7 +271,7 @@ async function generateMainMemo(
   }
   yPos += 10
 
-  // Signature image if available - render above the signature line
+  // Signature image if available - render above the signer name (NO border/line)
   if (memoData.signatory.signature_image_url) {
     try {
       const sigUrl = memoData.signatory.signature_image_url
@@ -282,7 +282,9 @@ async function generateMainMemo(
         const b64Match = sigUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
         if (b64Match) {
           const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
-          doc.addImage(sigUrl, imageType, margin, yPos - 8, 40, 15)
+          // Render signature ABOVE the name, with proper spacing
+          doc.addImage(sigUrl, imageType, margin, yPos - 5, 45, 18)
+          yPos += 15 // Add space after signature image
         }
       } else if (sigUrl.startsWith("http")) {
         // Handle external URLs by fetching
@@ -292,7 +294,8 @@ async function generateMainMemo(
           const arrayBuffer = await signatureBlob.arrayBuffer()
           const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
           const dataUrl = `data:image/png;base64,${base64}`
-          doc.addImage(dataUrl, "PNG", margin, yPos - 8, 40, 15)
+          doc.addImage(dataUrl, "PNG", margin, yPos - 5, 45, 18)
+          yPos += 15 // Add space after signature image
         }
       }
     } catch (err) {
@@ -300,13 +303,11 @@ async function generateMainMemo(
     }
   }
 
-  // Signature line
-  doc.setDrawColor(0)
-  doc.setLineWidth(0.5)
-  doc.line(margin, yPos, margin + 50, yPos)
-  yPos += 5
+  // NO signature line/border - clean look without underline
+  // The signature image appears above the name with proper spacing
+  yPos += 3
 
-  // Signature block - using dynamic signatory
+  // Signature block - signer name and title (NO border/underline)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.text(memoData.signatory.name, margin, yPos)

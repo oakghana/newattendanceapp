@@ -94,7 +94,7 @@ export async function detectStaffOnLeaveForMonth(month: string): Promise<StaffOn
 export function generateProfessionalMemos(
   staffList: StaffOnLeave[],
   month: string,
-  signer?: { name?: string; position?: string }
+  signer?: { name?: string; position?: string; signature_image_url?: string }
 ): Record<string, string> {
   const monthDate = new Date(`${month}-01`)
   const monthName = monthDate.toLocaleDateString("en-US", {
@@ -115,19 +115,37 @@ export function generateProfessionalMemos(
     Junior: "JNR. STAFF",
   }
 
+  // Category codes for reference numbers
+  const categoryCodes: Record<string, string> = {
+    Manager: "MGT",
+    Senior: "SNR",
+    Junior: "JNR",
+  }
+
   Object.entries(categories).forEach(([category, staff]) => {
     if ((staff as StaffOnLeave[]).length === 0) return
 
     const categoryLabel = categoryLabels[category] || category
+    const categoryCode = categoryCodes[category] || "GEN"
     const today = new Date()
-    const dateStr = `${today.getDate()}/${today.getMonth() + 1}/${today.getFullYear()}`
+    const dateStr = today.toLocaleDateString("en-GB", { 
+      day: "2-digit", 
+      month: "long", 
+      year: "numeric" 
+    })
+    
+    // Generate professional reference number: QCC/HR/PA/{YEAR}/{MONTH}/{CATEGORY}/{SEQUENCE}
+    const year = monthDate.getFullYear()
+    const monthNum = String(monthDate.getMonth() + 1).padStart(2, "0")
+    const sequence = String((staff as StaffOnLeave[]).length).padStart(3, "0")
+    const refNo = `QCC/HR/PA/${year}/${monthNum}/${categoryCode}/${sequence}`
 
     let memo = `QUALITY CONTROL COMPANY LTD.
 (COCOBOD)
 P. O. BOX M54
 ACCRA                                                    MEMORANDUM
 
-REF. NO: QCC/                         DATE: ${dateStr}
+REF. NO: ${refNo}                         DATE: ${dateStr}
 
 TO:      DEPUTY DIRECTOR, FINANCE
 
