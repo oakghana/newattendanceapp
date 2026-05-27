@@ -148,9 +148,9 @@ NO    NAME                          S/NO        POSITION                      DE
 
     memo += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-We, therefore, kindly request you to pay their leave allowances accordingly.
-
 We count on your co-operation.
+
+We, therefore, kindly request you to process and pay their leave allowance accordingly.
 
 
 ${signerName}
