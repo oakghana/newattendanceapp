@@ -87,6 +87,32 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [loadingSubmittedMemos, setLoadingSubmittedMemos] = useState(false)
   const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7))
 
+  // Load submitted memos for Monthly Summary tab
+  useEffect(() => {
+    if (!isHrLeaveOffice || !summaryMonth) return
+
+    const loadSubmittedMemos = async () => {
+      setLoadingSubmittedMemos(true)
+      try {
+        const response = await fetch(`/api/leave/payment-advice/my-memos?month=${summaryMonth}`)
+        if (response.ok) {
+          const data = await response.json()
+          setSubmittedMemos(data.memos || [])
+        } else {
+          console.error("[v0] Failed to load submitted memos:", await response.json())
+          setSubmittedMemos([])
+        }
+      } catch (err) {
+        console.error("[v0] Error loading submitted memos:", err)
+        setSubmittedMemos([])
+      } finally {
+        setLoadingSubmittedMemos(false)
+      }
+    }
+
+    loadSubmittedMemos()
+  }, [isHrLeaveOffice, summaryMonth])
+
   // Helper: Retry approval after signature has been saved
   const retryPendingApproval = async (memoIds: string[]) => {
     if (!selectedSigner || memoIds.length === 0) return
