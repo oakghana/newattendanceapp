@@ -33,9 +33,8 @@ export async function POST(request: NextRequest) {
 
     // Query staff on annual leave for this month
     // Status can be: approved, hr_approved, hod_approved (all are approved states)
-    // For overlap detection: A leave overlaps with the month if:
-    // - leave_start_date <= monthEnd (leave started before/on last day of month)
-    // - leave_end_date >= monthStart (leave ends on/after first day of month)
+    // FIXED: Use START DATE ONLY to prevent multi-month leaves from appearing in multiple months
+    // This ensures each leave generates only ONE payment memo in the month it starts
     const { data: staffOnLeave, error } = await supabase
       .from("leave_plan_requests")
       .select(
@@ -49,13 +48,16 @@ export async function POST(request: NextRequest) {
         status,
         requested_days,
         adjusted_days,
-        entitlement_days
+        entitlement_days,
+        travelling_days_added,
+        year_outstanding_balance
       `
       )
       .eq("leave_type_key", "annual")
       .in("status", ["approved", "hr_approved", "hod_approved"])
+      // Filter by START DATE ONLY - leave must start in this month
+      .gte("preferred_start_date", monthStart)
       .lte("preferred_start_date", monthEnd)
-      .gte("preferred_end_date", monthStart)
 
     if (error) {
       console.error("[v0] Error querying staff:", error)
