@@ -1,24 +1,33 @@
-import { createAdminClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse, NextRequest } from "next/server"
 
 /**
  * Quick signature save endpoint for HR executives
- * Allows HR to save/update their signature for use in memos
+ * Allows HR to save/update their signature permanently for use in all payment advice memos
+ * Accepts either { signatureDataUrl, userId } or { signature_data } (uses session user)
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { signatureDataUrl, userId } = body
+    // Support both payload shapes from different callers
+    const signatureDataUrl = body.signatureDataUrl || body.signature_data
 
     if (!signatureDataUrl) {
       return NextResponse.json({ error: "No signature provided" }, { status: 400 })
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: "No userId provided" }, { status: 400 })
-    }
-
     const admin = await createAdminClient()
+
+    // Resolve userId - prefer explicit, fall back to session user
+    let userId = body.userId
+    if (!userId) {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized - no user session" }, { status: 401 })
+      }
+      userId = user.id
+    }
 
     // Check if signature already exists for this user
     const { data: existingSignature } = await admin

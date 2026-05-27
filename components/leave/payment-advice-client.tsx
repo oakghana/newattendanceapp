@@ -75,6 +75,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
   const [showSignatureRequiredDialog, setShowSignatureRequiredDialog] = useState(false)
+  const [pendingApprovalMemoIds, setPendingApprovalMemoIds] = useState<string[]>([])
   
   // Pagination states
   const [pendingPage, setPendingPage] = useState(1)
@@ -85,6 +86,43 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [submittedMemos, setSubmittedMemos] = useState<any[]>([])
   const [loadingSubmittedMemos, setLoadingSubmittedMemos] = useState(false)
   const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7))
+
+  // Helper: Retry approval after signature has been saved
+  const retryPendingApproval = async (memoIds: string[]) => {
+    if (!selectedSigner || memoIds.length === 0) return
+    try {
+      const response = await fetch("/api/leave/payment-advice/approve-secure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memoIds,
+          selectedSigner: {
+            id: selectedSigner.id,
+            name: selectedSigner.full_name || selectedSigner.name,
+            position: selectedSigner.position,
+          },
+        }),
+      })
+      const result = await response.json()
+      if (response.ok) {
+        const approvedIds = new Set(memoIds)
+        setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
+        setApprovedMemos((prev) => [
+          ...pendingMemos
+            .filter((m) => approvedIds.has(m.id))
+            .map((m) => ({ ...m, status: "reviewed_by_hr", updated_at: new Date().toISOString() })),
+          ...prev,
+        ])
+        toast({ title: "Approved", description: `${memoIds.length} memo${memoIds.length > 1 ? "s" : ""} approved successfully.` })
+      } else {
+        toast({ title: "Error", description: result.error || "Failed to approve memos.", variant: "destructive" })
+      }
+    } catch (err) {
+      console.error("[v0] Error in retry approval:", err)
+      toast({ title: "Error", description: "Failed to approve memos.", variant: "destructive" })
+    }
+    setPendingApprovalMemoIds([])
+  }
 
   // Helper: Check if signer has a saved signature
   const checkSignerSignature = async (signerId: string): Promise<boolean> => {
@@ -985,13 +1023,11 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     // HR Executive must have a signature before approving
                                     const hasSignature = await checkSignerSignature(selectedSigner.id)
                                     if (!hasSignature) {
-                                      // Show signature dialog for HR Executive to add signature
+                                      // Save the memo IDs so we can retry after signature is saved
+                                      const ids = memos.map((m: any) => m.id)
+                                      setPendingApprovalMemoIds(ids)
+                                      // Show signature dialog for HR Executive to add their signature
                                       setShowSignatureRequiredDialog(true)
-                                      toast({
-                                        title: "Signature Required",
-                                        description: "You must save your signature before approving payment advice memos.",
-                                        variant: "destructive",
-                                      })
                                       return
                                     }
 
@@ -1392,6 +1428,20 @@ We, therefore, kindly request you to process and pay their leave allowance accor
 
           </div>
         </CardContent>
+
+        {/* Signature Required Dialog for HR Executives - renders inside HR Executive section */}
+        <SignatureRequiredDialog
+          open={showSignatureRequiredDialog}
+          onOpenChange={setShowSignatureRequiredDialog}
+          hrName={selectedSigner?.full_name || selectedSigner?.name || "HR Executive"}
+          onSignatureSaved={async () => {
+            setShowSignatureRequiredDialog(false)
+            // Retry the pending approval now that signature is saved
+            if (pendingApprovalMemoIds.length > 0) {
+              await retryPendingApproval(pendingApprovalMemoIds)
+            }
+          }}
+        />
       </Card>
     )
   }
