@@ -1290,8 +1290,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       refNo: `QCC/`,
                                       body: `We wish to inform you that the undermentioned staff members are scheduled to proceed on their annual vacation leave.
 
-We, therefore, kindly request you to pay their leave allowances accordingly.
-We count on your co-operation.`,
+We count on your co-operation.
+
+We, therefore, kindly request you to process and pay their leave allowance accordingly.`,
                                       signatory: {
                                         name: batchSignerName,
                                         title: batchSignerTitle,
