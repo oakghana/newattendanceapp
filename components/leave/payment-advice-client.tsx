@@ -1339,9 +1339,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       refNo: `QCC/`,
                                       body: `We wish to inform you that the undermentioned staff members are scheduled to proceed on their annual vacation leave.
 
-We count on your co-operation.
+We, therefore, kindly request you to process and pay their leave allowance accordingly.
 
-We, therefore, kindly request you to process and pay their leave allowance accordingly.`,
+We count on your co-operation.`,
                                       signatory: {
                                         name: batchSignerName,
                                         title: batchSignerTitle,
@@ -1739,26 +1739,77 @@ We, therefore, kindly request you to process and pay their leave allowance accor
                 <div className="text-sm font-medium text-gray-700">
                   Found {submittedMemos.length} submitted memo{submittedMemos.length !== 1 ? "s" : ""}
                 </div>
-                {submittedMemos.map((memo, idx) => (
-                  <div key={memo.id || idx} className="p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{memo.memo_subject || "Payment Advice Memo"}</p>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Submitted: {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
-                        </p>
-                        {memo.memo_body && (
-                          <div className="text-xs text-gray-600 mt-2 line-clamp-2">
-                            {typeof memo.memo_body === "string" ? memo.memo_body.substring(0, 100) : ""}...
-                          </div>
-                        )}
+                {submittedMemos.map((memo, idx) => {
+                  // Parse memo_body if it's a JSON string
+                  let memoBody: any = {}
+                  if (memo.memo_body) {
+                    try {
+                      memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+                    } catch (e) {
+                      // memo_body is plain text, not JSON
+                    }
+                  }
+
+                  const submittedMonth = memo.created_at ? new Date(memo.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long" }) : "Unknown"
+                  const signerName = memoBody.selectedSigner?.name || memoBody.selectedSigner?.full_name || "Pending"
+                  const signerPosition = memoBody.selectedSigner?.position || "N/A"
+
+                  return (
+                    <div
+                      key={memo.id || idx}
+                      className="p-4 border rounded-lg bg-white hover:shadow-md transition-shadow space-y-2"
+                    >
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">{memo.staff_name || "Multiple Staff"}</p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Month: <span className="font-medium">{submittedMonth}</span>
+                          </p>
+                        </div>
+                        <Badge variant={memo.status === "reviewed_by_hr" ? "default" : memo.status === "approved" ? "default" : "secondary"}>
+                          {memo.status === "reviewed_by_hr" ? "Approved" : memo.status === "approved" ? "Approved" : "Submitted"}
+                        </Badge>
                       </div>
-                      <Badge variant={memo.status === "approved" ? "default" : "secondary"}>
-                        {memo.status || "submitted"}
-                      </Badge>
+
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t">
+                        <div>
+                          <p className="text-gray-600">Submitted</p>
+                          <p className="font-medium text-gray-900">{memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Leave Period</p>
+                          <p className="font-medium text-gray-900">
+                            {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"}
+                            {memo.leave_period_end ? ` - ${new Date(memo.leave_period_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Days Approved</p>
+                          <p className="font-medium text-gray-900">{memo.approved_days || "N/A"} days</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Signer</p>
+                          <p className="font-medium text-gray-900 truncate">{signerName}</p>
+                        </div>
+                      </div>
+
+                      {/* Staff Number and Details */}
+                      {memo.staff_number && (
+                        <div className="text-xs text-gray-600 pt-2 border-t">
+                          <p>
+                            Staff No: <span className="font-medium text-gray-900">{memo.staff_number}</span>
+                          </p>
+                          {signerPosition !== "N/A" && (
+                            <p>
+                              Approver: <span className="font-medium text-gray-900">{signerPosition}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>
