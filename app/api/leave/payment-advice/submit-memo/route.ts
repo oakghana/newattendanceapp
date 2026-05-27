@@ -107,6 +107,17 @@ export async function POST(request: NextRequest) {
     // Group staff by category
     const categories = groupStaffByCategory(staffList)
     
+    console.log("[v0] Processing staffList:", {
+      totalStaff: staffList.length,
+      staffSamples: staffList.slice(0, 3).map((s: any) => ({
+        name: s.full_name,
+        user_id: s.user_id,
+        leave_plan_request_id: s.leave_plan_request_id,
+        fields: Object.keys(s)
+      })),
+      categories
+    })
+    
     // Create individual payment memo records for each staff member
     const memoRecords: any[] = []
     const errors: string[] = []
@@ -186,9 +197,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (memoRecords.length === 0) {
-      console.error("[v0] No valid memo records to insert:", errors)
+      console.error("[v0] No valid memo records to insert:", { 
+        totalStaffCount: staffList.length,
+        errorCount: errors.length,
+        errors,
+        staffSampleData: staffList.slice(0, 2).map(s => ({
+          name: s.full_name,
+          has_leave_plan_request_id: !!s.leave_plan_request_id,
+          has_user_id: !!s.user_id,
+          leave_plan_request_id: s.leave_plan_request_id,
+          user_id: s.user_id
+        }))
+      })
       return NextResponse.json(
-        { error: "No valid staff records", details: errors.join("; ") },
+        { 
+          error: "No valid staff records", 
+          details: errors.length > 0 ? errors.join("; ") : "All staff records are missing required fields (leave_plan_request_id or user_id)",
+          staffValidationErrors: errors,
+          staffCount: staffList.length
+        },
         { status: 400 }
       )
     }
