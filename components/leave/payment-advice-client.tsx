@@ -361,6 +361,40 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const handleGenerateMemos = async () => {
     setIsLoading(true)
     try {
+      // CRITICAL: Check if memos already exist for this month
+      // This prevents duplicate submissions and guides users to the Monthly Summary tab
+      console.log("[v0] Checking for existing memos for month:", selectedMonth)
+      const existingMemosResponse = await fetch(`/api/leave/payment-advice/my-memos?month=${selectedMonth}`)
+      
+      if (existingMemosResponse.ok) {
+        const existingData = await existingMemosResponse.json()
+        const existingMemoCount = existingData.memos?.length || 0
+        
+        console.log("[v0] Found existing memos:", existingMemoCount)
+        
+        // If memos already exist for this month, warn the user
+        if (existingMemoCount > 0) {
+          const statuses = existingData.memos.map((m: any) => m.status).filter(Boolean)
+          const hasSubmitted = statuses.includes("ready_for_review") || statuses.includes("approved")
+          
+          toast({
+            title: "Month Already Processed",
+            description: hasSubmitted 
+              ? `${existingMemoCount} payment memo(s) already submitted for ${selectedMonth}. Check the Monthly Summary tab to view details or consider a different month.`
+              : `${existingMemoCount} draft(s) exist for ${selectedMonth}. Complete these first or select a different month.`,
+            variant: "default",
+          })
+          
+          // Don't prevent generation, but make them aware
+          // They may still want to generate if these are drafts
+          console.log("[v0] User attempting to generate for month with existing memos:", {
+            month: selectedMonth,
+            count: existingMemoCount,
+            statuses,
+          })
+        }
+      }
+
       const response = await fetch("/api/leave/payment-advice/generate-memo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1738,17 +1772,32 @@ We count on your co-operation.`,
             <CardDescription>View all payment advice memos you&apos;ve submitted within the selected month to prevent duplicate submissions</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="summary-month-select" className="mb-2 block font-medium">
-                Select Month
-              </Label>
-              <Input
-                id="summary-month-select"
-                type="month"
-                value={summaryMonth}
-                onChange={(e) => setSummaryMonth(e.target.value)}
-                className="text-base max-w-xs"
-              />
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <Label htmlFor="summary-month-select" className="mb-2 block font-medium">
+                  Select Month to Check
+                </Label>
+                <Input
+                  id="summary-month-select"
+                  type="month"
+                  value={summaryMonth}
+                  onChange={(e) => setSummaryMonth(e.target.value)}
+                  className="text-base max-w-xs"
+                />
+              </div>
+              <Button 
+                onClick={() => setSummaryMonth(summaryMonth)} 
+                disabled={loadingSubmittedMemos}
+                variant="outline"
+                className="gap-2"
+              >
+                {loadingSubmittedMemos ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Filter className="h-4 w-4" />
+                )}
+                {loadingSubmittedMemos ? "Loading..." : "Check"}
+              </Button>
             </div>
 
             {loadingSubmittedMemos ? (
