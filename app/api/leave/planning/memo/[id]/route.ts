@@ -640,12 +640,6 @@ export async function GET(
 
     let y = 51
 
-    // Modern header separator line
-    doc.setDrawColor(200, 0, 0)  // Red accent line
-    doc.setLineWidth(0.8)
-    doc.line(marginLeft, y - 2, pageWidth - marginRight, y - 2)
-    y += 1
-
     // Ref No + Date row (modern styling)
     doc.setTextColor(0, 0, 0)
     doc.setFont("times", "normal")
@@ -733,6 +727,7 @@ export async function GET(
     if (useTable) {
       const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
+      const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
       const grossEntitledDays = Math.max(0, Number(tableEntitlement || 0) + Number(tableTravellingDays || 0))
       const totalDeductions = Math.max(0, holidayDaysDeducted + priorLeaveDaysDeducted)
 
@@ -740,10 +735,10 @@ export async function GET(
         ? `${tableEntitlement} plus ${tableTravellingDays} travelling day${tableTravellingDays !== 1 ? "s" : ""}`
         : String(tableEntitlement || effectiveDays)
 
-      // Annual memo should reflect entitlement arithmetic: entitlement + travel - deductions.
+      // Annual memo should reflect entitlement arithmetic: entitlement + travel - deductions + outstanding days added.
       const totalGranted = grossEntitledDays > 0
-        ? Math.max(0, grossEntitledDays - totalDeductions)
-        : Math.max(0, effectiveDays)
+        ? Math.max(0, grossEntitledDays - totalDeductions + outstandingLeaveDaysAdded)
+        : Math.max(0, effectiveDays + outstandingLeaveDaysAdded)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
@@ -752,10 +747,11 @@ export async function GET(
       const hasIncrease = adjustedRequested > originalRequested || Number(lr.travelling_days_added || 0) > 0
       const remarksParts: string[] = []
       if (holidayDaysDeducted > 0) remarksParts.push(`${holidayDaysDeducted} day(s) public holiday`) 
-      if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`) 
+      if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`)
+      if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
       const remarksSummary = remarksParts.length > 0
-        ? `Less ${remarksParts.join(" + ")}${remarksText ? `; ${remarksText}` : ""}`
+        ? `${remarksParts.join("; ")}${remarksText ? `; ${remarksText}` : ""}`
         : (hasIncrease && remarksText ? remarksText : "")
 
       autoTable(doc, {
