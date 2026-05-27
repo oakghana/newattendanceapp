@@ -87,8 +87,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // CRITICAL: Verify selected signer has ONLY HR Executive role (manager_hr or director_hr)
-    const HR_EXECUTIVE_ROLES = ["manager_hr", "director_hr"]
+    // CRITICAL: Verify selected signer has HR Executive role
+    const HR_EXECUTIVE_ROLES = ["hr_executive", "manager_hr", "director_hr", "hr_manager", "hr_officer", "hr_director", "manager", "deputy_hr"]
     if (!signerProfile.role || !HR_EXECUTIVE_ROLES.includes(signerProfile.role)) {
       console.warn("[v0] Non-HR Executive role attempted to sign memo:", {
         signerId: selectedSigner.id,
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           error: "Invalid signer role",
-          details: `Only users with HR Executive roles (manager_hr or director_hr) can approve memos. Selected user has role: ${signerProfile.role}`,
+          details: `Only users with HR Executive roles can approve memos. Selected user has role: ${signerProfile.role}. Allowed roles: ${HR_EXECUTIVE_ROLES.join(", ")}`,
         },
         { status: 403 }
       )
@@ -110,17 +110,21 @@ export async function POST(request: NextRequest) {
     // CRITICAL: Verify signer has a saved signature before allowing approval
     console.log("[v0] Checking signature for selected signer:", selectedSigner.id, "- signerName:", signerName)
     
-    // First, verify that the selected signer is actually assigned to approve these memos
+    // Verify that the CURRENT USER (the one approving) is authorized to approve
+    // AND verify the selected signer is assigned to these memos
     const { data: memosToValidate } = await admin
       .from("leave_payment_memos")
       .select("id, assigned_signers")
       .in("id", memoIds)
 
     if (memosToValidate && memosToValidate.length > 0) {
-      // Check if selectedSigner.id is in the assigned_signers array for ALL memos
+      // Check if CURRENT USER is an assigned signer for ALL memos
+      // The current user must be authorized, and they select the final signer
+      // (which could be themselves or another HR executive if delegating)
       const unauthorizedMemos = memosToValidate.filter(memo => {
         const assignedSigners = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
-        return !assignedSigners.includes(selectedSigner.id)
+        // Current user (the one approving) must be in the assigned_signers list
+        return !assignedSigners.includes(user.id)
       })
 
       if (unauthorizedMemos.length > 0) {
@@ -133,7 +137,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error: "You are not authorized to approve these memos",
-            details: `The selected signer (${signerName}) is not assigned to approve ${unauthorizedMemos.length} of the selected memos. Only the assigned signer can approve.`,
+            details: `You (user ${user.id}) are not assigned to approve ${unauthorizedMemos.length} of the selected memos. Only assigned signers can approve.`,
           },
           { status: 403 }
         )
