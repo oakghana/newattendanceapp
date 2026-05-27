@@ -44,8 +44,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Query pending memos in "ready_for_review" status where current user is assigned as signer
-    // Check if user.id is in the assigned_signers JSONB array
-    const { data: pendingMemos, error } = await admin
+    // We'll fetch all and filter in code since PostgREST JSONB filtering can be tricky
+    // This ensures we reliably check if user.id is in the assigned_signers array
+    const { data: allPendingMemos, error } = await admin
       .from("leave_payment_memos")
       .select(
         `
@@ -67,8 +68,6 @@ export async function GET(request: NextRequest) {
       `
       )
       .eq("status", "ready_for_review")
-      // Filter: assigned_signers JSONB array must contain current user's ID
-      .filter("assigned_signers", "cs", `"${user.id}"`)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -79,8 +78,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Filter memos to only include those where user is an assigned signer
+    const pendingMemos = (allPendingMemos || []).filter((memo: any) => {
+      const signers = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
+      return signers.includes(user.id)
+    })
+
     console.log(
-      `[v0] Found ${pendingMemos?.length || 0} pending memos assigned to user ${user.id}`
+      `[v0] Found ${pendingMemos?.length || 0} pending memos assigned to user ${user.id} (out of ${allPendingMemos?.length || 0} total pending memos)`
     )
 
     return NextResponse.json({

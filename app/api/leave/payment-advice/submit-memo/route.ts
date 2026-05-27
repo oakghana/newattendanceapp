@@ -183,6 +183,8 @@ export async function POST(request: NextRequest) {
           approved_days: staff.approved_days || staff.requested_days || 0,
           // Status for HR Executive approval (valid statuses: draft, ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts)
           status: "ready_for_review",
+          // IMPORTANT: Assign signers - the selected HR Executive can approve this memo
+          assigned_signers: selectedSigner.id ? [selectedSigner.id] : [],
         })
       } else {
         console.log("[v0] Staff validation failed:", {
