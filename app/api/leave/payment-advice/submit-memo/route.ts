@@ -90,17 +90,24 @@ export async function POST(request: NextRequest) {
     }
 
     // FETCH SIGNER'S SIGNATURE IMAGE for inclusion in memo
-    let signerSignatureUrl: string | undefined
-    const { data: signatureRecord } = await admin
-      .from("approval_signature_registry")
-      .select("signature_data_url")
-      .eq("user_id", selectedSigner.id)
-      .eq("is_active", true)
-      .single()
+    // Prefer signature passed from frontend, but fallback to fetching from registry
+    let signerSignatureUrl: string | undefined = selectedSigner.signature_image_url
+    
+    if (!signerSignatureUrl) {
+      const { data: signatureRecord } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url")
+        .eq("user_id", selectedSigner.id)
+        .eq("is_active", true)
+        .single()
 
-    if (signatureRecord?.signature_data_url) {
-      signerSignatureUrl = signatureRecord.signature_data_url
-      console.log("[v0] Signer signature found and will be included in memos:", signerSignatureUrl)
+      if (signatureRecord?.signature_data_url) {
+        signerSignatureUrl = signatureRecord.signature_data_url
+      }
+    }
+    
+    if (signerSignatureUrl) {
+      console.log("[v0] Signer signature found and will be included in memos")
     } else {
       console.warn("[v0] Signer has no saved signature - memos will be generated without signature image:", selectedSigner.id)
     }

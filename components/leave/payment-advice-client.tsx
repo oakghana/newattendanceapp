@@ -437,6 +437,15 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       setMemos(data.memos)
       setMemoSummary(data.summary)
       setSelectedMemoCategory(Object.keys(data.memos)[0])
+      
+      // Store the signer data with signature for later use when submitting
+      if (data.signerData) {
+        setSelectedSigner(data.signerData)
+        console.log("[v0] Stored signer data with signature:", {
+          signerName: data.signerData.name,
+          hasSignature: !!data.signerData.signature_image_url,
+        })
+      }
 
       toast({
         title: "Memos Generated",
@@ -540,6 +549,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           name: selectedSigner.full_name || selectedSigner.name,
           position: selectedSigner.position,
           email: selectedSigner.email,
+          signature_image_url: selectedSigner.signature_image_url, // Include signature from profile/generation
         },
       }
 
