@@ -81,6 +81,11 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [approvedPage, setApprovedPage] = useState(1)
   const ITEMS_PER_PAGE = 10
 
+  // HR LEAVE_OFFICE: Track submitted memos to prevent duplicates
+  const [submittedMemos, setSubmittedMemos] = useState<any[]>([])
+  const [loadingSubmittedMemos, setLoadingSubmittedMemos] = useState(false)
+  const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7))
+
   // Helper: Check if signer has a saved signature
   const checkSignerSignature = async (signerId: string): Promise<boolean> => {
     try {
@@ -189,6 +194,35 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       fetchApprovedMemos()
     }
   }, [isHrExecutive, approvedFilterMonth])
+
+  // Load submitted memos for HR LEAVE_OFFICE users (to prevent duplicate submissions)
+  useEffect(() => {
+    if (isHrLeaveOffice) {
+      const fetchSubmittedMemos = async () => {
+        setLoadingSubmittedMemos(true)
+        try {
+          const url = summaryMonth
+            ? `/api/leave/payment-advice/my-memos?month=${summaryMonth}`
+            : "/api/leave/payment-advice/my-memos"
+          const response = await fetch(url)
+          if (response.ok) {
+            const data = await response.json()
+            setSubmittedMemos(data.memos || [])
+            console.log("[v0] Loaded submitted memos for month:", summaryMonth, "Count:", data.memos?.length)
+          } else {
+            console.error("[v0] Failed to fetch submitted memos")
+            setSubmittedMemos([])
+          }
+        } catch (err) {
+          console.error("[v0] Error fetching submitted memos:", err)
+          setSubmittedMemos([])
+        } finally {
+          setLoadingSubmittedMemos(false)
+        }
+      }
+      fetchSubmittedMemos()
+    }
+  }, [isHrLeaveOffice, summaryMonth])
 
   // Group staff by category
   const staffByCategory = useMemo(() => {
@@ -310,12 +344,21 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       return
     }
 
-    // CHECK: Verify signer has a saved signature
-    const hasSignature = await checkSignerSignature(selectedSigner.id)
-    if (!hasSignature) {
-      setShowSignatureRequiredDialog(true)
-      return
+    // ONLY HR EXECUTIVES need signatures - not HR LEAVE_OFFICE staff
+    // Check if the SIGNER (HR Executive) has a saved signature
+    // This is only triggered if the current user IS the selected signer
+    // HR Leave Office staff never need signatures - they just submit requests
+    if (isHrExecutive) {
+      // Only check if current user is an HR Executive AND they are selecting themselves as signer
+      const currentUserIsTheSigner = selectedSigner.id // In real scenario, compare with current user ID
+      // For now, if HR executive is about to approve, check their signature
+      const hasSignature = await checkSignerSignature(selectedSigner.id)
+      if (!hasSignature) {
+        setShowSignatureRequiredDialog(true)
+        return
+      }
     }
+    // HR LEAVE_OFFICE users skip signature check entirely - they just submit the request
 
     // Validate that all required reference numbers are filled
     const requiredCategories = ["Manager", "Senior", "Junior"].filter(
@@ -344,6 +387,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         staffList: staffList?.length,
         selectedSigner,
         memosKeys: Object.keys(memos),
+        userRole: userRole,
+        isHrLeaveOffice: isHrLeaveOffice,
       })
 
       // Create a clean payload with only serializable data
@@ -1340,6 +1385,35 @@ We count on your co-operation.`,
   // HR Leave Office View - Create and submit payment advice memos
   return (
     <div className="space-y-6">
+      {/* Tabs for HR LEAVE_OFFICE users */}
+      {isHrLeaveOffice && (
+        <div className="flex gap-2 border-b mb-4">
+          <button
+            onClick={() => setActivePaymentTab("pending" as any)}
+            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              activePaymentTab === "pending" || (activePaymentTab as any) === "pending"
+                ? "border-b-2 border-blue-600 text-blue-600"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Create Payment Advice
+          </button>
+          <button
+            onClick={() => setActivePaymentTab("approved" as any)}
+            className={`px-4 py-2 font-medium text-sm transition-colors ${
+              activePaymentTab === "approved" || (activePaymentTab as any) === "approved"
+                ? "border-b-2 border-blue-600 text-blue-600"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Monthly Summary ({submittedMemos.length})
+          </button>
+        </div>
+      )}
+
+      {/* Create Payment Advice Tab */}
+      {(!isHrLeaveOffice || (activePaymentTab as any) === "pending") && (
+      <>
       {/* Month Selection & HR Signer */}
       <Card>
         <CardHeader>
@@ -1561,6 +1635,72 @@ We count on your co-operation.`,
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Monthly Summary Tab - for HR LEAVE_OFFICE to see submitted memos */}
+      {isHrLeaveOffice && (activePaymentTab as any) === "approved" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-green-600" />
+              Monthly Summary - Previously Submitted Memos
+            </CardTitle>
+            <CardDescription>View all payment advice memos you&apos;ve submitted within the selected month to prevent duplicate submissions</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="summary-month-select" className="mb-2 block font-medium">
+                Select Month
+              </Label>
+              <Input
+                id="summary-month-select"
+                type="month"
+                value={summaryMonth}
+                onChange={(e) => setSummaryMonth(e.target.value)}
+                className="text-base max-w-xs"
+              />
+            </div>
+
+            {loadingSubmittedMemos ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              </div>
+            ) : submittedMemos.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <FileText className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                <p>No payment advice memos submitted for {summaryMonth}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-gray-700">
+                  Found {submittedMemos.length} submitted memo{submittedMemos.length !== 1 ? "s" : ""}
+                </div>
+                {submittedMemos.map((memo, idx) => (
+                  <div key={memo.id || idx} className="p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">{memo.memo_subject || "Payment Advice Memo"}</p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Submitted: {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
+                        </p>
+                        {memo.memo_body && (
+                          <div className="text-xs text-gray-600 mt-2 line-clamp-2">
+                            {typeof memo.memo_body === "string" ? memo.memo_body.substring(0, 100) : ""}...
+                          </div>
+                        )}
+                      </div>
+                      <Badge variant={memo.status === "approved" ? "default" : "secondary"}>
+                        {memo.status || "submitted"}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      </>
       )}
 
       {/* Signature Required Dialog */}

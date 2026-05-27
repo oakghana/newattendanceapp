@@ -274,17 +274,26 @@ async function generateMainMemo(
   // Signature image if available - render above the signature line
   if (memoData.signatory.signature_image_url) {
     try {
-      console.log("[v0] Loading signature from:", memoData.signatory.signature_image_url)
-      const signatureResponse = await fetch(memoData.signatory.signature_image_url)
-      if (signatureResponse.ok) {
-        const signatureBlob = await signatureResponse.blob()
-        const signatureUrl = URL.createObjectURL(signatureBlob)
-        // Render signature image (40mm wide, 20mm high) above the line
-        doc.addImage(signatureUrl, "PNG", margin, yPos - 8, 40, 15)
-        console.log("[v0] Signature image added to memo")
-        URL.revokeObjectURL(signatureUrl)
-      } else {
-        console.warn("[v0] Failed to fetch signature image:", signatureResponse.status)
+      const sigUrl = memoData.signatory.signature_image_url
+      
+      // Handle base64 data URLs directly (most common case)
+      if (sigUrl.startsWith("data:image/")) {
+        // Extract base64 and add image directly
+        const b64Match = sigUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
+        if (b64Match) {
+          const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+          doc.addImage(sigUrl, imageType, margin, yPos - 8, 40, 15)
+        }
+      } else if (sigUrl.startsWith("http")) {
+        // Handle external URLs by fetching
+        const signatureResponse = await fetch(sigUrl)
+        if (signatureResponse.ok) {
+          const signatureBlob = await signatureResponse.blob()
+          const arrayBuffer = await signatureBlob.arrayBuffer()
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+          const dataUrl = `data:image/png;base64,${base64}`
+          doc.addImage(dataUrl, "PNG", margin, yPos - 8, 40, 15)
+        }
       }
     } catch (err) {
       console.warn("[v0] Could not load signature image:", err)
