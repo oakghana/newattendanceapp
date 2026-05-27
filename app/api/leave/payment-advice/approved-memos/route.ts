@@ -54,7 +54,8 @@ export async function GET(request: NextRequest) {
         signer_name
       `
       )
-      .eq("status", "reviewed_by_hr")
+      // Include all approved/reviewed statuses for HR Executives to download
+      .in("status", ["reviewed_by_hr", "approved", "finalized"])
       .order("updated_at", { ascending: false })
 
     // Optionally filter by month
@@ -68,17 +69,32 @@ export async function GET(request: NextRequest) {
     const { data: approvedMemos, error } = await query
 
     if (error) {
-      console.error("[v0] Error fetching approved memos:", error)
+      console.error("[v0] Error fetching approved memos:", {
+        error,
+        userId: user.id,
+        month,
+      })
       return NextResponse.json(
         { error: "Failed to fetch approved memos", details: error.message },
         { status: 500 }
       )
     }
 
+    console.log("[v0] Approved memos fetched successfully:", {
+      userId: user.id,
+      month: month || "all",
+      count: approvedMemos?.length || 0,
+      memoStatuses: approvedMemos?.map(m => ({ id: m.id, status: m.status })) || [],
+    })
+
     return NextResponse.json({
       success: true,
       memos: approvedMemos || [],
       count: approvedMemos?.length || 0,
+      debug: {
+        queryStatus: ["reviewed_by_hr", "approved", "finalized"],
+        month: month || "all",
+      },
     })
   } catch (err) {
     console.error("[v0] Unexpected error in approved-memos:", err)

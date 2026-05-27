@@ -257,15 +257,23 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           const url = approvedFilterMonth
             ? `/api/leave/payment-advice/approved-memos?month=${approvedFilterMonth}`
             : "/api/leave/payment-advice/approved-memos"
+          console.log("[v0] Fetching approved memos from:", url)
           const response = await fetch(url)
           if (response.ok) {
             const data = await response.json()
+            console.log("[v0] Approved memos response:", {
+              count: data.count,
+              memos: data.memos?.length || 0,
+              debug: data.debug,
+            })
             setApprovedMemos(data.memos || [])
           } else {
-            console.error("[v0] Failed to fetch approved memos")
+            console.error("[v0] Failed to fetch approved memos:", response.status, response.statusText)
+            setApprovedMemos([])
           }
         } catch (err) {
           console.error("[v0] Error fetching approved memos:", err)
+          setApprovedMemos([])
         } finally {
           setLoadingApprovedMemos(false)
         }
