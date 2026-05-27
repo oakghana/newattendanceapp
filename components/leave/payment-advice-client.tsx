@@ -6,6 +6,7 @@ import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock
 import { jsPDF } from "jspdf"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
+import { MonthlySummaryTab } from "@/components/leave/monthly-summary-tab"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1801,133 +1802,9 @@ We count on your co-operation.`,
         </Card>
       )}
 
-      {/* Monthly Summary Tab - for HR LEAVE_OFFICE to see submitted memos */}
-      {isHrLeaveOffice && activePaymentTab === "approved" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-green-600" />
-              Monthly Summary - Previously Submitted Memos
-            </CardTitle>
-            <CardDescription>View all payment advice memos you&apos;ve submitted within the selected month to prevent duplicate submissions</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <Label htmlFor="summary-month-select" className="mb-2 block font-medium">
-                  Select Month to Check
-                </Label>
-                <Input
-                  id="summary-month-select"
-                  type="month"
-                  value={summaryMonth}
-                  onChange={(e) => setSummaryMonth(e.target.value)}
-                  className="text-base max-w-xs"
-                />
-              </div>
-              <Button 
-                onClick={() => setSummaryMonth(summaryMonth)} 
-                disabled={loadingSubmittedMemos}
-                variant="outline"
-                className="gap-2"
-              >
-                {loadingSubmittedMemos ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Filter className="h-4 w-4" />
-                )}
-                {loadingSubmittedMemos ? "Loading..." : "Check"}
-              </Button>
-            </div>
-
-            {loadingSubmittedMemos ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-              </div>
-            ) : submittedMemos.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                <p>No payment advice memos submitted for {summaryMonth}</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="text-sm font-medium text-gray-700">
-                  Found {submittedMemos.length} submitted memo{submittedMemos.length !== 1 ? "s" : ""}
-                </div>
-                
-                {/* Professional Table Display */}
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-100 border-b">
-                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Staff Name</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Staff #</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Leave Period</th>
-                        <th className="px-4 py-3 text-center font-semibold text-gray-900">Days Approved</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-900">HR Signer</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Status</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Submitted</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {submittedMemos.map((memo, idx) => {
-                        // Parse memo_body if it's a JSON string
-                        let memoBody: any = {}
-                        if (memo.memo_body) {
-                          try {
-                            memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-                          } catch (e) {
-                            // memo_body is plain text, not JSON
-                          }
-                        }
-
-                        const signerName = memoBody.selectedSigner?.name || memoBody.selectedSigner?.full_name || "Pending"
-                        const leaveStart = memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"
-                        const leaveEnd = memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"
-                        const submittedDate = memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"
-                        
-                        // Status badge styling
-                        let statusColor = "bg-yellow-100 text-yellow-800"
-                        let statusLabel = "Submitted"
-                        
-                        if (memo.status === "reviewed_by_hr" || memo.status === "approved") {
-                          statusColor = "bg-green-100 text-green-800"
-                          statusLabel = "Approved"
-                        } else if (memo.status === "ready_for_review") {
-                          statusColor = "bg-blue-100 text-blue-800"
-                          statusLabel = "Ready for Review"
-                        } else if (memo.status === "forwarded_to_accounts") {
-                          statusColor = "bg-purple-100 text-purple-800"
-                          statusLabel = "Forwarded to Accounts"
-                        }
-
-                        return (
-                          <tr key={memo.id || idx} className="border-b hover:bg-gray-50">
-                            <td className="px-4 py-3 font-medium text-gray-900">{memo.staff_name || "N/A"}</td>
-                            <td className="px-4 py-3 text-gray-700">{memo.staff_number || "N/A"}</td>
-                            <td className="px-4 py-3 text-gray-700">
-                              {leaveStart === "N/A" ? "N/A" : `${leaveStart} - ${leaveEnd}`}
-                            </td>
-                            <td className="px-4 py-3 text-center font-medium text-gray-900">
-                              {memo.approved_days || 0}
-                            </td>
-                            <td className="px-4 py-3 text-gray-700">{signerName}</td>
-                            <td className="px-4 py-3">
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
-                                {statusLabel}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-600 text-xs">{submittedDate}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Monthly Summary Tab - Redesigned for both HR Leave Office and HR Executive */}
+      {(isHrLeaveOffice || isHrExecutive) && activePaymentTab === "approved" && (
+        <MonthlySummaryTab />
       )}
       </>
       )}
