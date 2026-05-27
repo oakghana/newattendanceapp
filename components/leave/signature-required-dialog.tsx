@@ -42,58 +42,45 @@ export function SignatureRequiredDialog({
 
     setIsSaving(true)
     try {
-      const payload: any = {
-        signature_data: signatureData || undefined,
+      let finalSignatureData = signatureData
+
+      // If uploaded image, convert to data URL first
+      if (uploadedImage && !finalSignatureData) {
+        finalSignatureData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => reject(new Error("Failed to read image"))
+          reader.readAsDataURL(uploadedImage)
+        })
       }
 
-      if (uploadedImage) {
-        const reader = new FileReader()
-        reader.onload = async (e) => {
-          payload.signature_data = e.target?.result as string
-          
-          const res = await fetch("/api/user/hr-signature-save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          })
-
-          const data = await res.json()
-          if (!res.ok) {
-            throw new Error(data.error || "Failed to save signature")
-          }
-
-          toast({
-            title: "Signature saved",
-            description: "Your signature has been saved and will appear on all payment advice memos",
-          })
-          setSignatureData(null)
-          setUploadedImage(null)
-          onOpenChange(false)
-          onSignatureSaved()
-          setIsSaving(false)
-        }
-        reader.readAsDataURL(uploadedImage)
-      } else {
-        const res = await fetch("/api/user/hr-signature-save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-
-        const data = await res.json()
-        if (!res.ok) {
-          throw new Error(data.error || "Failed to save signature")
-        }
-
-        toast({
-          title: "Signature saved",
-          description: "Your signature has been saved and will appear on all payment advice memos",
-        })
-        setSignatureData(null)
-        setUploadedImage(null)
-        onOpenChange(false)
-        onSignatureSaved()
+      if (!finalSignatureData) {
+        throw new Error("No signature data to save")
       }
+
+      const payload = {
+        signature_data: finalSignatureData,
+      }
+
+      const res = await fetch("/api/user/hr-signature-save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save signature")
+      }
+
+      toast({
+        title: "Signature saved",
+        description: "Your signature has been saved and will appear on all payment advice memos",
+      })
+      setSignatureData(null)
+      setUploadedImage(null)
+      onOpenChange(false)
+      onSignatureSaved()
     } catch (error) {
       console.error("[v0] Error saving signature:", error)
       toast({
