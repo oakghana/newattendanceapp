@@ -75,6 +75,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
   const [showSignatureRequiredDialog, setShowSignatureRequiredDialog] = useState(false)
+  const [pendingApprovalMemoIds, setPendingApprovalMemoIds] = useState<string[]>([])
   
   // Pagination states
   const [pendingPage, setPendingPage] = useState(1)
@@ -85,6 +86,69 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [submittedMemos, setSubmittedMemos] = useState<any[]>([])
   const [loadingSubmittedMemos, setLoadingSubmittedMemos] = useState(false)
   const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7))
+
+  // Load submitted memos for Monthly Summary tab
+  useEffect(() => {
+    if (!isHrLeaveOffice || !summaryMonth) return
+
+    const loadSubmittedMemos = async () => {
+      setLoadingSubmittedMemos(true)
+      try {
+        const response = await fetch(`/api/leave/payment-advice/my-memos?month=${summaryMonth}`)
+        if (response.ok) {
+          const data = await response.json()
+          setSubmittedMemos(data.memos || [])
+        } else {
+          console.error("[v0] Failed to load submitted memos:", await response.json())
+          setSubmittedMemos([])
+        }
+      } catch (err) {
+        console.error("[v0] Error loading submitted memos:", err)
+        setSubmittedMemos([])
+      } finally {
+        setLoadingSubmittedMemos(false)
+      }
+    }
+
+    loadSubmittedMemos()
+  }, [isHrLeaveOffice, summaryMonth])
+
+  // Helper: Retry approval after signature has been saved
+  const retryPendingApproval = async (memoIds: string[]) => {
+    if (!selectedSigner || memoIds.length === 0) return
+    try {
+      const response = await fetch("/api/leave/payment-advice/approve-secure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memoIds,
+          selectedSigner: {
+            id: selectedSigner.id,
+            name: selectedSigner.full_name || selectedSigner.name,
+            position: selectedSigner.position,
+          },
+        }),
+      })
+      const result = await response.json()
+      if (response.ok) {
+        const approvedIds = new Set(memoIds)
+        setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
+        setApprovedMemos((prev) => [
+          ...pendingMemos
+            .filter((m) => approvedIds.has(m.id))
+            .map((m) => ({ ...m, status: "reviewed_by_hr", updated_at: new Date().toISOString() })),
+          ...prev,
+        ])
+        toast({ title: "Approved", description: `${memoIds.length} memo${memoIds.length > 1 ? "s" : ""} approved successfully.` })
+      } else {
+        toast({ title: "Error", description: result.error || "Failed to approve memos.", variant: "destructive" })
+      }
+    } catch (err) {
+      console.error("[v0] Error in retry approval:", err)
+      toast({ title: "Error", description: "Failed to approve memos.", variant: "destructive" })
+    }
+    setPendingApprovalMemoIds([])
+  }
 
   // Helper: Check if signer has a saved signature
   const checkSignerSignature = async (signerId: string): Promise<boolean> => {
@@ -985,13 +1049,11 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     // HR Executive must have a signature before approving
                                     const hasSignature = await checkSignerSignature(selectedSigner.id)
                                     if (!hasSignature) {
-                                      // Show signature dialog for HR Executive to add signature
+                                      // Save the memo IDs so we can retry after signature is saved
+                                      const ids = memos.map((m: any) => m.id)
+                                      setPendingApprovalMemoIds(ids)
+                                      // Show signature dialog for HR Executive to add their signature
                                       setShowSignatureRequiredDialog(true)
-                                      toast({
-                                        title: "Signature Required",
-                                        description: "You must save your signature before approving payment advice memos.",
-                                        variant: "destructive",
-                                      })
                                       return
                                     }
 
@@ -1303,9 +1365,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       refNo: `QCC/`,
                                       body: `We wish to inform you that the undermentioned staff members are scheduled to proceed on their annual vacation leave.
 
-We count on your co-operation.
+We, therefore, kindly request you to process and pay their leave allowance accordingly.
 
-We, therefore, kindly request you to process and pay their leave allowance accordingly.`,
+We count on your co-operation.`,
                                       signatory: {
                                         name: batchSignerName,
                                         title: batchSignerTitle,
@@ -1392,6 +1454,20 @@ We, therefore, kindly request you to process and pay their leave allowance accor
 
           </div>
         </CardContent>
+
+        {/* Signature Required Dialog for HR Executives - renders inside HR Executive section */}
+        <SignatureRequiredDialog
+          open={showSignatureRequiredDialog}
+          onOpenChange={setShowSignatureRequiredDialog}
+          hrName={selectedSigner?.full_name || selectedSigner?.name || "HR Executive"}
+          onSignatureSaved={async () => {
+            setShowSignatureRequiredDialog(false)
+            // Retry the pending approval now that signature is saved
+            if (pendingApprovalMemoIds.length > 0) {
+              await retryPendingApproval(pendingApprovalMemoIds)
+            }
+          }}
+        />
       </Card>
     )
   }
@@ -1689,26 +1765,77 @@ We, therefore, kindly request you to process and pay their leave allowance accor
                 <div className="text-sm font-medium text-gray-700">
                   Found {submittedMemos.length} submitted memo{submittedMemos.length !== 1 ? "s" : ""}
                 </div>
-                {submittedMemos.map((memo, idx) => (
-                  <div key={memo.id || idx} className="p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{memo.memo_subject || "Payment Advice Memo"}</p>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Submitted: {memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}
-                        </p>
-                        {memo.memo_body && (
-                          <div className="text-xs text-gray-600 mt-2 line-clamp-2">
-                            {typeof memo.memo_body === "string" ? memo.memo_body.substring(0, 100) : ""}...
-                          </div>
-                        )}
+                {submittedMemos.map((memo, idx) => {
+                  // Parse memo_body if it's a JSON string
+                  let memoBody: any = {}
+                  if (memo.memo_body) {
+                    try {
+                      memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+                    } catch (e) {
+                      // memo_body is plain text, not JSON
+                    }
+                  }
+
+                  const submittedMonth = memo.created_at ? new Date(memo.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long" }) : "Unknown"
+                  const signerName = memoBody.selectedSigner?.name || memoBody.selectedSigner?.full_name || "Pending"
+                  const signerPosition = memoBody.selectedSigner?.position || "N/A"
+
+                  return (
+                    <div
+                      key={memo.id || idx}
+                      className="p-4 border rounded-lg bg-white hover:shadow-md transition-shadow space-y-2"
+                    >
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">{memo.staff_name || "Multiple Staff"}</p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Month: <span className="font-medium">{submittedMonth}</span>
+                          </p>
+                        </div>
+                        <Badge variant={memo.status === "reviewed_by_hr" ? "default" : memo.status === "approved" ? "default" : "secondary"}>
+                          {memo.status === "reviewed_by_hr" ? "Approved" : memo.status === "approved" ? "Approved" : "Submitted"}
+                        </Badge>
                       </div>
-                      <Badge variant={memo.status === "approved" ? "default" : "secondary"}>
-                        {memo.status || "submitted"}
-                      </Badge>
+
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t">
+                        <div>
+                          <p className="text-gray-600">Submitted</p>
+                          <p className="font-medium text-gray-900">{memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Leave Period</p>
+                          <p className="font-medium text-gray-900">
+                            {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"}
+                            {memo.leave_period_end ? ` - ${new Date(memo.leave_period_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Days Approved</p>
+                          <p className="font-medium text-gray-900">{memo.approved_days || "N/A"} days</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Signer</p>
+                          <p className="font-medium text-gray-900 truncate">{signerName}</p>
+                        </div>
+                      </div>
+
+                      {/* Staff Number and Details */}
+                      {memo.staff_number && (
+                        <div className="text-xs text-gray-600 pt-2 border-t">
+                          <p>
+                            Staff No: <span className="font-medium text-gray-900">{memo.staff_number}</span>
+                          </p>
+                          {signerPosition !== "N/A" && (
+                            <p>
+                              Approver: <span className="font-medium text-gray-900">{signerPosition}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>
