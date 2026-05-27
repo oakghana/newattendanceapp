@@ -3,8 +3,9 @@ import { createAdminClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
-// HR Executive roles that can receive forwarded leave requests
-const HR_EXECUTIVE_ROLES = ["manager_hr", "director_hr"]
+// HR Executive roles that can approve/sign payment memos
+// These are users who should be able to receive and approve payment advice memos
+const HR_EXECUTIVE_ROLES = ["hr_executive", "manager_hr", "director_hr", "hr_manager", "hr_officer", "hr_director", "manager"]
 
 // GET: Fetch all HR executives (manager_hr, director_hr) for forwarding selector
 export async function GET() {
@@ -40,6 +41,7 @@ export async function GET() {
 
     if (!executives || executives.length === 0) {
       console.warn("[v0] No HR executives found in database for roles:", HR_EXECUTIVE_ROLES)
+      console.warn("[v0] Looking for executives with roles:", HR_EXECUTIVE_ROLES.join(", "))
       return NextResponse.json({ executives: [], grouped: { manager_hr: [], director_hr: [] } })
     }
 
