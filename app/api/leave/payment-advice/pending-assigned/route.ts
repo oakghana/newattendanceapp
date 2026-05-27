@@ -44,6 +44,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Query pending memos in "ready_for_review" status where current user is assigned as signer
+    // CRITICAL: Only fetch memos with status = "ready_for_review" to ensure approved memos don't re-appear
+    // Approved memos have status = "reviewed_by_hr" or higher and should NOT appear here
     // We'll fetch all and filter in code since PostgREST JSONB filtering can be tricky
     // This ensures we reliably check if user.id is in the assigned_signers array
     const { data: allPendingMemos, error } = await admin
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
         updated_at
       `
       )
-      .eq("status", "ready_for_review")
+      .eq("status", "ready_for_review") // CRITICAL: Only ready_for_review, NOT approved (reviewed_by_hr)
       .order("created_at", { ascending: false })
 
     if (error) {
