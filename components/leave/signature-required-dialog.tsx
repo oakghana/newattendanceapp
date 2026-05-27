@@ -130,8 +130,7 @@ export function SignatureRequiredDialog({
 
           <TabsContent value="draw" className="mt-4">
             <SignaturePad
-              onSignatureChange={setSignatureData}
-              onClear={() => setSignatureData(null)}
+              onChange={setSignatureData}
             />
           </TabsContent>
 
