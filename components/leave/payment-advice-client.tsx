@@ -1761,81 +1761,80 @@ We count on your co-operation.`,
                 <p>No payment advice memos submitted for {summaryMonth}</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="text-sm font-medium text-gray-700">
                   Found {submittedMemos.length} submitted memo{submittedMemos.length !== 1 ? "s" : ""}
                 </div>
-                {submittedMemos.map((memo, idx) => {
-                  // Parse memo_body if it's a JSON string
-                  let memoBody: any = {}
-                  if (memo.memo_body) {
-                    try {
-                      memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-                    } catch (e) {
-                      // memo_body is plain text, not JSON
-                    }
-                  }
+                
+                {/* Professional Table Display */}
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-100 border-b">
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Staff Name</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Staff #</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Leave Period</th>
+                        <th className="px-4 py-3 text-center font-semibold text-gray-900">Days Approved</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">HR Signer</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Status</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Submitted</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {submittedMemos.map((memo, idx) => {
+                        // Parse memo_body if it's a JSON string
+                        let memoBody: any = {}
+                        if (memo.memo_body) {
+                          try {
+                            memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+                          } catch (e) {
+                            // memo_body is plain text, not JSON
+                          }
+                        }
 
-                  const submittedMonth = memo.created_at ? new Date(memo.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long" }) : "Unknown"
-                  const signerName = memoBody.selectedSigner?.name || memoBody.selectedSigner?.full_name || "Pending"
-                  const signerPosition = memoBody.selectedSigner?.position || "N/A"
+                        const signerName = memoBody.selectedSigner?.name || memoBody.selectedSigner?.full_name || "Pending"
+                        const leaveStart = memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"
+                        const leaveEnd = memo.leave_period_end ? new Date(memo.leave_period_end).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"
+                        const submittedDate = memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"
+                        
+                        // Status badge styling
+                        let statusColor = "bg-yellow-100 text-yellow-800"
+                        let statusLabel = "Submitted"
+                        
+                        if (memo.status === "reviewed_by_hr" || memo.status === "approved") {
+                          statusColor = "bg-green-100 text-green-800"
+                          statusLabel = "Approved"
+                        } else if (memo.status === "ready_for_review") {
+                          statusColor = "bg-blue-100 text-blue-800"
+                          statusLabel = "Ready for Review"
+                        } else if (memo.status === "forwarded_to_accounts") {
+                          statusColor = "bg-purple-100 text-purple-800"
+                          statusLabel = "Forwarded to Accounts"
+                        }
 
-                  return (
-                    <div
-                      key={memo.id || idx}
-                      className="p-4 border rounded-lg bg-white hover:shadow-md transition-shadow space-y-2"
-                    >
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex-1">
-                          <p className="font-semibold text-gray-900">{memo.staff_name || "Multiple Staff"}</p>
-                          <p className="text-sm text-gray-600 mt-1">
-                            Month: <span className="font-medium">{submittedMonth}</span>
-                          </p>
-                        </div>
-                        <Badge variant={memo.status === "reviewed_by_hr" ? "default" : memo.status === "approved" ? "default" : "secondary"}>
-                          {memo.status === "reviewed_by_hr" ? "Approved" : memo.status === "approved" ? "Approved" : "Submitted"}
-                        </Badge>
-                      </div>
-
-                      {/* Details Grid */}
-                      <div className="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t">
-                        <div>
-                          <p className="text-gray-600">Submitted</p>
-                          <p className="font-medium text-gray-900">{memo.created_at ? new Date(memo.created_at).toLocaleDateString() : "N/A"}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600">Leave Period</p>
-                          <p className="font-medium text-gray-900">
-                            {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"}
-                            {memo.leave_period_end ? ` - ${new Date(memo.leave_period_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600">Days Approved</p>
-                          <p className="font-medium text-gray-900">{memo.approved_days || "N/A"} days</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600">Signer</p>
-                          <p className="font-medium text-gray-900 truncate">{signerName}</p>
-                        </div>
-                      </div>
-
-                      {/* Staff Number and Details */}
-                      {memo.staff_number && (
-                        <div className="text-xs text-gray-600 pt-2 border-t">
-                          <p>
-                            Staff No: <span className="font-medium text-gray-900">{memo.staff_number}</span>
-                          </p>
-                          {signerPosition !== "N/A" && (
-                            <p>
-                              Approver: <span className="font-medium text-gray-900">{signerPosition}</span>
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                        return (
+                          <tr key={memo.id || idx} className="border-b hover:bg-gray-50">
+                            <td className="px-4 py-3 font-medium text-gray-900">{memo.staff_name || "N/A"}</td>
+                            <td className="px-4 py-3 text-gray-700">{memo.staff_number || "N/A"}</td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {leaveStart === "N/A" ? "N/A" : `${leaveStart} - ${leaveEnd}`}
+                            </td>
+                            <td className="px-4 py-3 text-center font-medium text-gray-900">
+                              {memo.approved_days || 0}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">{signerName}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">{submittedDate}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </CardContent>
