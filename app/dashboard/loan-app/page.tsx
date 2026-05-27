@@ -3358,17 +3358,44 @@ export default function LoanAppPage() {
                                   const currentDate = new Date()
                                   const dateStr = `${currentDate.getDate()}/${currentDate.getMonth() + 1}/${currentDate.getFullYear()}`
 
-                                  // Prepare memo data for professional template
+                                  // Parse memo_body to get actual signer info
+                                  let signerName = "HUMAN RESOURCE MANAGER"
+                                  let signerTitle = "HR DEPARTMENT"
+                                  let signerSignatureUrl = ""
+                                  let staffPosition = "Staff Position"
+                                  let staffDepartment = "Department"
+
+                                  if (memo.memo_body) {
+                                    try {
+                                      const memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+                                      // Get signer from memo_body
+                                      if (memoBody.selectedSigner) {
+                                        signerName = memoBody.selectedSigner.name || signerName
+                                        signerTitle = memoBody.selectedSigner.position || signerTitle
+                                        signerSignatureUrl = memoBody.selectedSigner.signature_data_url || ""
+                                      }
+                                      // Get staff details if available
+                                      if (memoBody.staffList && memoBody.staffList[0]) {
+                                        staffPosition = memoBody.staffList[0].position || staffPosition
+                                        staffDepartment = memoBody.staffList[0].department || staffDepartment
+                                      }
+                                    } catch (parseErr) {
+                                      console.warn("[v0] Could not parse memo_body:", parseErr)
+                                    }
+                                  }
+
+                                  // Prepare memo data using ACTUAL signer from the memo
                                   const memoData = {
                                     to: "DEPUTY DIRECTOR, FINANCE",
-                                    from: "ACCOUNTS DEPARTMENT",
+                                    from: "HUMAN RESOURCE MANAGER",
                                     subject: `PAYMENT OF LEAVE ALLOWANCE - ${memo.staff_name || "Staff"}`,
                                     date: dateStr,
                                     refNo: "QCC/",
                                     body: `We wish to inform you that the undermentioned staff member has been approved for leave payment.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.\n\nWe count on your co-operation.`,
                                     signatory: {
-                                      name: "ACCOUNTS MANAGER",
-                                      title: "FOR: FINANCE DIRECTOR",
+                                      name: signerName.toUpperCase(),
+                                      title: signerTitle.toUpperCase(),
+                                      signature_image_url: signerSignatureUrl,
                                     },
                                     ccList: ["Finance Director", "HR Department", "Internal Audit"],
                                     memoType: "payment" as const,
@@ -3377,14 +3404,14 @@ export default function LoanAppPage() {
                                         no: 1,
                                         name: memo.staff_name || "N/A",
                                         employeeId: memo.staff_number || "N/A",
-                                        position: "Staff Position",
-                                        department: "Department",
+                                        position: staffPosition,
+                                        department: staffDepartment,
                                         leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
                                       },
                                     ],
                                   }
 
-                                  // Generate professional PDF
+                                  // Generate professional PDF with actual signature
                                   const pdf = await generateProfessionalMemoPDF(
                                     memoData,
                                     `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`
