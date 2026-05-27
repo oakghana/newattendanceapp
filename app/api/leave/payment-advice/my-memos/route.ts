@@ -1,12 +1,13 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
 /**
- * GET: Fetch approved payment advice memos for the currently authenticated staff member
+ * GET: Fetch payment advice memos submitted by the current HR LEAVE_OFFICE user
+ * Used for Monthly Summary tab to prevent duplicate submissions
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const admin = await createAdminClient()
@@ -19,9 +20,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Fetch all approved payment advice memos for this staff member
-    // Status = reviewed_by_hr means HR Executive has approved it
-    const { data: memos, error } = await admin
+    // Get month filter from query params (format: YYYY-MM)
+    const { searchParams } = new URL(request.url)
+    const month = searchParams.get("month")
+
+    // Build query to fetch memos SUBMITTED BY this HR Leave Office user
+    let query = admin
       .from("leave_payment_memos")
       .select(
         `
@@ -41,14 +45,23 @@ export async function GET() {
         status
       `
       )
-      .eq("staff_id", user.id)
-      .eq("status", "reviewed_by_hr")
-      .order("updated_at", { ascending: false })
+      .eq("hr_leave_office_id", user.id) // Memos submitted BY this user
+      .order("created_at", { ascending: false })
+
+    // Filter by month if provided
+    if (month) {
+      const startOfMonth = `${month}-01`
+      const [year, monthNum] = month.split("-").map(Number)
+      const endOfMonth = new Date(year, monthNum, 0).toISOString().slice(0, 10)
+      query = query.gte("created_at", startOfMonth).lte("created_at", `${endOfMonth}T23:59:59`)
+    }
+
+    const { data: memos, error } = await query
 
     if (error) {
-      console.error("[v0] Error fetching staff payment memos:", error)
+      console.error("[v0] Error fetching submitted payment memos:", error)
       return NextResponse.json(
-        { error: "Failed to fetch your payment advice memos", details: error.message },
+        { error: "Failed to fetch your submitted payment advice memos", details: error.message },
         { status: 500 }
       )
     }

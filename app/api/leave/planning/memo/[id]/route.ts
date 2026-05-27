@@ -415,7 +415,7 @@ export async function GET(
       if (!storedToken || token !== storedToken) {
         return NextResponse.json({ error: "Invalid or expired memo token." }, { status: 401 })
       }
-    } else if (!isHrApproverRole(role, deptName, deptCode) && role !== "admin") {
+    } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin") {
       return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
     }
 

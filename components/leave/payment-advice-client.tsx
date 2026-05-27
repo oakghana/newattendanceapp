@@ -982,6 +982,19 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       return
                                     }
 
+                                    // HR Executive must have a signature before approving
+                                    const hasSignature = await checkSignerSignature(selectedSigner.id)
+                                    if (!hasSignature) {
+                                      // Show signature dialog for HR Executive to add signature
+                                      setShowSignatureRequiredDialog(true)
+                                      toast({
+                                        title: "Signature Required",
+                                        description: "You must save your signature before approving payment advice memos.",
+                                        variant: "destructive",
+                                      })
+                                      return
+                                    }
+
                                     // Approve all memos in this group using secure endpoint
                                     const memoIds = memos.map((m) => m.id)
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
