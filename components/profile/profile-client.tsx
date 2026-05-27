@@ -117,6 +117,29 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
       // ignore
     }
   }, [searchParams])
+
+  // Load existing signature when Signature tab is active
+  useEffect(() => {
+    if (activeTab === "signature") {
+      loadExistingSignature()
+    }
+  }, [activeTab])
+
+  const loadExistingSignature = async () => {
+    try {
+      const res = await fetch("/api/user/signature-save", { method: "GET" })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.signature?.signature_data_url) {
+          setSignatureDataUrl(data.signature.signature_data_url)
+          console.log("[v0] Loaded existing signature from database")
+        }
+      }
+    } catch (err) {
+      console.error("[v0] Error loading existing signature:", err)
+    }
+  }
+
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -806,35 +829,32 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
 
                     setIsSavingSignature(true)
                     try {
-                      console.log("[v0] Saving signature via workflow/registry endpoint")
+                      console.log("[v0] Saving signature to /api/user/signature-save")
                       
-                      const response = await fetch("/api/workflow/registry", {
+                      const response = await fetch("/api/user/signature-save", {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
                         },
                         body: JSON.stringify({
-                          action: "upsert_signature",
-                          workflow_domain: "loan",
-                          approval_stage: "director_hr",
-                          signature_mode: signatureMode,
                           signature_data_url: signatureDataUrl,
                         }),
                       })
 
                       const result = await response.json()
-                      console.log("[v0] API response:", result)
+                      console.log("[v0] Signature save response:", result)
 
                       if (!response.ok) {
                         throw new Error(result.error || `Failed to save signature: ${response.statusText}`)
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
-                      setSignatureDataUrl(null)
+                      // Keep the saved signature displayed instead of clearing it
+                      setSignatureDataUrl(result.signature?.signature_data_url || signatureDataUrl)
                     } catch (err) {
                       const errorMsg = err instanceof Error ? err.message : String(err)
                       console.error("[v0] Error saving signature:", errorMsg)
-                      toast.error("Failed to save signature. Please try again.")
+                      toast.error(errorMsg || "Failed to save signature. Please try again.")
                     } finally {
                       setIsSavingSignature(false)
                     }

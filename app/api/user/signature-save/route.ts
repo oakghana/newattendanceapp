@@ -86,13 +86,15 @@ export async function POST(request: NextRequest) {
 
     let result
     if (hasExistingSignature && existingSignature?.id) {
-      // Update existing signature - only update what matters
+      // Update existing signature - include required non-null columns
       result = await admin
         .from("approval_signature_registry")
         .update({
           signature_data_url: signatureUrl,
           is_active: true,
           signature_mode: "draw",
+          workflow_domain: "loan",
+          approval_stage: "director_hr",
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", user.id)
