@@ -57,7 +57,10 @@ export function SignatureRequiredDialog({
             body: JSON.stringify(payload),
           })
 
-          if (!res.ok) throw new Error("Failed to save signature")
+          const data = await res.json()
+          if (!res.ok) {
+            throw new Error(data.error || "Failed to save signature")
+          }
 
           toast({
             title: "Signature saved",
@@ -67,6 +70,7 @@ export function SignatureRequiredDialog({
           setUploadedImage(null)
           onOpenChange(false)
           onSignatureSaved()
+          setIsSaving(false)
         }
         reader.readAsDataURL(uploadedImage)
       } else {
@@ -76,7 +80,10 @@ export function SignatureRequiredDialog({
           body: JSON.stringify(payload),
         })
 
-        if (!res.ok) throw new Error("Failed to save signature")
+        const data = await res.json()
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to save signature")
+        }
 
         toast({
           title: "Signature saved",

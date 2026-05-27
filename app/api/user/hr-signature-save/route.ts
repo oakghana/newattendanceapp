@@ -9,10 +9,13 @@ import { NextResponse, NextRequest } from "next/server"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log("[v0] Signature save request received:", { hasSignatureData: !!body.signature_data, hasUserId: !!body.userId })
+    
     // Support both payload shapes from different callers
     const signatureDataUrl = body.signatureDataUrl || body.signature_data
 
     if (!signatureDataUrl) {
+      console.error("[v0] No signature data provided in request")
       return NextResponse.json({ error: "No signature provided" }, { status: 400 })
     }
 
@@ -24,21 +27,32 @@ export async function POST(request: NextRequest) {
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
+        console.error("[v0] No authenticated user found")
         return NextResponse.json({ error: "Unauthorized - no user session" }, { status: 401 })
       }
       userId = user.id
+      console.log("[v0] Using session user ID:", userId)
     }
 
+    console.log("[v0] Attempting to save signature for user:", userId)
+
     // Check if signature already exists for this user
-    const { data: existingSignature } = await admin
+    const { data: existingSignature, error: checkError } = await admin
       .from("approval_signature_registry")
       .select("id")
       .eq("user_id", userId)
       .single()
 
+    if (checkError && checkError.code !== "PGRST116") {
+      // PGRST116 = no rows returned, which is expected for new users
+      console.error("[v0] Error checking for existing signature:", checkError)
+      throw checkError
+    }
+
     let result
 
     if (existingSignature) {
+      console.log("[v0] Updating existing signature for user:", userId)
       // Update existing signature
       const { data, error } = await admin
         .from("approval_signature_registry")
@@ -53,9 +67,13 @@ export async function POST(request: NextRequest) {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("[v0] Error updating signature:", error)
+        throw error
+      }
       result = data
     } else {
+      console.log("[v0] Inserting new signature for user:", userId)
       // Insert new signature
       const { data, error } = await admin
         .from("approval_signature_registry")
@@ -70,11 +88,14 @@ export async function POST(request: NextRequest) {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("[v0] Error inserting signature:", error)
+        throw error
+      }
       result = data
     }
 
-    console.log("[v0] HR signature saved successfully:", userId)
+    console.log("[v0] HR signature saved successfully for user:", userId)
 
     return NextResponse.json({
       success: true,
@@ -82,9 +103,10 @@ export async function POST(request: NextRequest) {
       data: result
     })
   } catch (error) {
-    console.error("[v0] Error saving HR signature:", error)
+    console.error("[v0] Error in hr-signature-save endpoint:", error)
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
     return NextResponse.json(
-      { error: `Failed to save signature: ${error instanceof Error ? error.message : "Unknown error"}` },
+      { error: `Failed to save signature: ${errorMessage}` },
       { status: 500 }
     )
   }
