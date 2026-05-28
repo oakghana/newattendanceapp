@@ -42,7 +42,8 @@ export async function GET(request: NextRequest) {
 
     const results: { deferments: unknown[], recalls: unknown[] } = { deferments: [], recalls: [] }
 
-    // Fetch deferment requests assigned to this HR executive
+    // Fetch deferment requests - for now use hr_office fields since assigned_hr_executive_id doesn't exist yet
+    // TODO: Switch to assigned_hr_executive_id once migration is applied
     if (type === 'deferment' || type === 'all' || !type) {
       let defermentQuery = supabase
         .from('leave_deferment_requests')
@@ -52,23 +53,20 @@ export async function GET(request: NextRequest) {
             id, first_name, last_name, employee_id, position, department_id,
             departments(name)
           ),
-          initiator:user_profiles!leave_deferment_requests_initiated_by_user_id_fkey(
-            id, first_name, last_name, employee_id, position
-          ),
           leave_plan_requests(
             id, leave_type_key, preferred_start_date, preferred_end_date,
             adjusted_start_date, adjusted_end_date, requested_days, adjusted_days
           )
         `)
-        .eq('assigned_hr_executive_id', hrExecutiveId)
+        .eq('hr_office_reviewed_by', hrExecutiveId)
         .order('created_at', { ascending: false })
 
       // Filter by status
       if (status && status !== 'all') {
         if (status === 'pending') {
-          defermentQuery = defermentQuery.eq('hr_executive_decision', 'pending')
+          defermentQuery = defermentQuery.is('hr_office_decision', null)
         } else {
-          defermentQuery = defermentQuery.eq('hr_executive_decision', status)
+          defermentQuery = defermentQuery.eq('hr_office_decision', status)
         }
       }
 
@@ -81,7 +79,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch recall requests assigned to this HR executive
+    // Fetch recall requests - for now use hr fields since assigned_hr_executive_id doesn't exist yet
     if (type === 'recall' || type === 'all' || !type) {
       let recallQuery = supabase
         .from('leave_recall_requests')
@@ -91,23 +89,20 @@ export async function GET(request: NextRequest) {
             id, first_name, last_name, employee_id, position, department_id,
             departments(name)
           ),
-          initiator:user_profiles!leave_recall_requests_initiated_by_user_id_fkey(
-            id, first_name, last_name, employee_id, position
-          ),
           leave_plan_requests(
             id, leave_type_key, preferred_start_date, preferred_end_date,
             adjusted_start_date, adjusted_end_date
           )
         `)
-        .eq('assigned_hr_executive_id', hrExecutiveId)
+        .eq('hr_reviewed_by', hrExecutiveId)
         .order('created_at', { ascending: false })
 
       // Filter by status
       if (status && status !== 'all') {
         if (status === 'pending') {
-          recallQuery = recallQuery.eq('hr_executive_decision', 'pending')
+          recallQuery = recallQuery.is('hr_decision', null)
         } else {
-          recallQuery = recallQuery.eq('hr_executive_decision', status)
+          recallQuery = recallQuery.eq('hr_decision', status)
         }
       }
 
@@ -125,7 +120,10 @@ export async function GET(request: NextRequest) {
       total: results.deferments.length + results.recalls.length,
       pending_count: [...results.deferments, ...results.recalls].filter(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (r: any) => r.hr_executive_decision === 'pending'
+        (r: any) => {
+          // Check both old hr_office_decision/hr_decision and new hr_executive_decision fields
+          return r.hr_office_decision === null || r.hr_decision === null || r.hr_executive_decision === 'pending'
+        }
       ).length
     })
   } catch (error) {

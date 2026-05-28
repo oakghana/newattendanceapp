@@ -71,33 +71,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify it's assigned to this HR executive
-    if (existingRequest.assigned_hr_executive_id !== hr_executive_id) {
+    // Verify it's assigned to this HR executive (check hr_office_reviewed_by for deferment, hr_reviewed_by for recall)
+    const hrReviewerField = request_type === 'deferment' ? 'hr_office_reviewed_by' : 'hr_reviewed_by'
+    if (existingRequest[hrReviewerField] && existingRequest[hrReviewerField] !== hr_executive_id) {
       return NextResponse.json(
         { error: "This request is not assigned to you" },
         { status: 403 }
       )
     }
 
-    // Verify it hasn't already been processed
-    if (existingRequest.hr_executive_decision && existingRequest.hr_executive_decision !== 'pending') {
+    // Verify it hasn't already been processed (check the decision field)
+    const decisionField = request_type === 'deferment' ? 'hr_office_decision' : 'hr_decision'
+    if (existingRequest[decisionField] && existingRequest[decisionField] !== null) {
       return NextResponse.json(
-        { error: `This request has already been ${existingRequest.hr_executive_decision}` },
+        { error: `This request has already been ${existingRequest[decisionField]}` },
         { status: 400 }
       )
     }
 
     // Update the request with the decision
-    const updateData: Record<string, unknown> = {
-      hr_executive_decision: decision,
-      hr_executive_decision_date: new Date().toISOString(),
-      status: decision,
-      updated_at: new Date().toISOString()
+    const updateData: Record<string, unknown> = {}
+    
+    if (request_type === 'deferment') {
+      updateData.hr_office_decision = decision
+      updateData.hr_office_reviewed_at = new Date().toISOString()
+      updateData.hr_office_reviewed_by = hr_executive_id
+      updateData.hr_office_decision_note = rejection_reason || null
+    } else {
+      updateData.hr_decision = decision
+      updateData.hr_reviewed_at = new Date().toISOString()
+      updateData.hr_reviewed_by = hr_executive_id
+      updateData.hr_decision_note = rejection_reason || null
     }
-
-    if (decision === 'rejected' && rejection_reason) {
-      updateData.hr_executive_rejection_reason = rejection_reason
-    }
+    
+    updateData.status = decision
+    updateData.updated_at = new Date().toISOString()
 
     const { data, error } = await supabase
       .from(tableName)
