@@ -1335,7 +1335,146 @@ export function LeaveManagementClient({
           </CardHeader>
           {showMemoTemplatesSection && (
             <CardContent className="space-y-4 p-5">
-              <p className="text-sm text-slate-600">A simpler workspace for HR staff to browse, copy, update, and create leave memo templates without seeing every advanced field at once.</p>
+              <p className="text-sm text-slate-600 mb-4">A simpler workspace for HR staff to browse, copy, update, and create leave memo templates without seeing every advanced field at once.</p>
+              
+              {/* Stats */}
+              <div className="grid gap-3 grid-cols-3">
+                <div className="rounded-lg border border-white/80 bg-white/80 px-3 py-3 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Total</p>
+                  <p className="mt-1 text-2xl font-semibold text-slate-900">{templateStats.total}</p>
+                </div>
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 py-3 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wide text-emerald-700">Active</p>
+                  <p className="mt-1 text-2xl font-semibold text-emerald-900">{templateStats.active}</p>
+                </div>
+                <div className="rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-3 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wide text-amber-700">Inactive</p>
+                  <p className="mt-1 text-2xl font-semibold text-amber-900">{templateStats.inactive}</p>
+                </div>
+              </div>
+
+              {/* Category Filter */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-2">Filter by Category</p>
+                <div className="flex flex-wrap gap-2">
+                  {templateCategoryOptions.map((option) => {
+                    const active = templateCategoryFilter === option
+                    return (
+                      <Button
+                        key={`template-category-${option}`}
+                        type="button"
+                        size="sm"
+                        variant={active ? "default" : "outline"}
+                        className={active ? "bg-slate-900 hover:bg-slate-800" : "bg-white"}
+                        onClick={() => setTemplateCategoryFilter(option)}
+                      >
+                        {option.replaceAll("_", " ")}
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Templates List */}
+              {templatesLoading ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                  Loading templates...
+                </div>
+              ) : filteredTemplates.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                  No templates found for this category.
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredTemplates.map((template) => {
+                    const isExpanded = expandedTemplateKey === template.template_key
+                    return (
+                      <div key={template.template_key} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <p className="text-base font-semibold text-slate-900">{template.template_name}</p>
+                              <Badge variant={template.is_active ? "default" : "outline"} className={template.is_active ? "bg-emerald-600" : ""}>
+                                {template.is_active ? "Active" : "Inactive"}
+                              </Badge>
+                              <Badge variant="outline">{template.category || "general"}</Badge>
+                            </div>
+                            <p className="text-sm text-slate-600">{template.description || "No description"}</p>
+                            <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-slate-500">
+                              <span>Key: {template.template_key}</span>
+                              {template.updated_at && <span>Updated: {format(new Date(template.updated_at), "dd MMM yyyy")}</span>}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => copyTemplate(`${template.subject_template}\n\n${template.body_template}`, template.template_name)}
+                            >
+                              <Copy className="mr-1 h-4 w-4" /> Copy
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setExpandedTemplateKey((current) => current === template.template_key ? null : template.template_key)}
+                            >
+                              {isExpanded ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
+                              {isExpanded ? "Hide" : "Edit"}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Template Name</Label>
+                              <Input
+                                value={templateDrafts[template.template_key]?.template_name || template.template_name}
+                                onChange={(e) => updateTemplateDraft(template.template_key, { template_name: e.target.value })}
+                                disabled={!canEditHrTemplates}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Subject</Label>
+                              <Input
+                                value={templateDrafts[template.template_key]?.subject_template || template.subject_template}
+                                onChange={(e) => updateTemplateDraft(template.template_key, { subject_template: e.target.value })}
+                                disabled={!canEditHrTemplates}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Body</Label>
+                              <Textarea
+                                rows={6}
+                                value={templateDrafts[template.template_key]?.body_template || template.body_template}
+                                onChange={(e) => updateTemplateDraft(template.template_key, { body_template: e.target.value })}
+                                disabled={!canEditHrTemplates}
+                                className="text-xs"
+                              />
+                            </div>
+                            {canEditHrTemplates && (
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" onClick={() => resetTemplateDraft(template.template_key)}>
+                                  Reset
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => saveTemplate(template.template_key)}
+                                  disabled={savingTemplateKey === template.template_key}
+                                  className="bg-blue-700 hover:bg-blue-800"
+                                >
+                                  {savingTemplateKey === template.template_key ? "Saving..." : "Save"}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           )}
         </Card>
