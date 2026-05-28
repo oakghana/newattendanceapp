@@ -26,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
+import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -2296,30 +2297,52 @@ export function LeaveManagementClient({
           )}
 
           {selectedTab === "deferrments" && (
-            <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
-              <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Defer Staff Annual Leave
-                </CardTitle>
-                <CardDescription className="text-amber-100">
-                  Select a staff member&apos;s approved annual leave and defer it to a future leave year (HOD/RM/HR only)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="py-6">
-                {!isManagerView ? (
-                  <Alert className="border-amber-200 bg-amber-50">
-                    <AlertDescription className="text-amber-900">Only Heads of Department, Regional Managers, and HR staff can submit leave deferment requests.</AlertDescription>
-                  </Alert>
-                ) : !Array.isArray(approvedRequests) || approvedRequests.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                    <p className="font-medium text-slate-700">No approved leave available for deferment</p>
-                    <p className="text-sm text-slate-500 mt-2">There are no approved annual leave requests in your department to defer at this time</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
+            <div className="space-y-6">
+              {/* Deferment Requests Tracker */}
+              <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
+                <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Deferment Requests Tracking
+                  </CardTitle>
+                  <CardDescription className="text-amber-100">
+                    View all leave deferment requests submitted in your department/location
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  <DefermentRecallTracker 
+                    type="deferment" 
+                    userRole={userRole}
+                    userDepartment={userDepartment}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Deferment Form */}
+              <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
+                <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Submit New Deferment Request
+                  </CardTitle>
+                  <CardDescription className="text-amber-100">
+                    Select a staff member&apos;s approved annual leave and defer it to a future leave year (HOD/RM/HR only)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  {!isManagerView ? (
+                    <Alert className="border-amber-200 bg-amber-50">
+                      <AlertDescription className="text-amber-900">Only Heads of Department, Regional Managers, and HR staff can submit leave deferment requests.</AlertDescription>
+                    </Alert>
+                  ) : !Array.isArray(approvedRequests) || approvedRequests.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                      <p className="font-medium text-slate-700">No approved leave available for deferment</p>
+                      <p className="text-sm text-slate-500 mt-2">There are no approved annual leave requests in your department to defer at this time</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
 
                       {/* Step 1: Search + Filter + Select Staff Leave Request */}
                       <div className="space-y-3">
@@ -2480,31 +2503,54 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
 
           {selectedTab === "recalls" && (
-            <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
-              <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
-                <CardTitle className="flex items-center gap-2">
-                  <ArrowUpRight className="h-5 w-5" />
-                  Recall Your Leave
-                </CardTitle>
-                <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
-              </CardHeader>
-              <CardContent className="py-6">
-                {!isManagerView ? (
-                  <Alert className="border-blue-200 bg-blue-50">
-                    <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
-                  </Alert>
-                ) : typeof approvedRequests === "undefined" || approvedRequests.length === 0 ? (
-                  <div className="text-center py-12">
-                    <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
-                    <p className="font-medium text-slate-700">No approved leave to recall</p>
-                    <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
+            <div className="space-y-6">
+              {/* Recall Requests Tracker */}
+              <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
+                <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Leave Recall Requests Tracking
+                  </CardTitle>
+                  <CardDescription className="text-rose-100">
+                    View all leave recall requests submitted in your department/location
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  <DefermentRecallTracker 
+                    type="recall" 
+                    userRole={userRole}
+                    userDepartment={userDepartment}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Recall Form */}
+              <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
+                <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <ArrowUpRight className="h-5 w-5" />
+                    Submit New Recall Request
+                  </CardTitle>
+                  <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  {!isManagerView ? (
+                    <Alert className="border-blue-200 bg-blue-50">
+                      <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
+                    </Alert>
+                  ) : typeof approvedRequests === "undefined" || approvedRequests.length === 0 ? (
+                    <div className="text-center py-12">
+                      <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
+                      <p className="font-medium text-slate-700">No approved leave to recall</p>
+                      <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
                       <div className="space-y-3">
                         <Label className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
 
@@ -2651,6 +2697,7 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
 
           {selectedTab === "approved-memos" && isManagerView && (
