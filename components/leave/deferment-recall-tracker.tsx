@@ -22,27 +22,10 @@ interface DefermentRequest {
     department_id: string
     departments?: { name: string }
   }
-  requested_by_id?: string
-  initiated_by_user_id?: string
-  initiator?: {
-    id: string
-    first_name: string
-    last_name: string
-    employee_id: string
-    position: string
-  }
-  initiator_name?: string
-  hod_reviewer?: {
+  hr_reviewer?: {
     first_name: string
     last_name: string
   }
-  assigned_hr_executive?: {
-    id: string
-    first_name: string
-    last_name: string
-  }
-  assigned_hr_executive_id?: string
-  hr_executive_decision?: string
   reason: string
   defer_to_leave_year: string
   requested_deferment_year?: number
@@ -91,13 +74,10 @@ interface RecallRequest {
     first_name: string
     last_name: string
   }
-  assigned_hr_executive?: {
-    id: string
+  hr_reviewer?: {
     first_name: string
     last_name: string
   }
-  assigned_hr_executive_id?: string
-  hr_executive_decision?: string
   recall_reason: string
   recall_date: string
   status: 'pending' | 'approved' | 'rejected' | 'pending_hr_assignment' | 'pending_hr_executive'
@@ -371,64 +351,6 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
               </div>
             </div>
             
-            {/* HR Executive Assignment Section - Only visible to HR Leave Office */}
-            {isHrLeaveOffice && req.status === 'pending' && !req.assigned_hr_executive_id && (
-              <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs font-semibold text-slate-600 mb-2">ASSIGN TO HR EXECUTIVE FOR APPROVAL</p>
-                <div className="bg-amber-50 border border-amber-200 rounded p-4">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Select
-                      value={selectedExecutive[req.id] || ''}
-                      onValueChange={(value) => setSelectedExecutive(prev => ({ ...prev, [req.id]: value }))}
-                    >
-                      <SelectTrigger className="flex-1 bg-white">
-                        <SelectValue placeholder="Select HR Executive to approve..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {hrExecutives.map((exec) => (
-                          <SelectItem key={exec.id} value={exec.id}>
-                            {exec.name} - {exec.position}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button 
-                      onClick={() => assignToHrExecutive(req.id, 'deferment')}
-                      disabled={!selectedExecutive[req.id] || assigning === req.id}
-                      className="bg-amber-600 hover:bg-amber-700 text-white"
-                    >
-                      {assigning === req.id ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Assigning...
-                        </>
-                      ) : (
-                        'Assign for Approval'
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-amber-700 mt-2">
-                    Select an HR Executive who will review and approve this deferment request.
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {/* Show assigned HR executive info */}
-            {req.assigned_hr_executive_id && req.assigned_hr_executive && (
-              <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs font-semibold text-slate-600 mb-2">ASSIGNED HR EXECUTIVE</p>
-                <div className="bg-purple-50 border border-purple-200 rounded p-3">
-                  <p className="text-sm font-medium text-purple-800">
-                    {req.assigned_hr_executive.first_name} {req.assigned_hr_executive.last_name}
-                  </p>
-                  <p className="text-xs text-purple-600 mt-1">
-                    Status: {req.hr_executive_decision === 'pending' ? 'Awaiting Decision' : req.hr_executive_decision}
-                  </p>
-                </div>
-              </div>
-            )}
-            
             <div className="flex gap-2 pt-2">
               <Button size="sm" variant="outline" className="gap-2">
                 <Eye className="h-4 w-4" />
@@ -541,64 +463,6 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 <p className="text-sm text-slate-700">{req.recall_reason || 'No reason provided'}</p>
               </div>
             </div>
-            
-            {/* HR Executive Assignment Section - Only visible to HR Leave Office */}
-            {isHrLeaveOffice && req.status === 'pending' && !req.assigned_hr_executive_id && (
-              <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs font-semibold text-slate-600 mb-2">ASSIGN TO HR EXECUTIVE FOR APPROVAL</p>
-                <div className="bg-rose-50 border border-rose-200 rounded p-4">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Select
-                      value={selectedExecutive[req.id] || ''}
-                      onValueChange={(value) => setSelectedExecutive(prev => ({ ...prev, [req.id]: value }))}
-                    >
-                      <SelectTrigger className="flex-1 bg-white">
-                        <SelectValue placeholder="Select HR Executive to approve..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {hrExecutives.map((exec) => (
-                          <SelectItem key={exec.id} value={exec.id}>
-                            {exec.name} - {exec.position}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button 
-                      onClick={() => assignToHrExecutive(req.id, 'recall')}
-                      disabled={!selectedExecutive[req.id] || assigning === req.id}
-                      className="bg-rose-600 hover:bg-rose-700 text-white"
-                    >
-                      {assigning === req.id ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Assigning...
-                        </>
-                      ) : (
-                        'Assign for Approval'
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-rose-700 mt-2">
-                    Select an HR Executive who will review and approve this recall request.
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {/* Show assigned HR executive info */}
-            {req.assigned_hr_executive_id && req.assigned_hr_executive && (
-              <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs font-semibold text-slate-600 mb-2">ASSIGNED HR EXECUTIVE</p>
-                <div className="bg-purple-50 border border-purple-200 rounded p-3">
-                  <p className="text-sm font-medium text-purple-800">
-                    {req.assigned_hr_executive.first_name} {req.assigned_hr_executive.last_name}
-                  </p>
-                  <p className="text-xs text-purple-600 mt-1">
-                    Status: {req.hr_executive_decision === 'pending' ? 'Awaiting Decision' : req.hr_executive_decision}
-                  </p>
-                </div>
-              </div>
-            )}
             
             <div className="flex gap-2 pt-2">
               <Button size="sm" variant="outline" className="gap-2">

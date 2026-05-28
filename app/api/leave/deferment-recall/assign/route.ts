@@ -62,14 +62,20 @@ export async function POST(request: NextRequest) {
       ? 'leave_deferment_requests' 
       : 'leave_recall_requests'
 
+    // Use existing schema fields instead of non-existent assigned_hr_executive_id
+    const updatePayload = request_type === 'deferment' ? {
+      hr_office_reviewed_by: hr_executive_id,
+      status: 'pending_hr_office_review',
+      updated_at: new Date().toISOString()
+    } : {
+      hr_reviewed_by: hr_executive_id,
+      status: 'pending_hr_review',
+      updated_at: new Date().toISOString()
+    }
+
     const { data, error } = await supabase
       .from(tableName)
-      .update({
-        assigned_hr_executive_id: hr_executive_id,
-        hr_executive_decision: 'pending',
-        status: 'pending_hr_executive',
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', request_id)
       .select()
       .single()

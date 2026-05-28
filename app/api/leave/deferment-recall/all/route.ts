@@ -67,18 +67,6 @@ export async function GET(request: NextRequest) {
             assigned_location_id,
             departments (name)
           ),
-          initiator:user_profiles!leave_deferment_requests_initiated_by_user_id_fkey (
-            id,
-            first_name,
-            last_name,
-            employee_id,
-            position
-          ),
-          assigned_hr_executive:user_profiles!leave_deferment_requests_assigned_hr_executive_id_fkey (
-            id,
-            first_name,
-            last_name
-          ),
           hod_reviewer:user_profiles!leave_deferment_requests_hod_reviewed_by_fkey (
             first_name,
             last_name
