@@ -434,9 +434,21 @@ export async function GET(request: NextRequest) {
       recalls: results.recalls,
       summary: {
         total_deferments: results.deferments.length,
-        pending_deferments: results.deferments.filter(d => d.status === "pending").length,
+        pending_deferments: results.deferments.filter(d => {
+          const status = String(d.status || "").toLowerCase()
+          return status === "pending" || 
+                 status.includes("pending") || 
+                 status === "sent_to_hr_executive" ||
+                 status === "hod_approved" ||
+                 (d.hr_office_decision === null && d.hod_decision !== "rejected")
+        }).length,
         total_recalls: results.recalls.length,
-        pending_recalls: results.recalls.filter(r => r.status === "pending").length
+        pending_recalls: results.recalls.filter(r => {
+          const status = String(r.status || "").toLowerCase()
+          return status === "pending" || 
+                 status.includes("pending") || 
+                 (r.hr_decision === null && r.hod_decision !== "rejected")
+        }).length
       },
       access_level: canViewAll ? "full" : isHodRm ? "department_regional" : "own_only"
     })
