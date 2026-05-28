@@ -2314,6 +2314,7 @@ export function LeaveManagementClient({
                     type="deferment" 
                     userRole={userRole}
                     userDepartment={userDepartment}
+                    userId={userId}
                   />
                 </CardContent>
               </Card>
@@ -2524,6 +2525,7 @@ export function LeaveManagementClient({
                     type="recall" 
                     userRole={userRole}
                     userDepartment={userDepartment}
+                    userId={userId}
                   />
                 </CardContent>
               </Card>

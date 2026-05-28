@@ -50,6 +50,9 @@ export async function GET(request: NextRequest) {
             preferred_start_date,
             preferred_end_date,
             requested_days,
+            adjusted_days,
+            adjusted_start_date,
+            adjusted_end_date,
             status,
             user_id,
             leave_year_period
@@ -63,6 +66,18 @@ export async function GET(request: NextRequest) {
             department_id,
             assigned_location_id,
             departments (name)
+          ),
+          initiator:user_profiles!leave_deferment_requests_initiated_by_user_id_fkey (
+            id,
+            first_name,
+            last_name,
+            employee_id,
+            position
+          ),
+          assigned_hr_executive:user_profiles!leave_deferment_requests_assigned_hr_executive_id_fkey (
+            id,
+            first_name,
+            last_name
           ),
           hod_reviewer:user_profiles!leave_deferment_requests_hod_reviewed_by_fkey (
             first_name,
@@ -103,12 +118,23 @@ export async function GET(request: NextRequest) {
         if (!simpleError && simpleDeferments) {
           // Manually fetch related data
           for (const def of simpleDeferments) {
-            // Get user info
+            // Get user info (staff whose leave is being deferred)
             const { data: user } = await supabase
               .from("user_profiles")
               .select("first_name, last_name, employee_id, position, department_id, assigned_location_id")
               .eq("id", def.user_id)
               .single()
+            
+            // Get initiator info (HOD/RM who made the request)
+            let initiator = null
+            if (def.initiated_by_user_id) {
+              const { data: initiatorData } = await supabase
+                .from("user_profiles")
+                .select("id, first_name, last_name, employee_id, position")
+                .eq("id", def.initiated_by_user_id)
+                .single()
+              initiator = initiatorData
+            }
             
             // HOD/RM filtering - only their department/location
             if (isHodRm && user) {
@@ -161,6 +187,8 @@ export async function GET(request: NextRequest) {
               department: deptName,
               department_id: user?.department_id,
               location_id: user?.assigned_location_id,
+              initiator: initiator,
+              initiator_name: initiator ? `${initiator.first_name} ${initiator.last_name}` : null,
               leave_type: leaveReq?.leave_type_key || "",
               start_date: leaveReq?.preferred_start_date,
               end_date: leaveReq?.preferred_end_date,
