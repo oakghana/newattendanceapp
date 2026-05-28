@@ -121,9 +121,12 @@ export function LeaveManagementClient({
       "pending_hr",
       "pending_manager_review",
       "pending_hod_review",
+      "pending_hr_office_review",
+      "pending_hr_review",
       "manager_confirmed",
       "hod_approved",
       "hr_office_forwarded",
+      "sent_to_hr_executive",
     ])
     const approvedStatuses = new Set(["approved", "hr_approved"])
     const editableStatuses = new Set([
@@ -1631,12 +1634,15 @@ export function LeaveManagementClient({
                                     deferment.status === "rejected" ? "bg-red-100 text-red-700" :
                                     deferment.status === "pending" || deferment.status === "pending_hod_review" ? "bg-amber-100 text-amber-700" :
                                     deferment.status === "pending_hr_review" || deferment.status === "hod_approved" ? "bg-blue-100 text-blue-700" :
+                                    deferment.status === "pending_hr_office_review" || deferment.status === "sent_to_hr_executive" ? "bg-purple-100 text-purple-700" :
                                     "bg-slate-100 text-slate-700"
                                   }`}>
                                     {deferment.status === "approved" ? "Approved" :
                                      deferment.status === "rejected" ? "Rejected" :
                                      deferment.status === "pending" || deferment.status === "pending_hod_review" ? "Pending HOD Review" :
                                      deferment.status === "pending_hr_review" || deferment.status === "hod_approved" ? "HOD Approved - Awaiting HR" :
+                                     deferment.status === "pending_hr_office_review" ? "Pending HR Office Review" :
+                                     deferment.status === "sent_to_hr_executive" ? "Sent to HR Executive for Approval" :
                                      deferment.status || "Pending"}
                                   </span>
                                   {canEditDeferment(deferment.status) && (

@@ -97,14 +97,17 @@ export async function POST(request: NextRequest) {
       updateData.hr_office_reviewed_at = new Date().toISOString()
       updateData.hr_office_reviewed_by = hr_executive_id
       updateData.hr_office_decision_note = rejection_reason || null
+      // When HR Office approves, forward to HR Executive; if rejects, set to rejected
+      updateData.status = decision === 'approved' ? 'sent_to_hr_executive' : 'rejected'
     } else {
       updateData.hr_decision = decision
       updateData.hr_reviewed_at = new Date().toISOString()
       updateData.hr_reviewed_by = hr_executive_id
       updateData.hr_decision_note = rejection_reason || null
+      // When HR reviews, set to approved/rejected
+      updateData.status = decision === 'approved' ? 'approved' : 'rejected'
     }
     
-    updateData.status = decision
     updateData.updated_at = new Date().toISOString()
 
     const { data, error } = await supabase

@@ -42,8 +42,7 @@ export async function GET(request: NextRequest) {
 
     const results: { deferments: unknown[], recalls: unknown[] } = { deferments: [], recalls: [] }
 
-    // Fetch deferment requests - for now use hr_office fields since assigned_hr_executive_id doesn't exist yet
-    // TODO: Switch to assigned_hr_executive_id once migration is applied
+    // Fetch deferment requests sent to HR executives for approval (after HR office review)
     if (type === 'deferment' || type === 'all' || !type) {
       let defermentQuery = supabase
         .from('leave_deferment_requests')
@@ -58,12 +57,13 @@ export async function GET(request: NextRequest) {
             adjusted_start_date, adjusted_end_date, requested_days, adjusted_days
           )
         `)
-        .eq('hr_office_reviewed_by', hrExecutiveId)
+        .eq('status', 'sent_to_hr_executive')
         .order('created_at', { ascending: false })
 
-      // Filter by status
+      // Filter by sub-status if provided
       if (status && status !== 'all') {
         if (status === 'pending') {
+          // Pending means no hr_office decision yet (shouldn't happen at this stage, but keep for safety)
           defermentQuery = defermentQuery.is('hr_office_decision', null)
         } else {
           defermentQuery = defermentQuery.eq('hr_office_decision', status)
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch recall requests - for now use hr fields since assigned_hr_executive_id doesn't exist yet
+    // Fetch recall requests sent to HR executives for approval
     if (type === 'recall' || type === 'all' || !type) {
       let recallQuery = supabase
         .from('leave_recall_requests')
@@ -94,10 +94,10 @@ export async function GET(request: NextRequest) {
             adjusted_start_date, adjusted_end_date
           )
         `)
-        .eq('hr_reviewed_by', hrExecutiveId)
+        .eq('status', 'approved')
         .order('created_at', { ascending: false })
 
-      // Filter by status
+      // Filter by sub-status if provided
       if (status && status !== 'all') {
         if (status === 'pending') {
           recallQuery = recallQuery.is('hr_decision', null)
