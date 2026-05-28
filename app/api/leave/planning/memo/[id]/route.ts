@@ -549,9 +549,18 @@ export async function GET(
     const effectiveStart = lr.adjusted_start_date || lr.preferred_start_date
     const effectiveEnd   = lr.adjusted_end_date   || lr.preferred_end_date
     const effectiveDays  = Number(lr.adjusted_days || lr.requested_days || 0)
+    const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
 
-    // Return-to-work date (next business day after leave end)
-    const returnDate = new Date(effectiveEnd)
+    // Adjust end date if outstanding leave days are added
+    let adjustedEffectiveEnd = effectiveEnd
+    if (outstandingLeaveDaysAdded > 0) {
+      const endDateObj = new Date(effectiveEnd)
+      endDateObj.setDate(endDateObj.getDate() + outstandingLeaveDaysAdded)
+      adjustedEffectiveEnd = endDateObj.toISOString().split('T')[0]
+    }
+
+    // Return-to-work date (next business day after adjusted leave end)
+    const returnDate = new Date(adjustedEffectiveEnd)
     returnDate.setDate(returnDate.getDate() + 1)
     if (returnDate.getDay() === 6) returnDate.setDate(returnDate.getDate() + 2)
     if (returnDate.getDay() === 0) returnDate.setDate(returnDate.getDate() + 1)
@@ -573,8 +582,8 @@ export async function GET(
     const templateData = {
       leave_type: leaveLabel,
       leave_start_date: fmtFormalDate(effectiveStart),
-      leave_end_date: fmtFormalDate(effectiveEnd),
-      approved_days: String(effectiveDays),
+      leave_end_date: fmtFormalDate(adjustedEffectiveEnd),
+      approved_days: String(effectiveDays + outstandingLeaveDaysAdded),
       submitted_date: fmtFormalDate(lr.submitted_at || lr.created_at),
       return_to_work_date: fmtFormalDateWithWeekday(returnDateIso),
     }
@@ -774,7 +783,7 @@ export async function GET(
             entitlementLabel,
             String(totalGranted || effectiveDays),
             fmtFormalDate(effectiveStart),
-            fmtFormalDate(effectiveEnd),
+            fmtFormalDate(adjustedEffectiveEnd),
             remarksSummary,
           ],
           [
