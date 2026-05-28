@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
     const body = await request.json()
-    const { leave_plan_request_id, deferral_year, reason, user_id, user_role } = body
+    const { leave_plan_request_id, deferral_year, reason, user_id, requester_id, user_role } = body
 
     // Validate required fields
     if (!leave_plan_request_id || !deferral_year || !user_id) {
@@ -33,10 +33,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the original leave request exists
+    // Verify the original leave request exists and get its details
     const { data: leaveRequest, error: leaveError } = await supabase
       .from("leave_plan_requests")
-      .select("*")
+      .select("*, user_profiles!leave_plan_requests_user_id_fkey(id, first_name, last_name, employee_id)")
       .eq("id", leave_plan_request_id)
       .single()
 
@@ -55,8 +55,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create deferment request
-    const defermentPeriod = `${deferral_year}/2027` // Format as "2026/2027"
+    // Validate that leave has valid dates (not N/A)
+    if (!leaveRequest.preferred_start_date || !leaveRequest.preferred_end_date) {
+      return NextResponse.json(
+        { error: "Cannot defer leave without valid start and end dates" },
+        { status: 400 }
+      )
+    }
+
+    // Create deferment request with requester info
+    const defermentPeriod = `${deferral_year}/${parseInt(deferral_year) + 1}` // Format as "2026/2027"
     const { data, error } = await supabase
       .from("leave_deferment_requests")
       .insert({
@@ -64,7 +72,8 @@ export async function POST(request: NextRequest) {
         requested_deferment_year: parseInt(deferral_year),
         requested_deferment_period: defermentPeriod,
         reason: reason || null,
-        user_id: user_id,
+        user_id: leaveRequest.user_id, // The staff whose leave is being deferred
+        initiated_by_user_id: requester_id || user_id, // The HOD/RM/HR who initiated
         created_at: new Date().toISOString(),
         status: "pending",
       })

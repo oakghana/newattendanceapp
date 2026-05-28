@@ -26,6 +26,8 @@ import {
   XCircle,
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
+import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
+import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -193,6 +195,7 @@ export function LeaveManagementClient({
   const [isSavingSigner, setIsSavingSigner] = useState(false)
   const [showTemplateComposer, setShowTemplateComposer] = useState(false)
   const [showPlaceholderGuide, setShowPlaceholderGuide] = useState(false)
+  const [showMemoTemplatesSection, setShowMemoTemplatesSection] = useState(false)
   const [expandedTemplateKey, setExpandedTemplateKey] = useState<string | null>(null)
   const [newTemplate, setNewTemplate] = useState({
     template_key: "",
@@ -1314,336 +1317,27 @@ export function LeaveManagementClient({
       {canViewHrTemplates && (
         <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardHeader className="border-b border-slate-200 bg-[linear-gradient(135deg,_#eef6ff_0%,_#f8fbff_55%,_#eefaf5_100%)] pb-4">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <CardTitle className="text-xl text-slate-900">HR Memo Templates</CardTitle>
-                <CardDescription className="mt-1 max-w-2xl text-slate-600">
-                  A simpler workspace for HR staff to browse, copy, update, and create leave memo templates without seeing every advanced field at once.
-                </CardDescription>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
-                <div className="rounded-2xl border border-white/80 bg-white/80 px-3 py-3 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Total</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">{templateStats.total}</p>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setShowMemoTemplatesSection(!showMemoTemplatesSection)}
+                className="p-2 hover:bg-white/50 rounded-lg transition-colors flex items-center gap-2"
+              >
+                {showMemoTemplatesSection ? (
+                  <ChevronUp className="h-5 w-5 text-slate-600" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-slate-600" />
+                )}
+                <div>
+                  <CardTitle className="text-xl text-slate-900">HR Memo Templates</CardTitle>
                 </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-3 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wide text-emerald-700">Active</p>
-                  <p className="mt-1 text-2xl font-semibold text-emerald-900">{templateStats.active}</p>
-                </div>
-                <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-3 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wide text-amber-700">Inactive</p>
-                  <p className="mt-1 text-2xl font-semibold text-amber-900">{templateStats.inactive}</p>
-                </div>
-              </div>
+              </button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 p-5">
-            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Quick View</p>
-                <p className="mt-1 text-sm text-slate-600">Filter by template purpose and open only the template you want to work on.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {templateCategoryOptions.map((option) => {
-                  const active = templateCategoryFilter === option
-                  return (
-                    <Button
-                      key={`template-category-${option}`}
-                      type="button"
-                      size="sm"
-                      variant={active ? "default" : "outline"}
-                      className={active ? "bg-slate-900 hover:bg-slate-800" : "bg-white"}
-                      onClick={() => setTemplateCategoryFilter(option)}
-                    >
-                      {option.replaceAll("_", " ")}
-                    </Button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto]">
-              {canEditHrTemplates ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="justify-between rounded-2xl border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-                  onClick={() => setShowTemplateComposer((prev) => !prev)}
-                >
-                  <span>{showTemplateComposer ? "Hide New Template Composer" : "Create New Template"}</span>
-                  {showTemplateComposer ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </Button>
-              ) : <div />}
-
-              <Button
-                type="button"
-                variant="outline"
-                className="justify-between rounded-2xl bg-white"
-                onClick={() => setShowPlaceholderGuide((prev) => !prev)}
-              >
-                <span>{showPlaceholderGuide ? "Hide Placeholder Guide" : "Show Placeholder Guide"}</span>
-                {showPlaceholderGuide ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </Button>
-
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-sm text-blue-900">
-                <p className="font-medium">Visible templates</p>
-                <p className="mt-1 text-2xl font-semibold">{filteredTemplates.length}</p>
-              </div>
-            </div>
-
-            {canEditHrTemplates && showTemplateComposer && (
-              <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">New Template Composer</p>
-                    <p className="mt-1 text-sm text-slate-600">Keep the wording clean and reusable. The key will be normalized automatically.</p>
-                  </div>
-                  <Badge className="bg-emerald-700 text-white">Simple Create</Badge>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Template Name</Label>
-                    <Input
-                      value={newTemplate.template_name}
-                      onChange={(e) => setNewTemplate((prev) => ({
-                        ...prev,
-                        template_name: e.target.value,
-                        template_key: prev.template_key || slugifyTemplateKey(e.target.value),
-                      }))}
-                      placeholder="Annual Leave Approval Revised"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Template Key</Label>
-                    <Input
-                      value={newTemplate.template_key}
-                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, template_key: slugifyTemplateKey(e.target.value) }))}
-                      placeholder="annual_leave_approval_revised"
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Category</Label>
-                    <Input
-                      value={newTemplate.category}
-                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, category: e.target.value.toLowerCase().trim() || "general" }))}
-                      placeholder="approval, rejection, deferment"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">CC Recipients</Label>
-                    <Input
-                      value={newTemplate.cc_recipients}
-                      onChange={(e) => setNewTemplate((prev) => ({ ...prev, cc_recipients: e.target.value }))}
-                      placeholder="Managing Director, HR Head"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Description</Label>
-                  <Input
-                    value={newTemplate.description}
-                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, description: e.target.value }))}
-                    placeholder="For use when annual leave requires special management wording"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Subject Template</Label>
-                  <Input
-                    value={newTemplate.subject_template}
-                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, subject_template: e.target.value }))}
-                    placeholder="APPLICATION FOR {{leave_type}} - {{leave_year_period}}"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Body Template</Label>
-                  <Textarea
-                    rows={6}
-                    value={newTemplate.body_template}
-                    onChange={(e) => setNewTemplate((prev) => ({ ...prev, body_template: e.target.value }))}
-                    placeholder="We refer to your application dated {{submitted_date}}..."
-                    className="text-xs"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setShowTemplateComposer(false)}>Cancel</Button>
-                  <Button onClick={handleCreateTemplate} disabled={creatingTemplate} className="bg-emerald-700 hover:bg-emerald-800">
-                    {creatingTemplate ? "Creating..." : "Create Template"}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {showPlaceholderGuide && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 space-y-3">
-                <div className="flex items-center gap-2 text-amber-900">
-                  <Info className="h-4 w-4" />
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">Available Placeholders</p>
-                </div>
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {Object.entries(placeholderDescriptions).map(([key, description]) => (
-                    <div key={key} className="rounded-xl border border-amber-200 bg-white px-3 py-2">
-                      <p className="text-[11px] font-semibold text-amber-900">{key}</p>
-                      <p className="mt-1 text-[11px] text-slate-600">{description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {templatesLoading ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-                Loading templates...
-              </div>
-            ) : filteredTemplates.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
-                No templates found for this filter.
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {filteredTemplates.map((template) => {
-                  const draft = templateDrafts[template.template_key] || template
-                  const isExpanded = expandedTemplateKey === draft.template_key
-                  return (
-                    <div key={template.template_key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-base font-semibold text-slate-900">{draft.template_name}</p>
-                            <Badge variant={draft.is_active ? "default" : "outline"} className={draft.is_active ? "bg-emerald-600" : ""}>
-                              {draft.is_active ? "Active" : "Inactive"}
-                            </Badge>
-                            <Badge variant="outline">{String(draft.category || "general")}</Badge>
-                          </div>
-                          <p className="mt-1 text-sm text-slate-500">{draft.description || "No description added yet."}</p>
-                          <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-slate-500">
-                            <span>Key: {draft.template_key}</span>
-                            <span>Updated: {draft.updated_at ? format(new Date(draft.updated_at), "dd MMM yyyy, HH:mm") : "Not available"}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => copyTemplate(`${draft.subject_template}\n\n${draft.body_template}`, `${draft.template_name} template`)}
-                          >
-                            <Copy className="mr-1 h-4 w-4" /> Copy
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setExpandedTemplateKey((current) => current === draft.template_key ? null : draft.template_key)}
-                          >
-                            {isExpanded ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
-                            {isExpanded ? "Hide Editor" : "Open Editor"}
-                          </Button>
-                          {canEditHrTemplates && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => runTemplateAction(draft.template_key, "duplicate")}
-                                disabled={templateActionKey === `duplicate:${draft.template_key}`}
-                              >
-                                Duplicate
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => runTemplateAction(draft.template_key, draft.is_active ? "deactivate" : "activate")}
-                                disabled={templateActionKey === `${draft.is_active ? "deactivate" : "activate"}:${draft.template_key}`}
-                              >
-                                {draft.is_active ? "Deactivate" : "Activate"}
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4">
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Template Name</Label>
-                              <Input
-                                value={draft.template_name}
-                                onChange={(e) => updateTemplateDraft(draft.template_key, { template_name: e.target.value })}
-                                disabled={!canEditHrTemplates}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Category</Label>
-                              <Input
-                                value={draft.category || "general"}
-                                onChange={(e) => updateTemplateDraft(draft.template_key, { category: e.target.value.toLowerCase().trim() || "general" })}
-                                disabled={!canEditHrTemplates}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">Description</Label>
-                            <Input
-                              value={draft.description || ""}
-                              onChange={(e) => updateTemplateDraft(draft.template_key, { description: e.target.value })}
-                              disabled={!canEditHrTemplates}
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">Subject Template</Label>
-                            <Input
-                              value={draft.subject_template}
-                              onChange={(e) => updateTemplateDraft(draft.template_key, { subject_template: e.target.value })}
-                              disabled={!canEditHrTemplates}
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">Body Template</Label>
-                            <Textarea
-                              rows={7}
-                              value={draft.body_template}
-                              onChange={(e) => updateTemplateDraft(draft.template_key, { body_template: e.target.value })}
-                              disabled={!canEditHrTemplates}
-                              className="whitespace-pre-wrap text-xs"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">CC Recipients</Label>
-                            <Input
-                              value={draft.cc_recipients || ""}
-                              onChange={(e) => updateTemplateDraft(draft.template_key, { cc_recipients: e.target.value })}
-                              disabled={!canEditHrTemplates}
-                            />
-                          </div>
-
-                          {canEditHrTemplates && (
-                            <div className="flex flex-wrap justify-end gap-2">
-                              <Button size="sm" variant="outline" onClick={() => resetTemplateDraft(draft.template_key)}>
-                                Reset
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => saveTemplate(draft.template_key)}
-                                disabled={savingTemplateKey === draft.template_key}
-                                className="bg-blue-700 hover:bg-blue-800"
-                              >
-                                {savingTemplateKey === draft.template_key ? "Saving..." : "Save Changes"}
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
+          {showMemoTemplatesSection && (
+            <CardContent className="space-y-4 p-5">
+              <p className="text-sm text-slate-600">A simpler workspace for HR staff to browse, copy, update, and create leave memo templates without seeing every advanced field at once.</p>
+            </CardContent>
+          )}
         </Card>
       )}
 
@@ -2296,30 +1990,61 @@ export function LeaveManagementClient({
           )}
 
           {selectedTab === "deferrments" && (
-            <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
-              <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Defer Staff Annual Leave
-                </CardTitle>
-                <CardDescription className="text-amber-100">
-                  Select a staff member&apos;s approved annual leave and defer it to a future leave year (HOD/RM/HR only)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="py-6">
-                {!isManagerView ? (
-                  <Alert className="border-amber-200 bg-amber-50">
-                    <AlertDescription className="text-amber-900">Only Heads of Department, Regional Managers, and HR staff can submit leave deferment requests.</AlertDescription>
-                  </Alert>
-                ) : !Array.isArray(approvedRequests) || approvedRequests.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
-                    <p className="font-medium text-slate-700">No approved leave available for deferment</p>
-                    <p className="text-sm text-slate-500 mt-2">There are no approved annual leave requests in your department to defer at this time</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
+            <div className="space-y-6">
+              {/* Deferment Requests Tracker */}
+              <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
+                <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Deferment Requests Tracking
+                  </CardTitle>
+                  <CardDescription className="text-amber-100">
+                    View all leave deferment requests submitted in your department/location
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  <DefermentRecallTracker 
+                    type="deferment" 
+                    userRole={userRole}
+                    userDepartment={userDepartment}
+                    userId={userId}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* HR Executive Approval Dashboard - visible to managers and HR staff who can approve */}
+              {isManagerView && (
+                <HRExecutiveApprovalDashboard 
+                  hrExecutiveId={userId}
+                  userRole={userRole}
+                />
+              )}
+
+              {/* Deferment Form */}
+              <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
+                <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Submit New Deferment Request
+                  </CardTitle>
+                  <CardDescription className="text-amber-100">
+                    Select a staff member&apos;s approved annual leave and defer it to a future leave year (HOD/RM/HR only)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  {!isManagerView ? (
+                    <Alert className="border-amber-200 bg-amber-50">
+                      <AlertDescription className="text-amber-900">Only Heads of Department, Regional Managers, and HR staff can submit leave deferment requests.</AlertDescription>
+                    </Alert>
+                  ) : !Array.isArray(approvedRequests) || approvedRequests.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
+                      <p className="font-medium text-slate-700">No approved leave available for deferment</p>
+                      <p className="text-sm text-slate-500 mt-2">There are no approved annual leave requests in your department to defer at this time</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="bg-white rounded-lg border border-amber-200 p-6 space-y-5">
 
                       {/* Step 1: Search + Filter + Select Staff Leave Request */}
                       <div className="space-y-3">
@@ -2480,31 +2205,55 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
 
           {selectedTab === "recalls" && (
-            <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
-              <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
-                <CardTitle className="flex items-center gap-2">
-                  <ArrowUpRight className="h-5 w-5" />
-                  Recall Your Leave
-                </CardTitle>
-                <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
-              </CardHeader>
-              <CardContent className="py-6">
-                {!isManagerView ? (
-                  <Alert className="border-blue-200 bg-blue-50">
-                    <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
-                  </Alert>
-                ) : typeof approvedRequests === "undefined" || approvedRequests.length === 0 ? (
-                  <div className="text-center py-12">
-                    <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
-                    <p className="font-medium text-slate-700">No approved leave to recall</p>
-                    <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
+            <div className="space-y-6">
+              {/* Recall Requests Tracker */}
+              <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
+                <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Leave Recall Requests Tracking
+                  </CardTitle>
+                  <CardDescription className="text-rose-100">
+                    View all leave recall requests submitted in your department/location
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  <DefermentRecallTracker 
+                    type="recall" 
+                    userRole={userRole}
+                    userDepartment={userDepartment}
+                    userId={userId}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Recall Form */}
+              <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
+                <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
+                  <CardTitle className="flex items-center gap-2">
+                    <ArrowUpRight className="h-5 w-5" />
+                    Submit New Recall Request
+                  </CardTitle>
+                  <CardDescription className="text-rose-100">Request to recall active or upcoming leave (HOD/RM/HR only)</CardDescription>
+                </CardHeader>
+                <CardContent className="py-6">
+                  {!isManagerView ? (
+                    <Alert className="border-blue-200 bg-blue-50">
+                      <AlertDescription className="text-blue-900">Only Heads of Department, Regional Managers, and HR staff can submit leave recall requests.</AlertDescription>
+                    </Alert>
+                  ) : typeof approvedRequests === "undefined" || approvedRequests.length === 0 ? (
+                    <div className="text-center py-12">
+                      <ArrowUpRight className="mx-auto mb-4 h-12 w-12 text-rose-400" />
+                      <p className="font-medium text-slate-700">No approved leave to recall</p>
+                      <p className="text-sm text-slate-500 mt-2">No active or upcoming approved leave available for recall</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="bg-white rounded-lg border border-rose-200 p-6 space-y-5">
                       <div className="space-y-3">
                         <Label className="text-sm font-semibold text-slate-700">Select Leave Request to Recall</Label>
 
@@ -2651,6 +2400,7 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
 
           {selectedTab === "approved-memos" && isManagerView && (
