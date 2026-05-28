@@ -1356,7 +1356,6 @@ export function LeaveManagementClient({
           </CardHeader>
           {showMemoTemplatesSection && (
             <CardContent className="space-y-4 p-5">
-            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Quick View</p>
                 <p className="mt-1 text-sm text-slate-600">Filter by template purpose and open only the template you want to work on.</p>
@@ -1378,36 +1377,35 @@ export function LeaveManagementClient({
                   )
                 })}
               </div>
-            </div>
 
-            <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto]">
-              {canEditHrTemplates ? (
+              <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto]">
+                {canEditHrTemplates ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-between rounded-2xl border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                    onClick={() => setShowTemplateComposer((prev) => !prev)}
+                  >
+                    <span>{showTemplateComposer ? "Hide New Template Composer" : "Create New Template"}</span>
+                    {showTemplateComposer ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                ) : <div />}
+
                 <Button
                   type="button"
                   variant="outline"
-                  className="justify-between rounded-2xl border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-                  onClick={() => setShowTemplateComposer((prev) => !prev)}
+                  className="justify-between rounded-2xl bg-white"
+                  onClick={() => setShowPlaceholderGuide((prev) => !prev)}
                 >
-                  <span>{showTemplateComposer ? "Hide New Template Composer" : "Create New Template"}</span>
-                  {showTemplateComposer ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  <span>{showPlaceholderGuide ? "Hide Placeholder Guide" : "Show Placeholder Guide"}</span>
+                  {showPlaceholderGuide ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
-              ) : <div />}
 
-              <Button
-                type="button"
-                variant="outline"
-                className="justify-between rounded-2xl bg-white"
-                onClick={() => setShowPlaceholderGuide((prev) => !prev)}
-              >
-                <span>{showPlaceholderGuide ? "Hide Placeholder Guide" : "Show Placeholder Guide"}</span>
-                {showPlaceholderGuide ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </Button>
-
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-sm text-blue-900">
-                <p className="font-medium">Visible templates</p>
-                <p className="mt-1 text-2xl font-semibold">{filteredTemplates.length}</p>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-sm text-blue-900">
+                  <p className="font-medium">Visible templates</p>
+                  <p className="mt-1 text-2xl font-semibold">{filteredTemplates.length}</p>
+                </div>
               </div>
-            </div>
 
             {canEditHrTemplates && showTemplateComposer && (
               <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm space-y-4">

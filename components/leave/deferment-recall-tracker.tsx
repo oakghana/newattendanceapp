@@ -270,7 +270,10 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
 
   const renderDefermentCard = (req: DefermentRequest) => {
     const isExpanded = expandedId === req.id
-    const staffName = `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() || 'Unknown Staff'
+    const staffFirstName = req.user_profiles?.first_name || ''
+    const staffLastName = req.user_profiles?.last_name || ''
+    const staffName = `${staffFirstName} ${staffLastName}`.trim()
+    const hasValidStaffName = !!(staffFirstName || staffLastName)
     
     // Get initiator name - try initiator object first, then initiator_name, then hod_reviewer
     const initiatorName = req.initiator 
@@ -303,8 +306,12 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-slate-800">{staffName}</h3>
-                  <p className="text-xs text-slate-500">{req.user_profiles?.employee_id} • {req.user_profiles?.departments?.name}</p>
+                  {hasValidStaffName && (
+                    <>
+                      <h3 className="font-semibold text-slate-800">{staffName}</h3>
+                      <p className="text-xs text-slate-500">{req.user_profiles?.employee_id} • {req.user_profiles?.departments?.name}</p>
+                    </>
+                  )}
                 </div>
                 {getStatusBadge(req.status)}
               </div>
@@ -442,7 +449,10 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
 
   const renderRecallCard = (req: RecallRequest) => {
     const isExpanded = expandedId === req.id
-    const staffName = `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() || 'Unknown Staff'
+    const staffFirstName = req.user_profiles?.first_name || ''
+    const staffLastName = req.user_profiles?.last_name || ''
+    const staffName = `${staffFirstName} ${staffLastName}`.trim()
+    const hasValidStaffName = !!(staffFirstName || staffLastName)
     
     // Get initiator name - try initiator object first, then initiator_name, then hod_reviewer
     const initiatorName = req.initiator 
@@ -468,8 +478,12 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-slate-800">{staffName}</h3>
-                  <p className="text-xs text-slate-500">{req.user_profiles?.employee_id} • {req.user_profiles?.departments?.name}</p>
+                  {hasValidStaffName && (
+                    <>
+                      <h3 className="font-semibold text-slate-800">{staffName}</h3>
+                      <p className="text-xs text-slate-500">{req.user_profiles?.employee_id} • {req.user_profiles?.departments?.name}</p>
+                    </>
+                  )}
                 </div>
                 {getStatusBadge(req.status)}
               </div>
