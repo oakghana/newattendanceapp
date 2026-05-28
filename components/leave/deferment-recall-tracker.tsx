@@ -279,7 +279,7 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
         ? req.initiator_name
         : req.hod_reviewer 
           ? `${req.hod_reviewer.first_name} ${req.hod_reviewer.last_name}`
-          : 'Unknown'
+          : null
     
     const leaveType = req.leave_plan_requests?.leave_type_key?.replace(/_/g, ' ') || 'Annual Leave'
     const deferYear = req.requested_deferment_year || req.defer_to_leave_year || 'N/A'
@@ -309,10 +309,12 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 {getStatusBadge(req.status)}
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-xs">
-                <div>
-                  <p className="text-slate-500">Requested By</p>
-                  <p className="font-medium text-slate-700">{initiatorName}</p>
-                </div>
+                {initiatorName && (
+                  <div>
+                    <p className="text-slate-500">Requested By</p>
+                    <p className="font-medium text-slate-700">{initiatorName}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-slate-500">Leave Type</p>
                   <p className="font-medium text-slate-700 capitalize">{leaveType}</p>
@@ -449,7 +451,7 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
         ? req.initiator_name
         : req.hod_reviewer 
           ? `${req.hod_reviewer.first_name} ${req.hod_reviewer.last_name}`
-          : 'Unknown'
+          : null
     
     // Get leave dates - try adjusted dates first, then preferred dates, then fallback fields
     const startDate = req.leave_plan_requests?.adjusted_start_date 
@@ -472,10 +474,12 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 {getStatusBadge(req.status)}
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-xs">
-                <div>
-                  <p className="text-slate-500">Requested By</p>
-                  <p className="font-medium text-slate-700">{initiatorName}</p>
-                </div>
+                {initiatorName && (
+                  <div>
+                    <p className="text-slate-500">Requested By</p>
+                    <p className="font-medium text-slate-700">{initiatorName}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-slate-500">Recall Date</p>
                   <p className="font-medium text-slate-700">{req.recall_date ? format(new Date(req.recall_date), 'dd MMM yyyy') : 'N/A'}</p>

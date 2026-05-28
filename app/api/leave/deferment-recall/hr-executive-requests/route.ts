@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 
 // HR Executive roles that can approve deferment/recall requests
-const HR_EXECUTIVE_ROLES = ["hr_executive", "hr_director", "hr_head", "admin"]
+const HR_EXECUTIVE_ROLES = ["hr_executive", "hr_director", "hr_head", "admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr"]
 
 export async function GET(request: NextRequest) {
   try {

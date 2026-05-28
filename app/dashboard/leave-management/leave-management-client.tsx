@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
+import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -194,6 +195,7 @@ export function LeaveManagementClient({
   const [isSavingSigner, setIsSavingSigner] = useState(false)
   const [showTemplateComposer, setShowTemplateComposer] = useState(false)
   const [showPlaceholderGuide, setShowPlaceholderGuide] = useState(false)
+  const [showMemoTemplatesSection, setShowMemoTemplatesSection] = useState(false)
   const [expandedTemplateKey, setExpandedTemplateKey] = useState<string | null>(null)
   const [newTemplate, setNewTemplate] = useState({
     template_key: "",
@@ -1316,29 +1318,44 @@ export function LeaveManagementClient({
         <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardHeader className="border-b border-slate-200 bg-[linear-gradient(135deg,_#eef6ff_0%,_#f8fbff_55%,_#eefaf5_100%)] pb-4">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <CardTitle className="text-xl text-slate-900">HR Memo Templates</CardTitle>
-                <CardDescription className="mt-1 max-w-2xl text-slate-600">
-                  A simpler workspace for HR staff to browse, copy, update, and create leave memo templates without seeing every advanced field at once.
-                </CardDescription>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
-                <div className="rounded-2xl border border-white/80 bg-white/80 px-3 py-3 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Total</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">{templateStats.total}</p>
-                </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-3 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wide text-emerald-700">Active</p>
-                  <p className="mt-1 text-2xl font-semibold text-emerald-900">{templateStats.active}</p>
-                </div>
-                <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-3 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wide text-amber-700">Inactive</p>
-                  <p className="mt-1 text-2xl font-semibold text-amber-900">{templateStats.inactive}</p>
+              <div className="flex items-center gap-3 flex-1">
+                <button
+                  onClick={() => setShowMemoTemplatesSection(!showMemoTemplatesSection)}
+                  className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+                >
+                  {showMemoTemplatesSection ? (
+                    <ChevronUp className="h-5 w-5 text-slate-600" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-slate-600" />
+                  )}
+                </button>
+                <div>
+                  <CardTitle className="text-xl text-slate-900">HR Memo Templates</CardTitle>
+                  <CardDescription className="mt-1 max-w-2xl text-slate-600">
+                    A simpler workspace for HR staff to browse, copy, update, and create leave memo templates without seeing every advanced field at once.
+                  </CardDescription>
                 </div>
               </div>
+              {showMemoTemplatesSection && (
+                <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
+                  <div className="rounded-2xl border border-white/80 bg-white/80 px-3 py-3 shadow-sm">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">Total</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{templateStats.total}</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-3 shadow-sm">
+                    <p className="text-[11px] uppercase tracking-wide text-emerald-700">Active</p>
+                    <p className="mt-1 text-2xl font-semibold text-emerald-900">{templateStats.active}</p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-3 shadow-sm">
+                    <p className="text-[11px] uppercase tracking-wide text-amber-700">Inactive</p>
+                    <p className="mt-1 text-2xl font-semibold text-amber-900">{templateStats.inactive}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 p-5">
+          {showMemoTemplatesSection && (
+            <CardContent className="space-y-4 p-5">
             <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Quick View</p>
@@ -2318,6 +2335,14 @@ export function LeaveManagementClient({
                   />
                 </CardContent>
               </Card>
+
+              {/* HR Executive Approval Dashboard - visible to managers and HR staff who can approve */}
+              {isManagerView && (
+                <HRExecutiveApprovalDashboard 
+                  hrExecutiveId={userId}
+                  userRole={userRole}
+                />
+              )}
 
               {/* Deferment Form */}
               <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
