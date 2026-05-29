@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { generateProfessionalMemoPDF } from "@/lib/professional-memo-generator"
 
 interface StaffOnLeave {
   // Required for payment memo creation
@@ -1157,6 +1158,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                         title: "Batch Approved",
                                         description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
                                       })
+                                      
+                                      // Switch to approved tab to show the newly approved memos
+                                      setActivePaymentTab("approved")
                                     } else {
                                       const errorData = result as any
                                       let errorMsg = errorData.error || "Failed to approve memos."
