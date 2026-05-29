@@ -104,6 +104,16 @@ export async function POST(request: NextRequest, context: any) {
       memoData = memo
       memoTable = "recall_memos"
       signerUserId = memo?.signer_id || null
+    } else if (memoType === "payment-advice") {
+      const { data: memo } = await admin
+        .from("payment_advice_memos")
+        .select("*")
+        .eq("id", memoId)
+        .single()
+
+      memoData = memo
+      memoTable = "payment_advice_memos"
+      signerUserId = memo?.signer_id || memo?.approver_id || null
     }
 
     if (!memoData) {
@@ -253,6 +263,66 @@ Yours faithfully,
       const contentLines = doc.splitTextToSize(content, contentWidth)
       doc.text(contentLines, marginLeft, y)
       y += contentLines.length * 5 + 15
+    } else if (memoType === "payment-advice") {
+      // Payment advice memo content
+      const memo = memoData
+      const body = memoBody
+
+      doc.setFontSize(11)
+      doc.setFont(undefined, "normal")
+
+      // Extract staff details from memo_body
+      const staffMembers = Array.isArray(body?.staff_members) ? body.staff_members : []
+      
+      const content = `
+Dear Finance Officer,
+
+Please find below the payment advice for staff members scheduled to proceed on annual leave as indicated:
+
+${body?.introductory_text || "We wish to inform you that the undermentioned staff members are scheduled to proceed on their annual vacation leave."}
+
+We, therefore, kindly request you to process and pay their leave allowance accordingly.
+`.trim()
+
+      const contentLines = doc.splitTextToSize(content, contentWidth)
+      doc.text(contentLines, marginLeft, y)
+      y += contentLines.length * 5 + 10
+
+      // Staff table
+      if (staffMembers.length > 0) {
+        const tableData = staffMembers.map((staff: any, idx: number) => [
+          String(idx + 1),
+          staff.name || "N/A",
+          staff.staff_id || staff.employee_id || "N/A",
+          staff.position || "N/A",
+          staff.department || "N/A",
+          staff.leave_days ? String(staff.leave_days) : "N/A",
+          staff.leave_start_date ? fmtDate(staff.leave_start_date) : "N/A"
+        ])
+
+        autoTable(doc, {
+          head: [["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DAYS", "LEAVE DATE"]],
+          body: tableData,
+          startY: y,
+          margin: marginLeft,
+          bodyStyles: { fontSize: 9 },
+          headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 9 },
+          columnStyles: { 0: { halign: "center" }, 5: { halign: "center" } }
+        })
+
+        y = (doc as any).lastAutoTable.finalY + 10
+      }
+
+      // Closing
+      const closing = `
+We count on your co-operation.
+
+Yours faithfully,
+`.trim()
+
+      const closingLines = doc.splitTextToSize(closing, contentWidth)
+      doc.text(closingLines, marginLeft, y)
+      y += closingLines.length * 5 + 10
     }
 
     // Signature block
