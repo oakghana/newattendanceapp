@@ -1419,7 +1419,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       } catch {}
                                       
                                       const firstMemoSigner = firstMemoBody.selectedSigner || firstMemoBody.approver || {}
-                                      batchSignerName = (firstMemoSigner.name || memos[0]?.hr_leave_office_name || "HR EXECUTIVE").toUpperCase()
+                                      // Prefer the actual signer (set during signing), then the selected signer stored in memo_body
+                                      batchSignerName = (memos[0]?.signer_name || firstMemoSigner.name || "HR EXECUTIVE").toUpperCase()
                                       batchSignerTitle = (firstMemoSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase()
                                     }
                                     
@@ -1432,8 +1433,20 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                           : month
                                       }`,
                                       date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }),
-                                      // Generate professional reference number
+                                      // Use the reference number entered by the user during memo creation
                                       refNo: (() => {
+                                        // Read the user-entered reference number stored in memo_body
+                                        let firstBody: any = {}
+                                        try {
+                                          firstBody = typeof memos[0]?.memo_body === "string"
+                                            ? JSON.parse(memos[0].memo_body)
+                                            : (memos[0]?.memo_body || {})
+                                        } catch {}
+                                        const enteredRef = firstBody?.referenceNumber || firstBody?.reference_number
+                                        if (enteredRef && String(enteredRef).trim()) {
+                                          return String(enteredRef).trim()
+                                        }
+                                        // Fallback only if no reference number was entered
                                         const monthDate = month.includes("-") ? new Date(month + "-01") : new Date()
                                         const year = monthDate.getFullYear()
                                         const monthNum = String(monthDate.getMonth() + 1).padStart(2, "0")
@@ -1451,14 +1464,19 @@ We count on your co-operation.`,
                                         title: batchSignerTitle,
                                         // Fetch signature from memo_body or direct field - check multiple sources
                                         signature_image_url: (() => {
-                                          // First check direct signature_data_url field
+                                          // First check the top-level signature_data_url (set during signing)
                                           if (memos[0]?.signature_data_url) return memos[0].signature_data_url
-                                          // Then check memo_body for signature
+                                          // Then check memo_body - signature is stored under selectedSigner.signature_data_url
                                           try {
-                                            const body = typeof memos[0]?.memo_body === "string" 
-                                              ? JSON.parse(memos[0].memo_body) 
+                                            const body = typeof memos[0]?.memo_body === "string"
+                                              ? JSON.parse(memos[0].memo_body)
                                               : memos[0]?.memo_body
-                                            return body?.signature_data_url || body?.selectedSigner?.signature_image_url || undefined
+                                            return (
+                                              body?.selectedSigner?.signature_data_url ||
+                                              body?.selectedSigner?.signature_image_url ||
+                                              body?.signature_data_url ||
+                                              undefined
+                                            )
                                           } catch {
                                             return undefined
                                           }
