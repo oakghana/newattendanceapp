@@ -74,11 +74,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Save signature to approval_signature_registry (permanent database storage with Blob)
-    // The signature_data_url will contain the Vercel Blob URL for permanent, cloud-backed storage
+    // Save signature to BOTH user_profiles AND approval_signature_registry
+    // user_profiles is the primary permanent storage, approval_signature_registry is for workflow approvals
     console.log("[v0] Saving signature for user:", user.id, "Blob URL:", signatureUrl)
     
     try {
+      // FIRST: Update user_profiles with the signature (PRIMARY persistent storage)
+      console.log("[v0] Updating user_profiles with signature for user:", user.id)
+      const { error: profileUpdateError } = await admin
+        .from("user_profiles")
+        .update({
+          signature_data_url: signatureUrl,
+          signature_updated_at: new Date().toISOString(),
+          signature_mode: "draw",
+        })
+        .eq("id", user.id)
+
+      if (profileUpdateError) {
+        console.error("[v0] Error updating user_profiles:", profileUpdateError)
+        throw new Error(`Failed to save to profile: ${profileUpdateError.message}`)
+      }
+
+      console.log("[v0] Signature saved to user_profiles successfully")
+
+      // SECOND: Also save to approval_signature_registry for workflow approvals
       // Delete existing signature for this user to avoid duplicates
       const { error: deleteError } = await admin
         .from("approval_signature_registry")
@@ -88,15 +107,15 @@ export async function POST(request: NextRequest) {
         .eq("approval_stage", "director_hr")
 
       if (deleteError && deleteError.code !== "PGRST116") {
-        console.warn("[v0] Warning deleting old signature:", deleteError)
+        console.warn("[v0] Warning deleting old signature from registry:", deleteError)
       }
 
-      // Insert new signature into approval_signature_registry (permanent storage)
+      // Insert new signature into approval_signature_registry
       const { data: result, error: insertError } = await admin
         .from("approval_signature_registry")
         .insert({
           user_id: user.id,
-          signature_data_url: signatureUrl, // Vercel Blob URL - permanent cloud storage
+          signature_data_url: signatureUrl,
           is_active: true,
           workflow_domain: "loan",
           approval_stage: "director_hr",
@@ -114,7 +133,7 @@ export async function POST(request: NextRequest) {
         throw new Error(`Database error: ${insertError.message || insertError.code}`)
       }
 
-      console.log("[v0] Signature saved successfully to approval_signature_registry:", result)
+      console.log("[v0] Signature saved successfully to both tables")
 
       return NextResponse.json({
         success: true,
@@ -144,9 +163,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Fetch signature from approval_signature_registry (persistent database storage)
     console.log("[v0] Fetching signature for user:", user.id)
-    
+
+    // PRIORITY 1: Fetch from user_profiles first (PRIMARY permanent storage)
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("signature_data_url, signature_updated_at, signature_mode")
+      .eq("id", user.id)
+      .single()
+
+    if (profile && profile.signature_data_url) {
+      console.log("[v0] Signature found in user_profiles, returning persistent signature")
+      return NextResponse.json({
+        success: true,
+        signature: {
+          id: user.id,
+          user_id: user.id,
+          signature_data_url: profile.signature_data_url,
+          signature_image_url: profile.signature_data_url,
+          signature_mode: profile.signature_mode || "draw",
+          updated_at: profile.signature_updated_at,
+          is_active: true,
+          source: "user_profiles",
+        },
+      })
+    }
+
+    // PRIORITY 2: Fallback to approval_signature_registry if not in user_profiles
     const { data: signature, error } = await admin
       .from("approval_signature_registry")
       .select("*")
@@ -155,7 +198,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (error) {
-      // No signature found is not an error - just return null
+      // No signature found is not an error
       if (error.code === "PGRST116") {
         console.log("[v0] No signature found for user:", user.id)
         return NextResponse.json({
@@ -167,12 +210,13 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
-    console.log("[v0] Signature found for user:", user.id)
+    console.log("[v0] Signature found in approval_signature_registry (fallback)")
     return NextResponse.json({
       success: true,
       signature: {
         ...signature,
-        signature_image_url: signature.signature_data_url, // For frontend compatibility
+        signature_image_url: signature.signature_data_url,
+        source: "approval_signature_registry",
       },
     })
   } catch (err) {
