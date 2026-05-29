@@ -43,18 +43,23 @@ function pickBestSignature(rows: any[]): any | null {
   return [...pool].sort((a, b) => score(b) - score(a))[0] || null
 }
 
-export async function POST(request: NextRequest, context: any) {
+// Handler function shared by both GET and POST
+async function generateMemoHandler(context: any, isPublic = false) {
   try {
-    const supabase = await createClient()
     const admin = await createAdminClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Only require auth for POST requests; GET requests can be public
+    if (!isPublic) {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
     }
 
     const params = await context.params
-    const { memoId, memoType } = params // memoType: "deferment" or "recall"
+    const { memoId, memoType } = params // memoType: "deferment", "recall", or "payment-advice"
 
     if (!memoId || !memoType) {
       return NextResponse.json({ error: "Missing memo ID or type" }, { status: 400 })
@@ -419,4 +424,14 @@ Yours faithfully,
       { status: 500 }
     )
   }
+}
+
+// GET handler - Public access to payment advice memos via direct URL
+export async function GET(request: NextRequest, context: any) {
+  return generateMemoHandler(context, true)
+}
+
+// POST handler - Authenticated access for internal requests
+export async function POST(request: NextRequest, context: any) {
+  return generateMemoHandler(context, false)
 }
