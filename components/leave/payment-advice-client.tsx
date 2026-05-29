@@ -46,7 +46,7 @@ interface HRExecutive {
   email: string
 }
 
-export function PaymentAdviceClient({ userRole = "hr_leave_office", initialTab = "pending" }: { userRole?: string; initialTab?: "pending" | "approved" }) {
+export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole?: string }) {
   const { toast } = useToast()
   const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
   const isHrLeaveOffice = ["hr_leave_office", "leave_office"].includes(roleNorm)
@@ -56,7 +56,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office", initialTab =
   const [isLoading, setIsLoading] = useState(false)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])
   const [memos, setMemos] = useState<Record<string, string>>({})
-  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">(initialTab)
+  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [memoSummary, setMemoSummary] = useState<any>(null)
   const [selectedMemoCategory, setSelectedMemoCategory] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
