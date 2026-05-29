@@ -1624,6 +1624,20 @@ export function LeaveManagementClient({
                   Payment Advice
                 </Button>
               )}
+              {canAccessPaymentAdvice && (
+                <Button
+                  onClick={() => setSelectedTab("monthly-summary")}
+                  className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                    selectedTab === "monthly-summary"
+                      ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                  variant={selectedTab === "monthly-summary" ? "default" : "outline"}
+                >
+                  <Calendar className="h-4 w-4" />
+                  Monthly Summary
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -2695,7 +2709,11 @@ export function LeaveManagementClient({
           )}
 
           {selectedTab === "payment-advice" && canAccessPaymentAdvice && (
-            <PaymentAdviceClient userRole={normalizedRole} />
+            <PaymentAdviceClient userRole={normalizedRole} initialTab="pending" />
+          )}
+
+          {selectedTab === "monthly-summary" && canAccessPaymentAdvice && (
+            <PaymentAdviceClient userRole={normalizedRole} initialTab="approved" />
           )}
 
         {isManagerView && selectedTab === "pending-approvals" && (
