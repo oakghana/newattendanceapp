@@ -63,7 +63,7 @@ export function SignatureRequiredDialog({
       // Auto-proceed with existing signature without showing dialog
       setTimeout(() => {
         handleUseExistingSignature()
-      }, 500)
+      }, 300)
     }
   }, [existingSignature, open])
 
