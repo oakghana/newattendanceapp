@@ -3,8 +3,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
-import { jsPDF } from "jspdf"
-import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { MonthlySummaryTab } from "@/components/leave/monthly-summary-tab"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -14,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 
 interface StaffOnLeave {
   // Required for payment memo creation
@@ -53,11 +52,12 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
   const isHrLeaveOffice = ["hr_leave_office", "leave_office"].includes(roleNorm)
   // HR Executives who can approve payment advice - include all HR management roles
-  const isHrExecutive = ["director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
+  const isHrExecutive = ["hr_executive", "director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [isLoading, setIsLoading] = useState(false)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])
   const [memos, setMemos] = useState<Record<string, string>>({})
+  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [memoSummary, setMemoSummary] = useState<any>(null)
   const [selectedMemoCategory, setSelectedMemoCategory] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -73,7 +73,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [loadingPendingMemos, setLoadingPendingMemos] = useState(false)
   const [approvedMemos, setApprovedMemos] = useState<any[]>([])
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
-  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
   const [showSignatureRequiredDialog, setShowSignatureRequiredDialog] = useState(false)
   const [pendingApprovalMemoIds, setPendingApprovalMemoIds] = useState<string[]>([])
@@ -1159,6 +1158,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                         title: "Batch Approved",
                                         description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
                                       })
+                                      
+                                      // Switch to approved tab to show the newly approved memos
+                                      setActivePaymentTab("approved")
                                     } else {
                                       const errorData = result as any
                                       let errorMsg = errorData.error || "Failed to approve memos."
