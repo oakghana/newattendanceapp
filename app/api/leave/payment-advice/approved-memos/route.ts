@@ -54,8 +54,9 @@ export async function GET(request: NextRequest) {
         signer_name
       `
       )
-      // Include all approved/reviewed statuses for HR Executives to download
-      .in("status", ["reviewed_by_hr", "approved", "finalized"])
+      // Include all approved/reviewed/signed statuses for HR Executives to download
+      // 'signed_by_hr_executive' is the new primary status for HR-signed memos
+      .in("status", ["signed_by_hr_executive", "reviewed_by_hr", "approved", "finalized"])
       .order("updated_at", { ascending: false })
 
     // Optionally filter by month
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
       memos: approvedMemos || [],
       count: approvedMemos?.length || 0,
       debug: {
-        queryStatus: ["reviewed_by_hr", "approved", "finalized"],
+        queryStatus: ["signed_by_hr_executive", "reviewed_by_hr", "approved", "finalized"],
         month: month || "all",
       },
     })

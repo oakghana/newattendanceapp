@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
 
     const results: { deferments: unknown[], recalls: unknown[] } = { deferments: [], recalls: [] }
 
-    // Fetch deferment requests - for now use hr_office fields since assigned_hr_executive_id doesn't exist yet
-    // TODO: Switch to assigned_hr_executive_id once migration is applied
+    // Fetch deferment requests assigned to this HR Executive
+    // Filter by assigned_hr_executive_id to ensure HR Executives only see items assigned to them by HR Leave Office
     if (type === 'deferment' || type === 'all' || !type) {
       let defermentQuery = supabase
         .from('leave_deferment_requests')
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
             adjusted_start_date, adjusted_end_date, requested_days, adjusted_days
           )
         `)
-        .eq('hr_office_reviewed_by', hrExecutiveId)
+        .eq('assigned_hr_executive_id', hrExecutiveId) // Filter by assigned HR Executive
         .order('created_at', { ascending: false })
 
       // Filter by status
@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch recall requests - for now use hr fields since assigned_hr_executive_id doesn't exist yet
+    // Fetch recall requests assigned to this HR Executive
+    // Filter by assigned_hr_executive_id to ensure HR Executives only see items assigned to them by HR Leave Office
     if (type === 'recall' || type === 'all' || !type) {
       let recallQuery = supabase
         .from('leave_recall_requests')
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
             adjusted_start_date, adjusted_end_date
           )
         `)
-        .eq('hr_reviewed_by', hrExecutiveId)
+        .eq('assigned_hr_executive_id', hrExecutiveId) // Filter by assigned HR Executive
         .order('created_at', { ascending: false })
 
       // Filter by status

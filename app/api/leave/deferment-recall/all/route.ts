@@ -2,10 +2,14 @@ import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 
 // Define roles that can see ALL deferment/recall requests
-const HR_ADMIN_ROLES = ["hr_leave_office", "admin", "manager_hr", "director_hr", "hr_director", "hr_officer", "hr_office", "hr"]
+const HR_ADMIN_ROLES = ["hr_leave_office", "admin", "manager_hr", "director_hr", "hr_director", "hr_officer", "hr_office", "hr", "hr_executive"]
 
 // Define roles that can see department/regional data
 const HOD_RM_ROLES = ["department_head", "regional_manager"]
+
+// Define staff roles that can ONLY see their own requests
+// Any role not in HR_ADMIN_ROLES or HOD_RM_ROLES is considered normal staff
+const STAFF_ROLES = ["staff", "employee", "junior_staff", "senior_staff", "officer", "clerk", "assistant"]
 
 export async function GET(request: NextRequest) {
   try {

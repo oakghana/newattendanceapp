@@ -215,10 +215,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Update memo with new status, signature, and updated memo_body
+        // Use 'signed_by_hr_executive' to clearly indicate the memo has been signed and approved
+        // This prevents the memo from appearing in the pending queue again
         await admin
           .from("leave_payment_memos")
           .update({
-            status: "reviewed_by_hr",
+            status: "signed_by_hr_executive",
             memo_body: JSON.stringify(memoBody),
             signature_data_url: signatureRecord?.signature_data_url || null, // Store signature in DB column for PDF rendering
             signer_id: selectedSigner.id,

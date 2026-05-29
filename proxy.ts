@@ -95,6 +95,7 @@ export default async function proxy(request: NextRequest) {
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/public/") ||
+    pathname.startsWith("/demo/") ||
     pathname === "/" ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/images/") ||

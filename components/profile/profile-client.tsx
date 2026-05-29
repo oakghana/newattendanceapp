@@ -805,8 +805,25 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       Update Signature
                     </Button>
                     <Button
-                      onClick={() => {
-                        setSignatureDataUrl(null)
+                      onClick={async () => {
+                        if (window.confirm("Are you sure you want to clear your saved signature?")) {
+                          try {
+                            setIsSavingSignature(true)
+                            const response = await fetch("/api/user/signature-clear", {
+                              method: "DELETE",
+                            })
+                            const result = await response.json()
+                            if (!response.ok) {
+                              throw new Error(result.error || "Failed to clear signature")
+                            }
+                            setSignatureDataUrl(null)
+                            toast.success("Signature cleared successfully")
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "Failed to clear signature")
+                          } finally {
+                            setIsSavingSignature(false)
+                          }
+                        }
                       }}
                       variant="destructive"
                       className="flex-1"
