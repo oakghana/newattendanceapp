@@ -1,14 +1,39 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { generateProfessionalMemoPDF } from "@/lib/professional-memo-generator"
 import { createClient } from "@/lib/supabase/server"
+import { jsPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
 
+export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+// Helper: Format date for memo
+function fmtDate(value?: string | null): string {
+  if (!value) return new Date().toISOString().slice(0, 10)
+  const date = new Date(value)
+  if (isNaN(date.getTime())) return String(value)
+  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+}
+
+// Helper: Get best signature from registry (proven pattern)
+function pickBestSignature(rows: any[]): any | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null
+  const active = rows.filter((row) => row?.is_active !== false)
+  const pool = active.length > 0 ? active : rows
+
+  const score = (row: any) => {
+    const mode = String(row?.signature_mode || "").toLowerCase()
+    const hasImage = (mode === "draw" || mode === "upload") && String(row?.signature_data_url || "").trim().length > 0
+    const hasTyped = mode === "typed" && String(row?.signature_text || "").trim().length > 0
+    return hasImage ? 100 : hasTyped ? 10 : 0
+  }
+
+  return [...pool].sort((a, b) => score(b) - score(a))[0] || null
+}
+
 /**
- * GET: Download a single payment advice memo as PDF
- * Query params:
- * - memo_id: The ID of the memo to download
+ * GET: Download payment advice memo in professional QCC letter format
+ * Uses proven leave memo pattern with proper signature fetching and rendering
  */
 export async function GET(request: NextRequest) {
   try {
@@ -16,94 +41,302 @@ export async function GET(request: NextRequest) {
     const memoId = searchParams.get("memo_id")
 
     if (!memoId) {
-      console.error("[v0] Download endpoint missing memo_id")
       return NextResponse.json({ error: "memo_id required" }, { status: 400 })
     }
 
-    console.log("[v0] Download requested for memo:", memoId)
+    console.log("[v0] Payment advice download for memo:", memoId)
 
-    // Check authentication
+    // Auth check
     const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      console.warn("[v0] Download: Unauthenticated request for memo:", memoId)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const admin = await createAdminClient()
 
-    // Fetch the memo with all required data
+    // Fetch memo with all required data including staff_category
     const { data: memo, error } = await admin
       .from("leave_payment_memos")
-      .select(
-        `
-        id,
-        staff_id,
-        staff_name,
-        staff_number,
-        memo_subject,
-        memo_body,
-        leave_period_start,
-        leave_period_end,
-        approved_days,
-        hr_leave_office_name,
-        signer_name,
-        signature_data_url,
-        created_at,
-        status
-      `
-      )
+      .select(`
+        id, staff_name, staff_number, memo_subject, memo_body,
+        leave_period_start, leave_period_end, approved_days,
+        hr_leave_office_name, signer_id, signer_name, 
+        signature_data_url, created_at, status, staff_category
+      `)
       .eq("id", memoId)
       .single()
 
     if (error || !memo) {
-      console.error("[v0] Error fetching memo for download:", error || "Not found")
+      console.error("[v0] Memo not found:", memoId, error)
       return NextResponse.json({ error: "Memo not found" }, { status: 404 })
     }
 
-    console.log("[v0] Memo fetched successfully:", memoId, "Status:", memo.status)
+    // Smart signature fetching - from approval_signature_registry using pickBestSignature
+    let signatureUrl: string | null = memo.signature_data_url || null
+    let signerName = memo.signer_name || memo.hr_leave_office_name || "HUMAN RESOURCE MANAGER"
 
-    // Parse memo_body if needed
-    let memoBodies: any = {}
-    if (memo.memo_body) {
-      try {
-        memoBodies = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-      } catch (e) {
-        console.warn("[v0] Failed to parse memo_body:", e)
+    if (!signatureUrl && memo.signer_id) {
+      console.log("[v0] Fetching signature from registry for signer:", memo.signer_id)
+      const { data: signatureRecords } = await admin
+        .from("approval_signature_registry")
+        .select("id, signature_data_url, signature_mode, signature_text, is_active, user_id")
+        .eq("user_id", memo.signer_id)
+      
+      if (signatureRecords) {
+        const bestSig = pickBestSignature(signatureRecords)
+        if (bestSig?.signature_data_url) {
+          signatureUrl = bestSig.signature_data_url
+          console.log("[v0] Found signature in registry for memo")
+        }
       }
     }
 
-    // Generate PDF using the professional memo generator
-    console.log("[v0] Generating PDF for memo:", memoId)
-    const pdfBuffer = await generateProfessionalMemoPDF({
-      ...memo,
-      memo_body: memoBodies,
-      signatory: {
-        name: memo.signer_name || memo.hr_leave_office_name || "HR Manager",
-        title: "HUMAN RESOURCE MANAGER",
-        signature_image_url: memo.signature_data_url,
-      },
+    // Parse memo body to extract staff list
+    let staffList: any[] = []
+    if (memo.memo_body) {
+      try {
+        const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+        staffList = body.staffList || body.staff || []
+      } catch (e) {
+        console.warn("[v0] Could not parse memo_body")
+      }
+    }
+
+    // Create professional QCC memorandum format PDF
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
     })
 
-    console.log("[v0] PDF generated successfully for memo:", memoId, "Size:", pdfBuffer?.length || 0, "bytes")
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 20
+    const contentWidth = pageWidth - 2 * margin
+    const memoDate = new Date(memo.created_at)
+    let y = margin
 
-    // Create response with PDF
+    // === LEFT SIDE HEADER ===
+    doc.setFontSize(11)
+    doc.setFont(undefined, "bold")
+    doc.text("QUALITY CONTROL COMPANY LTD.", margin, y)
+    y += 5
+    doc.setFontSize(9)
+    doc.setFont(undefined, "normal")
+    doc.text("(COCOBOD)", margin, y)
+    y += 4
+    doc.text("P.O. BOX M54", margin, y)
+    y += 4
+    doc.text("ACCRA", margin, y)
+
+    // === VERTICAL DIVIDER LINE ===
+    const dividerX = pageWidth / 2 - 0.5
+    doc.setDrawColor(0, 0, 0)
+    doc.setLineWidth(0.5)
+    doc.line(dividerX, margin + 2, dividerX, margin + 18)
+
+    // === RIGHT SIDE: MEMORANDUM HEADER ===
+    doc.setFontSize(12)
+    doc.setFont(undefined, "bold")
+    doc.text("MEMORANDUM", pageWidth / 2 + 15, margin + 5, { align: "center" })
+
+    // Date on right
+    doc.setFontSize(9)
+    doc.setFont(undefined, "normal")
+    doc.text(`DATE: ${fmtDate(memo.created_at)}`, pageWidth / 2 + 15, margin + 13, { align: "center" })
+
+    y = margin + 22
+
+    // === REFERENCE NUMBER ===
+    const refNo = `QCC/HR/PA/${memoDate.getFullYear()}/${String(memoDate.getMonth() + 1).padStart(2, "0")}/MGT/${String(memoId).substring(0, 3).toUpperCase()}`
+    doc.setFontSize(9)
+    doc.setFont(undefined, "bold")
+    doc.text(`REF. NO: ${refNo}`, margin, y)
+    y += 7
+
+    // === HORIZONTAL DIVIDER ===
+    doc.setDrawColor(0, 0, 0)
+    doc.setLineWidth(0.5)
+    doc.line(margin, y, pageWidth - margin, y)
+    y += 8
+
+    // === TO / FROM / SUBJECT ===
+    doc.setFontSize(9)
+    doc.setFont(undefined, "bold")
+    doc.text("TO:", margin, y)
+    doc.setFont(undefined, "normal")
+    doc.text("DEPUTY DIRECTOR, FINANCE", margin + 15, y)
+    y += 6
+
+    doc.setFont(undefined, "bold")
+    doc.text("FROM:", margin, y)
+    doc.setFont(undefined, "normal")
+    doc.text("DEPUTY HUMAN RESOURCE MANAGER", margin + 15, y)
+    y += 6
+
+    doc.setFont(undefined, "bold")
+    doc.text("SUBJECT:", margin, y)
+    doc.setFont(undefined, "normal")
+    
+    // Dynamic subject based on staff category
+    const categoryLabel = memo.staff_category ? `(${memo.staff_category.toUpperCase()} STAFF)` : ""
+    const monthYear = memoDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" }).toUpperCase()
+    const subject = `PAYMENT OF LEAVE ALLOWANCE ${categoryLabel} – ${monthYear}`
+    const subjectLines = doc.splitTextToSize(subject, contentWidth - 30)
+    doc.text(subjectLines, margin + 30, y)
+    y += (subjectLines.length * 4) + 6
+
+    // === BODY TEXT ===
+    doc.setFontSize(9)
+    doc.setFont(undefined, "normal")
+    
+    const staffCount = staffList.length > 0 ? staffList.length : 1
+    const bodyText1 = `We wish to inform you that the attached list of ${staffCount} ${memo.staff_category || ""}staff are scheduled to proceed on their annual vacation leave in ${monthYear}.`
+    const bodyLines1 = doc.splitTextToSize(bodyText1, contentWidth)
+    doc.text(bodyLines1, margin, y)
+    y += bodyLines1.length * 4 + 4
+
+    const bodyText2 = "We, therefore, kindly request you to process and pay their leave allowances accordingly."
+    const bodyLines2 = doc.splitTextToSize(bodyText2, contentWidth)
+    doc.text(bodyLines2, margin, y)
+    y += bodyLines2.length * 4 + 4
+
+    doc.text("We count on your co-operation.", margin, y)
+    y += 8
+
+    // === STAFF TABLE ===
+    const tableData = (staffList.length > 0 ? staffList : [
+      {
+        name: memo.staff_name,
+        employeeId: memo.staff_number,
+        position: "",
+        station: "",
+        leaveDate: fmtDate(memo.leave_period_start),
+      },
+    ]).map((s: any, idx: number) => [
+      String(idx + 1),
+      s.name || s.staff_name || "",
+      s.employeeId || s.staff_number || s.sno || "",
+      s.position || s.rank || "",
+      s.station || s.location || "",
+      s.leaveDate || fmtDate(memo.leave_period_start),
+    ])
+
+    autoTable(doc, {
+      head: [["N", "NAME", "S/NO", "RANK", "STATION", "LEAVE DATE"]],
+      body: tableData,
+      startY: y,
+      margin: margin,
+      headStyles: { 
+        fillColor: [101, 67, 33],
+        textColor: 255,
+        fontStyle: "bold",
+        fontSize: 8,
+        halign: "center",
+        valign: "middle",
+        lineWidth: 0.3,
+      },
+      bodyStyles: { 
+        fontSize: 8,
+        lineWidth: 0.3,
+      },
+      columnStyles: {
+        0: { cellWidth: 12, halign: "center" },
+        1: { cellWidth: 32, halign: "left" },
+        2: { cellWidth: 20, halign: "center" },
+        3: { cellWidth: 23, halign: "left" },
+        4: { cellWidth: 23, halign: "left" },
+        5: { cellWidth: 22, halign: "center" },
+      },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+    })
+
+    y = (doc as any).lastAutoTable.finalY + 8
+
+    // === CLOSING TEXT ===
+    doc.setFontSize(9)
+    doc.setFont(undefined, "normal")
+    doc.text("We count on your co-operation.", margin, y)
+    y += 10
+
+    // === SIGNATURE INSTRUCTION ===
+    doc.setFont(undefined, "bold")
+    doc.text("Signature from signers profile come here", margin, y)
+    y += 6
+
+    // === ADD SIGNATURE IMAGE ABOVE NAME (CRITICAL) ===
+    if (signatureUrl && signatureUrl.length > 10) {
+      console.log("[v0] Rendering signature for memo")
+      try {
+        if (signatureUrl.startsWith("data:image/")) {
+          const b64Match = signatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
+          if (b64Match) {
+            const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+            doc.addImage(signatureUrl, imageType, margin, y, 40, 15)
+            y += 16
+            console.log("[v0] Signature rendered from data URL")
+          }
+        } else if (signatureUrl.startsWith("https://")) {
+          try {
+            const sigResponse = await fetch(signatureUrl)
+            if (sigResponse.ok) {
+              const sigBuffer = await sigResponse.arrayBuffer()
+              const base64Sig = Buffer.from(sigBuffer).toString('base64')
+              const contentType = sigResponse.headers.get('content-type') || 'image/png'
+              const imageType = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG'
+              const dataUrl = `data:${contentType};base64,${base64Sig}`
+              doc.addImage(dataUrl, imageType, margin, y, 40, 15)
+              y += 16
+              console.log("[v0] Signature rendered from external URL")
+            }
+          } catch (fetchErr) {
+            console.warn("[v0] Could not fetch signature from URL:", fetchErr)
+            y += 4
+          }
+        }
+      } catch (imgErr) {
+        console.warn("[v0] Could not render signature image:", imgErr)
+        y += 4
+      }
+    } else {
+      y += 4
+    }
+
+    // === SIGNER NAME AND TITLE (BELOW SIGNATURE) ===
+    doc.setFont(undefined, "bold")
+    doc.setFontSize(9)
+    doc.text(signerName, margin, y)
+    y += 4
+    doc.setFont(undefined, "normal")
+    doc.text("HUMAN RESOURCE MANAGER", margin, y)
+    y += 7
+
+    // === CC SECTION ===
+    doc.setFont(undefined, "bold")
+    doc.text("cc:", margin, y)
+    y += 4
+    doc.setFont(undefined, "normal")
+    const ccList = ["Managing Director", "Deputy Director, HR", "Audit Manager"]
+    ccList.forEach((cc) => {
+      doc.text(cc, margin + 5, y)
+      y += 4
+    })
+
+    // Convert to buffer and return
+    const pdfBuffer = Buffer.from(doc.output("arraybuffer"))
+    console.log("[v0] Payment advice PDF generated:", memoId, "Size:", pdfBuffer.length, "bytes", "Signature:", signatureUrl ? "YES" : "NO")
+
     const response = new NextResponse(pdfBuffer)
     response.headers.set("Content-Type", "application/pdf")
     response.headers.set(
       "Content-Disposition",
-      `attachment; filename="Payment-Advice-${memo.staff_name.replace(/\s+/g, "-")}-${new Date(memo.created_at).toISOString().split("T")[0]}.pdf"`
+      `attachment; filename="payment-advice-${memo.staff_name.replace(/\s+/g, "-")}-${memoDate.toISOString().split("T")[0]}.pdf"`
     )
     response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate")
-    response.headers.set("Pragma", "no-cache")
-    response.headers.set("Expires", "0")
 
     return response
   } catch (err) {
-    console.error("[v0] Error downloading memo:", err)
+    console.error("[v0] Error downloading payment advice memo:", err)
     return NextResponse.json(
       { error: "Failed to generate PDF", details: String(err) },
       { status: 500 }

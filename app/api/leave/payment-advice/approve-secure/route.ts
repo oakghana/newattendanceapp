@@ -144,27 +144,44 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    const { data: signatureRecords, error: sigError } = await admin
-      .from("approval_signature_registry")
-      .select("id, signature_data_url, user_id, is_active, workflow_domain")
-      .eq("user_id", selectedSigner.id)
-      .eq("is_active", true)
+    // Smart signature lookup: First check user_profiles (primary), then approval_signature_registry (fallback)
+    let signatureUrl: string | null = null
     
-    console.log("[v0] Signature query result:", {
-      recordCount: signatureRecords?.length,
-      error: sigError?.message,
-      records: signatureRecords,
-    })
+    // Priority 1: Check user_profiles (where signatures are now saved permanently)
+    const { data: profileSignature } = await admin
+      .from("user_profiles")
+      .select("signature_data_url")
+      .eq("id", selectedSigner.id)
+      .single()
+    
+    if (profileSignature?.signature_data_url) {
+      signatureUrl = profileSignature.signature_data_url
+      console.log("[v0] Found signature in user_profiles for user:", selectedSigner.id)
+    }
+    
+    // Priority 2: Check approval_signature_registry (fallback for older signatures)
+    if (!signatureUrl) {
+      const { data: signatureRecords, error: sigError } = await admin
+        .from("approval_signature_registry")
+        .select("id, signature_data_url, user_id, is_active, workflow_domain")
+        .eq("user_id", selectedSigner.id)
+        .eq("is_active", true)
+      
+      console.log("[v0] Registry signature query result:", {
+        recordCount: signatureRecords?.length,
+        error: sigError?.message,
+      })
 
-    const signatureRecord = signatureRecords && signatureRecords.length > 0 ? signatureRecords[0] : null
+      if (signatureRecords && signatureRecords.length > 0 && signatureRecords[0].signature_data_url) {
+        signatureUrl = signatureRecords[0].signature_data_url
+        console.log("[v0] Found signature in approval_signature_registry for user:", selectedSigner.id)
+      }
+    }
 
-    if (!signatureRecord || !signatureRecord.signature_data_url) {
-      console.warn("[v0] Signature validation failed for user:", {
+    if (!signatureUrl) {
+      console.warn("[v0] No signature found for user:", {
         userId: user.id,
         userName: signerName,
-        sigError: sigError?.message,
-        hasSignature: !!signatureRecord?.signature_data_url,
-        recordCount: signatureRecords?.length,
       })
       return NextResponse.json(
         { 
@@ -176,7 +193,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    console.log("[v0] Signature validation passed for user:", user.id, "- signature:", signatureRecord.signature_data_url)
+    console.log("[v0] Signature validation passed for user:", user.id, "- signature found")
 
     // Update memos with approval and store approver info in memo_body
     
@@ -210,7 +227,7 @@ export async function POST(request: NextRequest) {
             id: selectedSigner.id,
             name: signerName,
             position: signerProfile.position || "",
-            signature_image_url: signatureRecord?.signature_data_url || "",
+            signature_image_url: signatureUrl || "",
           }
         }
 
@@ -222,7 +239,7 @@ export async function POST(request: NextRequest) {
           .update({
             status: "signed_by_hr_executive",
             memo_body: JSON.stringify(memoBody),
-            signature_data_url: signatureRecord?.signature_data_url || null, // Store signature in DB column for PDF rendering
+            signature_data_url: signatureUrl || null, // Store signature in DB column for PDF rendering
             signer_id: selectedSigner.id,
             signer_name: signerName,
             updated_at: new Date().toISOString(),

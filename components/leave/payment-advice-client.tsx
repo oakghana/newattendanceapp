@@ -3,8 +3,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
-import { jsPDF } from "jspdf"
-import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { MonthlySummaryTab } from "@/components/leave/monthly-summary-tab"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -53,7 +51,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const roleNorm = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
   const isHrLeaveOffice = ["hr_leave_office", "leave_office"].includes(roleNorm)
   // HR Executives who can approve payment advice - include all HR management roles
-  const isHrExecutive = ["director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
+  const isHrExecutive = ["hr_executive", "director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [isLoading, setIsLoading] = useState(false)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])

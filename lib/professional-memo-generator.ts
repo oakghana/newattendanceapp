@@ -275,9 +275,11 @@ async function generateMainMemo(
   if (memoData.signatory.signature_image_url) {
     try {
       const sigUrl = memoData.signatory.signature_image_url
+      console.log("[v0] Attempting to render signature, URL starts with:", sigUrl.substring(0, 30))
       
       // Handle base64 data URLs directly (most common case)
       if (sigUrl.startsWith("data:image/")) {
+        console.log("[v0] Signature is base64 data URL, rendering directly")
         // Extract base64 and add image directly
         const b64Match = sigUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
         if (b64Match) {
@@ -285,22 +287,50 @@ async function generateMainMemo(
           // Render signature ABOVE the name, with proper spacing
           doc.addImage(sigUrl, imageType, margin, yPos - 5, 45, 18)
           yPos += 15 // Add space after signature image
+          console.log("[v0] Signature rendered successfully from data URL")
         }
       } else if (sigUrl.startsWith("http")) {
-        // Handle external URLs by fetching
-        const signatureResponse = await fetch(sigUrl)
-        if (signatureResponse.ok) {
-          const signatureBlob = await signatureResponse.blob()
-          const arrayBuffer = await signatureBlob.arrayBuffer()
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
-          const dataUrl = `data:image/png;base64,${base64}`
-          doc.addImage(dataUrl, "PNG", margin, yPos - 5, 45, 18)
-          yPos += 15 // Add space after signature image
+        // Handle external URLs (Vercel Blob URLs) by fetching
+        console.log("[v0] Signature is external URL, fetching from:", sigUrl.substring(0, 50))
+        try {
+          const signatureResponse = await fetch(sigUrl, {
+            headers: {
+              'Accept': 'image/*',
+            },
+          })
+          
+          if (signatureResponse.ok) {
+            const signatureBlob = await signatureResponse.blob()
+            const arrayBuffer = await signatureBlob.arrayBuffer()
+            const uint8Array = new Uint8Array(arrayBuffer)
+            
+            // Convert to base64 properly
+            let binary = ''
+            for (let i = 0; i < uint8Array.length; i++) {
+              binary += String.fromCharCode(uint8Array[i])
+            }
+            const base64 = btoa(binary)
+            
+            // Detect image type from content-type or URL
+            const contentType = signatureResponse.headers.get('content-type') || 'image/png'
+            const imageType = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG'
+            const dataUrl = `data:${contentType};base64,${base64}`
+            
+            doc.addImage(dataUrl, imageType, margin, yPos - 5, 45, 18)
+            yPos += 15 // Add space after signature image
+            console.log("[v0] Signature rendered successfully from external URL")
+          } else {
+            console.warn("[v0] Failed to fetch signature, status:", signatureResponse.status)
+          }
+        } catch (fetchErr) {
+          console.warn("[v0] Error fetching signature from URL:", fetchErr)
         }
       }
     } catch (err) {
       console.warn("[v0] Could not load signature image:", err)
     }
+  } else {
+    console.log("[v0] No signature URL provided for memo signatory")
   }
 
   // NO signature line/border - clean look without underline

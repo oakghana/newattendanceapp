@@ -5,6 +5,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
 
+// Helper: Format date for memo
 function fmtDate(value?: string | null): string {
   if (!value) return new Date().toISOString().slice(0, 10)
   const date = new Date(value)
@@ -12,6 +13,7 @@ function fmtDate(value?: string | null): string {
   return date.toLocaleDateString("en-GH", { day: "2-digit", month: "long", year: "numeric" })
 }
 
+// Helper: Formal date format
 function fmtFormalDate(value?: string | null): string {
   if (!value) return ""
   const date = new Date(value)
@@ -23,6 +25,22 @@ function fmtFormalDate(value?: string | null): string {
     return n + (s[(v - 20) % 10] || s[v] || s[0])
   }
   return `${ordinalSuffix(date.getDate())} ${MONTH_NAMES[date.getMonth()]}, ${date.getFullYear()}`
+}
+
+// Helper: Pick best signature from registry (proven pattern from payment advice)
+function pickBestSignature(rows: any[]): any | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null
+  const active = rows.filter((row) => row?.is_active !== false)
+  const pool = active.length > 0 ? active : rows
+
+  const score = (row: any) => {
+    const mode = String(row?.signature_mode || "").toLowerCase()
+    const hasImage = (mode === "draw" || mode === "upload") && String(row?.signature_data_url || "").trim().length > 0
+    const hasTyped = mode === "typed" && String(row?.signature_text || "").trim().length > 0
+    return hasImage ? 100 : hasTyped ? 10 : 0
+  }
+
+  return [...pool].sort((a, b) => score(b) - score(a))[0] || null
 }
 
 export async function POST(request: NextRequest, context: any) {
@@ -44,6 +62,7 @@ export async function POST(request: NextRequest, context: any) {
 
     let memoData = null
     let memoTable = ""
+    let signerUserId: string | null = null
 
     if (memoType === "deferment") {
       const { data: memo } = await admin
@@ -66,6 +85,7 @@ export async function POST(request: NextRequest, context: any) {
 
       memoData = memo
       memoTable = "deferment_memos"
+      signerUserId = memo?.signer_id || null
     } else if (memoType === "recall") {
       const { data: memo } = await admin
         .from("recall_memos")
@@ -83,6 +103,7 @@ export async function POST(request: NextRequest, context: any) {
 
       memoData = memo
       memoTable = "recall_memos"
+      signerUserId = memo?.signer_id || null
     }
 
     if (!memoData) {
@@ -99,8 +120,40 @@ export async function POST(request: NextRequest, context: any) {
       }
     }
 
-    // Get signer signature
+    // Smart signature fetching (proven pattern from payment advice)
     let signerSignatureUrl = memoData.signature_image_url || memoBody?.selectedSigner?.signature_data_url || ""
+    
+    // Priority 1: Check approval_signature_registry for signer (pickBestSignature)
+    if (!signerSignatureUrl && signerUserId) {
+      console.log("[v0] Fetching signature from registry for signer:", signerUserId)
+      const { data: signatureRecords } = await admin
+        .from("approval_signature_registry")
+        .select("id, signature_data_url, signature_mode, signature_text, is_active")
+        .eq("user_id", signerUserId)
+      
+      if (signatureRecords && signatureRecords.length > 0) {
+        const bestSig = pickBestSignature(signatureRecords)
+        if (bestSig?.signature_data_url) {
+          signerSignatureUrl = bestSig.signature_data_url
+          console.log("[v0] Found signature in registry for memo")
+        }
+      }
+    }
+    
+    // Priority 2: Check user_profiles for signer
+    if (!signerSignatureUrl && signerUserId) {
+      console.log("[v0] Fetching signature from user_profiles for signer:", signerUserId)
+      const { data: signerProfile } = await admin
+        .from("user_profiles")
+        .select("signature_data_url")
+        .eq("id", signerUserId)
+        .single()
+      
+      if (signerProfile?.signature_data_url) {
+        signerSignatureUrl = signerProfile.signature_data_url
+        console.log("[v0] Found signature in user_profiles for memo")
+      }
+    }
 
     // Create PDF
     const doc = new jsPDF({
@@ -210,21 +263,46 @@ Yours faithfully,
 
     y += 8
 
-    // Add signature image if available
-    let sigImgY = y
+    // Add signature image if available - RENDER ABOVE NAME (critical fix)
     if (signerSignatureUrl && signerSignatureUrl.length > 10) {
       try {
-        if (signerSignatureUrl.startsWith("data:")) {
-          const b64 = signerSignatureUrl.replace(/^data:image\/[^;]+;base64,/, "")
-          doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
-          y += 22
-          sigImgY = y
+        if (signerSignatureUrl.startsWith("data:image/")) {
+          // Base64 data URL
+          const b64Match = signerSignatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
+          if (b64Match) {
+            const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+            doc.addImage(signerSignatureUrl, imageType, marginLeft, y, 40, 15)
+            y += 18
+            console.log("[v0] Signature rendered from data URL")
+          }
+        } else if (signerSignatureUrl.startsWith("https://")) {
+          // External URL - fetch and embed
+          try {
+            const sigResponse = await fetch(signerSignatureUrl)
+            if (sigResponse.ok) {
+              const sigBuffer = await sigResponse.arrayBuffer()
+              const base64Sig = Buffer.from(sigBuffer).toString('base64')
+              const contentType = sigResponse.headers.get('content-type') || 'image/png'
+              const imageType = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG'
+              const dataUrl = `data:${contentType};base64,${base64Sig}`
+              doc.addImage(dataUrl, imageType, marginLeft, y, 40, 15)
+              y += 18
+              console.log("[v0] Signature rendered from external URL")
+            }
+          } catch (fetchErr) {
+            console.warn("[v0] Could not fetch signature from URL:", fetchErr)
+            // Draw placeholder line
+            doc.setDrawColor(150, 150, 150)
+            doc.setLineWidth(0.2)
+            doc.line(marginLeft, y + 8, marginLeft + 50, y + 8)
+            y += 12
+          }
         }
       } catch (err) {
         console.warn("[v0] Failed to add signature image:", err)
-        // Draw line instead
-        doc.setDrawColor(100, 100, 100)
-        doc.setLineWidth(0.3)
+        // Draw placeholder line
+        doc.setDrawColor(150, 150, 150)
+        doc.setLineWidth(0.2)
         doc.line(marginLeft, y + 8, marginLeft + 50, y + 8)
         y += 12
       }
@@ -236,7 +314,7 @@ Yours faithfully,
       y += 12
     }
 
-    // Signer name and position
+    // Signer name and position (BELOW SIGNATURE IMAGE)
     doc.setFont(undefined, "bold")
     doc.text(memoData.signer_name || "To Be Determined", marginLeft, y)
     y += 5
@@ -255,6 +333,8 @@ Yours faithfully,
     // Generate PDF and return
     const pdf = doc.output("arraybuffer")
     const filename = `${memoType}-memo-${String(memoId).slice(0, 8)}.pdf`
+
+    console.log("[v0] Memo PDF generated:", memoType, memoId, "Signature:", signerSignatureUrl ? "YES" : "NO")
 
     return new Response(pdf, {
       headers: {
