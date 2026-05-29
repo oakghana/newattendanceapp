@@ -3,8 +3,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { del } from "@vercel/blob"
 
 /**
- * DELETE: Remove user's saved signature
- * Handles cleanup from both user_profiles and approval_signature_registry
+ * DELETE: Clear user's saved signature from all storage systems
+ * Removes from: Vercel Blob (cloud) and approval_signature_registry (database)
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -19,49 +19,44 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get the signature URLs before deleting
-    const { data: profile } = await admin
-      .from("user_profiles")
+    console.log("[v0] Clearing signature for user:", user.id)
+
+    // Fetch the signature to get the Blob URL
+    const { data: signature } = await admin
+      .from("approval_signature_registry")
       .select("signature_data_url")
-      .eq("id", user.id)
+      .eq("user_id", user.id)
+      .eq("is_active", true)
       .single()
 
-    // Delete from Vercel Blob if it's a blob URL
-    if (profile?.signature_data_url && profile.signature_data_url.startsWith("https://")) {
+    // Delete from Vercel Blob if it's a blob URL (permanent cloud storage)
+    if (signature?.signature_data_url?.startsWith("https://")) {
       try {
-        await del(profile.signature_data_url)
-        console.log("[v0] Old signature deleted from Blob storage")
+        console.log("[v0] Deleting signature from Vercel Blob:", signature.signature_data_url)
+        await del(signature.signature_data_url)
       } catch (err) {
-        console.warn("[v0] Could not delete signature from Blob:", err)
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        console.warn("[v0] Warning deleting from Blob:", errorMsg)
+        // Don't fail if blob deletion fails - continue with database cleanup
       }
     }
 
-    // Clear from user_profiles
-    const { error: profileError } = await admin
-      .from("user_profiles")
-      .update({
-        signature_data_url: null,
-        signature_mode: null,
-        signature_updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id)
-
-    if (profileError) {
-      console.error("[v0] Error clearing signature from user_profiles:", profileError)
-      throw new Error(`Failed to clear signature: ${profileError.message}`)
-    }
-
-    // Also clear from approval_signature_registry
-    await admin
+    // Delete from approval_signature_registry (database storage)
+    const { error: deleteError } = await admin
       .from("approval_signature_registry")
       .delete()
       .eq("user_id", user.id)
 
-    console.log("[v0] Signature cleared from both tables")
+    if (deleteError && deleteError.code !== "PGRST116") {
+      console.error("[v0] Error deleting signature from database:", deleteError)
+      throw new Error(`Failed to delete signature: ${deleteError.message}`)
+    }
+
+    console.log("[v0] Signature cleared successfully from all storage systems (Blob + Database)")
 
     return NextResponse.json({
       success: true,
-      message: "Signature cleared successfully",
+      message: "Signature cleared successfully from all storage systems",
     })
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
