@@ -217,6 +217,8 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
       if (statusFilter !== 'all') params.set('status', statusFilter)
       params.set('user_role', userRole)
       if (userDepartment) params.set('user_department', userDepartment)
+      // CRITICAL: Pass user_id so the API can filter for normal staff to only see their own requests
+      if (userId) params.set('user_id', userId)
 
       const res = await fetch(`/api/leave/deferment-recall/all?${params.toString()}`)
       if (!res.ok) throw new Error('Failed to fetch requests')
