@@ -884,6 +884,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, resolved: true, decision: updatedData.request_status })
     }
 
+    if (action === "delete_all_hod_linkages") {
+      // ADMIN ONLY: Delete all hardcoded HOD linkages to reset the system
+      if (profile?.role !== "admin") {
+        return NextResponse.json({ error: "Only admins can delete all HOD linkages" }, { status: 403 })
+      }
+
+      const { error } = await admin.from("loan_hod_linkages").delete().neq("id", "")
+      if (error) throw error
+
+      return NextResponse.json({ success: true, message: "All HOD linkages have been deleted. Staff must now set their real HODs." })
+    }
+
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 })
   } catch (error: any) {
     console.error("loan lookups post error", error)
