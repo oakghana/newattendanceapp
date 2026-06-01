@@ -603,6 +603,24 @@ export async function GET() {
       entries: timelinesMap[id] || [],
     }))
 
+    // Build current HOD profile data (for dynamic resolution in loan requests)
+    let currentHodProfile: any = null
+    if (myHodLinkRes.data?.hod_user_id) {
+      const { data: currentHodData } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, geofence_locations!assigned_location_id(name)")
+        .eq("id", myHodLinkRes.data.hod_user_id)
+        .maybeSingle()
+      if (currentHodData) {
+        currentHodProfile = {
+          id: currentHodData.id,
+          name: `${currentHodData.first_name || ""} ${currentHodData.last_name || ""}`.trim() || null,
+          rank: currentHodData.position || null,
+          location: (currentHodData as any)?.geofence_locations?.name || null,
+        }
+      }
+    }
+
     return NextResponse.json({
       degraded: false,
       profile: {
@@ -620,6 +638,7 @@ export async function GET() {
         assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
         assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
         linkedHodName,
+        currentHodProfile,
       },
       role,
       permissions,

@@ -106,6 +106,12 @@ type WorkflowResponse = {
     assignedLocationAddress?: string | null
     assignedDistrictName?: string | null
     linkedHodName?: string | null
+    currentHodProfile?: {
+      id: string
+      name: string | null
+      rank: string | null
+      location: string | null
+    } | null
   }
   permissions: {
     hod: boolean
@@ -614,6 +620,7 @@ function buildHrNoteWithThroTelephone(note: string, throTelephone: string, throN
 function buildDirectorAutoMemoDraft(
   row: LoanRequest,
   entry?: { hodName?: string; hodRank?: string; hodLocation?: string; hodTelephone?: string; memoRef?: string; memoRecipient?: string },
+  currentHodProfile?: any,
 ) {
   const amount = row.fixed_amount || row.requested_amount || 0
   const amtNum = Number(amount)
@@ -623,8 +630,9 @@ function buildDirectorAutoMemoDraft(
   const staffName = (row.staff_full_name || "REQUESTING STAFF").toUpperCase()
   const staffNo = row.staff_number || "—"
   const staffRank = (row.staff_rank || "").toUpperCase()
-  const hodRank = (entry?.hodRank || row.hod_rank || "").toUpperCase()
-  const hodLocation = entry?.hodLocation || row.hod_location || row.staff_location_name || "—"
+  // Use current HOD profile if available (dynamic), otherwise fall back to entry or row data
+  const hodRank = entry?.hodRank || currentHodProfile?.rank || (row.hod_rank || "").toUpperCase()
+  const hodLocation = entry?.hodLocation || currentHodProfile?.location || row.hod_location || row.staff_location_name || "—"
   const memoRecipient = entry?.memoRecipient || "Deputy Director Finance"
   const memoRef = entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number)
   const today = new Date().toISOString().slice(0, 10)
@@ -801,6 +809,29 @@ function LoanAnalyticsBarChart({
             </CardContent>
           </Card>
   )
+}
+
+// Helper function to resolve current HOD for a loan request
+// Always fetches the latest HOD linkage instead of using static fields
+function resolveCurrentHodForRequest(
+  request: LoanRequest,
+  currentHodProfile: any,
+): { name: string; rank: string; location: string } {
+  // If current HOD profile is available, use it (dynamic/real-time)
+  if (currentHodProfile?.id) {
+    return {
+      name: currentHodProfile.name || "—",
+      rank: currentHodProfile.rank || "—",
+      location: currentHodProfile.location || "—",
+    }
+  }
+
+  // Fallback to static HOD fields for archived requests or if linkage doesn't exist
+  return {
+    name: (request.hod_name || "—").trim() || "—",
+    rank: (request.hod_rank || "—").toUpperCase() || "—",
+    location: request.hod_location || "—",
+  }
 }
 
 export default function LoanAppPage() {
@@ -2090,9 +2121,9 @@ export default function LoanAppPage() {
           setModalStaffRank(row.staff_rank || "")
           setModalCorporateEmail(row.corporate_email || "")
           setModalReferenceNumber(formatReferenceNumber(row.reference_number, row.request_number))
-          setModalHodName(parsedLoanOfficeNote.throName || row.hod_name || "")
-          setModalHodRank(parsedLoanOfficeNote.throRank || row.hod_rank || "")
-          setModalHodLocation(parsedLoanOfficeNote.throLocation || row.hod_location || row.staff_location_name || "")
+          setModalHodName(parsedLoanOfficeNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
+          setModalHodRank(parsedLoanOfficeNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
+          setModalHodLocation(parsedLoanOfficeNote.throLocation || data?.profile.currentHodProfile?.location || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(parsedLoanOfficeNote.throTelephone || "")
           setModalHodReviewerId(row.hod_reviewer_id || "")
           setModalDirectorApproverId(row.director_hr_id || "")
@@ -2114,9 +2145,9 @@ export default function LoanAppPage() {
           setModalRecovery(entry?.recovery || "")
           setModalMonths(entry?.months || (row.recovery_months ? String(row.recovery_months) : fallbackMonths))
           setModalNote(parsedHrNote.cleanedNote)
-          setModalHodName(entry?.hodName || parsedHrNote.throName || row.hod_name || "")
-          setModalHodRank(entry?.hodRank || parsedHrNote.throRank || row.hod_rank || "")
-          setModalHodLocation(entry?.hodLocation || parsedHrNote.throLocation || row.hod_location || row.staff_location_name || "")
+          setModalHodName(entry?.hodName || parsedHrNote.throName || data?.profile.currentHodProfile?.name || row.hod_name || "")
+          setModalHodRank(entry?.hodRank || parsedHrNote.throRank || data?.profile.currentHodProfile?.rank || row.hod_rank || "")
+          setModalHodLocation(entry?.hodLocation || parsedHrNote.throLocation || data?.profile.currentHodProfile?.location || row.hod_location || row.staff_location_name || "")
           setModalHodTelephone(entry?.hodTelephone || parsedHrNote.throTelephone || "")
           setModalMemoRecipient(entry?.memoRecipient || parsedHrNote.memoRecipient || "Deputy Director Finance")
           setModalMemoRef(entry?.memoRef || formatReferenceNumber(row.reference_number, row.request_number))
@@ -2125,7 +2156,7 @@ export default function LoanAppPage() {
         }
         if (actionType === "director") {
           const entry = hrInputs[row.id]
-          const draft = buildDirectorAutoMemoDraft(row, entry)
+          const draft = buildDirectorAutoMemoDraft(row, entry, data?.profile.currentHodProfile)
           setModalMemoText(draft)
           setModalSignatureText(signatureText)
           setModalSignatureDataUrl(signatureDataUrl)
@@ -2349,7 +2380,7 @@ export default function LoanAppPage() {
                   <div><strong>Rank:</strong> {data?.profile.position || "N/A"}</div>
                   <div><strong>Assigned Location:</strong> {data?.profile.assignedLocationName || "N/A"}</div>
                   <div><strong>Assigned District:</strong> {data?.profile.assignedDistrictName || "N/A"}</div>
-                  <div><strong>Linked HOD:</strong> {data?.profile.linkedHodName || "Not yet assigned"}</div>
+                  <div><strong>Linked HOD:</strong> {data?.profile.currentHodProfile?.name ? `${data.profile.currentHodProfile.name} (${data.profile.currentHodProfile.rank})` : "Not yet assigned"}</div>
                   <div className="md:col-span-2"><strong>Location Address:</strong> {data?.profile.assignedLocationAddress || "N/A"}</div>
                 </div>
               </div>
@@ -3279,7 +3310,7 @@ export default function LoanAppPage() {
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Disbursement: {row.disbursement_date || "TBD"} | Recovery: {row.recovery_start_date || "TBD"} ({row.recovery_months || "?"} months)</div>
                   <div>Status: <strong>{statusText(row.status)}</strong></div>
                   <div className="flex gap-2 flex-wrap pt-1">
-                    <Button variant="outline" size="sm" onClick={() => void generateMemoPdf(row, row.director_letter || buildDirectorAutoMemoDraft(row, hrInputs[row.id]), row.director_signature_text || "")}>
+                    <Button variant="outline" size="sm" onClick={() => void generateMemoPdf(row, row.director_letter || buildDirectorAutoMemoDraft(row, hrInputs[row.id], data?.profile.currentHodProfile), row.director_signature_text || "")}>
                       <Download className="h-4 w-4 mr-1" /> Download Approval Letter
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>
@@ -4871,6 +4902,7 @@ export default function LoanAppPage() {
                   const draft = buildDirectorAutoMemoDraft(
                     { ...actionModal.row!, recovery_start_date: modalRecovery, disbursement_date: modalDisbursement, recovery_months: Number(modalMonths) || null },
                     { hodName: modalHodName, hodRank: modalHodRank, hodLocation: modalHodLocation, hodTelephone: modalHodTelephone, memoRef: modalMemoRef, memoRecipient: modalMemoRecipient },
+                    data?.profile.currentHodProfile,
                   )
                   setModalMemoText(draft)
                 }}>Preview Memo</Button>
