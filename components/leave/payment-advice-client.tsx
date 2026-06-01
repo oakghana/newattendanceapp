@@ -196,13 +196,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           }))
           setHrExecutives(execs)
           console.log("[v0] HR Executives loaded:", execs.length)
-          // Set default signer as first HR executive
-          if (execs.length > 0) {
-            setSelectedSigner(execs[0])
-            console.log("[v0] Default signer set to:", execs[0].full_name)
-          } else {
-            console.log("[v0] No HR executives found")
-          }
+          // Do NOT auto-assign signer - let user choose from the list
+          // User must explicitly select a signer from the dropdown
         } else {
           const error = await response.json()
           console.error("[v0] API returned error:", error)
