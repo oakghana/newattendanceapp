@@ -637,79 +637,143 @@ export async function POST(request: NextRequest) {
       let updated = 0
       for (const staff of staffRows || []) {
         const locationId = (staff as any).assigned_location_id
+        const departmentId = (staff as any).department_id
+        const staffRole = (staff as any).role
+
         let hodQuery = admin
           .from("user_profiles")
           .select("id, role, department_id, assigned_location_id, position")
           .eq("is_active", true)
-          .limit(20)
 
+        // Smart linking based on organizational hierarchy
         if (isHeadOfficeStaff(staff)) {
-          const deptId = String((staff as any)?.department_id || "")
-          if (!deptId) continue
-          hodQuery = hodQuery.eq("department_id", deptId).eq("role", "department_head")
+          // Head office staff should link to their department head
+          if (!departmentId) continue
+          hodQuery = hodQuery.eq("department_id", departmentId).eq("role", "department_head")
         } else {
+          // Regional/field staff should link to regional manager at their location
           if (!locationId) continue
           hodQuery = hodQuery.eq("assigned_location_id", locationId).eq("role", "regional_manager")
+          
+          // If no regional manager at location, try department head as fallback
+          const { data: regionalManagers } = await hodQuery
+          if (!regionalManagers || regionalManagers.length === 0) {
+            // No regional manager found - link to department head instead
+            if (departmentId) {
+              hodQuery = admin
+                .from("user_profiles")
+                .select("id, role, department_id, assigned_location_id, position")
+                .eq("is_active", true)
+                .eq("department_id", departmentId)
+                .eq("role", "department_head")
+            } else {
+              continue
+            }
+          }
         }
 
         const { data: hodRows } = await hodQuery
 
         if (!hodRows || hodRows.length === 0) continue
 
-        const payload = (hodRows as any[]).map((hod: any) => ({
+        // Prefer the first HOD (typically the one created first/senior)
+        const selectedHod = hodRows[0]
+        
+        const payload = {
           staff_user_id: (staff as any).id,
-          hod_user_id: hod.id,
+          hod_user_id: selectedHod.id,
           location_id: locationId,
           district_name: (staff as any)?.geofence_locations?.districts?.name || null,
           location_address: (staff as any)?.geofence_locations?.address || null,
           staff_rank: (staff as any)?.position || null,
-          hod_rank: hod.position || null,
+          hod_rank: selectedHod.position || null,
           created_by: user.id,
           updated_at: new Date().toISOString(),
-        }))
+        }
 
-        const { error: upsertErr } = await admin.from("loan_hod_linkages").upsert(payload, { onConflict: "staff_user_id,hod_user_id" })
-        if (!upsertErr) updated += payload.length
+        const { error: upsertErr } = await admin.from("loan_hod_linkages").upsert(payload, { onConflict: "staff_user_id" })
+        if (!upsertErr) updated += 1
       }
 
       return NextResponse.json({ success: true, updated })
     }
 
     if (action === "auto_link_it_admin_staff") {
-      const [{ data: staffRows, error: staffError }, { data: adminRows, error: adminError }] = await Promise.all([
+      // Link IT admin staff to IT department HOD, not all admins
+      const [{ data: staffRows, error: staffError }, { data: itHodRows, error: itHodError }] = await Promise.all([
         admin
           .from("user_profiles")
-          .select("id, position, assigned_location_id, geofence_locations!assigned_location_id(address, districts(name))")
+          .select("id, position, assigned_location_id, department_id, geofence_locations!assigned_location_id(address, districts(name))")
           .eq("role", "it_admin")
           .eq("is_active", true),
         admin
           .from("user_profiles")
-          .select("id, position")
-          .eq("role", "admin")
+          .select("id, position, department_id, departments(name, code)")
+          .eq("role", "department_head")
           .eq("is_active", true),
       ])
 
       if (staffError) throw staffError
-      if (adminError) throw adminError
+      if (itHodError) throw itHodError
 
       let updated = 0
-      for (const staff of staffRows || []) {
-        const payload = (adminRows || []).map((adminProfile: any) => ({
-          staff_user_id: (staff as any).id,
-          hod_user_id: adminProfile.id,
-          location_id: (staff as any).assigned_location_id || null,
-          district_name: (staff as any)?.geofence_locations?.districts?.name || null,
-          location_address: (staff as any)?.geofence_locations?.address || null,
-          staff_rank: (staff as any)?.position || null,
-          hod_rank: adminProfile.position || "Admin",
-          created_by: user.id,
-          updated_at: new Date().toISOString(),
-        }))
+      
+      // Find the IT department HOD(s)
+      const itHods = (itHodRows || []).filter((hod: any) => {
+        const deptName = String((hod as any)?.departments?.name || "").toLowerCase()
+        const deptCode = String((hod as any)?.departments?.code || "").toLowerCase()
+        return deptName.includes("information") || deptName.includes(" it ") || deptCode === "it" || deptCode.startsWith("it")
+      })
 
-        if (payload.length === 0) continue
+      if (itHods.length === 0) {
+        // No IT department HOD found - try linking to admin role as fallback
+        const { data: adminRows } = await admin
+          .from("user_profiles")
+          .select("id, position")
+          .eq("role", "admin")
+          .eq("is_active", true)
+          .limit(1)
 
-        const { error } = await admin.from("loan_hod_linkages").upsert(payload, { onConflict: "staff_user_id,hod_user_id" })
-        if (!error) updated += payload.length
+        if (!adminRows || adminRows.length === 0) {
+          return NextResponse.json({ success: true, updated: 0, message: "No suitable IT HOD found" })
+        }
+
+        // Link all IT admin staff to the single admin
+        for (const staff of staffRows || []) {
+          const payload = {
+            staff_user_id: (staff as any).id,
+            hod_user_id: adminRows[0].id,
+            location_id: (staff as any).assigned_location_id || null,
+            district_name: (staff as any)?.geofence_locations?.districts?.name || null,
+            location_address: (staff as any)?.geofence_locations?.address || null,
+            staff_rank: (staff as any)?.position || null,
+            hod_rank: adminRows[0].position || "Admin",
+            created_by: user.id,
+            updated_at: new Date().toISOString(),
+          }
+
+          const { error } = await admin.from("loan_hod_linkages").upsert(payload, { onConflict: "staff_user_id" })
+          if (!error) updated += 1
+        }
+      } else {
+        // Link all IT admin staff to the IT department HOD (prefer first one if multiple)
+        const selectedItHod = itHods[0]
+        for (const staff of staffRows || []) {
+          const payload = {
+            staff_user_id: (staff as any).id,
+            hod_user_id: selectedItHod.id,
+            location_id: (staff as any).assigned_location_id || null,
+            district_name: (staff as any)?.geofence_locations?.districts?.name || null,
+            location_address: (staff as any)?.geofence_locations?.address || null,
+            staff_rank: (staff as any)?.position || null,
+            hod_rank: selectedItHod.position || "IT Manager",
+            created_by: user.id,
+            updated_at: new Date().toISOString(),
+          }
+
+          const { error } = await admin.from("loan_hod_linkages").upsert(payload, { onConflict: "staff_user_id" })
+          if (!error) updated += 1
+        }
       }
 
       return NextResponse.json({ success: true, updated })

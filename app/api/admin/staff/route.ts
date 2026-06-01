@@ -464,26 +464,35 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Staff API - Staff member created successfully")
 
-    // Auto-link IT department staff to the IT HOD
+    // Auto-link IT department staff to the IT department HOD
     try {
       const newDeptId = (newProfile as any)?.department_id
       const newDeptName = String((newProfile as any)?.departments?.name || "").toLowerCase()
       const newDeptCode = String((newProfile as any)?.departments?.code || "").toLowerCase()
       const isItDept = newDeptName.includes("information") || newDeptName.includes(" it ") || newDeptCode === "it" || newDeptCode.startsWith("it")
+      
       if (isItDept && newDeptId) {
-        const { data: itHod } = await adminSupabase
+        // Find the IT department head
+        const { data: itHods } = await adminSupabase
           .from("user_profiles")
-          .select("id")
+          .select("id, departments(name, code)")
           .eq("department_id", newDeptId)
           .eq("role", "department_head")
           .eq("is_active", true)
-          .maybeSingle()
-        if (itHod?.id && itHod.id !== authUser.user.id) {
+        
+        // Verify it's actually an IT department head
+        const verifiedItHod = itHods?.find((hod: any) => {
+          const deptName = String((hod as any)?.departments?.name || "").toLowerCase()
+          const deptCode = String((hod as any)?.departments?.code || "").toLowerCase()
+          return deptName.includes("information") || deptName.includes(" it ") || deptCode === "it" || deptCode.startsWith("it")
+        })
+        
+        if (verifiedItHod?.id && verifiedItHod.id !== authUser.user.id) {
           await adminSupabase.from("loan_hod_linkages").upsert(
-            { staff_user_id: authUser.user.id, hod_user_id: itHod.id },
-            { onConflict: "staff_user_id,hod_user_id", ignoreDuplicates: true },
+            { staff_user_id: authUser.user.id, hod_user_id: verifiedItHod.id },
+            { onConflict: "staff_user_id", ignoreDuplicates: false },
           )
-          console.log("[v0] Staff API - Auto-linked IT staff to IT HOD:", itHod.id)
+          console.log("[v0] Staff API - Auto-linked IT staff to verified IT department HOD:", verifiedItHod.id)
         }
       }
     } catch (linkErr) {
