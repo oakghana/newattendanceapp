@@ -555,9 +555,9 @@ export default function LoginPage() {
                 <Image
                   src="/images/qcc-logo.png"
                   alt="QCC Logo - Quality Control Company Limited"
-                  width={80}
-                  height={80}
-                  className="rounded-full object-contain"
+                  width={96}
+                  height={96}
+                  className="rounded-full object-cover w-full h-full p-1"
                   priority
                 />
               </div>
