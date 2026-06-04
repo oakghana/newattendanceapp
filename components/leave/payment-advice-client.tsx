@@ -543,6 +543,14 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         userRole: userRole,
         isHrLeaveOffice: isHrLeaveOffice,
       })
+      
+      // DEBUG: Check first staff member
+      if (staffList && staffList.length > 0) {
+        console.log("[v0] DEBUG: First staff in staffList:", JSON.stringify(staffList[0], null, 2))
+        console.log("[v0] DEBUG: staffList[0] keys:", Object.keys(staffList[0]))
+        console.log("[v0] DEBUG: leave_plan_request_id present?", 'leave_plan_request_id' in staffList[0])
+        console.log("[v0] DEBUG: leave_plan_request_id value:", staffList[0].leave_plan_request_id)
+      }
 
       // Create a clean payload with only serializable data
       const cleanPayload = {

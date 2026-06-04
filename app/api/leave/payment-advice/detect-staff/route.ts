@@ -70,8 +70,6 @@ export async function POST(request: NextRequest) {
     // Get user IDs and fetch user profiles separately with department names
     const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
     
-    console.log("[v0] Fetching profiles for user IDs:", userIds)
-    
     let userProfiles: any[] = []
     let departments: any[] = []
     
