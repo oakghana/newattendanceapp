@@ -35,29 +35,79 @@ export async function POST(request: NextRequest) {
     // Status can be: approved, hr_approved, hod_approved (all are approved states)
     // FIXED: Use START DATE ONLY to prevent multi-month leaves from appearing in multiple months
     // This ensures each leave generates only ONE payment memo in the month it starts
-    const { data: staffOnLeave, error } = await supabase
-      .from("leave_plan_requests")
-      .select(
-        `
-        id,
-        user_id,
-        staff_category,
-        preferred_start_date,
-        preferred_end_date,
-        leave_type_key,
-        status,
-        requested_days,
-        adjusted_days,
-        entitlement_days,
-        travelling_days_added,
-        year_outstanding_balance
-      `
-      )
-      .eq("leave_type_key", "annual")
-      .in("status", ["approved", "hr_approved", "hod_approved"])
-      // Filter by START DATE ONLY - leave must start in this month
-      .gte("preferred_start_date", monthStart)
-      .lte("preferred_start_date", monthEnd)
+    // CRITICAL: Use admin client to bypass RLS policies - HR Leave Office needs to see ALL approved leave requests, not just their own
+    let staffOnLeave: any = []
+    let error: any = null
+
+    try {
+      // Try using admin/service role client first to bypass RLS
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+      if (supabaseUrl && supabaseServiceKey) {
+        const { createClient: createAdminClient } = await import("@supabase/supabase-js")
+        const adminClient = createAdminClient(supabaseUrl, supabaseServiceKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        })
+
+        const response = await adminClient
+          .from("leave_plan_requests")
+          .select(
+            `
+            id,
+            user_id,
+            staff_category,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            status,
+            requested_days,
+            adjusted_days,
+            entitlement_days,
+            travelling_days_added,
+            year_outstanding_balance
+          `
+          )
+          .eq("leave_type_key", "annual")
+          .in("status", ["approved", "hr_approved", "hod_approved"])
+          // Filter by START DATE ONLY - leave must start in this month
+          .gte("preferred_start_date", monthStart)
+          .lte("preferred_start_date", monthEnd)
+
+        staffOnLeave = response.data || []
+        error = response.error
+      } else {
+        // Fallback to regular client if service role not available
+        const response = await supabase
+          .from("leave_plan_requests")
+          .select(
+            `
+            id,
+            user_id,
+            staff_category,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            status,
+            requested_days,
+            adjusted_days,
+            entitlement_days,
+            travelling_days_added,
+            year_outstanding_balance
+          `
+          )
+          .eq("leave_type_key", "annual")
+          .in("status", ["approved", "hr_approved", "hod_approved"])
+          .gte("preferred_start_date", monthStart)
+          .lte("preferred_start_date", monthEnd)
+
+        staffOnLeave = response.data || []
+        error = response.error
+      }
+    } catch (err) {
+      console.error("[v0] Error creating admin client:", err)
+      error = err
+    }
 
     if (error) {
       console.error("[v0] Error querying staff:", error)
