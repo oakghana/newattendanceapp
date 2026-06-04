@@ -67,6 +67,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log("[v0] Staff query results:", {
+      staffOnLeaveCount: (staffOnLeave || []).length,
+      staffOnLeaveSample: (staffOnLeave || []).slice(0, 2),
+      queryParams: {
+        month,
+        monthStart,
+        monthEnd,
+        leaveTypeKey: "annual",
+        statuses: ["approved", "hr_approved", "hod_approved"],
+      },
+    })
+
     // Get user IDs and fetch user profiles separately with department names
     const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
     
@@ -107,6 +119,17 @@ export async function POST(request: NextRequest) {
     
     // Create a map of user profiles for easy lookup
     const profileMap = new Map(userProfiles.map((p: any) => [p.id, p]))
+
+    // If no staff found at all, return early with helpful message
+    if (!staffOnLeave || staffOnLeave.length === 0) {
+      console.log("[v0] No staff on annual leave found for month:", month)
+      return NextResponse.json({
+        success: true,
+        staff: [],
+        count: 0,
+        message: `No staff members are scheduled on annual leave starting in ${month}. Please verify the leave plan requests have been created and approved.`,
+      })
+    }
 
     // Function to derive staff_category from role/position if NULL
     const deriveStaffCategory = (record: any, profile: any): string => {
@@ -191,10 +214,45 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Filter out any null entries and validate required fields
+    const validatedStaff = formatted.filter((staff: any) => {
+      return staff !== null && 
+             staff.leave_plan_request_id && 
+             staff.user_id
+    })
+
+    // Check if all staff records are valid
+    if (formatted.length > 0 && validatedStaff.length === 0) {
+      const sampleRecord = formatted[0]
+      console.error("[v0] VALIDATION ERROR: All staff records are missing required fields!")
+      console.error("[v0] Total formatted records:", formatted.length)
+      console.error("[v0] Valid records after filter:", validatedStaff.length)
+      console.error("[v0] Sample formatted record:", {
+        ...sampleRecord,
+        has_leave_plan_request_id: !!sampleRecord?.leave_plan_request_id,
+        has_user_id: !!sampleRecord?.user_id,
+        keys: Object.keys(sampleRecord || {}),
+      })
+      console.error("[v0] Full sample for debugging:", JSON.stringify(sampleRecord, null, 2))
+      
+      return NextResponse.json({
+        error: "All staff records are missing required fields (leave_plan_request_id or user_id)",
+        details: "Staff detection failed to populate required fields",
+        debugInfo: {
+          totalFormatted: formatted.length,
+          validAfterFilter: validatedStaff.length,
+          sampleKeys: Object.keys(formatted[0] || {}),
+          sampleData: formatted[0],
+        },
+        staff: [],
+        count: 0
+      }, { status: 400 })
+    }
+
     return NextResponse.json({
       success: true,
-      staff: formatted,
-      count: formatted.length,
+      staff: validatedStaff,
+      count: validatedStaff.length,
     })
   } catch (err: any) {
     console.error("[v0] Error in detect-staff API:", err)

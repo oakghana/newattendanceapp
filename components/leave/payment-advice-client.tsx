@@ -359,7 +359,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       if ((data.staff || []).length === 0) {
         toast({
           title: "No Staff Found",
-          description: `No staff are scheduled on annual leave for ${selectedMonth}.`,
+          description: data.message || `No staff are scheduled on annual leave for ${selectedMonth}.`,
           variant: "default",
         })
       } else {
@@ -466,6 +466,16 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Submit memos
   const handleSubmitMemos = async () => {
+    // FIRST: Validate that we have staff to submit
+    if (!staffList || staffList.length === 0) {
+      toast({
+        title: "No Staff to Submit",
+        description: "Please detect staff members on leave for this month before submitting payment requests. Click 'Detect Staff' first.",
+        variant: "destructive",
+      })
+      return
+    }
+
     // Allow either selectedSigner (single) OR selectedSigners (multiple)
     const signersToUse = selectedSigners && selectedSigners.length > 0 ? selectedSigners : (selectedSigner ? [selectedSigner] : [])
     
