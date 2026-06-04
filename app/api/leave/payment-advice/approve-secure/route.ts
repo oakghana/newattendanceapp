@@ -232,12 +232,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Update memo with new status, signature, and updated memo_body
-        // Use 'signed_by_hr_executive' to clearly indicate the memo has been signed and approved
+        // Use 'reviewed_by_hr' status (one of the allowed CHECK constraint values)
         // This prevents the memo from appearing in the pending queue again
         const { error: updateError } = await admin
           .from("leave_payment_memos")
           .update({
-            status: "signed_by_hr_executive",
+            status: "reviewed_by_hr", // ✅ Matches CHECK constraint: ['draft', 'ready_for_review', 'reviewed_by_hr', 'forwarded_to_accounts', 'acknowledged_by_accounts']
             memo_body: JSON.stringify(memoBody),
             signature_data_url: signatureUrl || null, // Store signature in DB column for PDF rendering
             signer_id: selectedSigner.id,
