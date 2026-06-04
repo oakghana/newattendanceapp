@@ -359,7 +359,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       if ((data.staff || []).length === 0) {
         toast({
           title: "No Staff Found",
-          description: `No staff are scheduled on annual leave for ${selectedMonth}.`,
+          description: data.message || `No staff are scheduled on annual leave for ${selectedMonth}.`,
           variant: "default",
         })
       } else {
@@ -466,6 +466,16 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Submit memos
   const handleSubmitMemos = async () => {
+    // FIRST: Validate that we have staff to submit
+    if (!staffList || staffList.length === 0) {
+      toast({
+        title: "No Staff to Submit",
+        description: "Please detect staff members on leave for this month before submitting payment requests. Click 'Detect Staff' first.",
+        variant: "destructive",
+      })
+      return
+    }
+
     // Allow either selectedSigner (single) OR selectedSigners (multiple)
     const signersToUse = selectedSigners && selectedSigners.length > 0 ? selectedSigners : (selectedSigner ? [selectedSigner] : [])
     
@@ -583,15 +593,37 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }))
         console.error("[v0] API error details:", errorData)
+
+        // Handle the "already exists" case (409) as an informational message, not a hard error
+        if (response.status === 409 || errorData.alreadyExists) {
+          toast({
+            title: "Memos Already Submitted",
+            description:
+              errorData.details ||
+              `Payment memos for these staff already exist for ${selectedMonth}. They have already been sent to signers for review.`,
+          })
+          // Clear the form since the work is effectively done
+          setMemos({})
+          setStaffList([])
+          setMemoSummary(null)
+          setSelectedSigners([])
+          return
+        }
+
         throw new Error(errorData.details || errorData.error || "Failed to submit memos")
       }
 
       const result = await response.json()
       console.log("[v0] Memo submitted successfully:", result)
 
+      // If some staff were skipped as duplicates but others succeeded, mention it
+      const skipped = Array.isArray(result.skippedDuplicates) ? result.skippedDuplicates.length : 0
       toast({
         title: "Success",
-        description: `Payment advice memos have been saved and assigned to ${signersToUse.length} signer(s) successfully.`,
+        description:
+          skipped > 0
+            ? `${result.memoCount} memo(s) saved and assigned to ${signersToUse.length} signer(s). ${skipped} staff already had memos and were skipped.`
+            : `Payment advice memos have been saved and assigned to ${signersToUse.length} signer(s) successfully.`,
       })
 
       setMemos({})

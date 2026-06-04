@@ -35,29 +35,79 @@ export async function POST(request: NextRequest) {
     // Status can be: approved, hr_approved, hod_approved (all are approved states)
     // FIXED: Use START DATE ONLY to prevent multi-month leaves from appearing in multiple months
     // This ensures each leave generates only ONE payment memo in the month it starts
-    const { data: staffOnLeave, error } = await supabase
-      .from("leave_plan_requests")
-      .select(
-        `
-        id,
-        user_id,
-        staff_category,
-        preferred_start_date,
-        preferred_end_date,
-        leave_type_key,
-        status,
-        requested_days,
-        adjusted_days,
-        entitlement_days,
-        travelling_days_added,
-        year_outstanding_balance
-      `
-      )
-      .eq("leave_type_key", "annual")
-      .in("status", ["approved", "hr_approved", "hod_approved"])
-      // Filter by START DATE ONLY - leave must start in this month
-      .gte("preferred_start_date", monthStart)
-      .lte("preferred_start_date", monthEnd)
+    // CRITICAL: Use admin client to bypass RLS policies - HR Leave Office needs to see ALL approved leave requests, not just their own
+    let staffOnLeave: any = []
+    let error: any = null
+
+    try {
+      // Try using admin/service role client first to bypass RLS
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+      if (supabaseUrl && supabaseServiceKey) {
+        const { createClient: createAdminClient } = await import("@supabase/supabase-js")
+        const adminClient = createAdminClient(supabaseUrl, supabaseServiceKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        })
+
+        const response = await adminClient
+          .from("leave_plan_requests")
+          .select(
+            `
+            id,
+            user_id,
+            staff_category,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            status,
+            requested_days,
+            adjusted_days,
+            entitlement_days,
+            travelling_days_added,
+            year_outstanding_balance
+          `
+          )
+          .eq("leave_type_key", "annual")
+          .in("status", ["approved", "hr_approved", "hod_approved"])
+          // Filter by START DATE ONLY - leave must start in this month
+          .gte("preferred_start_date", monthStart)
+          .lte("preferred_start_date", monthEnd)
+
+        staffOnLeave = response.data || []
+        error = response.error
+      } else {
+        // Fallback to regular client if service role not available
+        const response = await supabase
+          .from("leave_plan_requests")
+          .select(
+            `
+            id,
+            user_id,
+            staff_category,
+            preferred_start_date,
+            preferred_end_date,
+            leave_type_key,
+            status,
+            requested_days,
+            adjusted_days,
+            entitlement_days,
+            travelling_days_added,
+            year_outstanding_balance
+          `
+          )
+          .eq("leave_type_key", "annual")
+          .in("status", ["approved", "hr_approved", "hod_approved"])
+          .gte("preferred_start_date", monthStart)
+          .lte("preferred_start_date", monthEnd)
+
+        staffOnLeave = response.data || []
+        error = response.error
+      }
+    } catch (err) {
+      console.error("[v0] Error creating admin client:", err)
+      error = err
+    }
 
     if (error) {
       console.error("[v0] Error querying staff:", error)
@@ -69,8 +119,6 @@ export async function POST(request: NextRequest) {
 
     // Get user IDs and fetch user profiles separately with department names
     const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
-    
-    console.log("[v0] Fetching profiles for user IDs:", userIds)
     
     let userProfiles: any[] = []
     let departments: any[] = []
@@ -108,6 +156,16 @@ export async function POST(request: NextRequest) {
     // Create a map of user profiles for easy lookup
     const profileMap = new Map(userProfiles.map((p: any) => [p.id, p]))
 
+    // If no staff found at all, return early with helpful message
+    if (!staffOnLeave || staffOnLeave.length === 0) {
+      return NextResponse.json({
+        success: true,
+        staff: [],
+        count: 0,
+        message: `No staff members are scheduled on annual leave starting in ${month}. Please verify the leave plan requests have been created and approved.`,
+      })
+    }
+
     // Function to derive staff_category from role/position if NULL
     const deriveStaffCategory = (record: any, profile: any): string => {
       // If staff_category is already set, use it
@@ -134,27 +192,23 @@ export async function POST(request: NextRequest) {
       const profile = profileMap.get(record.user_id)
       const staffCategory = deriveStaffCategory(record, profile)
       
+      // CRITICAL: Ensure we always have these required fields
+      const recordId = record.id
+      const userId = record.user_id
+      
       // Construct full name from first_name and last_name
       const fullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "Unknown"
       
-      // Get department name from the map - ENSURE THIS IS POPULATED
+      // Get department name from the map
       const departmentName = profile?.department_id ? (departmentMap.get(profile.department_id) || "N/A") : (profile?.department_name || "N/A")
       
-      // Get position from profile - ENSURE THIS IS POPULATED
+      // Get position from profile
       const position = profile?.position || "N/A"
 
-      console.log("[v0] Staff record mapping:", {
-        fullName,
-        staffNumber: profile?.employee_id,
-        position,
-        departmentName,
-        departmentId: profile?.department_id,
-      })
-
       return {
-        // Required fields for payment memo creation
-        leave_plan_request_id: record.id,
-        user_id: record.user_id,
+        // REQUIRED fields for payment memo creation - MUST ALWAYS BE PRESENT
+        leave_plan_request_id: recordId,
+        user_id: userId,
         // Staff details
         full_name: fullName,
         staff_number: profile?.employee_id || "N/A",
@@ -179,10 +233,27 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Filter out any null entries and validate required fields
+    const validatedStaff = formatted.filter((staff: any) => {
+      return staff !== null && 
+             staff.leave_plan_request_id && 
+             staff.user_id
+    })
+
+    // Check if all staff records are valid
+    if (formatted.length > 0 && validatedStaff.length === 0) {
+      return NextResponse.json({
+        error: "All staff records are missing required fields (leave_plan_request_id or user_id)",
+        details: "Staff detection failed to populate required fields",
+        staff: [],
+        count: 0
+      }, { status: 400 })
+    }
+
     return NextResponse.json({
       success: true,
-      staff: formatted,
-      count: formatted.length,
+      staff: validatedStaff,
+      count: validatedStaff.length,
     })
   } catch (err: any) {
     console.error("[v0] Error in detect-staff API:", err)
