@@ -77,6 +77,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
   const [showSignatureRequiredDialog, setShowSignatureRequiredDialog] = useState(false)
   const [pendingApprovalMemoIds, setPendingApprovalMemoIds] = useState<string[]>([])
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string } | null>(null)
   
   // Pagination states
   const [pendingPage, setPendingPage] = useState(1)
@@ -181,6 +182,27 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
   }
 
+  // Fetch current user first to set as default signer
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await fetch("/api/auth/me")
+        if (response.ok) {
+          const data = await response.json()
+          setCurrentUser({
+            id: data.user?.id,
+            name: data.user?.full_name || data.user?.name,
+            email: data.user?.email,
+          })
+          console.log("[v0] Current user loaded:", data.user?.name || data.user?.email)
+        }
+      } catch (err) {
+        console.error("[v0] Error fetching current user:", err)
+      }
+    }
+    fetchCurrentUser()
+  }, [])
+
   // Load HR executives on mount
   useEffect(() => {
     const fetchHrExecutives = async () => {
@@ -197,12 +219,20 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           }))
           setHrExecutives(execs)
           console.log("[v0] HR Executives loaded:", execs.length)
-          // Set default signer as first HR executive
-          if (execs.length > 0) {
+          
+          // Set default signer to CURRENT USER if they're in the list, otherwise first executive
+          if (currentUser && execs.length > 0) {
+            const currentUserSigner = execs.find((exec: any) => exec.id === currentUser.id)
+            if (currentUserSigner) {
+              setSelectedSigner(currentUserSigner)
+              console.log("[v0] Default signer set to current user:", currentUserSigner.full_name)
+            } else {
+              setSelectedSigner(execs[0])
+              console.log("[v0] Current user not in executives list, default signer set to:", execs[0].full_name)
+            }
+          } else if (execs.length > 0) {
             setSelectedSigner(execs[0])
-            console.log("[v0] Default signer set to:", execs[0].full_name)
-          } else {
-            console.log("[v0] No HR executives found")
+            console.log("[v0] Current user not loaded yet, default signer set to:", execs[0].full_name)
           }
         } else {
           const error = await response.json()
@@ -216,7 +246,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
     
     fetchHrExecutives()
-  }, [])
+  }, [currentUser])  // Re-run when currentUser is loaded
 
   // Load pending memos for HR Executives
   useEffect(() => {
