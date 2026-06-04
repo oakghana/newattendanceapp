@@ -14,10 +14,10 @@ CREATE TABLE IF NOT EXISTS device_radius_settings (
 
 -- Insert default device radius settings
 INSERT INTO device_radius_settings (device_type, check_in_radius_meters, check_out_radius_meters, description, is_active) VALUES
-  ('mobile', 400, 400, 'Mobile phones and smartphones', true),
-  ('tablet', 400, 400, 'Tablets and iPads', true),
-  ('laptop', 700, 700, 'Laptop computers (Windows and Mac)', true),
-  ('desktop', 2000, 1000, 'Desktop computers and workstations', true)
+  ('mobile', 100, 100, 'Mobile phones and smartphones', true),
+  ('tablet', 150, 150, 'Tablets and iPads', true),
+  ('laptop', 200, 200, 'Laptop computers (Windows and Mac)', true),
+  ('desktop', 2000, 1500, 'Desktop computers and workstations', true)
 ON CONFLICT (device_type) DO NOTHING;
 
 -- Enable RLS

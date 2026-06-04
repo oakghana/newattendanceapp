@@ -63,6 +63,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [hrExecutives, setHrExecutives] = useState<HRExecutive[]>([])
   const [selectedSigner, setSelectedSigner] = useState<HRExecutive | null>(null)
+  const [selectedSigners, setSelectedSigners] = useState<HRExecutive[]>([]) // Support multiple signers
   const [loadingHrExecutives, setLoadingHrExecutives] = useState(false)
   const [referenceNumbers, setReferenceNumbers] = useState<Record<string, string>>({
     Manager: "",
@@ -465,25 +466,36 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Submit memos
   const handleSubmitMemos = async () => {
-    if (!selectedSigner) {
+    // Allow either selectedSigner (single) OR selectedSigners (multiple)
+    const signersToUse = selectedSigners && selectedSigners.length > 0 ? selectedSigners : (selectedSigner ? [selectedSigner] : [])
+    
+    if (!signersToUse || signersToUse.length === 0) {
       toast({
         title: "Error",
-        description: "Please select an HR executive signer first.",
+        description: "Please select at least one HR executive signer.",
         variant: "destructive",
       })
       return
     }
 
     // ONLY HR EXECUTIVES need signatures - not HR LEAVE_OFFICE staff
-    // Check if the SIGNER (HR Executive) has a saved signature
-    // This is only triggered if the current user IS the selected signer
-    // HR Leave Office staff never need signatures - they just submit requests
-    if (isHrExecutive) {
-      // Only check if current user is an HR Executive AND they are selecting themselves as signer
-      const currentUserIsTheSigner = selectedSigner.id // In real scenario, compare with current user ID
-      // For now, if HR executive is about to approve, check their signature
-      const hasSignature = await checkSignerSignature(selectedSigner.id)
-      if (!hasSignature) {
+    // Check each signer's signature
+    if (isHrExecutive && signersToUse.length > 0) {
+      const signersWithoutSignature: string[] = []
+      
+      for (const signer of signersToUse) {
+        const hasSignature = await checkSignerSignature(signer.id)
+        if (!hasSignature) {
+          signersWithoutSignature.push(signer.full_name || signer.name || "Unknown")
+        }
+      }
+      
+      if (signersWithoutSignature.length > 0) {
+        toast({
+          title: "Missing Signatures",
+          description: `The following signers need to save their signatures before payment memos can be approved: ${signersWithoutSignature.join(", ")}. Please have them visit Settings > My Profile to upload their signatures.`,
+          variant: "destructive",
+        })
         setShowSignatureRequiredDialog(true)
         return
       }
@@ -515,7 +527,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         month: selectedMonth,
         referenceNumbers,
         staffList: staffList?.length,
-        selectedSigner,
+        signerCount: signersToUse.length,
+        signers: signersToUse.map(s => s.full_name || s.name),
         memosKeys: Object.keys(memos),
         userRole: userRole,
         isHrLeaveOffice: isHrLeaveOffice,
@@ -544,13 +557,21 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           requested_days: staff.requested_days,
           approved_days: staff.approved_days,
         })),
-        selectedSigner: {
-          id: selectedSigner.id,
-          name: selectedSigner.full_name || selectedSigner.name,
-          position: selectedSigner.position,
-          email: selectedSigner.email,
-          signature_image_url: selectedSigner.signature_image_url, // Include signature from profile/generation
-        },
+        selectedSigner: signersToUse[0] ? {
+          id: signersToUse[0].id,
+          name: signersToUse[0].full_name || signersToUse[0].name,
+          position: signersToUse[0].position,
+          email: signersToUse[0].email,
+          signature_image_url: signersToUse[0].signature_image_url,
+        } : null,
+        // NEW: Pass all selected signers to the API for proper assignment
+        selectedSigners: signersToUse.map(s => ({
+          id: s.id,
+          name: s.full_name || s.name,
+          position: s.position,
+          email: s.email,
+          signature_image_url: s.signature_image_url,
+        })),
       }
 
       const response = await fetch("/api/leave/payment-advice/submit-memo", {
@@ -570,12 +591,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
       toast({
         title: "Success",
-        description: "Payment advice memos have been saved successfully.",
+        description: `Payment advice memos have been saved and assigned to ${signersToUse.length} signer(s) successfully.`,
       })
 
       setMemos({})
       setStaffList([])
       setMemoSummary(null)
+      setSelectedSigners([]) // Clear selected signers after submission
     } catch (err: any) {
       console.error("[v0] Error submitting memos:", err)
       toast({
@@ -1645,27 +1667,32 @@ We count on your co-operation.`,
             </div>
             <div>
               <Label htmlFor="signer-select" className="mb-2 block font-medium">
-                HR Executive (Signer)
+                HR Executive(s) - Signers
               </Label>
               <select
                 id="signer-select"
-                value={selectedSigner?.id || ""}
+                multiple
+                value={selectedSigners.map((s) => s.id)}
                 onChange={(e) => {
-                  const signer = hrExecutives.find((exec) => exec.id === e.target.value)
-                  if (signer) setSelectedSigner(signer)
+                  const selectedIds = Array.from(e.target.selectedOptions, (option) => option.value)
+                  const signers = hrExecutives.filter((exec) => selectedIds.includes(exec.id))
+                  setSelectedSigners(signers)
+                  // Also set first signer as selectedSigner for backward compatibility
+                  if (signers.length > 0) {
+                    setSelectedSigner(signers[0])
+                  }
                 }}
                 disabled={loadingHrExecutives || hrExecutives.length === 0}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
+                size={Math.min(hrExecutives.length, 5)}
               >
-                <option value="">
-                  {loadingHrExecutives ? "Loading..." : "Select HR Executive"}
-                </option>
                 {hrExecutives.map((exec) => (
                   <option key={exec.id} value={exec.id}>
                     {exec.full_name} ({exec.position})
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple signers</p>
             </div>
           </div>
 
@@ -1707,16 +1734,20 @@ We count on your co-operation.`,
           
           <div className="flex gap-4">
             <div className="flex-1">
-              {selectedSigner && (
+              {selectedSigners && selectedSigners.length > 0 && (
                 <div className="text-sm text-gray-600">
-                  <div className="font-medium text-gray-900">{selectedSigner.full_name}</div>
-                  <div className="text-xs text-gray-600">{selectedSigner.position}</div>
+                  <div className="font-medium text-gray-900">Signers Selected: {selectedSigners.length}</div>
+                  {selectedSigners.map((signer) => (
+                    <div key={signer.id} className="text-xs text-gray-600">
+                      • {signer.full_name} ({signer.position})
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
             <Button 
               onClick={handleDetectStaff} 
-              disabled={isLoading || !selectedSigner} 
+              disabled={isLoading || selectedSigners.length === 0} 
               className="gap-2 bg-green-600 hover:bg-green-700"
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}

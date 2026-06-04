@@ -617,7 +617,7 @@ export function validateAttendanceLocation(
 } {
   const deviceInfo = detectDevice()
   // Use database-configured device radius if provided, otherwise use defaults
-  // Default: mobile/tablet 400m, laptop 700m, desktop 2000m
+  // Default: mobile 100m, tablet 150m, laptop 200m, desktop 2000m
   let deviceProximityBase = deviceRadiusCheckIn
   if (!deviceProximityBase) {
     if (deviceInfo.isMobile || deviceInfo.isTablet) {
@@ -752,7 +752,7 @@ export function validateCheckoutLocation(
 } {
   const deviceInfo = detectDevice()
   // Use database-configured device radius if provided, otherwise use defaults
-  // Default: mobile/tablet 400m, laptop 700m, desktop 1000m
+  // Default: mobile 100m, tablet 150m, laptop 200m, desktop 1500m
   let deviceProximityBase = deviceRadiusCheckOut
   if (!deviceProximityBase) {
     if (deviceInfo.isMobile || deviceInfo.isTablet) {
