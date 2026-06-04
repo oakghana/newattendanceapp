@@ -216,9 +216,20 @@ export async function POST(request: NextRequest) {
 
     // Filter out any null entries and validate required fields
     const validatedStaff = formatted.filter((staff: any) => {
-      return staff !== null && 
+      const isValid = staff !== null && 
              staff.leave_plan_request_id && 
              staff.user_id
+      
+      if (!isValid) {
+        console.log("[v0] Record failed validation:", {
+          isNull: staff === null,
+          hasId: !!staff?.leave_plan_request_id,
+          hasUserId: !!staff?.user_id,
+          staff: staff,
+        })
+      }
+      
+      return isValid
     })
 
     // Check if all staff records are valid
