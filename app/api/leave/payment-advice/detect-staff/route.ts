@@ -134,6 +134,16 @@ export async function POST(request: NextRequest) {
       const profile = profileMap.get(record.user_id)
       const staffCategory = deriveStaffCategory(record, profile)
       
+      // CRITICAL: Ensure we always have these required fields
+      const recordId = record.id
+      const userId = record.user_id
+      
+      // Validate that both required fields are present
+      if (!recordId || !userId) {
+        console.error("[v0] CRITICAL: Missing required field - record.id:", recordId, "user_id:", userId)
+        return null // This will be filtered out later
+      }
+      
       // Construct full name from first_name and last_name
       const fullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "Unknown"
       
@@ -149,12 +159,14 @@ export async function POST(request: NextRequest) {
         position,
         departmentName,
         departmentId: profile?.department_id,
+        leave_plan_request_id: recordId,
+        user_id: userId,
       })
 
       return {
-        // Required fields for payment memo creation
-        leave_plan_request_id: record.id,
-        user_id: record.user_id,
+        // REQUIRED fields for payment memo creation - MUST ALWAYS BE PRESENT
+        leave_plan_request_id: recordId,
+        user_id: userId,
         // Staff details
         full_name: fullName,
         staff_number: profile?.employee_id || "N/A",
