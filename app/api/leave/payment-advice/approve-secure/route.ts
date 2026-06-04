@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
         // Update memo with new status, signature, and updated memo_body
         // Use 'signed_by_hr_executive' to clearly indicate the memo has been signed and approved
         // This prevents the memo from appearing in the pending queue again
-        await admin
+        const { error: updateError } = await admin
           .from("leave_payment_memos")
           .update({
             status: "signed_by_hr_executive",
@@ -245,7 +245,23 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq("id", memo.id)
-        
+
+        // CRITICAL: Surface update failures instead of silently swallowing them.
+        // Previously this error was ignored, so a failed update left memos stuck in "pending".
+        if (updateError) {
+          console.error("[v0] Failed to update memo during approval:", {
+            memoId: memo.id,
+            error: updateError.message,
+          })
+          return NextResponse.json(
+            {
+              error: "Failed to approve memo",
+              details: `Could not update memo ${memo.id}: ${updateError.message}`,
+            },
+            { status: 500 },
+          )
+        }
+
         // Track the leave_plan_request_id so we can update it too
         if (memo.leave_plan_request_id) {
           leaveRequestIds.push(memo.leave_plan_request_id)
