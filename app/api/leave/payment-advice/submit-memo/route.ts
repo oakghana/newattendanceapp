@@ -210,26 +210,47 @@ export async function POST(request: NextRequest) {
     }
 
     if (memoRecords.length === 0) {
-      console.error("[v0] No valid memo records to insert:", { 
+      // CASE 1: All staff were skipped because they already have memos for this month.
+      // This is NOT a real error - the memos already exist and are pending/approved.
+      if (skippedDuplicates.length > 0 && errors.length === 0) {
+        console.log("[v0] All staff already have memos for this month:", skippedDuplicates)
+        return NextResponse.json(
+          {
+            error: "Payment memos already exist",
+            details: `All ${skippedDuplicates.length} selected staff member(s) already have payment memos for ${month}. ${skippedDuplicates.join("; ")}. You can review them in the existing memos list.`,
+            alreadyExists: true,
+            skippedDuplicates,
+            staffCount: staffList.length,
+          },
+          { status: 409 }, // 409 Conflict - resource already exists
+        )
+      }
+
+      // CASE 2: Genuine validation errors (missing fields, no signer, etc.)
+      console.error("[v0] No valid memo records to insert:", {
         totalStaffCount: staffList.length,
         errorCount: errors.length,
         errors,
-        staffSampleData: staffList.slice(0, 2).map(s => ({
+        skippedDuplicates,
+        staffSampleData: staffList.slice(0, 2).map((s) => ({
           name: s.full_name,
           has_leave_plan_request_id: !!s.leave_plan_request_id,
           has_user_id: !!s.user_id,
           leave_plan_request_id: s.leave_plan_request_id,
-          user_id: s.user_id
-        }))
+          user_id: s.user_id,
+        })),
       })
       return NextResponse.json(
-        { 
-          error: "No valid staff records", 
-          details: errors.length > 0 ? errors.join("; ") : "All staff records are missing required fields (leave_plan_request_id or user_id)",
+        {
+          error: "No valid staff records",
+          details:
+            errors.length > 0
+              ? errors.join("; ")
+              : "All staff records are missing required fields (leave_plan_request_id or user_id)",
           staffValidationErrors: errors,
-          staffCount: staffList.length
+          staffCount: staffList.length,
         },
-        { status: 400 }
+        { status: 400 },
       )
     }
 

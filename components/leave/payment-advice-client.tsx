@@ -543,14 +543,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         userRole: userRole,
         isHrLeaveOffice: isHrLeaveOffice,
       })
-      
-      // DEBUG: Check first staff member
-      if (staffList && staffList.length > 0) {
-        console.log("[v0] DEBUG: First staff in staffList:", JSON.stringify(staffList[0], null, 2))
-        console.log("[v0] DEBUG: staffList[0] keys:", Object.keys(staffList[0]))
-        console.log("[v0] DEBUG: leave_plan_request_id present?", 'leave_plan_request_id' in staffList[0])
-        console.log("[v0] DEBUG: leave_plan_request_id value:", staffList[0].leave_plan_request_id)
-      }
 
       // Create a clean payload with only serializable data
       const cleanPayload = {
@@ -601,15 +593,37 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }))
         console.error("[v0] API error details:", errorData)
+
+        // Handle the "already exists" case (409) as an informational message, not a hard error
+        if (response.status === 409 || errorData.alreadyExists) {
+          toast({
+            title: "Memos Already Submitted",
+            description:
+              errorData.details ||
+              `Payment memos for these staff already exist for ${selectedMonth}. They have already been sent to signers for review.`,
+          })
+          // Clear the form since the work is effectively done
+          setMemos({})
+          setStaffList([])
+          setMemoSummary(null)
+          setSelectedSigners([])
+          return
+        }
+
         throw new Error(errorData.details || errorData.error || "Failed to submit memos")
       }
 
       const result = await response.json()
       console.log("[v0] Memo submitted successfully:", result)
 
+      // If some staff were skipped as duplicates but others succeeded, mention it
+      const skipped = Array.isArray(result.skippedDuplicates) ? result.skippedDuplicates.length : 0
       toast({
         title: "Success",
-        description: `Payment advice memos have been saved and assigned to ${signersToUse.length} signer(s) successfully.`,
+        description:
+          skipped > 0
+            ? `${result.memoCount} memo(s) saved and assigned to ${signersToUse.length} signer(s). ${skipped} staff already had memos and were skipped.`
+            : `Payment advice memos have been saved and assigned to ${signersToUse.length} signer(s) successfully.`,
       })
 
       setMemos({})
