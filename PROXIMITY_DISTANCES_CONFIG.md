@@ -15,13 +15,13 @@ The app uses device-specific radius settings to accommodate different levels of 
 |-------------|-----------------|------------------|-------------|
 | **Mobile** | 100 meters | 100 meters | Mobile phones and smartphones - Most accurate GPS |
 | **Tablet** | 150 meters | 150 meters | Tablets and iPads - Good accuracy |
-| **Laptop** | 400 meters | 400 meters | Laptop computers (Windows and Mac) - Moderate accuracy |
+| **Laptop** | 200 meters | 200 meters | Laptop computers (Windows and Mac) - Moderate accuracy |
 | **Desktop** | 2,000 meters | 1,500 meters | Desktop computers and workstations - Lower accuracy (WiFi-based location) |
 
 ### Key Notes on Device Distances:
 - **Mobile devices** have the strictest proximity requirement (100m) due to accurate built-in GPS
 - **Tablets** allow slightly more tolerance (150m) as GPS can vary slightly
-- **Laptops** have a larger radius (400m) as they rely on WiFi-based location services
+- **Laptops** have a moderate radius (200m) as they rely on WiFi-based location services
 - **Desktops** have the largest radius (2,000m for check-in, 1,500m for check-out) as they depend entirely on WiFi triangulation
 - Check-out radius for desktop is slightly smaller (1,500m) to encourage staff to be closer when leaving
 
@@ -69,7 +69,7 @@ The app includes 100+ active QCC locations across Ghana with the following sampl
 3. **Device-specific radius is determined:**
    - Mobile: 100m
    - Tablet: 150m
-   - Laptop: 400m
+   - Laptop: 200m
    - Desktop: 2,000m
 4. **Distance to all QCC locations is calculated** using Haversine formula
 5. **Nearest location is identified**
@@ -106,11 +106,11 @@ Where:
 - Result: ❌ **BLOCKED** (2,150m > 2,000m + 500m buffer = 2,500m max, but exceeds actual check)
 - Error: "You are outside the allowed proximity for this location"
 
-### Scenario 3: Staff Member Using Laptop (400m radius) - The Bug That Was Fixed
+### Scenario 3: Staff Member Using Laptop (200m radius) - The Bug That Was Fixed
 - Device Type: Laptop
-- Distance to Nearest QCC Location: 450 meters
+- Distance to Nearest QCC Location: 250 meters
 - Old Behavior: ✅ ALLOWED (bug - no validation on fast check-in)
-- New Behavior: ❌ **BLOCKED** (450m > 400m device radius)
+- New Behavior: ❌ **BLOCKED** (250m > 200m device radius)
 - Screenshot from your report showed this exact scenario
 
 ### Scenario 4: Mobile Device at Edge of Range

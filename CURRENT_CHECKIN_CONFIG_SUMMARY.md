@@ -8,7 +8,7 @@
 |-------------|-----------------|------------------|-------|
 | **Mobile Phone** | 100 meters | 100 meters | Most accurate GPS |
 | **Tablet** | 150 meters | 150 meters | Good accuracy |
-| **Laptop** | 400 meters | 400 meters | WiFi-based location service |
+| **Laptop** | 200 meters | 200 meters | WiFi-based location service |
 | **Desktop** | 2,000 meters | 1,500 meters | IP-based location (WiFi triangulation) |
 
 ### Additional Configuration:
