@@ -67,18 +67,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[v0] Staff query results:", {
-      staffOnLeaveCount: (staffOnLeave || []).length,
-      staffOnLeaveSample: (staffOnLeave || []).slice(0, 2),
-      queryParams: {
-        month,
-        monthStart,
-        monthEnd,
-        leaveTypeKey: "annual",
-        statuses: ["approved", "hr_approved", "hod_approved"],
-      },
-    })
-
     // Get user IDs and fetch user profiles separately with department names
     const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
     
@@ -122,7 +110,6 @@ export async function POST(request: NextRequest) {
 
     // If no staff found at all, return early with helpful message
     if (!staffOnLeave || staffOnLeave.length === 0) {
-      console.log("[v0] No staff on annual leave found for month:", month)
       return NextResponse.json({
         success: true,
         staff: [],
@@ -161,30 +148,14 @@ export async function POST(request: NextRequest) {
       const recordId = record.id
       const userId = record.user_id
       
-      // Validate that both required fields are present
-      if (!recordId || !userId) {
-        console.error("[v0] CRITICAL: Missing required field - record.id:", recordId, "user_id:", userId)
-        return null // This will be filtered out later
-      }
-      
       // Construct full name from first_name and last_name
       const fullName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() : "Unknown"
       
-      // Get department name from the map - ENSURE THIS IS POPULATED
+      // Get department name from the map
       const departmentName = profile?.department_id ? (departmentMap.get(profile.department_id) || "N/A") : (profile?.department_name || "N/A")
       
-      // Get position from profile - ENSURE THIS IS POPULATED
+      // Get position from profile
       const position = profile?.position || "N/A"
-
-      console.log("[v0] Staff record mapping:", {
-        fullName,
-        staffNumber: profile?.employee_id,
-        position,
-        departmentName,
-        departmentId: profile?.department_id,
-        leave_plan_request_id: recordId,
-        user_id: userId,
-      })
 
       return {
         // REQUIRED fields for payment memo creation - MUST ALWAYS BE PRESENT
@@ -216,45 +187,16 @@ export async function POST(request: NextRequest) {
 
     // Filter out any null entries and validate required fields
     const validatedStaff = formatted.filter((staff: any) => {
-      const isValid = staff !== null && 
+      return staff !== null && 
              staff.leave_plan_request_id && 
              staff.user_id
-      
-      if (!isValid) {
-        console.log("[v0] Record failed validation:", {
-          isNull: staff === null,
-          hasId: !!staff?.leave_plan_request_id,
-          hasUserId: !!staff?.user_id,
-          staff: staff,
-        })
-      }
-      
-      return isValid
     })
 
     // Check if all staff records are valid
     if (formatted.length > 0 && validatedStaff.length === 0) {
-      const sampleRecord = formatted[0]
-      console.error("[v0] VALIDATION ERROR: All staff records are missing required fields!")
-      console.error("[v0] Total formatted records:", formatted.length)
-      console.error("[v0] Valid records after filter:", validatedStaff.length)
-      console.error("[v0] Sample formatted record:", {
-        ...sampleRecord,
-        has_leave_plan_request_id: !!sampleRecord?.leave_plan_request_id,
-        has_user_id: !!sampleRecord?.user_id,
-        keys: Object.keys(sampleRecord || {}),
-      })
-      console.error("[v0] Full sample for debugging:", JSON.stringify(sampleRecord, null, 2))
-      
       return NextResponse.json({
         error: "All staff records are missing required fields (leave_plan_request_id or user_id)",
         details: "Staff detection failed to populate required fields",
-        debugInfo: {
-          totalFormatted: formatted.length,
-          validAfterFilter: validatedStaff.length,
-          sampleKeys: Object.keys(formatted[0] || {}),
-          sampleData: formatted[0],
-        },
         staff: [],
         count: 0
       }, { status: 400 })
