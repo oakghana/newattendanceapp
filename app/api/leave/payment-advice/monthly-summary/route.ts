@@ -66,10 +66,23 @@ export async function GET(request: NextRequest) {
     const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
 
     // Only HR Leave Office, HR Executive, Accounts, and Admins can access this
-    const allowedRoles = ["hr_leave_office", "hr_executive", "accounts"]
-    if (!allowedRoles.includes(userRole) && !userIsAdmin) {
+    const allowedRoles = ["hr_leave_office", "hr_executive", "accounts", "manager", "manager_hr", "director_hr", "director", "admin", "administrator"]
+    const hasAccess = allowedRoles.includes(userRole) || userIsAdmin
+    
+    console.log("[v0] Monthly summary access check:", {
+      userId: user.id,
+      userRole,
+      rawRole: userProfile?.role,
+      hasAccess,
+      userIsAdmin,
+    })
+    
+    if (!hasAccess) {
       return NextResponse.json(
-        { error: "Forbidden - HR Leave Office, HR Executive, or Accounts role required" },
+        { 
+          error: "Forbidden - HR Leave Office, HR Executive, or Accounts role required",
+          details: `Your role (${userProfile?.role}) does not have access to this view. Allowed roles: ${allowedRoles.join(", ")}`,
+        },
         { status: 403 }
       )
     }
