@@ -156,23 +156,43 @@ export async function POST(request: NextRequest) {
     }
 
     if (!signatureUrl) {
-      console.warn("[v0] No signature found for user:", {
-        userId: user.id,
+      console.warn("[v0] APPROVAL BLOCKED - No signature found for user:", {
+        userId: selectedSigner.id,
         userName: signerName,
+        userEmail: signerProfile.email,
       })
+      // Return error response - approval cannot proceed without signature
       return NextResponse.json(
         { 
           error: "Signature required",
-          details: "You must save your signature in the system before you can approve payment memos. Please visit Settings > My Profile to upload your signature.",
+          details: "You must save your signature in the system before you can approve payment memos. Please visit Settings > My Profile to add your digital signature.",
           requiresSignatureSave: true,
+          missingSignatureFor: selectedSigner.id,
         },
         { status: 400 }
       )
     }
     
-    console.log("[v0] Signature validation passed for user:", user.id, "- signature found")
+    // Signature validation passed - proceed with approval
+    console.log("[v0] Signature validation PASSED for signer:", {
+      userId: selectedSigner.id,
+      userName: signerName,
+      signatureLength: signatureUrl?.length || 0,
+    })
 
     // Update memos with approval and store approver info in memo_body
+    
+    // Verify selectedSigner is set
+    if (!selectedSigner || !selectedSigner.id) {
+      console.error("[v0] CRITICAL: selectedSigner is missing or invalid", {
+        selectedSigner,
+        hasId: !!selectedSigner?.id,
+      })
+      return NextResponse.json(
+        { error: "Invalid signer selection" },
+        { status: 400 }
+      )
+    }
     
     // Fetch all memos to update their memo_body with approver info, ALSO get the leave_plan_request_id
     const { data: memosToUpdate } = await admin
