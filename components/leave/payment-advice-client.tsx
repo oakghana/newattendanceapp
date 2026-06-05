@@ -1728,33 +1728,51 @@ We count on your co-operation.`,
               />
             </div>
             <div>
-              <Label htmlFor="signer-select" className="mb-2 block font-medium">
-                HR Executive(s) - Signers
+              <Label htmlFor="signer-select" className="mb-3 block font-medium">
+                Select Signers (Click to Toggle)
               </Label>
-              <select
-                id="signer-select"
-                multiple
-                value={selectedSigners.map((s) => s.id)}
-                onChange={(e) => {
-                  const selectedIds = Array.from(e.target.selectedOptions, (option) => option.value)
-                  const signers = hrExecutives.filter((exec) => selectedIds.includes(exec.id))
-                  setSelectedSigners(signers)
-                  // Also set first signer as selectedSigner for backward compatibility
-                  if (signers.length > 0) {
-                    setSelectedSigner(signers[0])
-                  }
-                }}
-                disabled={loadingHrExecutives || hrExecutives.length === 0}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
-                size={Math.min(hrExecutives.length, 5)}
-              >
-                {hrExecutives.map((exec) => (
-                  <option key={exec.id} value={exec.id}>
-                    {exec.full_name} ({exec.position})
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple signers</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {hrExecutives.map((exec) => {
+                  const isSelected = selectedSigners.some((s) => s.id === exec.id)
+                  return (
+                    <button
+                      key={exec.id}
+                      onClick={() => {
+                        if (isSelected) {
+                          // Remove signer
+                          const updated = selectedSigners.filter((s) => s.id !== exec.id)
+                          setSelectedSigners(updated)
+                          if (updated.length > 0) {
+                            setSelectedSigner(updated[0])
+                          } else {
+                            setSelectedSigner(null)
+                          }
+                        } else {
+                          // Add signer
+                          const updated = [...selectedSigners, exec]
+                          setSelectedSigners(updated)
+                          setSelectedSigner(exec) // Set as primary signer when added
+                        }
+                      }}
+                      disabled={loadingHrExecutives}
+                      className={`px-4 py-3 rounded-lg border-2 font-medium transition-all ${
+                        isSelected
+                          ? "border-blue-500 bg-blue-50 text-blue-900 ring-2 ring-blue-200"
+                          : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-left">
+                          <div className="text-sm font-semibold">{exec.full_name}</div>
+                          <div className="text-xs text-gray-600">{exec.position}</div>
+                        </div>
+                        {isSelected && <CheckCircle className="h-5 w-5 flex-shrink-0 text-blue-500" />}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">Click buttons to select or deselect signers</p>
             </div>
           </div>
 
@@ -1797,13 +1815,25 @@ We count on your co-operation.`,
           <div className="flex gap-4">
             <div className="flex-1">
               {selectedSigners && selectedSigners.length > 0 && (
-                <div className="text-sm text-gray-600">
-                  <div className="font-medium text-gray-900">Signers Selected: {selectedSigners.length}</div>
-                  {selectedSigners.map((signer) => (
-                    <div key={signer.id} className="text-xs text-gray-600">
-                      • {signer.full_name} ({signer.position})
-                    </div>
-                  ))}
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="font-semibold text-blue-900 mb-2">📋 Selected Signers: {selectedSigners.length}</div>
+                  <div className="space-y-2">
+                    {selectedSigners.map((signer, idx) => (
+                      <div key={signer.id} className="text-sm text-blue-800 flex items-start gap-2">
+                        <span className="font-medium">{idx === 0 ? "🔵" : "⚪"}</span>
+                        <div>
+                          <span className="font-medium">{signer.full_name}</span>
+                          <span className="text-xs text-blue-600 ml-1">({signer.position})</span>
+                          {idx === 0 && <span className="text-xs text-blue-600 ml-2">[PRIMARY]</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(!selectedSigners || selectedSigners.length === 0) && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <p className="text-sm text-amber-800">⚠️ No signers selected yet. Click signer buttons above to select.</p>
                 </div>
               )}
             </div>
