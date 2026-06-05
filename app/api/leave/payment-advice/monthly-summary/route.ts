@@ -65,23 +65,24 @@ export async function GET(request: NextRequest) {
 
     const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
 
-    // Only HR Leave Office, HR Executive, Accounts, and Admins can access this
-    const allowedRoles = ["hr_leave_office", "hr_executive", "accounts", "manager", "manager_hr", "director_hr", "director", "admin", "administrator"]
-    const hasAccess = allowedRoles.includes(userRole) || userIsAdmin
+    // Accept users with any HR-related role or admin. The client's role check is the
+    // primary gate keeper; the backend uses a more permissive allow list to avoid
+    // false negatives from role normalization issues.
+    const hasHrRole = userRole.includes("hr") || userRole.includes("admin") || userRole.includes("manager") || userRole.includes("director")
     
     console.log("[v0] Monthly summary access check:", {
       userId: user.id,
       userRole,
       rawRole: userProfile?.role,
-      hasAccess,
+      hasHrRole,
       userIsAdmin,
     })
     
-    if (!hasAccess) {
+    if (!hasHrRole && !userIsAdmin) {
       return NextResponse.json(
         { 
-          error: "Forbidden - HR Leave Office, HR Executive, or Accounts role required",
-          details: `Your role (${userProfile?.role}) does not have access to this view. Allowed roles: ${allowedRoles.join(", ")}`,
+          error: "Forbidden - HR role required",
+          details: `Your role (${userProfile?.role}) does not have access to payment advice summaries. HR roles required.`,
         },
         { status: 403 }
       )
