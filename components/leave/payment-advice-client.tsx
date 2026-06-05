@@ -1190,53 +1190,28 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                                 onClick={async () => {
                                   try {
-                                    // Verify signer is selected
-                                    if (!selectedSigner) {
-                                      toast({
-                                        title: "Error",
-                                        description: "Please select an HR Executive signer before approving memos.",
-                                        variant: "destructive",
-                                      })
-                                      return
+                                    // The signer is ALWAYS the logged-in HR Executive (current user).
+                                    // Verify the current user has a saved signature before approving.
+                                    if (currentUser?.id) {
+                                      const hasSignature = await checkSignerSignature(currentUser.id)
+                                      if (!hasSignature) {
+                                        // Save the memo IDs so we can retry after signature is saved
+                                        const ids = memos.map((m: any) => m.id)
+                                        setPendingApprovalMemoIds(ids)
+                                        // Show signature dialog for HR Executive to add their signature
+                                        setShowSignatureRequiredDialog(true)
+                                        return
+                                      }
                                     }
 
-                                    // HR Executive must have a signature before approving
-                                    const hasSignature = await checkSignerSignature(selectedSigner.id)
-                                    if (!hasSignature) {
-                                      // Save the memo IDs so we can retry after signature is saved
-                                      const ids = memos.map((m: any) => m.id)
-                                      setPendingApprovalMemoIds(ids)
-                                      // Show signature dialog for HR Executive to add their signature
-                                      setShowSignatureRequiredDialog(true)
-                                      return
-                                    }
-
-                                    // Approve all memos in this group using secure endpoint
+                                    // Approve all memos in this group using secure endpoint.
+                                    // The server signs as the authenticated user, so no signer is sent.
                                     const memoIds = memos.map((m) => m.id)
-                                    
-                                    // Use the primary signer from the new selectedSigners array (not the old selectedSigner)
-                                    const primarySigner = selectedSigners && selectedSigners.length > 0 ? selectedSigners[0] : selectedSigner
-                                    
-                                    if (!primarySigner) {
-                                      toast({
-                                        title: "Error",
-                                        description: "No signer selected. Please select a signer using the buttons above.",
-                                        variant: "destructive",
-                                      })
-                                      return
-                                    }
                                     
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ 
-                                        memoIds,
-                                        selectedSigner: {
-                                          id: primarySigner.id,
-                                          name: primarySigner.full_name || primarySigner.name,
-                                          position: primarySigner.position,
-                                        },
-                                      }),
+                                      body: JSON.stringify({ memoIds }),
                                     })
 
                                     const result = await response.json()

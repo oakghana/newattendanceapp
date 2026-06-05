@@ -323,9 +323,7 @@ export async function GET(request: NextRequest) {
     })
 
     // === ADD SECRET FOOTER ===
-    const pageHeight = doc.internal.pageSize.getHeight()
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const footerY = pageHeight - 5
+    const footerY = doc.internal.pageSize.getHeight() - 5
     
     doc.setFontSize(6)
     doc.setTextColor(180, 180, 180) // Light gray

@@ -12,11 +12,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { deferment_id, decision, decision_note, selected_signer_id } = body
+    const { deferment_id, decision, decision_note } = body
 
     if (!deferment_id || !decision) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
+
+    // CRITICAL FIX: The signer is ALWAYS the authenticated user (the logged-in HR executive
+    // who is approving). This prevents storing a stale/default signer.
+    const selected_signer_id = user.id
 
     // Get deferment request details
     const { data: deferment, error: deferErr } = await admin
@@ -50,23 +54,28 @@ export async function POST(request: NextRequest) {
     if (selected_signer_id) {
       const { data: signer } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, position")
+        .select("id, first_name, last_name, position, signature_data_url")
         .eq("id", selected_signer_id)
         .single()
 
       if (signer) {
         signerData = signer
         
-        // Get signer's signature from approval_signature_registry
-        const { data: sig } = await admin
-          .from("approval_signature_registry")
-          .select("signature_data_url")
-          .eq("user_id", selected_signer_id)
-          .eq("is_active", true)
-          .limit(1)
-          .single()
+        // Priority 1: signature stored on the user profile
+        signerSignatureUrl = signer.signature_data_url || ""
 
-        signerSignatureUrl = sig?.signature_data_url || ""
+        // Priority 2: fall back to approval_signature_registry
+        if (!signerSignatureUrl) {
+          const { data: sig } = await admin
+            .from("approval_signature_registry")
+            .select("signature_data_url")
+            .eq("user_id", selected_signer_id)
+            .eq("is_active", true)
+            .limit(1)
+            .single()
+
+          signerSignatureUrl = sig?.signature_data_url || ""
+        }
       }
     }
 

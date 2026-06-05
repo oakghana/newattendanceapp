@@ -405,6 +405,13 @@ Yours faithfully,
     const footerText = `This is an electronically generated document. Reference: ${memoType}_${String(memoId).slice(0, 8)}`
     doc.text(footerText, marginLeft, pageHeight - 10)
 
+    // Secret feature: "Powered by ITD" footer (size 6, light gray)
+    doc.setFontSize(6)
+    doc.setFont(undefined, "normal")
+    doc.setTextColor(180, 180, 180)
+    doc.text("Powered by ITD", pageWidth - 40, pageHeight - 5, { align: "right" })
+    doc.setTextColor(0, 0, 0)
+
     // Generate PDF and return
     const pdf = doc.output("arraybuffer")
     const filename = `${memoType}-memo-${String(memoId).slice(0, 8)}.pdf`
