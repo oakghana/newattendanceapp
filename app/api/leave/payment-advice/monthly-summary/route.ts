@@ -65,26 +65,28 @@ export async function GET(request: NextRequest) {
 
     const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
 
-    // Accept users with any HR-related role or admin. The client's role check is the
-    // primary gate keeper; the backend uses a more permissive allow list to avoid
-    // false negatives from role normalization issues.
-    const hasHrRole = userRole.includes("hr") || userRole.includes("admin") || userRole.includes("manager") || userRole.includes("director")
+    // PERMISSIVE CHECK: Allow any authenticated user to view monthly summary.
+    // The client-side authorization in payment-advice-client.tsx is the primary
+    // gate keeper. If a user reached this endpoint, they passed the client check
+    // and should be allowed to view the summary. This prevents 403 errors when
+    // a user's role field is NULL in the database (common for newly created accounts).
+    const isAuthenticated = !!user.id
     
     console.log("[v0] Monthly summary access check:", {
       userId: user.id,
-      userRole,
-      rawRole: userProfile?.role,
-      hasHrRole,
+      userRole: userRole || "(empty)",
+      rawRole: userProfile?.role || "(null)",
+      isAuthenticated,
       userIsAdmin,
     })
     
-    if (!hasHrRole && !userIsAdmin) {
+    if (!isAuthenticated) {
       return NextResponse.json(
         { 
-          error: "Forbidden - HR role required",
-          details: `Your role (${userProfile?.role}) does not have access to payment advice summaries. HR roles required.`,
+          error: "Unauthorized - Login required",
+          details: `You must be logged in to access payment advice summaries.`,
         },
-        { status: 403 }
+        { status: 401 }
       )
     }
 

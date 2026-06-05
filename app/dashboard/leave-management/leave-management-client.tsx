@@ -147,9 +147,9 @@ export function LeaveManagementClient({
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
   const [selectedTab, setSelectedTab] = useState("my-requests")
-  // Sub-tabs for the Deferment and Recall sections: "tracking" | "approvals"
-  const [defermentSubTab, setDefermentSubTab] = useState<"tracking" | "approvals">("tracking")
-  const [recallSubTab, setRecallSubTab] = useState<"tracking" | "approvals">("tracking")
+  // Sub-tabs for the Deferment and Recall sections: "tracking" | "approvals" | "submit"
+  const [defermentSubTab, setDefermentSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
+  const [recallSubTab, setRecallSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
   const [defermentRequests, setDefermentRequests] = useState<any[]>([])
   const [recallRequests, setRecallRequests] = useState<any[]>([])
   const [myDefermentRequests, setMyDefermentRequests] = useState<any[]>([])
@@ -2159,6 +2159,17 @@ export function LeaveManagementClient({
                     Deferment &amp; Recall Approvals
                   </button>
                 )}
+                <button
+                  onClick={() => setDefermentSubTab("submit")}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    defermentSubTab === "submit"
+                      ? "bg-white text-amber-700 shadow-sm"
+                      : "text-amber-700/70 hover:text-amber-800"
+                  }`}
+                >
+                  <Plus className="h-4 w-4" />
+                  Submit New Request
+                </button>
               </div>
 
               {/* Approvals Sub-Tab */}
@@ -2192,7 +2203,12 @@ export function LeaveManagementClient({
                   />
                 </CardContent>
               </Card>
+              </div>
+              )}
 
+              {/* Submit New Deferment Request Sub-Tab */}
+              {defermentSubTab === "submit" && (
+              <div className="space-y-6">
               {/* Deferment Form */}
               <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
                 <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
@@ -2411,6 +2427,17 @@ export function LeaveManagementClient({
                     Deferment &amp; Recall Approvals
                   </button>
                 )}
+                <button
+                  onClick={() => setRecallSubTab("submit")}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    recallSubTab === "submit"
+                      ? "bg-white text-rose-700 shadow-sm"
+                      : "text-rose-700/70 hover:text-rose-800"
+                  }`}
+                >
+                  <Plus className="h-4 w-4" />
+                  Submit New Request
+                </button>
               </div>
 
               {/* Approvals Sub-Tab */}
@@ -2444,7 +2471,12 @@ export function LeaveManagementClient({
                   />
                 </CardContent>
               </Card>
+              </div>
+              )}
 
+              {/* Submit New Recall Request Sub-Tab */}
+              {recallSubTab === "submit" && (
+              <div className="space-y-6">
               {/* Recall Form */}
               <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
                 <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
