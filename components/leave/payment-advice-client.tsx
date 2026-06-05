@@ -132,7 +132,10 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Helper: Retry approval after signature has been saved
   const retryPendingApproval = async (memoIds: string[]) => {
-    if (!selectedSigner || memoIds.length === 0) return
+    // Use the primary signer from the new selectedSigners array
+    const primarySigner = selectedSigners && selectedSigners.length > 0 ? selectedSigners[0] : selectedSigner
+    
+    if (!primarySigner || memoIds.length === 0) return
     try {
       const response = await fetch("/api/leave/payment-advice/approve-secure", {
         method: "POST",
@@ -140,9 +143,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         body: JSON.stringify({
           memoIds,
           selectedSigner: {
-            id: selectedSigner.id,
-            name: selectedSigner.full_name || selectedSigner.name,
-            position: selectedSigner.position,
+            id: primarySigner.id,
+            name: primarySigner.full_name || primarySigner.name,
+            position: primarySigner.position,
           },
         }),
       })
@@ -1210,15 +1213,28 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
                                     // Approve all memos in this group using secure endpoint
                                     const memoIds = memos.map((m) => m.id)
+                                    
+                                    // Use the primary signer from the new selectedSigners array (not the old selectedSigner)
+                                    const primarySigner = selectedSigners && selectedSigners.length > 0 ? selectedSigners[0] : selectedSigner
+                                    
+                                    if (!primarySigner) {
+                                      toast({
+                                        title: "Error",
+                                        description: "No signer selected. Please select a signer using the buttons above.",
+                                        variant: "destructive",
+                                      })
+                                      return
+                                    }
+                                    
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({ 
                                         memoIds,
                                         selectedSigner: {
-                                          id: selectedSigner.id,
-                                          name: selectedSigner.full_name || selectedSigner.name,
-                                          position: selectedSigner.position,
+                                          id: primarySigner.id,
+                                          name: primarySigner.full_name || primarySigner.name,
+                                          position: primarySigner.position,
                                         },
                                       }),
                                     })
