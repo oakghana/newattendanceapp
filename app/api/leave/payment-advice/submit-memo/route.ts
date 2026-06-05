@@ -175,6 +175,19 @@ export async function POST(request: NextRequest) {
         continue
       }
 
+      // Build the assigned_signers array - CRITICAL for approver visibility
+      const assignedSigners = Array.isArray(requestBody.selectedSigners) && requestBody.selectedSigners.length > 0
+        ? requestBody.selectedSigners.map((s: any) => s.id || s).filter(Boolean)
+        : (selectedSigner.id ? [selectedSigner.id] : [])
+
+      console.log("[v0] Memo signer assignment:", {
+        memo_staff: staff.full_name,
+        selectedSigner_id: selectedSigner.id,
+        requestBody_selectedSigners: requestBody.selectedSigners?.map((s: any) => s.id),
+        computed_assignedSigners: assignedSigners,
+        isArray: Array.isArray(assignedSigners),
+      })
+
       // Only insert if we have required fields
       if (staff.leave_plan_request_id && staff.user_id) {
         memoRecords.push({
@@ -189,15 +202,10 @@ export async function POST(request: NextRequest) {
           leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
           leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
           approved_days: staff.approved_days || staff.requested_days || 0,
-          // Status for HR Executive approval (valid statuses: draft, ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts)
           status: "ready_for_review",
-          // IMPORTANT: Assign ALL HR executives to sign - not just the selected one
-          // This allows multiple signers to work on the same memo
-          assigned_signers: Array.isArray(requestBody.selectedSigners) && requestBody.selectedSigners.length > 0
-            ? requestBody.selectedSigners.map((s: any) => s.id || s)
-            : (selectedSigner.id ? [selectedSigner.id] : []),
+          // CRITICAL: Store the list of HR executives who can approve this memo
+          assigned_signers: assignedSigners,
         })
-      } else {
         console.log("[v0] Staff validation failed:", {
           name: staff.full_name,
           has_leave_plan_request_id: !!staff.leave_plan_request_id,
@@ -258,7 +266,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from("leave_payment_memos")
       .insert(memoRecords)
-      .select("id")
+      .select("id, assigned_signers, staff_name, status")
 
     if (error) {
       console.error("[v0] Error saving memos:", error)
@@ -268,7 +276,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[v0] Memos saved successfully:", data?.length || 0, "records")
+    console.log("[v0] Memos saved successfully:", {
+      recordCount: data?.length || 0,
+      samples: data?.slice(0, 3).map(m => ({
+        id: m.id,
+        staff: m.staff_name,
+        assigned_signers: m.assigned_signers,
+        status: m.status,
+      }))
+    })
     return NextResponse.json({ 
       success: true, 
       memoCount: data?.length || 0,
