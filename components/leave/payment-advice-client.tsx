@@ -218,25 +218,18 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
             id: exec.id,
             full_name: exec.name || exec.full_name || "Unknown",
             position: exec.position || "HR EXECUTIVE",
+            role: exec.role || "hr_executive",
             email: exec.email,
           }))
           setHrExecutives(execs)
           console.log("[v0] HR Executives loaded:", execs.length)
           
-          // Set default signer to CURRENT USER if they're in the list, otherwise first executive
-          if (currentUser && execs.length > 0) {
-            const currentUserSigner = execs.find((exec: any) => exec.id === currentUser.id)
-            if (currentUserSigner) {
-              setSelectedSigner(currentUserSigner)
-              console.log("[v0] Default signer set to current user:", currentUserSigner.full_name)
-            } else {
-              setSelectedSigner(execs[0])
-              console.log("[v0] Current user not in executives list, default signer set to:", execs[0].full_name)
-            }
-          } else if (execs.length > 0) {
-            setSelectedSigner(execs[0])
-            console.log("[v0] Current user not loaded yet, default signer set to:", execs[0].full_name)
-          }
+          // CRITICAL FIX: Don't auto-select a signer. Users MUST explicitly choose who should sign.
+          // This prevents accidentally assigning memos to the wrong person (e.g., choosing the first
+          // executive in the list by default).
+          setSelectedSigners([])
+          setSelectedSigner(null)
+          console.log("[v0] HR Executives loaded - user must explicitly select signers:", execs.map((e: any) => e.full_name))
         } else {
           const error = await response.json()
           console.error("[v0] API returned error:", error)
@@ -1746,18 +1739,20 @@ We count on your co-operation.`,
                         }
                       }}
                       disabled={loadingHrExecutives}
-                      className={`px-4 py-3 rounded-lg border-2 font-medium transition-all ${
+                      className={`px-4 py-3 rounded-lg border-2 font-medium transition-all text-left ${
                         isSelected
                           ? "border-blue-500 bg-blue-50 text-blue-900 ring-2 ring-blue-200"
                           : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-left">
-                          <div className="text-sm font-semibold">{exec.full_name}</div>
-                          <div className="text-xs text-gray-600">{exec.position}</div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold truncate">{exec.full_name}</div>
+                          <div className="text-xs text-gray-600 truncate">{exec.position}</div>
+                          <div className="text-xs text-gray-500 truncate">Role: {exec.role || "N/A"}</div>
+                          <div className="text-xs text-gray-400 truncate font-mono">ID: {exec.id?.substring(0, 8)}...</div>
                         </div>
-                        {isSelected && <CheckCircle className="h-5 w-5 flex-shrink-0 text-blue-500" />}
+                        {isSelected && <CheckCircle className="h-5 w-5 flex-shrink-0 text-blue-500 mt-1" />}
                       </div>
                     </button>
                   )
