@@ -1956,12 +1956,12 @@ We count on your co-operation.`,
           </CardContent>
         </Card>
       )}
+      </>
+      )}
 
       {/* Monthly Summary Tab - Redesigned for both HR Leave Office and HR Executive */}
       {(isHrLeaveOffice || isHrExecutive) && activePaymentTab === "approved" && (
         <MonthlySummaryTab />
-      )}
-      </>
       )}
 
       {/* Signature Required Dialog */}

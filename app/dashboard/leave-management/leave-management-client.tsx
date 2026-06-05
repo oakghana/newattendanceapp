@@ -147,6 +147,9 @@ export function LeaveManagementClient({
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
   const [selectedTab, setSelectedTab] = useState("my-requests")
+  // Sub-tabs for the Deferment and Recall sections: "tracking" | "approvals"
+  const [defermentSubTab, setDefermentSubTab] = useState<"tracking" | "approvals">("tracking")
+  const [recallSubTab, setRecallSubTab] = useState<"tracking" | "approvals">("tracking")
   const [defermentRequests, setDefermentRequests] = useState<any[]>([])
   const [recallRequests, setRecallRequests] = useState<any[]>([])
   const [myDefermentRequests, setMyDefermentRequests] = useState<any[]>([])
@@ -2130,6 +2133,45 @@ export function LeaveManagementClient({
 
           {selectedTab === "deferrments" && (
             <div className="space-y-6">
+              {/* Modern Sub-Tab Navigation */}
+              <div className="inline-flex w-full sm:w-auto rounded-xl bg-amber-100/60 p-1 border border-amber-200">
+                <button
+                  onClick={() => setDefermentSubTab("tracking")}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    defermentSubTab === "tracking"
+                      ? "bg-white text-amber-700 shadow-sm"
+                      : "text-amber-700/70 hover:text-amber-800"
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  Deferment Requests Tracking
+                </button>
+                {isManagerView && (
+                  <button
+                    onClick={() => setDefermentSubTab("approvals")}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      defermentSubTab === "approvals"
+                        ? "bg-white text-amber-700 shadow-sm"
+                        : "text-amber-700/70 hover:text-amber-800"
+                    }`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Deferment &amp; Recall Approvals
+                  </button>
+                )}
+              </div>
+
+              {/* Approvals Sub-Tab */}
+              {defermentSubTab === "approvals" && isManagerView && (
+                <HRExecutiveApprovalDashboard 
+                  hrExecutiveId={userId}
+                  userRole={userRole}
+                />
+              )}
+
+              {/* Tracking Sub-Tab */}
+              {defermentSubTab === "tracking" && (
+              <div className="space-y-6">
               {/* Deferment Requests Tracker */}
               <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
                 <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
@@ -2150,14 +2192,6 @@ export function LeaveManagementClient({
                   />
                 </CardContent>
               </Card>
-
-              {/* HR Executive Approval Dashboard - visible to managers and HR staff who can approve */}
-              {isManagerView && (
-                <HRExecutiveApprovalDashboard 
-                  hrExecutiveId={userId}
-                  userRole={userRole}
-                />
-              )}
 
               {/* Deferment Form */}
               <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
@@ -2344,11 +2378,52 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
+              </div>
+              )}
             </div>
           )}
 
           {selectedTab === "recalls" && (
             <div className="space-y-6">
+              {/* Modern Sub-Tab Navigation */}
+              <div className="inline-flex w-full sm:w-auto rounded-xl bg-rose-100/60 p-1 border border-rose-200">
+                <button
+                  onClick={() => setRecallSubTab("tracking")}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    recallSubTab === "tracking"
+                      ? "bg-white text-rose-700 shadow-sm"
+                      : "text-rose-700/70 hover:text-rose-800"
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  Recall Requests Tracking
+                </button>
+                {isManagerView && (
+                  <button
+                    onClick={() => setRecallSubTab("approvals")}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      recallSubTab === "approvals"
+                        ? "bg-white text-rose-700 shadow-sm"
+                        : "text-rose-700/70 hover:text-rose-800"
+                    }`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Deferment &amp; Recall Approvals
+                  </button>
+                )}
+              </div>
+
+              {/* Approvals Sub-Tab */}
+              {recallSubTab === "approvals" && isManagerView && (
+                <HRExecutiveApprovalDashboard 
+                  hrExecutiveId={userId}
+                  userRole={userRole}
+                />
+              )}
+
+              {/* Tracking Sub-Tab */}
+              {recallSubTab === "tracking" && (
+              <div className="space-y-6">
               {/* Recall Requests Tracker */}
               <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
                 <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
@@ -2539,6 +2614,8 @@ export function LeaveManagementClient({
                 )}
               </CardContent>
             </Card>
+              </div>
+              )}
             </div>
           )}
 
