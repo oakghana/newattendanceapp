@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
       id: signerProfile.id,
       name: signerName,
       role: signerProfile.role,
+      hasSignatureInProfile: !!signerProfile.signature_data_url,
     })
     
     // Smart signature lookup: First check user_profiles (primary), then approval_signature_registry (fallback)

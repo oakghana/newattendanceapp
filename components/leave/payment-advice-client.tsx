@@ -55,6 +55,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const isHrExecutive = ["hr_executive", "director_hr", "manager_hr", "hr_director", "hr", "hr_manager", "deputy_hr", "deputy_director_hr", "human_resource_manager", "admin"].includes(roleNorm)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [isLoading, setIsLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])
   const [memos, setMemos] = useState<Record<string, string>>({})
   const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
@@ -185,6 +186,17 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     }
   }
 
+  // Helper: Check if current user can approve a specific memo
+  const canUserApproveMemo = (memo: any): boolean => {
+    if (!currentUserId) return false
+    const assignedSigners = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
+    const canApprove = assignedSigners.includes(currentUserId)
+    if (!canApprove) {
+      console.log(`[v0] User ${currentUserId} cannot approve memo ${memo.id} - assigned to: ${assignedSigners.join(", ")}`)
+    }
+    return canApprove
+  }
+
   // Fetch current user first to set as default signer
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -197,7 +209,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
             name: data.user?.full_name || data.user?.name,
             email: data.user?.email,
           })
-          console.log("[v0] Current user loaded:", data.user?.name || data.user?.email)
+          // Also track the current user's ID for signer assignment checks
+          setCurrentUserId(data.user?.id || null)
+          console.log("[v0] Current user loaded:", data.user?.name || data.user?.email, "ID:", data.user?.id)
         }
       } catch (err) {
         console.error("[v0] Error fetching current user:", err)
@@ -1260,8 +1274,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                 Approve All ({memos.length})
                               </Button>
                               <Button
-                                variant="outline"
-                                className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                                disabled={
+                                  isApprovingMemos ||
+                                  memos.length === 0 ||
+                                  // Disable if user is not assigned as a signer for ANY of the memos in this batch
+                                  !memos.some((memo) => canUserApproveMemo(memo))
+                                }
+                                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 onClick={async () => {
                                   try {
                                     // Reject all memos in this group
