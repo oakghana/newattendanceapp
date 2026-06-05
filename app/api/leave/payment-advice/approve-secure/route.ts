@@ -31,6 +31,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Log the incoming request to debug signer selection issues
+    console.log("[v0] APPROVE REQUEST RECEIVED:", {
+      requestedMemoIds: requestBody.memoIds,
+      selectedSigner: requestBody.selectedSigner,
+      currentUserId: user.id,
+      currentUserEmail: user.email,
+    })
+
     // Verify user is an HR Executive
     const { data: userProfile, error: profileErr } = await admin
       .from("user_profiles")
@@ -108,12 +116,10 @@ export async function POST(request: NextRequest) {
     const signerName = `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim()
 
     // CRITICAL: Verify signer has a saved signature before allowing approval
-    console.log("[v0] Checking signature for selected signer:", selectedSigner.id, "- signerName:", signerName)
-    
-    // Verify that the CURRENT USER is an HR Executive (already done above)
-    // The selectedSigner will be the person who signs the memo (could be current user or delegated)
-    // No need to validate against assigned_signers since that's often hardcoded incorrectly
-    // Instead, trust that the selectedSigner is a valid HR Executive (verified above)
+    console.log("[v0] APPROVE FLOW: Starting signature lookup for selectedSigner:", {
+      id: selectedSigner.id,
+      name: signerName,
+    })
     
     // Smart signature lookup: First check user_profiles (primary), then approval_signature_registry (fallback)
     let signatureUrl: string | null = null
