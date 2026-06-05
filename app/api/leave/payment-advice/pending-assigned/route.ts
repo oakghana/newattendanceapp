@@ -85,17 +85,25 @@ export async function GET(request: NextRequest) {
       const signers = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
       const isAssigned = signers.includes(user.id)
       
-      if (!isAssigned && allPendingMemos.length < 5) {
-        // Log non-matching memos only when few results (to avoid spam)
-        console.log(`[v0] Memo ${memo.id} (${memo.staff_name}) - signers:`, signers, "user_id:", user.id, "match:", isAssigned)
-      }
+      // Enhanced logging for debugging signer visibility issues
+      console.log(`[v0] Memo visibility check:`, {
+        memoId: memo.id,
+        staffName: memo.staff_name,
+        storedSigners: signers,
+        currentUserId: user.id,
+        isMatch: isAssigned,
+        signerCount: signers.length,
+      })
       
       return isAssigned
     })
 
-    console.log(
-      `[v0] Pending memo filtering result: ${pendingMemos?.length || 0} assigned to user ${user.id} (out of ${allPendingMemos?.length || 0} total)\nUser ID type: ${typeof user.id}, Sample signers: ${allPendingMemos?.[0]?.assigned_signers?.slice(0,2)}`
-    )
+    console.log(`[v0] Pending memo filtering complete:`, {
+      assignedToUser: pendingMemos?.length || 0,
+      totalPending: allPendingMemos?.length || 0,
+      userId: user.id,
+      userRole: userProfile.role,
+    })
 
     return NextResponse.json({
       success: true,
