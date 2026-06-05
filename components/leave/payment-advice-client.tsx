@@ -2,9 +2,10 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
-import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter } from "lucide-react"
+import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter, Eye } from "lucide-react"
 import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { MonthlySummaryTab } from "@/components/leave/monthly-summary-tab"
+import { PaymentAdviceViewAllTab } from "@/components/leave/payment-advice-view-all-tab"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1088,6 +1089,17 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setActivePaymentTab("view-all")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t text-sm font-medium transition-colors ${
+                  activePaymentTab === "view-all"
+                    ? "bg-blue-100 text-blue-800 border-b-2 border-blue-500"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                }`}
+              >
+                <Eye className="h-4 w-4" />
+                View All Requests
+              </button>
             </div>
 
             {/* PENDING TAB */}
@@ -1653,6 +1665,11 @@ We count on your co-operation.`,
                   </div>
                 )}
               </>
+            )}
+
+            {/* VIEW ALL TAB */}
+            {activePaymentTab === "view-all" && (
+              <PaymentAdviceViewAllTab />
             )}
 
           </div>
