@@ -48,8 +48,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const HR_EXECUTIVE_ROLES = ["hr_executive", "manager_hr", "director_hr", "hr_manager", "hr_officer", "hr_director", "manager", "deputy_hr"]
-    if (!signerProfile.role || !HR_EXECUTIVE_ROLES.includes(signerProfile.role)) {
+    const roleNorm = String(signerProfile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const HR_EXECUTIVE_ROLES = [
+      "hr_executive",
+      "director_hr",
+      "director_human_resources",
+      "manager_hr",
+      "hr_manager",
+      "hr_officer",
+      "hr_director",
+      "deputy_hr",
+      "deputy_director_hr",
+      "human_resource_manager",
+      "admin",
+    ]
+    if (!roleNorm || !HR_EXECUTIVE_ROLES.includes(roleNorm)) {
       return NextResponse.json(
         { 
           error: "Access denied",

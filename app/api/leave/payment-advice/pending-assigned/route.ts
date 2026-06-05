@@ -35,8 +35,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Only allow HR executives to see pending memos
-    const hrRoles = ["hr_executive", "hr_manager", "hr_director", "hr_officer", "manager_hr", "manager", "deputy_hr"]
-    if (!hrRoles.includes(userProfile.role)) {
+    const roleNorm = String(userProfile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const hrRoles = [
+      "hr_executive",
+      "director_hr",
+      "director_human_resources",
+      "hr_manager",
+      "hr_director",
+      "hr_officer",
+      "manager_hr",
+      "deputy_hr",
+      "deputy_director_hr",
+      "human_resource_manager",
+      "admin",
+    ]
+    if (!hrRoles.includes(roleNorm)) {
       return NextResponse.json(
         { error: `Access denied. Your role (${userProfile.role}) is not authorized to approve payment memos.` },
         { status: 403 }

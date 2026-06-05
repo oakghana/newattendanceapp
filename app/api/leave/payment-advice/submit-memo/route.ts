@@ -73,8 +73,21 @@ export async function POST(request: NextRequest) {
 
     // CRITICAL VALIDATION: Verify signer has HR Executive role
     // All roles that can sign/approve payment advice memos
-    const validHrRoles = ["hr_executive", "hr_manager", "hr_director", "director_hr", "hr_officer", "manager_hr", "manager", "deputy_hr"]
-    if (!validHrRoles.includes(signerProfile.role)) {
+    const signerRoleNorm = String(signerProfile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
+    const validHrRoles = [
+      "hr_executive",
+      "director_hr",
+      "director_human_resources",
+      "hr_manager",
+      "hr_director",
+      "hr_officer",
+      "manager_hr",
+      "deputy_hr",
+      "deputy_director_hr",
+      "human_resource_manager",
+      "admin",
+    ]
+    if (!validHrRoles.includes(signerRoleNorm)) {
       console.warn("[v0] Invalid signer role attempt:", {
         signerId: selectedSigner.id,
         signerRole: signerProfile.role,
