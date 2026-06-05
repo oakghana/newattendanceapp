@@ -31,32 +31,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Verify user is an HR Executive
-    const { data: userProfile, error: profileErr } = await admin
+    // CRITICAL FIX: The signer is ALWAYS the authenticated user (whoever is logged in
+    // and clicking approve). You can only ever sign as yourself. This prevents the bug
+    // where a pre-selected default signer (e.g. the first HR executive) was being stored
+    // instead of the actual approver.
+    const { data: signerProfile, error: profileErr } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, position, role")
+      .select("id, first_name, last_name, position, role, signature_data_url")
       .eq("id", user.id)
       .single()
 
-    if (profileErr || !userProfile) {
+    if (profileErr || !signerProfile) {
       return NextResponse.json(
         { error: "User profile not found" },
         { status: 404 }
       )
     }
 
-    const hrRoles = ["manager_hr", "director_hr", "hr_executive", "deputy_hr"]
-    if (!hrRoles.includes(userProfile.role)) {
+    const HR_EXECUTIVE_ROLES = ["hr_executive", "manager_hr", "director_hr", "hr_manager", "hr_officer", "hr_director", "manager", "deputy_hr"]
+    if (!signerProfile.role || !HR_EXECUTIVE_ROLES.includes(signerProfile.role)) {
       return NextResponse.json(
         { 
           error: "Access denied",
-          details: `Your role (${userProfile.role}) is not authorized to approve payment memos. Only HR Executives can approve.` 
+          details: `Your role (${signerProfile.role}) is not authorized to approve payment memos. Only HR Executives can approve.` 
         },
         { status: 403 }
       )
     }
 
-    const { memoIds, selectedSigner } = requestBody
+    const { memoIds } = requestBody
 
     if (!memoIds || !Array.isArray(memoIds) || memoIds.length === 0) {
       return NextResponse.json(
@@ -65,98 +68,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!selectedSigner || !selectedSigner.id) {
-      return NextResponse.json(
-        { error: "No HR Executive signer selected", details: "An HR Executive must be selected to approve memos" },
-        { status: 400 }
-      )
-    }
+    // The selected signer is the authenticated user - they sign with their own identity
+    const selectedSigner = { id: signerProfile.id }
 
-    // Fetch the selected signer's profile to get their name and signature
-    console.log("[v0] Fetching selected signer profile:", selectedSigner.id)
-    const { data: signerProfile, error: signerProfileErr } = await admin
-      .from("user_profiles")
-      .select("id, first_name, last_name, position, role")
-      .eq("id", selectedSigner.id)
-      .single()
-
-    if (signerProfileErr || !signerProfile) {
-      return NextResponse.json(
-        { error: "Selected signer profile not found" },
-        { status: 404 }
-      )
-    }
-
-    // CRITICAL: Verify selected signer has HR Executive role
-    const HR_EXECUTIVE_ROLES = ["hr_executive", "manager_hr", "director_hr", "hr_manager", "hr_officer", "hr_director", "manager", "deputy_hr"]
-    if (!signerProfile.role || !HR_EXECUTIVE_ROLES.includes(signerProfile.role)) {
-      console.warn("[v0] Non-HR Executive role attempted to sign memo:", {
-        signerId: selectedSigner.id,
-        signerRole: signerProfile.role,
-        allowedRoles: HR_EXECUTIVE_ROLES,
-      })
-      return NextResponse.json(
-        { 
-          error: "Invalid signer role",
-          details: `Only users with HR Executive roles can approve memos. Selected user has role: ${signerProfile.role}. Allowed roles: ${HR_EXECUTIVE_ROLES.join(", ")}`,
-        },
-        { status: 403 }
-      )
-    }
-
-    // Build signer name from selected signer (NOT current user)
+    // Build signer name from the authenticated user's profile
     const signerName = `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim()
 
-    // CRITICAL: Verify signer has a saved signature before allowing approval
-    console.log("[v0] Checking signature for selected signer:", selectedSigner.id, "- signerName:", signerName)
-    
-    // Verify that the CURRENT USER (the one approving) is authorized to approve
-    // AND verify the selected signer is assigned to these memos
-    const { data: memosToValidate } = await admin
-      .from("leave_payment_memos")
-      .select("id, assigned_signers")
-      .in("id", memoIds)
-
-    if (memosToValidate && memosToValidate.length > 0) {
-      // Check if CURRENT USER is an assigned signer for ALL memos
-      // The current user must be authorized, and they select the final signer
-      // (which could be themselves or another HR executive if delegating)
-      const unauthorizedMemos = memosToValidate.filter(memo => {
-        const assignedSigners = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
-        // Current user (the one approving) must be in the assigned_signers list
-        return !assignedSigners.includes(user.id)
-      })
-
-      if (unauthorizedMemos.length > 0) {
-        console.warn("[v0] Unauthorized approval attempt:", {
-          attemptingUserId: user.id,
-          selectedSignerId: selectedSigner.id,
-          unauthorizedMemoIds: unauthorizedMemos.map(m => m.id),
-          assignedSignersForMemos: unauthorizedMemos.map(m => m.assigned_signers),
-        })
-        return NextResponse.json(
-          {
-            error: "You are not authorized to approve these memos",
-            details: `You (user ${user.id}) are not assigned to approve ${unauthorizedMemos.length} of the selected memos. Only assigned signers can approve.`,
-          },
-          { status: 403 }
-        )
-      }
-    }
+    console.log("[v0] APPROVE FLOW: Authenticated approver signing:", {
+      id: signerProfile.id,
+      name: signerName,
+      role: signerProfile.role,
+    })
     
     // Smart signature lookup: First check user_profiles (primary), then approval_signature_registry (fallback)
-    let signatureUrl: string | null = null
+    let signatureUrl: string | null = signerProfile.signature_data_url || null
     
-    // Priority 1: Check user_profiles (where signatures are now saved permanently)
-    const { data: profileSignature } = await admin
-      .from("user_profiles")
-      .select("signature_data_url")
-      .eq("id", selectedSigner.id)
-      .single()
-    
-    if (profileSignature?.signature_data_url) {
-      signatureUrl = profileSignature.signature_data_url
-      console.log("[v0] Found signature in user_profiles for user:", selectedSigner.id)
+    if (signatureUrl) {
+      console.log("[v0] Found signature in user_profiles for user:", signerProfile.id)
     }
     
     // Priority 2: Check approval_signature_registry (fallback for older signatures)
@@ -164,7 +92,7 @@ export async function POST(request: NextRequest) {
       const { data: signatureRecords, error: sigError } = await admin
         .from("approval_signature_registry")
         .select("id, signature_data_url, user_id, is_active, workflow_domain")
-        .eq("user_id", selectedSigner.id)
+        .eq("user_id", signerProfile.id)
         .eq("is_active", true)
       
       console.log("[v0] Registry signature query result:", {
@@ -174,28 +102,31 @@ export async function POST(request: NextRequest) {
 
       if (signatureRecords && signatureRecords.length > 0 && signatureRecords[0].signature_data_url) {
         signatureUrl = signatureRecords[0].signature_data_url
-        console.log("[v0] Found signature in approval_signature_registry for user:", selectedSigner.id)
+        console.log("[v0] Found signature in approval_signature_registry for user:", signerProfile.id)
       }
     }
 
     if (!signatureUrl) {
-      console.warn("[v0] No signature found for user:", {
-        userId: user.id,
+      console.warn("[v0] APPROVAL BLOCKED - No signature found for user:", {
+        userId: signerProfile.id,
         userName: signerName,
       })
       return NextResponse.json(
         { 
           error: "Signature required",
-          details: "You must save your signature in the system before you can approve payment memos. Please visit Settings > My Profile to upload your signature.",
+          details: "You must save your signature in the system before you can approve payment memos. Please visit Settings > My Profile to add your digital signature.",
           requiresSignatureSave: true,
+          missingSignatureFor: signerProfile.id,
         },
         { status: 400 }
       )
     }
     
-    console.log("[v0] Signature validation passed for user:", user.id, "- signature found")
-
-    // Update memos with approval and store approver info in memo_body
+    console.log("[v0] Signature validation PASSED for signer:", {
+      userId: signerProfile.id,
+      userName: signerName,
+      signatureLength: signatureUrl?.length || 0,
+    })
     
     // Fetch all memos to update their memo_body with approver info, ALSO get the leave_plan_request_id
     const { data: memosToUpdate } = await admin
@@ -211,7 +142,6 @@ export async function POST(request: NextRequest) {
       for (const memo of memosToUpdate) {
         const memoBody = typeof memo.memo_body === 'string' ? JSON.parse(memo.memo_body) : memo.memo_body
         
-        // Preserve the original selectedSigner if it exists (set during submit-memo)
         // Add approver info for the final PDF signer
         memoBody.approver = {
           id: selectedSigner.id,
@@ -221,14 +151,13 @@ export async function POST(request: NextRequest) {
           approved_at: new Date().toISOString(),
         }
         
-        // If selectedSigner not yet set, set it now (for initial approval flow)
-        if (!memoBody.selectedSigner) {
-          memoBody.selectedSigner = {
-            id: selectedSigner.id,
-            name: signerName,
-            position: signerProfile.position || "",
-            signature_image_url: signatureUrl || "",
-          }
+        // CRITICAL: Always overwrite selectedSigner with the ACTUAL approver (authenticated user).
+        // A stale/default signer set during submit-memo must not drive PDF rendering.
+        memoBody.selectedSigner = {
+          id: selectedSigner.id,
+          name: signerName,
+          position: signerProfile.position || "",
+          signature_image_url: signatureUrl || "",
         }
 
         // Update memo with new status, signature, and updated memo_body

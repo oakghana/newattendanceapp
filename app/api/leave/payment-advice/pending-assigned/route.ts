@@ -83,11 +83,18 @@ export async function GET(request: NextRequest) {
     // Filter memos to only include those where user is an assigned signer
     const pendingMemos = (allPendingMemos || []).filter((memo: any) => {
       const signers = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
-      return signers.includes(user.id)
+      const isAssigned = signers.includes(user.id)
+      
+      if (!isAssigned && allPendingMemos.length < 5) {
+        // Log non-matching memos only when few results (to avoid spam)
+        console.log(`[v0] Memo ${memo.id} (${memo.staff_name}) - signers:`, signers, "user_id:", user.id, "match:", isAssigned)
+      }
+      
+      return isAssigned
     })
 
     console.log(
-      `[v0] Found ${pendingMemos?.length || 0} pending memos assigned to user ${user.id} (out of ${allPendingMemos?.length || 0} total pending memos)`
+      `[v0] Pending memo filtering result: ${pendingMemos?.length || 0} assigned to user ${user.id} (out of ${allPendingMemos?.length || 0} total)\nUser ID type: ${typeof user.id}, Sample signers: ${allPendingMemos?.[0]?.assigned_signers?.slice(0,2)}`
     )
 
     return NextResponse.json({

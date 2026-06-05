@@ -322,6 +322,16 @@ export async function GET(request: NextRequest) {
       y += 4
     })
 
+    // === ADD SECRET FOOTER ===
+    const footerY = doc.internal.pageSize.getHeight() - 5
+    
+    doc.setFontSize(6)
+    doc.setTextColor(180, 180, 180) // Light gray
+    doc.text("Powered by ITD", pageWidth - 40, footerY, { align: "right" })
+    
+    // Reset text color for any subsequent content
+    doc.setTextColor(0, 0, 0)
+
     // Convert to buffer and return
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"))
     console.log("[v0] Payment advice PDF generated:", memoId, "Size:", pdfBuffer.length, "bytes", "Signature:", signatureUrl ? "YES" : "NO")

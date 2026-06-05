@@ -132,7 +132,10 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Helper: Retry approval after signature has been saved
   const retryPendingApproval = async (memoIds: string[]) => {
-    if (!selectedSigner || memoIds.length === 0) return
+    // Use the primary signer from the new selectedSigners array
+    const primarySigner = selectedSigners && selectedSigners.length > 0 ? selectedSigners[0] : selectedSigner
+    
+    if (!primarySigner || memoIds.length === 0) return
     try {
       const response = await fetch("/api/leave/payment-advice/approve-secure", {
         method: "POST",
@@ -140,9 +143,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         body: JSON.stringify({
           memoIds,
           selectedSigner: {
-            id: selectedSigner.id,
-            name: selectedSigner.full_name || selectedSigner.name,
-            position: selectedSigner.position,
+            id: primarySigner.id,
+            name: primarySigner.full_name || primarySigner.name,
+            position: primarySigner.position,
           },
         }),
       })
@@ -215,25 +218,18 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
             id: exec.id,
             full_name: exec.name || exec.full_name || "Unknown",
             position: exec.position || "HR EXECUTIVE",
+            role: exec.role || "hr_executive",
             email: exec.email,
           }))
           setHrExecutives(execs)
           console.log("[v0] HR Executives loaded:", execs.length)
           
-          // Set default signer to CURRENT USER if they're in the list, otherwise first executive
-          if (currentUser && execs.length > 0) {
-            const currentUserSigner = execs.find((exec: any) => exec.id === currentUser.id)
-            if (currentUserSigner) {
-              setSelectedSigner(currentUserSigner)
-              console.log("[v0] Default signer set to current user:", currentUserSigner.full_name)
-            } else {
-              setSelectedSigner(execs[0])
-              console.log("[v0] Current user not in executives list, default signer set to:", execs[0].full_name)
-            }
-          } else if (execs.length > 0) {
-            setSelectedSigner(execs[0])
-            console.log("[v0] Current user not loaded yet, default signer set to:", execs[0].full_name)
-          }
+          // CRITICAL FIX: Don't auto-select a signer. Users MUST explicitly choose who should sign.
+          // This prevents accidentally assigning memos to the wrong person (e.g., choosing the first
+          // executive in the list by default).
+          setSelectedSigners([])
+          setSelectedSigner(null)
+          console.log("[v0] HR Executives loaded - user must explicitly select signers:", execs.map((e: any) => e.full_name))
         } else {
           const error = await response.json()
           console.error("[v0] API returned error:", error)
@@ -1187,40 +1183,28 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                                 onClick={async () => {
                                   try {
-                                    // Verify signer is selected
-                                    if (!selectedSigner) {
-                                      toast({
-                                        title: "Error",
-                                        description: "Please select an HR Executive signer before approving memos.",
-                                        variant: "destructive",
-                                      })
-                                      return
+                                    // The signer is ALWAYS the logged-in HR Executive (current user).
+                                    // Verify the current user has a saved signature before approving.
+                                    if (currentUser?.id) {
+                                      const hasSignature = await checkSignerSignature(currentUser.id)
+                                      if (!hasSignature) {
+                                        // Save the memo IDs so we can retry after signature is saved
+                                        const ids = memos.map((m: any) => m.id)
+                                        setPendingApprovalMemoIds(ids)
+                                        // Show signature dialog for HR Executive to add their signature
+                                        setShowSignatureRequiredDialog(true)
+                                        return
+                                      }
                                     }
 
-                                    // HR Executive must have a signature before approving
-                                    const hasSignature = await checkSignerSignature(selectedSigner.id)
-                                    if (!hasSignature) {
-                                      // Save the memo IDs so we can retry after signature is saved
-                                      const ids = memos.map((m: any) => m.id)
-                                      setPendingApprovalMemoIds(ids)
-                                      // Show signature dialog for HR Executive to add their signature
-                                      setShowSignatureRequiredDialog(true)
-                                      return
-                                    }
-
-                                    // Approve all memos in this group using secure endpoint
+                                    // Approve all memos in this group using secure endpoint.
+                                    // The server signs as the authenticated user, so no signer is sent.
                                     const memoIds = memos.map((m) => m.id)
+                                    
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ 
-                                        memoIds,
-                                        selectedSigner: {
-                                          id: selectedSigner.id,
-                                          name: selectedSigner.full_name || selectedSigner.name,
-                                          position: selectedSigner.position,
-                                        },
-                                      }),
+                                      body: JSON.stringify({ memoIds }),
                                     })
 
                                     const result = await response.json()
@@ -1728,33 +1712,53 @@ We count on your co-operation.`,
               />
             </div>
             <div>
-              <Label htmlFor="signer-select" className="mb-2 block font-medium">
-                HR Executive(s) - Signers
+              <Label htmlFor="signer-select" className="mb-3 block font-medium">
+                Select Signers (Click to Toggle)
               </Label>
-              <select
-                id="signer-select"
-                multiple
-                value={selectedSigners.map((s) => s.id)}
-                onChange={(e) => {
-                  const selectedIds = Array.from(e.target.selectedOptions, (option) => option.value)
-                  const signers = hrExecutives.filter((exec) => selectedIds.includes(exec.id))
-                  setSelectedSigners(signers)
-                  // Also set first signer as selectedSigner for backward compatibility
-                  if (signers.length > 0) {
-                    setSelectedSigner(signers[0])
-                  }
-                }}
-                disabled={loadingHrExecutives || hrExecutives.length === 0}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
-                size={Math.min(hrExecutives.length, 5)}
-              >
-                {hrExecutives.map((exec) => (
-                  <option key={exec.id} value={exec.id}>
-                    {exec.full_name} ({exec.position})
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple signers</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {hrExecutives.map((exec) => {
+                  const isSelected = selectedSigners.some((s) => s.id === exec.id)
+                  return (
+                    <button
+                      key={exec.id}
+                      onClick={() => {
+                        if (isSelected) {
+                          // Remove signer
+                          const updated = selectedSigners.filter((s) => s.id !== exec.id)
+                          setSelectedSigners(updated)
+                          if (updated.length > 0) {
+                            setSelectedSigner(updated[0])
+                          } else {
+                            setSelectedSigner(null)
+                          }
+                        } else {
+                          // Add signer
+                          const updated = [...selectedSigners, exec]
+                          setSelectedSigners(updated)
+                          setSelectedSigner(exec) // Set as primary signer when added
+                        }
+                      }}
+                      disabled={loadingHrExecutives}
+                      className={`px-4 py-3 rounded-lg border-2 font-medium transition-all text-left ${
+                        isSelected
+                          ? "border-blue-500 bg-blue-50 text-blue-900 ring-2 ring-blue-200"
+                          : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold truncate">{exec.full_name}</div>
+                          <div className="text-xs text-gray-600 truncate">{exec.position}</div>
+                          <div className="text-xs text-gray-500 truncate">Role: {exec.role || "N/A"}</div>
+                          <div className="text-xs text-gray-400 truncate font-mono">ID: {exec.id?.substring(0, 8)}...</div>
+                        </div>
+                        {isSelected && <CheckCircle className="h-5 w-5 flex-shrink-0 text-blue-500 mt-1" />}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">Click buttons to select or deselect signers</p>
             </div>
           </div>
 
@@ -1797,13 +1801,25 @@ We count on your co-operation.`,
           <div className="flex gap-4">
             <div className="flex-1">
               {selectedSigners && selectedSigners.length > 0 && (
-                <div className="text-sm text-gray-600">
-                  <div className="font-medium text-gray-900">Signers Selected: {selectedSigners.length}</div>
-                  {selectedSigners.map((signer) => (
-                    <div key={signer.id} className="text-xs text-gray-600">
-                      • {signer.full_name} ({signer.position})
-                    </div>
-                  ))}
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="font-semibold text-blue-900 mb-2">📋 Selected Signers: {selectedSigners.length}</div>
+                  <div className="space-y-2">
+                    {selectedSigners.map((signer, idx) => (
+                      <div key={signer.id} className="text-sm text-blue-800 flex items-start gap-2">
+                        <span className="font-medium">{idx === 0 ? "🔵" : "⚪"}</span>
+                        <div>
+                          <span className="font-medium">{signer.full_name}</span>
+                          <span className="text-xs text-blue-600 ml-1">({signer.position})</span>
+                          {idx === 0 && <span className="text-xs text-blue-600 ml-2">[PRIMARY]</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(!selectedSigners || selectedSigners.length === 0) && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <p className="text-sm text-amber-800">⚠️ No signers selected yet. Click signer buttons above to select.</p>
                 </div>
               )}
             </div>
@@ -1935,12 +1951,12 @@ We count on your co-operation.`,
           </CardContent>
         </Card>
       )}
+      </>
+      )}
 
       {/* Monthly Summary Tab - Redesigned for both HR Leave Office and HR Executive */}
       {(isHrLeaveOffice || isHrExecutive) && activePaymentTab === "approved" && (
         <MonthlySummaryTab />
-      )}
-      </>
       )}
 
       {/* Signature Required Dialog */}
