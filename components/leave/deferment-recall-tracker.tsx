@@ -358,6 +358,15 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 <Eye className="h-4 w-4" />
                 View Details
               </Button>
+              {req.status === 'pending' && isHrLeaveOffice && (
+                <Button 
+                  size="sm" 
+                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => setExpandedId(`processing-${req.id}`)}
+                >
+                  ⚡ Process Request
+                </Button>
+              )}
               {req.status === 'approved' && (
                 <Button size="sm" variant="outline" className="gap-2">
                   <Download className="h-4 w-4" />
@@ -365,6 +374,52 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 </Button>
               )}
             </div>
+            
+            {/* HR Executive Assignment Section */}
+            {expandedId === `processing-${req.id}` && isHrLeaveOffice && (
+              <div className="border-t border-blue-200 p-4 bg-blue-50 space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-2 w-2 bg-blue-600 rounded-full" />
+                  <p className="text-sm font-semibold text-blue-900">Assign to HR Executive for Approval</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700 mb-2 block">Select HR Executive</label>
+                  <Select 
+                    value={selectedExecutive[req.id] || ''}
+                    onValueChange={(val) => setSelectedExecutive({...selectedExecutive, [req.id]: val})}
+                  >
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="Choose an HR Executive..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hrExecutives.map((exec) => (
+                        <SelectItem key={exec.id} value={exec.id}>
+                          {exec.name} - {exec.position}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 flex-1"
+                    onClick={() => assignToHrExecutive(req.id, 'deferment')}
+                    disabled={assigning === req.id || !selectedExecutive[req.id]}
+                  >
+                    {assigning === req.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {assigning === req.id ? 'Assigning...' : 'Confirm & Forward'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setExpandedId(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -471,6 +526,15 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 <Eye className="h-4 w-4" />
                 View Details
               </Button>
+              {req.status === 'pending' && isHrLeaveOffice && (
+                <Button 
+                  size="sm" 
+                  className="gap-2 bg-rose-600 hover:bg-rose-700 text-white"
+                  onClick={() => setExpandedId(`processing-${req.id}`)}
+                >
+                  ⚡ Process Request
+                </Button>
+              )}
               {req.status === 'approved' && (
                 <Button size="sm" variant="outline" className="gap-2">
                   <Download className="h-4 w-4" />
@@ -478,6 +542,52 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 </Button>
               )}
             </div>
+            
+            {/* HR Executive Assignment Section */}
+            {expandedId === `processing-${req.id}` && isHrLeaveOffice && (
+              <div className="border-t border-rose-200 p-4 bg-rose-50 space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-2 w-2 bg-rose-600 rounded-full" />
+                  <p className="text-sm font-semibold text-rose-900">Assign to HR Executive for Approval</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700 mb-2 block">Select HR Executive</label>
+                  <Select 
+                    value={selectedExecutive[req.id] || ''}
+                    onValueChange={(val) => setSelectedExecutive({...selectedExecutive, [req.id]: val})}
+                  >
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="Choose an HR Executive..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hrExecutives.map((exec) => (
+                        <SelectItem key={exec.id} value={exec.id}>
+                          {exec.name} - {exec.position}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 flex-1"
+                    onClick={() => assignToHrExecutive(req.id, 'recall')}
+                    disabled={assigning === req.id || !selectedExecutive[req.id]}
+                  >
+                    {assigning === req.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {assigning === req.id ? 'Assigning...' : 'Confirm & Forward'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setExpandedId(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
