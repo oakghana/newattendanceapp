@@ -1,6 +1,6 @@
 "use client"
 
-import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText } from "lucide-react"
+import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle, Send } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
@@ -11,6 +11,8 @@ import { OutstandingLeavePanel } from "./outstanding-leave-panel"
 import { LeaveCenterInfo } from "./leave-center-info"
 import { CarryoverApprovalDashboard } from "./carryover-approval-dashboard"
 import { AuditComplianceDashboard } from "./audit-compliance-dashboard"
+import { HRExecutiveMemoDashboard } from "@/components/leave/hr-executive-memo-dashboard"
+import { HRLeaveOfficeRequestDashboard } from "@/components/leave/hr-leave-office-request-dashboard"
 import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planning"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
@@ -59,6 +61,7 @@ export function LeaveManagementModuleClient({
   const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
+  const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
 
   return (
     <div className="space-y-6 w-full">
@@ -100,6 +103,16 @@ export function LeaveManagementModuleClient({
             </TabsTrigger>
           )}
 
+          {/* Processing Requests Tab - HR Leave Office only */}
+          {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
+            <TabsTrigger value="processing-requests" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-indigo-300 transition-all duration-300 ease-out data-[state=active]:border-indigo-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-indigo-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(99,102,241,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
+              <Send className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" />
+              <span className="hidden sm:inline">Processing Requests</span>
+              <span className="sm:hidden">Requests</span>
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-indigo-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
+            </TabsTrigger>
+          )}
+
           {/* Carryover & Audit Tab - HR Leave Office only */}
           {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
             <TabsTrigger value="carryover-audit" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-rose-300 transition-all duration-300 ease-out data-[state=active]:border-rose-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-rose-500 data-[state=active]:to-rose-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(244,63,94,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
@@ -107,6 +120,16 @@ export function LeaveManagementModuleClient({
               <span className="hidden sm:inline">Carryover & Audit</span>
               <span className="sm:hidden">Audit</span>
               <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-rose-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
+            </TabsTrigger>
+          )}
+
+          {/* Memo Management Tab - HR Executives & HR Leave Office */}
+          {(isHrExecutive || isHrOffice) && !isRegionalHR && (
+            <TabsTrigger value="memo-management" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-cyan-300 transition-all duration-300 ease-out data-[state=active]:border-cyan-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-cyan-500 data-[state=active]:to-cyan-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(34,211,238,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
+              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" />
+              <span className="hidden sm:inline">Memo Management</span>
+              <span className="sm:hidden">Memos</span>
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-cyan-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
             </TabsTrigger>
           )}
 
@@ -165,6 +188,13 @@ export function LeaveManagementModuleClient({
           </TabsContent>
         )}
 
+        {/* Processing Requests Tab */}
+        {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
+          <TabsContent value="processing-requests" className="space-y-4 sm:space-y-6 w-full">
+            <HRLeaveOfficeRequestDashboard />
+          </TabsContent>
+        )}
+
         {/* Carryover & Audit Tab */}
         {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
           <TabsContent value="carryover-audit" className="space-y-4 sm:space-y-6 w-full">
@@ -172,6 +202,13 @@ export function LeaveManagementModuleClient({
               <CarryoverApprovalDashboard />
               <AuditComplianceDashboard />
             </div>
+          </TabsContent>
+        )}
+
+        {/* Memo Management Tab */}
+        {(isHrExecutive || isHrOffice) && !isRegionalHR && (
+          <TabsContent value="memo-management" className="space-y-4 sm:space-y-6 w-full">
+            <HRExecutiveMemoDashboard userId={userId} />
           </TabsContent>
         )}
 
