@@ -175,15 +175,14 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
 
     try {
       setAssigning(requestId)
-      const res = await fetch('/api/leave/deferment-recall/assign', {
+      const res = await fetch('/api/leave/deferment-recall/assign-to-executive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          request_id: requestId,
-          request_type: requestType,
-          hr_executive_id: executiveId,
-          assigned_by_user_id: userId,
-          assigned_by_role: userRole
+          type: requestType,
+          requestId: requestId,
+          hrExecutiveId: executiveId,
+          notes: null
         })
       })
 
@@ -195,7 +194,9 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
         description: data.message || 'Request assigned successfully'
       })
       
-      // Refresh the list
+      // Reset state and refresh the list
+      setExpandedId(null)
+      setSelectedExecutive({...selectedExecutive, [requestId]: ''})
       fetchRequests()
     } catch (error) {
       console.error('[v0] Error assigning request:', error)
