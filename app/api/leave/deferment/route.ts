@@ -73,7 +73,6 @@ export async function POST(request: NextRequest) {
         requested_deferment_period: defermentPeriod,
         reason: reason || null,
         user_id: leaveRequest.user_id, // The staff whose leave is being deferred
-        initiated_by_user_id: requester_id || user_id, // The HOD/RM/HR who initiated
         created_at: new Date().toISOString(),
         status: "pending",
       })
