@@ -363,7 +363,10 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 <Button 
                   size="sm" 
                   className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={() => setExpandedId(`processing-${req.id}`)}
+                  onClick={() => {
+                    console.log('[v0] Process Request clicked for:', req.id)
+                    setExpandedId(`processing-${req.id}`)
+                  }}
                 >
                   ⚡ Process Request
                 </Button>
@@ -531,7 +534,10 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 <Button 
                   size="sm" 
                   className="gap-2 bg-rose-600 hover:bg-rose-700 text-white"
-                  onClick={() => setExpandedId(`processing-${req.id}`)}
+                  onClick={() => {
+                    console.log('[v0] Process Request clicked for recall:', req.id)
+                    setExpandedId(`processing-${req.id}`)
+                  }}
                 >
                   ⚡ Process Request
                 </Button>
