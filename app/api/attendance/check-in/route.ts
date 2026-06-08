@@ -802,6 +802,22 @@ export async function POST(request: NextRequest) {
       user_agent: request.headers.get("user-agent"),
     })
 
+    // Verify if this check-in corresponds to a leave resumption
+    try {
+      await fetch(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' + '/api/leave/resumption/verify-checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          checkinTime: checkInTime.toTimeString().split(' ')[0],
+          checkinDate: today
+        })
+      })
+    } catch (resumptionError) {
+      console.error('[v0] Failed to verify leave resumption:', resumptionError)
+      // Don't fail the entire check-in if resumption verification fails
+    }
+
     // Prepare response with late arrival warning if applicable
     let checkInMessage = attendanceData.is_remote_location
       ? `Successfully checked in at ${locationData?.name} (different from your assigned location). Remember to check out at the end of your work today.`
