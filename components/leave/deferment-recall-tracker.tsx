@@ -147,6 +147,16 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
   // Check if current user is HR Leave Office
   const normalizedRole = userRole?.toLowerCase().replace(/[-\s]+/g, '_') || ''
   const isHrLeaveOffice = HR_LEAVE_OFFICE_ROLES.includes(normalizedRole)
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('[v0] Component Debug:', {
+      userRole: userRole,
+      normalizedRole: normalizedRole,
+      isHrLeaveOffice: isHrLeaveOffice,
+      HR_LEAVE_OFFICE_ROLES: HR_LEAVE_OFFICE_ROLES
+    })
+  }, [userRole, normalizedRole, isHrLeaveOffice])
 
   useEffect(() => {
     fetchRequests()
@@ -359,6 +369,7 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 <Eye className="h-4 w-4" />
                 View Details
               </Button>
+              {console.log(`[v0] Deferment card: status=${req.status}, isHrLeaveOffice=${isHrLeaveOffice}, showButton=${req.status === 'pending' && isHrLeaveOffice}`)}
               {req.status === 'pending' && isHrLeaveOffice && (
                 <Button 
                   size="sm" 
@@ -530,6 +541,7 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 <Eye className="h-4 w-4" />
                 View Details
               </Button>
+              {console.log(`[v0] Recall card: status=${req.status}, isHrLeaveOffice=${isHrLeaveOffice}, showButton=${req.status === 'pending' && isHrLeaveOffice}`)}
               {req.status === 'pending' && isHrLeaveOffice && (
                 <Button 
                   size="sm" 
