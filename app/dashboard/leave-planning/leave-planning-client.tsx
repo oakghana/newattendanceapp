@@ -2308,7 +2308,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 <CardTitle className="text-base text-green-800">
                   {editingId ? "Edit Leave Request" : "New Leave Application"}
                 </CardTitle>
-                <p className="text-xs text-slate-500">Leave Year: {leaveYearPeriod}</p>
+                <p className="text-xs text-slate-500 hidden">Leave Year: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
                 {/* October Planning Reminder Alert */}
@@ -2332,8 +2332,22 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Type</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
+                    <Select value={leaveYearPeriod} onValueChange={setLeaveYearPeriod}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select leave year period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {leaveYearPeriodOptions.map((period) => (
+                          <SelectItem key={period} value={period}>{period}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Type</Label>
                   <Select value={leaveType} onValueChange={setLeaveType}>
                     <SelectTrigger className="h-10">
                       <SelectValue placeholder="Select leave type" />
@@ -2351,6 +2365,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                       Entitlement: <strong>{selectedLeaveType.entitlementDays} day(s)</strong>
                     </p>
                   )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
