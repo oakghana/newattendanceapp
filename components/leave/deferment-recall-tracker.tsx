@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Search, ChevronDown, Eye, Download, FileText, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 
 interface DefermentRequest {
   id: string
@@ -143,64 +145,131 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
   const [hrExecutives, setHrExecutives] = useState<HRExecutive[]>([])
   const [selectedExecutive, setSelectedExecutive] = useState<{ [key: string]: string }>({})
   const [assigning, setAssigning] = useState<string | null>(null)
+  const [memoRefDialogOpen, setMemoRefDialogOpen] = useState(false)
+  const [memoRefNumber, setMemoRefNumber] = useState('')
+  const [selectedRequestForMemo, setSelectedRequestForMemo] = useState<DefermentRequest | RecallRequest | null>(null)
+  const [selectedMemoType, setSelectedMemoType] = useState<'deferment' | 'recall'>('deferment')
   
   // Check if current user is HR Leave Office
   const normalizedRole = userRole?.toLowerCase().replace(/[-\s]+/g, '_') || ''
   const isHrLeaveOffice = HR_LEAVE_OFFICE_ROLES.includes(normalizedRole)
 
-  // Download memo as PDF using browser print dialog
-  const downloadMemoAsPDF = async (req: DefermentRequest | RecallRequest, requestType: 'deferment' | 'recall') => {
+  // Download memo as PDF using browser print dialog with official format
+  const downloadMemoAsPDF = async () => {
+    if (!selectedRequestForMemo || !memoRefNumber.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a reference number',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
-      console.log(`[v0] Downloading ${requestType} memo for:`, req.id)
+      console.log(`[v0] Downloading ${selectedMemoType} memo for:`, selectedRequestForMemo.id)
       
+      const req = selectedRequestForMemo
       const staffName = req.user_profiles 
         ? `${req.user_profiles.first_name} ${req.user_profiles.last_name}`
         : 'Unknown'
+      
+      const staffNo = req.user_profiles?.employee_id || 'N/A'
+      const position = req.user_profiles?.position || 'N/A'
+      const toRecipient = req.user_profiles?.departments?.name || 'Management'
+      
+      let memoDetails = ''
+      let subject = ''
+      let details = ''
+      
+      if (selectedMemoType === 'deferment') {
+        const dereq = req as DefermentRequest
+        subject = 'APPROVAL FOR RESCHEDULING OF ' + (dereq.requested_deferment_year || 'ANNUAL') + ' LEAVE'
+        details = `
+          <p>We refer to your request dated ${format(new Date(req.created_at), 'd MMMM yyyy')} and wish to inform you that Management has granted approval for your leave to be rescheduled.</p>
+          
+          <p>Accordingly, your outstanding leave of ${dereq.deferment_end_date ? 'the period as submitted' : 'days'} shall be deferred to ${dereq.requested_deferment_year || '2026'}.</p>
+          
+          <p><strong>Details:</strong></p>
+          <p>Original Leave Period: ${dereq.requested_deferment_period || 'As per submitted request'}<br/>
+          Deferment Year: ${dereq.requested_deferment_year || 'To be determined'}<br/>
+          Reason: ${dereq.reason || 'Not specified'}</p>
+          
+          <p>We wish you a pleasant continuation of service.</p>
+        `
+      } else {
+        const recreq = req as RecallRequest
+        subject = 'NOTICE OF RECALL FROM LEAVE'
+        details = `
+          <p>We are pleased to inform you that your request for recall from leave has been approved.</p>
+          
+          <p>You are expected to resume duty on <strong>${recreq.recall_date ? format(new Date(recreq.recall_date), 'EEEE, d MMMM yyyy') : 'the date as specified'}</strong>.</p>
+          
+          <p><strong>Details:</strong></p>
+          <p>Reason for Recall: ${recreq.recall_reason || 'Not specified'}<br/>
+          Recall Notes: ${recreq.recall_notes || 'None'}</p>
+          
+          <p>Please ensure proper handover of your duties upon resumption.</p>
+        `
+      }
       
       const memoHTML = `
         <!DOCTYPE html>
         <html>
         <head>
-          <title>${requestType === 'deferment' ? 'Deferment' : 'Recall'} Memo</title>
+          <title>${subject}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
-            h1 { text-align: center; color: #333; font-size: 24px; }
-            .header { text-align: center; color: #666; margin-bottom: 30px; }
-            .section { margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 15px; }
-            .section p { margin: 10px 0; }
-            strong { color: #333; }
-            .footer { margin-top: 40px; text-align: center; color: #999; font-size: 12px; }
-            @media print { body { padding: 0; } }
+            body { font-family: Arial, sans-serif; padding: 40px 60px; line-height: 1.8; color: #333; }
+            .memo-header { margin-bottom: 40px; }
+            .staff-info { margin-bottom: 10px; font-weight: bold; }
+            .to-line { margin-bottom: 30px; }
+            .subject { margin: 30px 0; font-weight: bold; text-decoration: underline; }
+            .memo-body { margin: 30px 0; text-align: justify; }
+            .memo-body p { margin: 15px 0; }
+            .signature-block { margin-top: 50px; }
+            .signer-name { margin-top: 40px; font-weight: bold; }
+            .cc-line { margin-top: 30px; font-size: 12px; }
+            .reference-line { margin-top: 10px; font-size: 11px; color: #666; }
+            .footer { margin-top: 50px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #ccc; padding-top: 20px; }
+            @media print { body { padding: 20px; } }
           </style>
         </head>
         <body>
-          <h1>${requestType === 'deferment' ? 'DEFERMENT REQUEST MEMO' : 'RECALL REQUEST MEMO'}</h1>
-          <div class="header">
-            <p>Leave Management System - QCC Attendance</p>
+          <div class="memo-header">
+            <div class="staff-info">${staffName.toUpperCase()} (S/NO. ${staffNo})</div>
+            <div class="staff-info">${position.toUpperCase()}</div>
           </div>
           
-          <div class="section">
-            <p><strong>Staff Member:</strong> ${staffName}</p>
-            <p><strong>Employee ID:</strong> ${req.user_profiles?.employee_id || 'N/A'}</p>
-            <p><strong>Department:</strong> ${req.user_profiles?.departments?.name || 'N/A'}</p>
-            <p><strong>Position:</strong> ${req.user_profiles?.position || 'N/A'}</p>
+          <div class="to-line">
+            <strong>THRO'</strong> THE HEAD OF ${toRecipient.toUpperCase()}<br/>
+            QUALITY CONTROL COMPANY LTD.<br/>
+            HEAD OFFICE, ACCRA
           </div>
           
-          <div class="section">
-            <p><strong>Status:</strong> ${req.status}</p>
-            <p><strong>Request Date:</strong> ${format(new Date(req.created_at), 'dd MMM yyyy')}</p>
-            ${requestType === 'deferment' ? `
-              <p><strong>Reason:</strong> ${(req as DefermentRequest).reason || 'N/A'}</p>
-              <p><strong>Deferment Period:</strong> ${(req as DefermentRequest).requested_deferment_period || 'N/A'}</p>
-            ` : `
-              <p><strong>Reason:</strong> ${(req as RecallRequest).recall_reason || 'N/A'}</p>
-              <p><strong>Recall Date:</strong> ${(req as RecallRequest).recall_date || 'N/A'}</p>
-            `}
+          <div class="subject">${subject}</div>
+          
+          <div class="memo-body">
+            ${details}
+          </div>
+          
+          <div class="signature-block">
+            <p>FRANK FREDUA-MENSAH (ESQ.)<br/>
+            DEP. HUMAN RESOURCE MANAGER<br/>
+            FOR: MANAGING DIRECTOR</p>
+          </div>
+          
+          <div class="reference-line">
+            Ref: ${memoRefNumber}
+          </div>
+          
+          <div class="cc-line">
+            <strong>cc:</strong> Managing Director<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;Dep. Director HR<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;Deputy Director, Finance<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;Audit Manager
           </div>
           
           <div class="footer">
-            <p>Generated on ${format(new Date(), 'dd MMM yyyy HH:mm')}</p>
-            <p>This is an official memo from the Leave Management System</p>
+            <p>This is an official memo from QCC Limited Leave Management System - ${format(new Date(), 'd MMM yyyy')}</p>
           </div>
         </body>
         </html>
@@ -219,9 +288,14 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
         printWindow.print()
       }, 100)
       
+      // Reset form
+      setMemoRefDialogOpen(false)
+      setMemoRefNumber('')
+      setSelectedRequestForMemo(null)
+      
       toast({
         title: 'Success',
-        description: `${requestType === 'deferment' ? 'Deferment' : 'Recall'} memo ready. Use the print dialog to save as PDF.`,
+        description: `${selectedMemoType === 'deferment' ? 'Deferment' : 'Recall'} memo ready. Use the print dialog to save as PDF.`,
       })
     } catch (error) {
       console.error('[v0] Error downloading memo:', error)
@@ -457,7 +531,17 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 </Button>
               )}
               {req.status === 'approved' && (
-                <Button size="sm" variant="outline" className="gap-2" onClick={() => downloadMemoAsPDF(req as DefermentRequest, 'deferment')}>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="gap-2" 
+                  onClick={() => {
+                    setSelectedRequestForMemo(req)
+                    setSelectedMemoType('deferment')
+                    setMemoRefNumber('')
+                    setMemoRefDialogOpen(true)
+                  }}
+                >
                   <Download className="h-4 w-4" />
                   Download Memo
                 </Button>
@@ -628,7 +712,17 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 </Button>
               )}
               {req.status === 'approved' && (
-                <Button size="sm" variant="outline" className="gap-2" onClick={() => downloadMemoAsPDF(req as RecallRequest, 'recall')}>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="gap-2" 
+                  onClick={() => {
+                    setSelectedRequestForMemo(req)
+                    setSelectedMemoType('recall')
+                    setMemoRefNumber('')
+                    setMemoRefDialogOpen(true)
+                  }}
+                >
                   <Download className="h-4 w-4" />
                   Download Memo
                 </Button>
@@ -806,6 +900,55 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
           ) : null}
         </div>
       )}
+
+      {/* Memo Reference Number Dialog */}
+      <Dialog open={memoRefDialogOpen} onOpenChange={setMemoRefDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enter Memo Reference Number</DialogTitle>
+            <DialogDescription>
+              HR Leave Office must provide the official memo reference number for {selectedMemoType} request
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Reference Number (e.g., QCC/PF/HR/001/2026)
+              </label>
+              <Input
+                placeholder="Enter reference number"
+                value={memoRefNumber}
+                onChange={(e) => setMemoRefNumber(e.target.value)}
+                className="w-full"
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Format: Organization/Department/Type/Number/Year
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setMemoRefDialogOpen(false)
+                setMemoRefNumber('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={downloadMemoAsPDF}
+              disabled={!memoRefNumber.trim()}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Generate & Download
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
