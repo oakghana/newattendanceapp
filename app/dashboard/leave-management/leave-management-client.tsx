@@ -24,6 +24,7 @@ import {
   Sparkles,
   Trash2,
   XCircle,
+  AlertCircle,
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
@@ -2224,9 +2225,31 @@ export function LeaveManagementClient({
                 </CardHeader>
                 <CardContent className="py-6">
                   {!isManagerView ? (
-                    <Alert className="border-amber-200 bg-amber-50">
-                      <AlertDescription className="text-amber-900">Only Heads of Department, Regional Managers, and HR staff can submit leave deferment requests.</AlertDescription>
-                    </Alert>
+                    <div className="space-y-4">
+                      <Alert className="border-amber-200 bg-amber-50">
+                        <AlertCircle className="h-4 w-4 text-amber-700" />
+                        <AlertDescription className="text-amber-900">
+                          <p className="font-semibold mb-1">Deferment Eligibility</p>
+                          <p className="text-sm">As a staff member, you can request to defer your leave once your annual leave has been approved. After approval, you'll be able to move your leave to a future year through your department head or regional manager.</p>
+                        </AlertDescription>
+                      </Alert>
+                      {!Array.isArray(approvedRequests) || approvedRequests.filter((r: any) => r.user_id === userId).length === 0 ? (
+                        <div className="rounded-lg border-2 border-dashed border-amber-200 bg-amber-50/50 p-8 text-center">
+                          <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-300" />
+                          <p className="font-semibold text-amber-900 mb-2">No Approved Leave Yet</p>
+                          <p className="text-sm text-amber-800 mb-4">Your annual leave request hasn't been approved yet. Once your leave is approved by HR, you'll be able to request to defer it here.</p>
+                          <p className="text-xs text-amber-700 italic">Keep an eye on your "Approved" tab to see when your leave gets approved!</p>
+                        </div>
+                      ) : (
+                        <Alert className="border-green-200 bg-green-50">
+                          <CheckCircle2 className="h-4 w-4 text-green-700" />
+                          <AlertDescription className="text-green-900">
+                            <p className="font-semibold mb-1">Great News!</p>
+                            <p className="text-sm">You have approved annual leave. You can request to defer it by submitting through your HOD or RM dashboard. They'll review and send it to HR for final approval.</p>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
                   ) : !Array.isArray(approvedRequests) || approvedRequests.length === 0 ? (
                     <div className="text-center py-12">
                       <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-400" />
