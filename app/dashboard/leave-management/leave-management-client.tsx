@@ -28,6 +28,7 @@ import {
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
 import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
+import { SubmitNewDefermentRequest } from "@/components/leave-management/submit-new-deferment-request"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -212,6 +213,7 @@ export function LeaveManagementClient({
   const [isExportingAnnualLeave, setIsExportingAnnualLeave] = useState(false)
   const [staffApprovedMemos, setStaffApprovedMemos] = useState<any[]>([])
   const [isLoadingApprovedMemos, setIsLoadingApprovedMemos] = useState(false)
+  const [showSubmitDefermentModal, setShowSubmitDefermentModal] = useState(false)
   
   // Pagination and search state for Leave Application Actions sections
   const [memosSearchQuery, setMemosSearchQuery] = useState("")
@@ -2888,6 +2890,18 @@ export function LeaveManagementClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Submit New Deferment Request Modal */}
+      <SubmitNewDefermentRequest
+        isOpen={showSubmitDefermentModal}
+        onClose={() => setShowSubmitDefermentModal(false)}
+        userId={userId}
+        userRole={userRole}
+        approvedLeaves={initialApprovedStaffRequests}
+        onSuccess={() => {
+          toast({ title: "Success", description: "Deferment request submitted successfully" })
+        }}
+      />
     </div>
   )
 }
