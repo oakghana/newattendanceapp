@@ -148,6 +148,91 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
   const normalizedRole = userRole?.toLowerCase().replace(/[-\s]+/g, '_') || ''
   const isHrLeaveOffice = HR_LEAVE_OFFICE_ROLES.includes(normalizedRole)
 
+  // Download memo as PDF using browser print dialog
+  const downloadMemoAsPDF = async (req: DefermentRequest | RecallRequest, requestType: 'deferment' | 'recall') => {
+    try {
+      console.log(`[v0] Downloading ${requestType} memo for:`, req.id)
+      
+      const staffName = req.user_profiles 
+        ? `${req.user_profiles.first_name} ${req.user_profiles.last_name}`
+        : 'Unknown'
+      
+      const memoHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${requestType === 'deferment' ? 'Deferment' : 'Recall'} Memo</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
+            h1 { text-align: center; color: #333; font-size: 24px; }
+            .header { text-align: center; color: #666; margin-bottom: 30px; }
+            .section { margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 15px; }
+            .section p { margin: 10px 0; }
+            strong { color: #333; }
+            .footer { margin-top: 40px; text-align: center; color: #999; font-size: 12px; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <h1>${requestType === 'deferment' ? 'DEFERMENT REQUEST MEMO' : 'RECALL REQUEST MEMO'}</h1>
+          <div class="header">
+            <p>Leave Management System - QCC Attendance</p>
+          </div>
+          
+          <div class="section">
+            <p><strong>Staff Member:</strong> ${staffName}</p>
+            <p><strong>Employee ID:</strong> ${req.user_profiles?.employee_id || 'N/A'}</p>
+            <p><strong>Department:</strong> ${req.user_profiles?.departments?.name || 'N/A'}</p>
+            <p><strong>Position:</strong> ${req.user_profiles?.position || 'N/A'}</p>
+          </div>
+          
+          <div class="section">
+            <p><strong>Status:</strong> ${req.status}</p>
+            <p><strong>Request Date:</strong> ${format(new Date(req.created_at), 'dd MMM yyyy')}</p>
+            ${requestType === 'deferment' ? `
+              <p><strong>Reason:</strong> ${(req as DefermentRequest).reason || 'N/A'}</p>
+              <p><strong>Deferment Period:</strong> ${(req as DefermentRequest).requested_deferment_period || 'N/A'}</p>
+            ` : `
+              <p><strong>Reason:</strong> ${(req as RecallRequest).recall_reason || 'N/A'}</p>
+              <p><strong>Recall Date:</strong> ${(req as RecallRequest).recall_date || 'N/A'}</p>
+            `}
+          </div>
+          
+          <div class="footer">
+            <p>Generated on ${format(new Date(), 'dd MMM yyyy HH:mm')}</p>
+            <p>This is an official memo from the Leave Management System</p>
+          </div>
+        </body>
+        </html>
+      `
+      
+      const printWindow = window.open('', '', 'height=800,width=900')
+      if (!printWindow) {
+        throw new Error('Unable to open print window. Please check your browser popup settings.')
+      }
+      
+      printWindow.document.write(memoHTML)
+      printWindow.document.close()
+      
+      // Wait a bit for content to render, then open print dialog
+      setTimeout(() => {
+        printWindow.print()
+      }, 100)
+      
+      toast({
+        title: 'Success',
+        description: `${requestType === 'deferment' ? 'Deferment' : 'Recall'} memo ready. Use the print dialog to save as PDF.`,
+      })
+    } catch (error) {
+      console.error('[v0] Error downloading memo:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to download memo',
+        variant: 'destructive',
+      })
+    }
+  }
+
   useEffect(() => {
     fetchRequests()
     if (isHrLeaveOffice) {
@@ -372,7 +457,7 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 </Button>
               )}
               {req.status === 'approved' && (
-                <Button size="sm" variant="outline" className="gap-2">
+                <Button size="sm" variant="outline" className="gap-2" onClick={() => downloadMemoAsPDF(req as DefermentRequest, 'deferment')}>
                   <Download className="h-4 w-4" />
                   Download Memo
                 </Button>
@@ -543,7 +628,7 @@ export function DefermentRecallTracker({ type, userRole, userDepartment, userId 
                 </Button>
               )}
               {req.status === 'approved' && (
-                <Button size="sm" variant="outline" className="gap-2">
+                <Button size="sm" variant="outline" className="gap-2" onClick={() => downloadMemoAsPDF(req as RecallRequest, 'recall')}>
                   <Download className="h-4 w-4" />
                   Download Memo
                 </Button>

@@ -175,12 +175,19 @@ export async function POST(request: NextRequest) {
 // Helper function to generate deferment memo
 async function generateDefermentMemo(supabase: any, defermentData: any, hrExecutiveId: string) {
   try {
+    console.log('[v0] Starting deferment memo generation for request:', defermentData.id)
+    
     // Get staff and leave details
-    const { data: staffData } = await supabase
+    const { data: staffData, error: staffError } = await supabase
       .from('user_profiles')
       .select('first_name, last_name, email, position, department_id')
       .eq('id', defermentData.user_id)
       .single()
+
+    if (staffError) {
+      console.error('[v0] Error fetching staff data:', staffError)
+      throw staffError
+    }
 
     const { data: hodData } = await supabase
       .from('loan_hod_linkages')
@@ -188,7 +195,7 @@ async function generateDefermentMemo(supabase: any, defermentData: any, hrExecut
       .eq('staff_user_id', defermentData.user_id)
       .single()
 
-    // Create deferment memo record
+    // Create deferment memo record - use all available data from request
     const memoData = {
       deferment_request_id: defermentData.id,
       staff_id: defermentData.user_id,
@@ -197,14 +204,19 @@ async function generateDefermentMemo(supabase: any, defermentData: any, hrExecut
       status: 'generated',
       generated_at: new Date().toISOString(),
       memo_body: {
-        staff_name: `${staffData?.first_name} ${staffData?.last_name}`,
+        staff_name: staffData ? `${staffData.first_name} ${staffData.last_name}` : 'Unknown',
         staff_email: staffData?.email,
-        leave_type: defermentData.leave_type_key,
-        deferment_period: `${defermentData.deferment_start_date} to ${defermentData.deferment_end_date}`,
+        // Get leave type from the request data
+        leave_type: defermentData.leave_type_key || defermentData.leave_type || 'Annual Leave',
+        deferment_period: `${defermentData.deferment_start_date || ''} to ${defermentData.deferment_end_date || ''}`,
+        original_period: `${defermentData.original_start_date || ''} to ${defermentData.original_end_date || ''}`,
         reason: defermentData.reason,
-        deferment_year: defermentData.requested_deferment_year
+        deferment_year: defermentData.requested_deferment_year,
+        requested_deferment_period: defermentData.requested_deferment_period
       }
     }
+
+    console.log('[v0] Inserting deferment memo with data:', { ...memoData, memo_body: '...' })
 
     const { data: memo, error: memoError } = await supabase
       .from('deferment_memos')
@@ -212,13 +224,22 @@ async function generateDefermentMemo(supabase: any, defermentData: any, hrExecut
       .select()
       .single()
 
-    if (memoError) throw memoError
+    if (memoError) {
+      console.error('[v0] Error inserting deferment memo:', memoError)
+      throw memoError
+    }
+
+    if (!memo || !memo.id) {
+      throw new Error('Memo created but no ID returned')
+    }
+
+    console.log('[v0] Deferment memo created successfully:', memo.id)
 
     // Create memo distributions for relevant roles
     const distributions = [
       { recipient_id: defermentData.user_id, recipient_role: 'staff' },
       { recipient_id: hodData?.hod_user_id, recipient_role: 'hod' }
-    ]
+    ].filter(d => d.recipient_id)
 
     // Add HR Leave Office recipient
     const { data: hrLeaveOfficeUsers } = await supabase
@@ -232,19 +253,21 @@ async function generateDefermentMemo(supabase: any, defermentData: any, hrExecut
     }
 
     for (const dist of distributions) {
-      if (dist.recipient_id) {
-        await supabase.from('deferment_memo_distributions').insert([{
-          deferment_memo_id: memo.id,
-          recipient_id: dist.recipient_id,
-          recipient_role: dist.recipient_role,
-          created_at: new Date().toISOString()
-        }])
+      const { error: distError } = await supabase.from('deferment_memo_distributions').insert([{
+        deferment_memo_id: memo.id,
+        recipient_id: dist.recipient_id,
+        recipient_role: dist.recipient_role,
+        created_at: new Date().toISOString()
+      }])
+      
+      if (distError) {
+        console.error(`[v0] Error creating distribution for ${dist.recipient_role}:`, distError)
       }
     }
 
-    console.log('[v0] Deferment memo generated successfully:', memo.id)
+    console.log('[v0] Deferment memo and distributions created successfully')
   } catch (error) {
-    console.error('[v0] Error generating deferment memo:', error)
+    console.error('[v0] Error generating deferment memo:', error instanceof Error ? error.message : error)
     throw error
   }
 }
@@ -252,12 +275,19 @@ async function generateDefermentMemo(supabase: any, defermentData: any, hrExecut
 // Helper function to generate recall memo
 async function generateRecallMemo(supabase: any, recallData: any, hrExecutiveId: string) {
   try {
+    console.log('[v0] Starting recall memo generation for request:', recallData.id)
+    
     // Get staff details
-    const { data: staffData } = await supabase
+    const { data: staffData, error: staffError } = await supabase
       .from('user_profiles')
       .select('first_name, last_name, email, position, department_id')
       .eq('id', recallData.staff_user_id)
       .single()
+
+    if (staffError) {
+      console.error('[v0] Error fetching staff data for recall:', staffError)
+      throw staffError
+    }
 
     const { data: hodData } = await supabase
       .from('loan_hod_linkages')
@@ -273,7 +303,7 @@ async function generateRecallMemo(supabase: any, recallData: any, hrExecutiveId:
       status: 'generated',
       generated_at: new Date().toISOString(),
       memo_body: {
-        staff_name: `${staffData?.first_name} ${staffData?.last_name}`,
+        staff_name: staffData ? `${staffData.first_name} ${staffData.last_name}` : 'Unknown',
         staff_email: staffData?.email,
         recall_date: recallData.recall_date,
         recall_reason: recallData.recall_reason,
@@ -281,19 +311,30 @@ async function generateRecallMemo(supabase: any, recallData: any, hrExecutiveId:
       }
     }
 
+    console.log('[v0] Inserting recall memo with data:', { ...memoData, memo_body: '...' })
+
     const { data: memo, error: memoError } = await supabase
       .from('recall_memos')
       .insert([memoData])
       .select()
       .single()
 
-    if (memoError) throw memoError
+    if (memoError) {
+      console.error('[v0] Error inserting recall memo:', memoError)
+      throw memoError
+    }
+
+    if (!memo || !memo.id) {
+      throw new Error('Recall memo created but no ID returned')
+    }
+
+    console.log('[v0] Recall memo created successfully:', memo.id)
 
     // Create memo distributions
     const distributions = [
       { recipient_id: recallData.staff_user_id, recipient_role: 'staff' },
       { recipient_id: hodData?.hod_user_id, recipient_role: 'hod' }
-    ]
+    ].filter(d => d.recipient_id)
 
     // Add HR Leave Office recipient
     const { data: hrLeaveOfficeUsers } = await supabase
@@ -307,19 +348,21 @@ async function generateRecallMemo(supabase: any, recallData: any, hrExecutiveId:
     }
 
     for (const dist of distributions) {
-      if (dist.recipient_id) {
-        await supabase.from('recall_memo_distributions').insert([{
-          recall_memo_id: memo.id,
-          recipient_id: dist.recipient_id,
-          recipient_role: dist.recipient_role,
-          created_at: new Date().toISOString()
-        }])
+      const { error: distError } = await supabase.from('recall_memo_distributions').insert([{
+        recall_memo_id: memo.id,
+        recipient_id: dist.recipient_id,
+        recipient_role: dist.recipient_role,
+        created_at: new Date().toISOString()
+      }])
+      
+      if (distError) {
+        console.error(`[v0] Error creating recall distribution for ${dist.recipient_role}:`, distError)
       }
     }
 
-    console.log('[v0] Recall memo generated successfully:', memo.id)
+    console.log('[v0] Recall memo and distributions created successfully')
   } catch (error) {
-    console.error('[v0] Error generating recall memo:', error)
+    console.error('[v0] Error generating recall memo:', error instanceof Error ? error.message : error)
     throw error
   }
 }
