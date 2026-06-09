@@ -2241,13 +2241,126 @@ export function LeaveManagementClient({
                           <p className="text-xs text-amber-700 italic">Keep an eye on your "Approved" tab to see when your leave gets approved!</p>
                         </div>
                       ) : (
-                        <Alert className="border-green-200 bg-green-50">
-                          <CheckCircle2 className="h-4 w-4 text-green-700" />
-                          <AlertDescription className="text-green-900">
-                            <p className="font-semibold mb-1">Great News!</p>
-                            <p className="text-sm">You have approved annual leave. You can request to defer it by submitting through your HOD or RM dashboard. They'll review and send it to HR for final approval.</p>
-                          </AlertDescription>
-                        </Alert>
+                        <div className="space-y-4">
+                          <Alert className="border-green-200 bg-green-50">
+                            <CheckCircle2 className="h-4 w-4 text-green-700" />
+                            <AlertDescription className="text-green-900">
+                              <p className="font-semibold mb-1">Great News!</p>
+                              <p className="text-sm">You have approved annual leave. Select a leave below to request deferment through your HOD or RM. They'll review and send it to HR for final approval.</p>
+                            </AlertDescription>
+                          </Alert>
+
+                          {/* Staff's Approved Leaves Selection */}
+                          <div className="space-y-3">
+                            <Label className="text-sm font-semibold text-slate-700">Select Your Approved Leave to Defer</Label>
+                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+                                <span className="text-xs text-slate-500 font-medium">
+                                  {(() => {
+                                    const staffLeaves = Array.isArray(approvedRequests) ? approvedRequests.filter((r: any) => r.user_id === userId) : []
+                                    return `${staffLeaves.length} approved leave${staffLeaves.length !== 1 ? "s" : ""}`
+                                  })()}
+                                </span>
+                                {selectedApprovedForDeferment && <button onClick={() => setSelectedApprovedForDeferment(null)} className="text-xs text-green-600 hover:underline">Clear selection</button>}
+                              </div>
+                              <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                {(() => {
+                                  const staffLeaves = Array.isArray(approvedRequests) ? approvedRequests.filter((r: any) => r.user_id === userId) : []
+                                  return staffLeaves.length === 0 ? (
+                                    <div className="py-6 text-center text-sm text-slate-400">No approved leaves found</div>
+                                  ) : staffLeaves.map((req: any) => {
+                                    const isSelected = selectedApprovedForDeferment === req.id
+                                    const type = String(req.leave_type || "annual").replace(/_/g, " ")
+                                    const start = req.start_date ? new Date(req.start_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                                    const end = req.end_date ? new Date(req.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                                    const duration = req.number_of_days ? `${req.number_of_days} day${req.number_of_days !== 1 ? "s" : ""}` : "?"
+                                    return (
+                                      <button
+                                        key={req.id}
+                                        type="button"
+                                        onClick={() => setSelectedApprovedForDeferment(isSelected ? null : req.id)}
+                                        className={`w-full text-left px-4 py-3 transition-colors ${isSelected ? "bg-green-50 border-l-4 border-green-500" : "hover:bg-slate-50 border-l-4 border-transparent"}`}
+                                      >
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-semibold text-slate-800 capitalize">{type} Leave</p>
+                                            <p className="text-xs text-slate-600 mt-1">{start} – {end} ({duration})</p>
+                                          </div>
+                                          {isSelected && <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />}
+                                        </div>
+                                      </button>
+                                    )
+                                  })
+                                })()}
+                              </div>
+                            </div>
+
+                            {/* Selected Leave Summary */}
+                            {selectedApprovedForDeferment && (() => {
+                              const sel = Array.isArray(approvedRequests) ? approvedRequests.find((r: any) => r.id === selectedApprovedForDeferment) : null
+                              if (!sel) return null
+                              const type = String(sel.leave_type || "annual").replace(/_/g, " ")
+                              const start = sel.start_date ? new Date(sel.start_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                              const end = sel.end_date ? new Date(sel.end_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "?"
+                              return (
+                                <div className="rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm space-y-2">
+                                  <p className="font-semibold text-green-800 flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Leave Selected</p>
+                                  <div className="space-y-1 text-slate-700 text-xs">
+                                    <p><span className="font-medium">Type:</span> {type}</p>
+                                    <p><span className="font-medium">Period:</span> {start} – {end}</p>
+                                    <p><span className="font-medium">Duration:</span> {sel.number_of_days} day{sel.number_of_days !== 1 ? "s" : ""}</p>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+
+                            {/* Deferment Details Form (Only show when leave is selected) */}
+                            {selectedApprovedForDeferment && (() => {
+                              const sel = Array.isArray(approvedRequests) ? approvedRequests.find((r: any) => r.id === selectedApprovedForDeferment) : null
+                              if (!sel) return null
+                              return (
+                                <div className="space-y-4 rounded-lg bg-white border border-green-200 p-4">
+                                  <h4 className="font-semibold text-slate-800 text-sm">Deferment Details</h4>
+                                  
+                                  <div className="space-y-3">
+                                    {/* Deferment Year */}
+                                    <div>
+                                      <Label className="text-xs font-semibold text-slate-700">Defer to Year</Label>
+                                      <Input
+                                        type="number"
+                                        min={new Date().getFullYear() + 1}
+                                        max={new Date().getFullYear() + 5}
+                                        placeholder="e.g. 2027"
+                                        className="h-9 text-sm border-slate-300 focus:ring-green-500 mt-1"
+                                      />
+                                      <p className="text-xs text-slate-500 mt-1">Select the year you want to defer this leave to</p>
+                                    </div>
+
+                                    {/* Reason */}
+                                    <div>
+                                      <Label className="text-xs font-semibold text-slate-700">Reason for Deferment (Optional)</Label>
+                                      <textarea
+                                        placeholder="Explain why you're deferring this leave..."
+                                        className="h-20 text-xs p-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 resize-none mt-1"
+                                      />
+                                      <p className="text-xs text-slate-500 mt-1">This helps your HOD/RM understand the request</p>
+                                    </div>
+
+                                    {/* Submit Button */}
+                                    <div className="flex gap-2 pt-2">
+                                      <Button className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm h-9">
+                                        Submit Request
+                                      </Button>
+                                      <Button variant="outline" onClick={() => setSelectedApprovedForDeferment(null)} className="text-sm h-9">
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        </div>
                       )}
                     </div>
                   ) : !Array.isArray(approvedRequests) || approvedRequests.length === 0 ? (
