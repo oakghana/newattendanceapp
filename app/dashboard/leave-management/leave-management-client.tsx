@@ -2233,7 +2233,7 @@ export function LeaveManagementClient({
                           <p className="text-sm">As a staff member, you can request to defer your leave once your annual leave has been approved. After approval, you'll be able to move your leave to a future year through your department head or regional manager.</p>
                         </AlertDescription>
                       </Alert>
-                      {!Array.isArray(approvedRequests) || approvedRequests.filter((r: any) => r.user_id === userId).length === 0 ? (
+                      {!Array.isArray(approvedRequests) || approvedRequests.filter((r: any) => r.user_id === userId && String(r.leave_type || "").toLowerCase() === "annual").length === 0 ? (
                         <div className="rounded-lg border-2 border-dashed border-amber-200 bg-amber-50/50 p-8 text-center">
                           <Calendar className="mx-auto mb-4 h-12 w-12 text-amber-300" />
                           <p className="font-semibold text-amber-900 mb-2">No Approved Leave Yet</p>
@@ -2257,17 +2257,17 @@ export function LeaveManagementClient({
                               <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
                                 <span className="text-xs text-slate-500 font-medium">
                                   {(() => {
-                                    const staffLeaves = Array.isArray(approvedRequests) ? approvedRequests.filter((r: any) => r.user_id === userId) : []
-                                    return `${staffLeaves.length} approved leave${staffLeaves.length !== 1 ? "s" : ""}`
+                                    const staffLeaves = Array.isArray(approvedRequests) ? approvedRequests.filter((r: any) => r.user_id === userId && String(r.leave_type || "").toLowerCase() === "annual") : []
+                                    return `${staffLeaves.length} approved annual leave${staffLeaves.length !== 1 ? "s" : ""}`
                                   })()}
                                 </span>
                                 {selectedApprovedForDeferment && <button onClick={() => setSelectedApprovedForDeferment(null)} className="text-xs text-green-600 hover:underline">Clear selection</button>}
                               </div>
                               <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
                                 {(() => {
-                                  const staffLeaves = Array.isArray(approvedRequests) ? approvedRequests.filter((r: any) => r.user_id === userId) : []
+                                  const staffLeaves = Array.isArray(approvedRequests) ? approvedRequests.filter((r: any) => r.user_id === userId && String(r.leave_type || "").toLowerCase() === "annual") : []
                                   return staffLeaves.length === 0 ? (
-                                    <div className="py-6 text-center text-sm text-slate-400">No approved leaves found</div>
+                                    <div className="py-6 text-center text-sm text-slate-400">No approved annual leaves found</div>
                                   ) : staffLeaves.map((req: any) => {
                                     const isSelected = selectedApprovedForDeferment === req.id
                                     const type = String(req.leave_type || "annual").replace(/_/g, " ")
@@ -2416,10 +2416,11 @@ export function LeaveManagementClient({
                         {/* Filtered results list */}
                         {(() => {
                           const filtered = approvedRequests.filter((r: any) => {
+                            const isAnnual = String(r.leave_type || "").toLowerCase() === "annual"
                             const nameMatch = !deferSearch || String(r.user_name || "").toLowerCase().includes(deferSearch.toLowerCase())
                             const deptMatch = !deferDeptFilter || r.department === deferDeptFilter
                             const locMatch = !deferLocFilter || r.location === deferLocFilter
-                            return nameMatch && deptMatch && locMatch
+                            return isAnnual && nameMatch && deptMatch && locMatch
                           })
                           return (
                             <div className="border border-slate-200 rounded-lg overflow-hidden">

@@ -62,6 +62,9 @@ export function SubmitNewDefermentRequest({
   const filteredLeaves = useMemo(() => {
     let leaves = approvedLeaves
     
+    // Only annual leave can be deferred
+    leaves = leaves.filter(leave => String(leave.leave_type || "").toLowerCase() === "annual")
+    
     // Staff can only see their own approved leaves
     if (isStaff) {
       leaves = leaves.filter(leave => leave.user_id === userId)
@@ -147,7 +150,7 @@ export function SubmitNewDefermentRequest({
           <DialogTitle className="text-2xl font-bold">Submit New Deferment Request</DialogTitle>
           <DialogDescription>
             {isStaff
-              ? 'Select one of your approved leave requests to defer to a future year'
+              ? 'Select one of your approved annual leave requests to defer to a future year'
               : 'Select a staff member\'s approved leave to defer to a future year'}
           </DialogDescription>
         </DialogHeader>
