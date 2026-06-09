@@ -65,6 +65,13 @@ export async function POST(request: NextRequest) {
 
     // Create deferment request with requester info
     const defermentPeriod = `${deferral_year}/${parseInt(deferral_year) + 1}` // Format as "2026/2027"
+    
+    // Determine initial status based on who is submitting
+    // If staff is submitting: goes to HOD/RM for endorsement first
+    // If HOD/RM/HR is submitting on behalf: goes directly to HR
+    const isStaffSubmitting = requester_id === leaveRequest.user_id
+    const initialStatus = isStaffSubmitting ? "pending_hod_endorsement" : "pending_hr_approval"
+    
     const { data, error } = await supabase
       .from("leave_deferment_requests")
       .insert({
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
         reason: reason || null,
         user_id: leaveRequest.user_id, // The staff whose leave is being deferred
         created_at: new Date().toISOString(),
-        status: "pending",
+        status: initialStatus,
       })
       .select()
       .single()
