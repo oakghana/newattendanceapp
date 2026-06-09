@@ -105,6 +105,13 @@ const navigationItems = [
     category: "admin",
   },
   {
+    title: "My Requests",
+    href: "/dashboard/staff-requests",
+    icon: FileText,
+    roles: ["staff", "nsp", "intern", "contract", "loan_office", "accounts", "audit_staff"],
+    category: "main",
+  },
+  {
     title: "Excuse Duty Review",
     href: "/dashboard/excuse-duty-review",
     icon: FileText,
