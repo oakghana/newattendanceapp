@@ -134,8 +134,8 @@ export function LeaveManagementModuleClient({
             </TabsTrigger>
           )}
 
-          {/* Deferment & Recall Tab - Staff, HOD/RM, and HR */}
-          {!isRegionalHR && (
+          {/* Deferment & Recall Tab - Only HR Leave Office and HR Executive */}
+          {(isHrOffice || isHrExecutive) && !isRegionalHR && (
             <TabsTrigger value="deferment-recall" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-orange-300 transition-all duration-300 ease-out data-[state=active]:border-orange-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-orange-500 data-[state=active]:to-orange-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(249,115,22,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
               <Shuffle className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" />
               <span className="hidden sm:inline">Deferment & Recall</span>
@@ -223,8 +223,8 @@ export function LeaveManagementModuleClient({
           </TabsContent>
         )}
 
-        {/* Deferment & Recall Tab */}
-        {!isRegionalHR && (
+        {/* Deferment & Recall Tab - Only HR Leave Office and HR Executive */}
+        {(isHrOffice || isHrExecutive) && !isRegionalHR && (
           <TabsContent value="deferment-recall" className="space-y-4 sm:space-y-6 w-full">
             <DefermentRequestsTracking 
               userRole={userRole} 
