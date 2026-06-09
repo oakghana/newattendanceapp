@@ -2308,7 +2308,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 <CardTitle className="text-base text-green-800">
                   {editingId ? "Edit Leave Request" : "New Leave Application"}
                 </CardTitle>
-                <p className="text-xs text-slate-500">Leave Year Period: {leaveYearPeriod}</p>
+                <p className="text-xs text-slate-500">Leave Year: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
                 {/* October Planning Reminder Alert */}
@@ -2346,7 +2346,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-slate-500">
-                      Current year: <strong>{activeLeaveYearPeriod}</strong>
+                      Current year: <strong>{activeLeaveYearPeriod.split("/")[1] || activeLeaveYearPeriod}</strong>
                     </p>
                     {inOctoberPlanningWindow && (
                       <p className="text-xs text-amber-700 font-medium">
@@ -2497,7 +2497,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Card>
           </TabsContent>
 
-          {/* ── HOD Review ���─────────────────────────────────────────────── */}
+          {/* ── HOD Review ���────────────────────────────────────────────���── */}
           <TabsContent value="hod-review">
             {/* 2-day approval notice for HOD/RM */}
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
