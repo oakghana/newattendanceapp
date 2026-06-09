@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
     // Verify user role has access
     const normalizedRole = String(hr_executive_role || "").toLowerCase().replace(/[-\s]+/g, "_")
     if (!HR_EXECUTIVE_ROLES.includes(normalizedRole)) {
+      console.error(`[v0] Role check failed. Role: "${hr_executive_role}", Normalized: "${normalizedRole}", Allowed: ${HR_EXECUTIVE_ROLES.join(', ')}`)
       return NextResponse.json(
         { error: "Access denied. Only HR Executives can approve or reject requests." },
         { status: 403 }

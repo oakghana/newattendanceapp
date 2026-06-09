@@ -188,6 +188,7 @@ export function DefermentRequestsTracking({ userRole, userId, userDepartmentId }
           request_type: 'deferment',
           decision: 'approved',
           hr_executive_id: userId,
+          hr_executive_role: userRole,
         }),
       })
 
@@ -205,7 +206,7 @@ export function DefermentRequestsTracking({ userRole, userId, userDepartmentId }
     } finally {
       setIsSubmitting(false)
     }
-  }, [selectedRequest, userId, fetchRequests])
+  }, [selectedRequest, userId, userRole, fetchRequests])
 
   const handleReject = useCallback(async () => {
     if (!selectedRequest) return
@@ -221,6 +222,7 @@ export function DefermentRequestsTracking({ userRole, userId, userDepartmentId }
           decision: 'rejected',
           rejection_reason: rejectionReason || 'Rejected by HR Executive',
           hr_executive_id: userId,
+          hr_executive_role: userRole,
         }),
       })
 
@@ -239,7 +241,7 @@ export function DefermentRequestsTracking({ userRole, userId, userDepartmentId }
     } finally {
       setIsSubmitting(false)
     }
-  }, [selectedRequest, rejectionReason, userId, fetchRequests])
+  }, [selectedRequest, rejectionReason, userId, userRole, fetchRequests])
 
   const pendingHodRequests = requests.filter(r => r.status === 'pending_hod_endorsement')
   const pendingHrRequests = requests.filter(r => r.status === 'pending_hr_approval')
