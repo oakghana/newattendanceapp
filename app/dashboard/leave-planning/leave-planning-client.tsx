@@ -2332,48 +2332,25 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
-                    <Select value={leaveYearPeriod} onValueChange={setLeaveYearPeriod}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Select leave year period" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {leaveYearPeriodOptions.map((period) => (
-                          <SelectItem key={period} value={period}>{period}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Type</Label>
+                  <Select value={leaveType} onValueChange={setLeaveType}>
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Select leave type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeLeaveTypes.map((t) => (
+                        <SelectItem key={t.leaveTypeKey} value={t.leaveTypeKey}>
+                          {t.leaveTypeLabel}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedLeaveType && (
                     <p className="text-xs text-slate-500">
-                      Current year: <strong>{activeLeaveYearPeriod.split("/")[1] || activeLeaveYearPeriod}</strong>
+                      Entitlement: <strong>{selectedLeaveType.entitlementDays} day(s)</strong>
                     </p>
-                    {inOctoberPlanningWindow && (
-                      <p className="text-xs text-amber-700 font-medium">
-                        ⚠️ First week of October: staff should submit annual leave for the next leave period.
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Type</Label>
-                    <Select value={leaveType} onValueChange={setLeaveType}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Select leave type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeLeaveTypes.map((t) => (
-                          <SelectItem key={t.leaveTypeKey} value={t.leaveTypeKey}>
-                            {t.leaveTypeLabel}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedLeaveType && (
-                      <p className="text-xs text-slate-500">
-                        Entitlement: <strong>{selectedLeaveType.entitlementDays} day(s)</strong>
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
