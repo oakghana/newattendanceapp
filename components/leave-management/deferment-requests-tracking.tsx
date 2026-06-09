@@ -119,31 +119,37 @@ export function DefermentRequestsTracking({ userRole, userId, userDepartmentId }
     setError(null)
 
     try {
-      let url = '/api/leave/deferment?'
-
-      if (isStaff) {
-        // Staff sees their own deferment requests
-        url += `user_id=${userId}`
-      } else if (isHodOrRM) {
-        // HOD/RM sees pending endorsement requests
-        url += `hod_id=${userId}`
-      } else if (isHRLeaveOffice) {
-        // HR sees all deferment requests
-        url += 'status=pending_hr_approval'
+      let url = '/api/leave/deferment-recall/all?'
+      
+      // Add role-based parameters for the API
+      const roleNorm = userRole?.toLowerCase().replace(/[\s-]+/g, '_') || ''
+      url += `user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(roleNorm)}`
+      
+      if (userDepartmentId) {
+        url += `&user_department=${encodeURIComponent(userDepartmentId)}`
       }
 
       const response = await fetch(url)
-      if (!response.ok) throw new Error('Failed to fetch deferment requests')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to fetch deferment requests')
+      }
 
       const data = await response.json()
-      setRequests(Array.isArray(data.data) ? data.data : [])
+      // The endpoint returns { deferments: [], recalls: [] }
+      const allRequests = [
+        ...(Array.isArray(data.deferments) ? data.deferments : []),
+        ...(Array.isArray(data.recalls) ? data.recalls : [])
+      ]
+      setRequests(allRequests)
     } catch (err) {
+      console.log("[v0] Deferment requests fetch error:", err)
       setError(err instanceof Error ? err.message : 'An error occurred')
       setRequests([])
     } finally {
       setIsLoading(false)
     }
-  }, [userId, isStaff, isHodOrRM, isHRLeaveOffice])
+  }, [userId, userRole, userDepartmentId])
 
   useEffect(() => {
     fetchRequests()
