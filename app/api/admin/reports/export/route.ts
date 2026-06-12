@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       // Check admin role
       const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-      if (!profile || !["admin", "regional_manager", "department_head"].includes(profile.role)) {
+      if (!profile || !["admin", "regional_manager", "department_head", "director_hr", "manager_hr"].includes(profile.role)) {
         return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
       }
 
