@@ -392,7 +392,7 @@ export default function LoginPage() {
         console.error("[v0] Supabase OTP error:", otpResult.error.message)
 
         if (otpResult.error.message.includes("Email rate limit exceeded")) {
-          showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
+          showWarning("Too many OTP requests. Please wait a few minutes before trying again.", "OTP Rate Limit")
         } else if (
           otpResult.error.message.includes("User not found") ||
           otpResult.error.message.includes("Signups not allowed")
@@ -404,7 +404,7 @@ export default function LoginPage() {
         } else if (otpResult.error.message.includes("Invalid email")) {
           showFieldError("Email", "Invalid email format. Please check your email address.")
         } else {
-          showFieldError("Email", `Failed to send OTP: ${otpResult.error.message}`)
+          showError(`Failed to send OTP: ${otpResult.error.message}`, "OTP Error")
         }
         return
       }
