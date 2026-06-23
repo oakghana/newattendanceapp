@@ -45,6 +45,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Banknote,
+  Mail,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -138,6 +139,14 @@ const navigationItems = [
     icon: Banknote,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
     category: "main",
+  },
+  {
+    title: "E-Circulars",
+    href: "https://engage.cloud.microsoft/main/org/qccgh.onmicrosoft.com/feed",
+    icon: Mail,
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+    category: "main",
+    external: true,
   },
   {
     title: "Reports & Trends",
@@ -474,6 +483,39 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
               {mainItems.map((item) => {
                 const Icon = item.icon
                 const isActive = pathname === item.href
+                const isExternal = (item as any).external
+                
+                if (isExternal) {
+                  return (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={isCollapsed ? item.title : undefined}
+                      className={cn(
+                      "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
+                      isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
+                        "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
+                      )}
+                      onClick={() => {
+                        setIsMobileMenuOpen(false)
+                      }}
+                    >
+                      <Icon
+                        className={cn(
+                          "h-4.5 w-4.5 flex-shrink-0",
+                        )}
+                      />
+                      {!isCollapsed && (
+                        <>
+                          <span className="flex-1">{item.title}</span>
+                        </>
+                      )}
+                    </a>
+                  )
+                }
+                
                 return (
                   <Link
                     key={item.href}
