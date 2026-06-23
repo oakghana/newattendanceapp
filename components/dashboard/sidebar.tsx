@@ -23,7 +23,6 @@ import {
   FileText,
   BarChart3,
   MapPin,
-  QrCode,
   Users,
   UserCheck,
   Upload,
@@ -34,7 +33,6 @@ import {
   ChevronRight,
   User,
   LogOut,
-  HelpCircle,
   RefreshCw,
   AlertCircle,
   Archive,
@@ -127,20 +125,8 @@ const navigationItems = [
     roles: ["admin", "regional_manager", "department_head", "director_hr", "manager_hr"],
     category: "admin",
   },
-  {
-    title: "Schedule",
-    href: "/dashboard/schedule",
-    icon: Clock,
-    roles: ["admin"],
-    category: "main",
-  },
-  {
-    title: "Help Center",
-    href: "/dashboard/help",
-    icon: HelpCircle,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
-    category: "main",
-  },
+
+
   {
     title: "Loan Administration",
     href: "/dashboard/loan-app",
@@ -162,13 +148,7 @@ const navigationItems = [
     roles: ["admin"],
     category: "admin",
   },
-  {
-    title: "QR Events",
-    href: "/dashboard/qr-events",
-    icon: QrCode,
-    roles: ["admin", "regional_manager", "department_head"],
-    category: "admin",
-  },
+
   {
     title: "Defaulters",
     href: "/dashboard/defaulters",
