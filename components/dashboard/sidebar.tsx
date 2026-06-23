@@ -77,6 +77,14 @@ const navigationItems = [
     category: "main",
   },
   {
+    title: "E-Circulars",
+    href: "https://engage.cloud.microsoft/main/org/qccgh.onmicrosoft.com/feed",
+    icon: Mail,
+    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+    category: "main",
+    external: true,
+  },
+  {
     title: "Attendance Check",
     href: "/dashboard/attendance",
     icon: Clock,
@@ -139,14 +147,6 @@ const navigationItems = [
     icon: Banknote,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
     category: "main",
-  },
-  {
-    title: "E-Circulars",
-    href: "https://engage.cloud.microsoft/main/org/qccgh.onmicrosoft.com/feed",
-    icon: Mail,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
-    category: "main",
-    external: true,
   },
   {
     title: "Reports & Trends",
