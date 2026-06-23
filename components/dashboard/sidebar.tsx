@@ -78,7 +78,7 @@ const navigationItems = [
   },
   {
     title: "E-Circulars",
-    href: "https://engage.cloud.microsoft/main/org/qccgh.onmicrosoft.com/feed",
+    href: "https://engage.cloud.microsoft/main/org/qccgh.onmicrosoft.com/users/eyJfdHlwZSI6IlVzZXIiLCJpZCI6IjUwMjc4NTE1NTA3MyJ9/storyline",
     icon: Mail,
     roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
     category: "main",
