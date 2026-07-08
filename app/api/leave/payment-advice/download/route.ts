@@ -72,34 +72,66 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Memo not found" }, { status: 404 })
     }
 
-    // Smart signature fetching - from approval_signature_registry using pickBestSignature
+    // Parse memo body to extract staff list and approver info FIRST
+    let staffList: any[] = []
+    let approverInfo: any = null
+    if (memo.memo_body) {
+      try {
+        const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+        staffList = body.staffList || body.staff || []
+        approverInfo = body.approver || null
+      } catch (e) {
+        console.warn("[v0] Could not parse memo_body")
+      }
+    }
+
+    // Smart signature fetching - Priority: approver info in memo_body > stored signer
     let signatureUrl: string | null = memo.signature_data_url || null
     let signerName = memo.signer_name || memo.hr_leave_office_name || "HUMAN RESOURCE MANAGER"
+    
+    // Use approver info from memo body if available, otherwise fall back to signer_name
+    if (approverInfo && approverInfo.name) {
+      signerName = approverInfo.name
+      console.log("[v0] Using approver info from memo body:", approverInfo)
+    }
+    
+    // CRITICAL: If memo has approver info (from approval), fetch their signature first
+    let approverId: string | null = null
+    if (approverInfo?.id) {
+      approverId = approverInfo.id
+      console.log("[v0] Memo has approver info stored, will fetch signature for:", approverId)
+    } else if (memo.signer_id) {
+      approverId = memo.signer_id
+      console.log("[v0] Using stored signer_id for signature:", approverId)
+    }
 
-    if (!signatureUrl && memo.signer_id) {
-      console.log("[v0] Fetching signature from registry for signer:", memo.signer_id)
+    if (!signatureUrl && approverId) {
+      console.log("[v0] Fetching signature from registry for approver/signer:", approverId)
       const { data: signatureRecords } = await admin
         .from("approval_signature_registry")
         .select("id, signature_data_url, signature_mode, signature_text, is_active, user_id")
-        .eq("user_id", memo.signer_id)
+        .eq("user_id", approverId)
       
       if (signatureRecords) {
         const bestSig = pickBestSignature(signatureRecords)
         if (bestSig?.signature_data_url) {
           signatureUrl = bestSig.signature_data_url
-          console.log("[v0] Found signature in registry for memo")
+          console.log("[v0] Found signature in registry for approver:", approverId)
         }
       }
     }
-
-    // Parse memo body to extract staff list
-    let staffList: any[] = []
-    if (memo.memo_body) {
-      try {
-        const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        staffList = body.staffList || body.staff || []
-      } catch (e) {
-        console.warn("[v0] Could not parse memo_body")
+    
+    // Also try fetching from user_profiles signature_data_url as a last resort
+    if (!signatureUrl && approverId) {
+      const { data: userProfile } = await admin
+        .from("user_profiles")
+        .select("signature_data_url")
+        .eq("id", approverId)
+        .single()
+      
+      if (userProfile?.signature_data_url) {
+        signatureUrl = userProfile.signature_data_url
+        console.log("[v0] Found signature in user_profiles for approver:", approverId)
       }
     }
 
@@ -171,7 +203,9 @@ export async function GET(request: NextRequest) {
     doc.setFont(undefined, "bold")
     doc.text("FROM:", margin, y)
     doc.setFont(undefined, "normal")
-    doc.text("DEPUTY HUMAN RESOURCE MANAGER", margin + 15, y)
+    // Use approver's position if available, otherwise fall back to generic title
+    const fromPosition = (approverInfo?.position || "HUMAN RESOURCE MANAGER").toUpperCase()
+    doc.text(fromPosition, margin + 15, y)
     y += 6
 
     doc.setFont(undefined, "bold")
@@ -308,7 +342,9 @@ export async function GET(request: NextRequest) {
     doc.text(signerName, margin, y)
     y += 4
     doc.setFont(undefined, "normal")
-    doc.text("HUMAN RESOURCE MANAGER", margin, y)
+    // Use approver's position from memo body if available
+    const signerPosition = (approverInfo?.position || "HUMAN RESOURCE MANAGER").toUpperCase()
+    doc.text(signerPosition, margin, y)
     y += 7
 
     // === CC SECTION ===
