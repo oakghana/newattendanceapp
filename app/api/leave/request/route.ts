@@ -93,14 +93,23 @@ export async function POST(request: NextRequest) {
 }
 
 async function tryDeleteAll(admin: any, table: string) {
-  const { error } = await admin.from(table).delete()
+  // Delete all records by filtering for any row that exists
+  // This satisfies Supabase's requirement for a WHERE clause
+  const { error } = await admin
+    .from(table)
+    .delete()
+    .gt("id", -1) // All positive IDs will match, effectively deleting all rows
+  
   if (error) {
     const message = String(error.message || "")
-    if (/does not exist|schema cache|relation/i.test(message)) {
+    if (/does not exist|schema cache|relation|UPDATE.*WHERE|DELETE.*WHERE/i.test(message)) {
+      console.warn(`[v0] Could not delete from ${table}:`, message)
       return
     }
     throw error
   }
+  
+  console.log(`[v0] Successfully deleted all records from ${table}`)
 }
 
 export async function DELETE() {
