@@ -195,6 +195,16 @@ export function MemoApprovalModal({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* Directed To Badge */}
+          {(memo as any).assigned_hr_executive_id && (
+            <Alert className="bg-blue-50 border-blue-200 text-blue-900">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-900">
+                This memo has been directed specifically to you for approval by HR Leave Office.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Memo Preview Section */}
           <div className="bg-slate-50 rounded-lg p-4 space-y-3">
             <h3 className="font-semibold text-slate-900">Memo Summary</h3>
