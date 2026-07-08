@@ -216,6 +216,11 @@ export function HRExecutiveMemoDashboard({ userId }: HRExecutiveMemoDashboardPro
                 {type === 'deferment' ? 'Deferment' : 'Recall'}
               </Badge>
               {getStatusBadge(memo.status)}
+              {(memo as any).assigned_hr_executive_id && (
+                <Badge className="bg-blue-50 text-blue-700 border-blue-200" variant="outline">
+                  Directed to You
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-slate-500 mb-3">
               {memo.staff?.employee_id} • {memo.staff?.departments?.name}

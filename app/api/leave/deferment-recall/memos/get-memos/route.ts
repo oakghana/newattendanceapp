@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       pending_count: 0
     }
 
-    // Fetch deferment memos assigned to or created for this HR Executive
+    // Fetch deferment memos assigned to this HR Executive
     if (memoType === 'deferment' || memoType === 'all') {
       let query = admin
         .from("deferment_memos")
@@ -41,12 +41,17 @@ export async function GET(request: NextRequest) {
           ),
           deferment_request:leave_deferment_requests(
             id, reason, requested_deferment_year, requested_deferment_period,
-            created_at
+            created_at, assigned_hr_executive_id
           ),
           signer:user_profiles!deferment_memos_hr_signer_id_fkey(
             first_name, last_name, position
           )
         `)
+        // Filter: Only show memos assigned to this HR Executive
+        // A memo should be visible if:
+        // 1. It's assigned to the current user in the deferment request, OR
+        // 2. The current user is the HR signer of the memo (already approved/rejected)
+        .or(`deferment_request.assigned_hr_executive_id.eq.${user.id},hr_signer_id.eq.${user.id}`)
         .order('generated_at', { ascending: false })
 
       // Filter by status
@@ -70,7 +75,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch recall memos
+    // Fetch recall memos assigned to this HR Executive
     if (memoType === 'recall' || memoType === 'all') {
       let query = admin
         .from("recall_memos")
@@ -81,12 +86,17 @@ export async function GET(request: NextRequest) {
             departments(name)
           ),
           recall_request:leave_recall_requests(
-            id, recall_reason, recall_date, created_at
+            id, recall_reason, recall_date, created_at, assigned_hr_executive_id
           ),
           signer:user_profiles!recall_memos_hr_signer_id_fkey(
             first_name, last_name, position
           )
         `)
+        // Filter: Only show memos assigned to this HR Executive
+        // A memo should be visible if:
+        // 1. It's assigned to the current user in the recall request, OR
+        // 2. The current user is the HR signer of the memo (already approved/rejected)
+        .or(`recall_request.assigned_hr_executive_id.eq.${user.id},hr_signer_id.eq.${user.id}`)
         .order('generated_at', { ascending: false })
 
       // Filter by status

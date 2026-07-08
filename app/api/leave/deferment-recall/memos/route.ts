@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
             requested_deferment_year,
             requested_deferment_period,
             deferment_start_date,
-            deferment_end_date
+            deferment_end_date,
+            assigned_hr_executive_id
           ),
           staff:user_profiles!deferment_memos_staff_id_fkey (
             id,
@@ -45,7 +46,12 @@ export async function GET(request: NextRequest) {
             position
           )
         `)
-        .or(`staff_id.eq.${user.id},hod_id.eq.${user.id},hr_signer_id.eq.${user.id}`)
+        // Filter: Only show memos where user is:
+        // 1. The staff member who submitted the deferment request
+        // 2. The HOD who endorsed it
+        // 3. The HR signer who approved it
+        // 4. The assigned HR Executive who should approve it
+        .or(`staff_id.eq.${user.id},hod_id.eq.${user.id},hr_signer_id.eq.${user.id},deferment_request.assigned_hr_executive_id.eq.${user.id}`)
         .order("created_at", { ascending: false })
 
       if (memos) {
@@ -54,6 +60,7 @@ export async function GET(request: NextRequest) {
           memo_type: "deferment",
           staff_name: m.staff ? `${m.staff.first_name} ${m.staff.last_name}` : "Unknown",
           hod_name: m.hod ? `${m.hod.first_name} ${m.hod.last_name}` : null,
+          assigned_hr_executive_id: m.deferment_request?.assigned_hr_executive_id,
         }))
       }
     }
@@ -69,7 +76,8 @@ export async function GET(request: NextRequest) {
             status,
             recall_reason,
             recall_notes,
-            recall_date
+            recall_date,
+            assigned_hr_executive_id
           ),
           staff:user_profiles!recall_memos_staff_id_fkey (
             id,
@@ -78,7 +86,11 @@ export async function GET(request: NextRequest) {
             employee_id
           )
         `)
-        .or(`staff_id.eq.${user.id},hr_signer_id.eq.${user.id}`)
+        // Filter: Only show memos where user is:
+        // 1. The staff member who initiated the recall request
+        // 2. The HR signer who approved it
+        // 3. The assigned HR Executive who should approve it
+        .or(`staff_id.eq.${user.id},hr_signer_id.eq.${user.id},recall_request.assigned_hr_executive_id.eq.${user.id}`)
         .order("created_at", { ascending: false })
 
       if (memos) {
@@ -86,6 +98,7 @@ export async function GET(request: NextRequest) {
           ...m,
           memo_type: "recall",
           staff_name: m.staff ? `${m.staff.first_name} ${m.staff.last_name}` : "Unknown",
+          assigned_hr_executive_id: m.recall_request?.assigned_hr_executive_id,
         }))
       }
     }
