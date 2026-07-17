@@ -186,7 +186,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     const assignedSigners = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
     const canApprove = assignedSigners.includes(currentUserId)
     if (!canApprove) {
-      console.log(`[v0] User ${currentUserId} cannot approve memo ${memo.id} - assigned to: ${assignedSigners.join(", ")}`)
+      return false
     }
     return canApprove
   }
@@ -211,7 +211,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           })
           // Also track the current user's ID for signer assignment checks
           setCurrentUserId(user?.id || null)
-          console.log("[v0] Current user loaded:", fullName, "ID:", user?.id)
         }
       } catch (err) {
         console.error("[v0] Error fetching current user:", err)
@@ -238,14 +237,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
             signature_image_url: exec.signature_image_url || null,
           }))
           setHrExecutives(execs)
-          console.log("[v0] HR Executives loaded:", execs.length, "Total:", execs.map((e: any) => e.full_name).join(", "))
-          
-          // CRITICAL FIX: Don't auto-select a signer. Users MUST explicitly choose who should sign.
-          // This prevents accidentally assigning memos to the wrong person (e.g., choosing the first
-          // executive in the list by default).
+          // Don't auto-select a signer — users must explicitly choose who should sign.
           setSelectedSigners([])
           setSelectedSigner(null)
-          console.log("[v0] HR Executives loaded - user must explicitly select signers:", execs.map((e: any) => e.full_name))
         } else {
           const error = await response.json()
           console.error("[v0] API returned error:", error)
@@ -272,12 +266,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           if (response.ok) {
             const data = await response.json()
             setPendingMemos(data.memos || [])
-            // Show debug info if no memos but some exist in system
             if (data.debugMessage && data.debugMessage !== "Loading successful") {
               setPendingMemosError(data.debugMessage)
-              console.log("[v0] Pending memos debug:", data.debugMessage)
             }
-            console.log("[v0] Fetched pending memos assigned to current HR Executive:", data.count, "memos out of", data.totalPendingInSystem, "total")
           } else {
             const errorData = await response.json()
             const errorMsg = errorData.error || response.statusText
@@ -307,15 +298,9 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           const url = approvedFilterMonth
             ? `/api/leave/payment-advice/approved-memos?month=${approvedFilterMonth}`
             : "/api/leave/payment-advice/approved-memos"
-          console.log("[v0] Fetching approved memos from:", url)
           const response = await fetch(url)
           if (response.ok) {
             const data = await response.json()
-            console.log("[v0] Approved memos response:", {
-              count: data.count,
-              memos: data.memos?.length || 0,
-              debug: data.debug,
-            })
             setApprovedMemos(data.memos || [])
           } else {
             console.error("[v0] Failed to fetch approved memos:", response.status, response.statusText)
@@ -345,7 +330,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           if (response.ok) {
             const data = await response.json()
             setSubmittedMemos(data.memos || [])
-            console.log("[v0] Loaded submitted memos for month:", summaryMonth, "Count:", data.memos?.length)
           } else {
             console.error("[v0] Failed to fetch submitted memos")
             setSubmittedMemos([])
@@ -491,10 +475,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       // Store the signer data with signature for later use when submitting
       if (data.signerData) {
         setSelectedSigner(data.signerData)
-        console.log("[v0] Stored signer data with signature:", {
-          signerName: data.signerData.name,
-          hasSignature: !!data.signerData.signature_image_url,
-        })
       }
 
       toast({
@@ -700,6 +680,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     if (!memo) return
 
     try {
+      const { jsPDF } = await import("jspdf")
       const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -713,11 +694,11 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       // ============ HEADER - TWO COLUMN LAYOUT ============
       // Left column: Company details
       doc.setFontSize(10)
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       doc.setTextColor(0, 0, 0)
       doc.text("QUALITY CONTROL COMPANY LTD.", 20, yPos)
       yPos += 5
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.text("(COCOBOD)", 20, yPos)
       yPos += 4
       doc.text("P. O. BOX M54", 20, yPos)
@@ -726,7 +707,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
       // Right column: MEMORANDUM title and logo
       doc.setFontSize(11)
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       doc.text("MEMORANDUM", pageWidth - 50, 15)
       
       // Add logo centered between date and memorandum text
@@ -748,7 +729,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       const refNo = referenceNumbers[category]?.trim() || `${category.charAt(0)}-${format(new Date(), "yyyy-MM-dd")}`
       yPos = 36
       doc.setFontSize(9)
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.text(`REF. NO: ${refNo}`, 20, yPos)
       doc.text(`DATE: ${format(new Date(), "dd-MMM-yyyy")}`, pageWidth - 50, yPos, { align: "left" })
 
@@ -759,7 +740,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
       // ============ MEMO FIELDS ============
       doc.setFontSize(10)
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
 
       // Extract month and year
       const [year, month] = selectedMonth.split("-")
@@ -771,28 +752,28 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       const categoryLabel = category === "Manager" ? "MANAGEMENT" : category === "Senior" ? "SNR." : "JNR."
 
       // TO field
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       doc.text("TO:", 20, yPos)
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.text("DEPUTY DIRECTOR, FINANCE", 35, yPos)
       yPos += 6
 
       // FROM field - use selected signer's position
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       doc.text("FROM:", 20, yPos)
-      doc.setFont(undefined, "normal")
-      const fromPosition = selectedSigner ? selectedSigner.position.toUpperCase() : "DEPUTY HUMAN RESOURCE MANAGER"
+      doc.setFont("helvetica", "normal")
+      const fromPosition = selectedSigner ? (selectedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase() : "HUMAN RESOURCE MANAGER"
       doc.text(fromPosition, 35, yPos)
       yPos += 6
 
       // SUBJECT field
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       const subjectText = `PAYMENT OF LEAVE ALLOWANCE (${categoryLabel} STAFF) – ${monthName.toUpperCase()} ${year}`
       doc.text("SUBJECT: ", 20, yPos)
       
       // Calculate space after SUBJECT:
       const subjectLabelWidth = doc.getTextWidth("SUBJECT: ")
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       const splitSubject = doc.splitTextToSize(subjectText, pageWidth - 55 - subjectLabelWidth)
       doc.text(splitSubject[0], 20 + subjectLabelWidth, yPos)
       
@@ -803,7 +784,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       yPos += 10
 
       // ============ BODY TEXT ============
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.setFontSize(10)
       const bodyText = `We wish to inform you that the under-listed ${categoryLabel.toLowerCase()} staff are scheduled to proceed on their annual vacation leave in ${monthName} ${year}.`
       const splitBody = doc.splitTextToSize(bodyText, pageWidth - 40)
@@ -857,7 +838,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       const startX = (pageWidth - totalTableWidth) / 2
 
       // Draw table header - simple black borders, no fill
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       doc.setFontSize(9)
       doc.setTextColor(0, 0, 0)
       doc.setDrawColor(0, 0, 0)
@@ -872,7 +853,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       yPos += headerHeight
 
       // Draw table data - simple borders
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.setFontSize(8)
       doc.setTextColor(0, 0, 0)
       tableData.forEach((row) => {
@@ -913,7 +894,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       yPos += 8
 
       // ============ CLOSING TEXT ============
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.setFontSize(10)
       doc.setTextColor(0, 0, 0)
       doc.text("We, therefore, kindly request you to pay their leave allowances accordingly.", 20, yPos)
@@ -960,17 +941,17 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       }
       
       // Signer name (no border above)
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       doc.setFontSize(10)
       doc.setTextColor(0, 0, 0)
-      const signerName = selectedSigner ? selectedSigner.full_name.toUpperCase() : "HR EXECUTIVE"
+      const signerName = selectedSigner ? (selectedSigner.full_name || "HR EXECUTIVE").toUpperCase() : "HR EXECUTIVE"
       doc.text(signerName, 20, yPos)
       yPos += 5
       
       // Signer title (rank/position in UPPERCASE)
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.setFontSize(9)
-      const signerTitle = selectedSigner ? selectedSigner.position.toUpperCase() : "DEPUTY HUMAN RESOURCE MANAGER"
+      const signerTitle = selectedSigner ? (selectedSigner.position || "HUMAN RESOURCE MANAGER").toUpperCase() : "HUMAN RESOURCE MANAGER"
       doc.text(signerTitle, 20, yPos)
       yPos += 10
 
@@ -981,13 +962,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
       doc.line(20, yPos, pageWidth - 20, yPos)
       yPos += 6
       
-      doc.setFont(undefined, "bold")
+      doc.setFont("helvetica", "bold")
       doc.setFontSize(9)
       doc.setTextColor(0, 0, 0)
       doc.text("CC:", 20, yPos)
       yPos += 5
       
-      doc.setFont(undefined, "normal")
+      doc.setFont("helvetica", "normal")
       doc.setFontSize(8)
       
       const ccList = ["MANAGING DIRECTOR", "DEPUTY DIRECTOR, HR", "AUDIT MANAGER"]
@@ -1457,15 +1438,39 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                           {paginatedGroups.map(({ key, month, category, memos }) => (
                         <Card key={key} className="border-l-4 border-l-green-500 shadow-sm">
                           <CardHeader className="pb-2">
-                            <div className="flex justify-between items-center">
-                              <div>
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
                                 <CardTitle className="text-lg flex items-center gap-2">
                                   <CheckCircle className="h-5 w-5 text-green-600" />
                                   {category} - {month}
                                 </CardTitle>
                                 <CardDescription>{memos.length} staff member{memos.length > 1 ? "s" : ""} approved</CardDescription>
+                                {/* Signer summary — resolve from each memo's memo_body or signer_name */}
+                                {(() => {
+                                  // Collect unique signers across all memos in this group
+                                  const signerSet = new Map<string, { name: string; position: string }>()
+                                  memos.forEach((m) => {
+                                    let body: any = {}
+                                    try { body = typeof m.memo_body === "string" ? JSON.parse(m.memo_body) : (m.memo_body || {}) } catch {}
+                                    const name = (body.approver?.name || m.signer_name || "").trim()
+                                    const position = (body.approver?.position || body.selectedSigner?.position || "").trim()
+                                    if (name) signerSet.set(name.toUpperCase(), { name: name.toUpperCase(), position })
+                                  })
+                                  const signers = Array.from(signerSet.values())
+                                  if (signers.length === 0) return null
+                                  return (
+                                    <div className="mt-1.5 flex flex-wrap gap-2">
+                                      {signers.map((s) => (
+                                        <span key={s.name} className="inline-flex items-center gap-1.5 text-xs bg-green-50 border border-green-200 text-green-800 rounded-full px-2.5 py-0.5 font-medium">
+                                          <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                                          Signed by: {s.name}{s.position ? ` — ${s.position}` : ""}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )
+                                })()}
                               </div>
-                              <Badge className="bg-green-100 text-green-800 border-green-300">
+                              <Badge className="bg-green-100 text-green-800 border-green-300 mt-0.5">
                                 ✓ Approved
                               </Badge>
                             </div>
@@ -1483,6 +1488,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Approved On</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Signed By</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -1495,6 +1501,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     }
                                     const staffRank = memoBody.staff_rank_label || category
                                     const staffPosition = memoBody.staff_position || "N/A"
+                                    const signerName = (memoBody.approver?.name || memo.signer_name || "").trim()
                                     
                                     return (
                                       <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
@@ -1509,6 +1516,16 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                         <td className="px-3 py-2 text-gray-600">
                                           {memo.updated_at ? new Date(memo.updated_at).toLocaleDateString() : "N/A"}
                                         </td>
+                                        <td className="px-3 py-2">
+                                          {signerName ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-green-700 font-medium">
+                                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                                              {signerName}
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs text-gray-400">—</span>
+                                          )}
+                                        </td>
                                       </tr>
                                     )
                                   })}
@@ -1522,7 +1539,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                 className="flex-1 bg-green-600 hover:bg-green-700"
                                 onClick={async () => {
                                   try {
-                                    console.log("[v0] Starting batch download for", category, month, "with", memos.length, "staff")
                                     
                                     // Download combined PDF with all staff in this group
                                     // Use the first memo's selected signer, or fall back to HR Leave Office

@@ -109,7 +109,6 @@ export function SignatureRequiredDialog({
       })
       setSignatureData(null)
       setUploadedImage(null)
-      setExistingSignature(data.signature?.signature_data_url || null)
       onOpenChange(false)
       onSignatureSaved()
     } catch (error) {
