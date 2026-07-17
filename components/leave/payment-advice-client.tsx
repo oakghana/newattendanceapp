@@ -83,6 +83,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [pendingMemos, setPendingMemos] = useState<any[]>([])
   const [loadingPendingMemos, setLoadingPendingMemos] = useState(false)
   const [pendingMemosError, setPendingMemosError] = useState<string | null>(null)
+  const [isApprovingMemos, setIsApprovingMemos] = useState(false)
   const [approvedMemos, setApprovedMemos] = useState<any[]>([])
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
@@ -1250,27 +1251,22 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                             {/* Batch approval buttons */}
                             <div className="flex gap-3">
                               <Button
-                                className="flex-1 bg-green-600 hover:bg-green-700"
+                                disabled={isApprovingMemos || memos.length === 0}
+                                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 onClick={async () => {
+                                  setIsApprovingMemos(true)
                                   try {
-                                    // The signer is ALWAYS the logged-in HR Executive (current user).
-                                    // Verify the current user has a saved signature before approving.
                                     if (currentUser?.id) {
                                       const hasSignature = await checkSignerSignature(currentUser.id)
                                       if (!hasSignature) {
-                                        // Save the memo IDs so we can retry after signature is saved
                                         const ids = memos.map((m: any) => m.id)
                                         setPendingApprovalMemoIds(ids)
-                                        // Show signature dialog for HR Executive to add their signature
                                         setShowSignatureRequiredDialog(true)
                                         return
                                       }
                                     }
 
-                                    // Approve all memos in this group using secure endpoint.
-                                    // The server signs as the authenticated user, so no signer is sent.
                                     const memoIds = memos.map((m) => m.id)
-                                    
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
@@ -1280,63 +1276,51 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     const result = await response.json()
                                     
                                     if (response.ok) {
-                                      // Remove all approved memos from pending
                                       const approvedIds = new Set(memos.map((m) => m.id))
                                       setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
-                                      
-                                      // Add to approved list
                                       const approvedMemosList = memos.map((m) => ({
                                         ...m,
                                         status: "reviewed_by_hr",
                                         updated_at: new Date().toISOString(),
                                       }))
                                       setApprovedMemos((prev) => [...approvedMemosList, ...prev])
-                                      
                                       toast({
                                         title: "Batch Approved",
                                         description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
                                       })
-                                      
-                                      // Switch to approved tab to show the newly approved memos
                                       setActivePaymentTab("approved")
                                     } else {
                                       const errorData = result as any
                                       let errorMsg = errorData.error || "Failed to approve memos."
-                                      
-                                      // Handle signature requirement error
                                       if (response.status === 400 && errorData.requiresSignatureSave) {
-                                        errorMsg = "⚠️ Signature Required: " + errorData.details
                                         toast({ 
                                           title: "Action Required: Save Your Signature", 
-                                          description: errorMsg, 
+                                          description: errorData.details, 
                                           variant: "destructive" 
                                         })
-                                        console.warn("[v0] User needs to save signature before approving")
                                       } else if (response.status === 403) {
-                                        errorMsg = "You are not authorized to approve these memos. Only the assigned signer can approve."
-                                        toast({ title: "Access Denied", description: errorMsg, variant: "destructive" })
+                                        toast({ title: "Access Denied", description: "You are not authorized to approve these memos.", variant: "destructive" })
                                       } else {
                                         toast({ title: "Error", description: errorMsg, variant: "destructive" })
                                       }
-                                      console.error("[v0] Approval error:", result)
                                     }
-                                  } catch (err) {
-                                    console.error("[v0] Error approving memos:", err)
+                                  } catch {
                                     toast({ title: "Error", description: "Failed to approve memos.", variant: "destructive" })
+                                  } finally {
+                                    setIsApprovingMemos(false)
                                   }
                                 }}
                               >
-                                <Check className="h-4 w-4 mr-2" />
+                                {isApprovingMemos ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
                                 Approve All ({memos.length})
                               </Button>
                               <Button
                                 disabled={
                                   isApprovingMemos ||
                                   memos.length === 0 ||
-                                  // Disable if user is not assigned as a signer for ANY of the memos in this batch
                                   !memos.some((memo) => canUserApproveMemo(memo))
                                 }
-                                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 onClick={async () => {
                                   try {
                                     // Reject all memos in this group
