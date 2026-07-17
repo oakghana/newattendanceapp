@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "memo_id required" }, { status: 400 })
     }
 
-    console.log("[v0] Payment advice download for memo:", memoId)
+
 
     // Auth check
     const supabase = await createClient()
@@ -80,22 +80,39 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Memo not found" }, { status: 404 })
     }
 
-    // Smart signature fetching - from approval_signature_registry using pickBestSignature
+    // Signature priority: 1) stored on memo, 2) signer's user_profiles, 3) registry, 4) current user's profile
     let signatureUrl: string | null = memo.signature_data_url || null
     let signerName = memo.signer_name || memo.hr_leave_office_name || "HUMAN RESOURCE MANAGER"
 
-    if (!signatureUrl && memo.signer_id) {
-      console.log("[v0] Fetching signature from registry for signer:", memo.signer_id)
-      const { data: signatureRecords } = await admin
-        .from("approval_signature_registry")
-        .select("id, signature_data_url, signature_mode, signature_text, is_active, user_id")
-        .eq("user_id", memo.signer_id)
-      
-      if (signatureRecords) {
-        const bestSig = pickBestSignature(signatureRecords)
-        if (bestSig?.signature_data_url) {
-          signatureUrl = bestSig.signature_data_url
-          console.log("[v0] Found signature in registry for memo")
+    if (!signatureUrl) {
+      // Try signer_id's user_profiles first
+      const signerIdToCheck = memo.signer_id || user.id
+      const { data: signerProfile } = await admin
+        .from("user_profiles")
+        .select("signature_data_url, first_name, last_name, position")
+        .eq("id", signerIdToCheck)
+        .single()
+
+      if (signerProfile?.signature_data_url) {
+        signatureUrl = signerProfile.signature_data_url
+        // If we fell back to current user, use their name
+        if (!memo.signer_id && signerProfile.first_name) {
+          signerName = `${signerProfile.first_name} ${signerProfile.last_name}`.toUpperCase()
+        }
+      }
+
+      // Fallback to approval_signature_registry
+      if (!signatureUrl) {
+        const { data: signatureRecords } = await admin
+          .from("approval_signature_registry")
+          .select("id, signature_data_url, signature_mode, signature_text, is_active, user_id")
+          .eq("user_id", signerIdToCheck)
+
+        if (signatureRecords) {
+          const bestSig = pickBestSignature(signatureRecords)
+          if (bestSig?.signature_data_url) {
+            signatureUrl = bestSig.signature_data_url
+          }
         }
       }
     }
@@ -232,8 +249,8 @@ export async function GET(request: NextRequest) {
       {
         name: memo.staff_name,
         employeeId: memo.staff_number,
-        position: "",
-        station: "",
+        position: memo.memo_body ? (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b.staffList?.[0]?.position || b.staffList?.[0]?.rank || "" } catch { return "" } })() : "",
+        location: "",
         leaveDate: fmtDate(memo.leave_period_start),
       },
     ]).map((s: any, idx: number) => [
@@ -241,12 +258,12 @@ export async function GET(request: NextRequest) {
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",
       s.position || s.rank || "",
-      s.station || s.location || "",
+      s.location || s.station || s.workStation || "",
       s.leaveDate || fmtDate(memo.leave_period_start),
     ])
 
     autoTable(doc, {
-      head: [["N", "NAME", "S/NO", "RANK", "STATION", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "POSITION", "LOCATION", "LEAVE DATE"]],
       body: tableData,
       startY: y,
       margin: margin,
@@ -282,14 +299,8 @@ export async function GET(request: NextRequest) {
     doc.text("We count on your co-operation.", margin, y)
     y += 10
 
-    // === SIGNATURE INSTRUCTION ===
-    doc.setFont(undefined, "bold")
-    doc.text("Signature from signers profile come here", margin, y)
-    y += 6
-
-    // === ADD SIGNATURE IMAGE ABOVE NAME (CRITICAL) ===
+    // === ADD SIGNATURE IMAGE ABOVE NAME ===
     if (signatureUrl && signatureUrl.length > 10) {
-      console.log("[v0] Rendering signature for memo")
       try {
         if (signatureUrl.startsWith("data:image/")) {
           const b64Match = signatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
@@ -297,7 +308,6 @@ export async function GET(request: NextRequest) {
             const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
             doc.addImage(signatureUrl, imageType, margin, y, 40, 15)
             y += 16
-            console.log("[v0] Signature rendered from data URL")
           }
         } else if (signatureUrl.startsWith("https://")) {
           try {
@@ -310,15 +320,12 @@ export async function GET(request: NextRequest) {
               const dataUrl = `data:${contentType};base64,${base64Sig}`
               doc.addImage(dataUrl, imageType, margin, y, 40, 15)
               y += 16
-              console.log("[v0] Signature rendered from external URL")
             }
-          } catch (fetchErr) {
-            console.warn("[v0] Could not fetch signature from URL:", fetchErr)
+          } catch {
             y += 4
           }
         }
-      } catch (imgErr) {
-        console.warn("[v0] Could not render signature image:", imgErr)
+      } catch {
         y += 4
       }
     } else {
@@ -357,8 +364,7 @@ export async function GET(request: NextRequest) {
 
     // Convert to buffer and return
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"))
-    console.log("[v0] Payment advice PDF generated:", memoId, "Size:", pdfBuffer.length, "bytes", "Signature:", signatureUrl ? "YES" : "NO")
-
+    
     const response = new NextResponse(pdfBuffer)
     response.headers.set("Content-Type", "application/pdf")
     response.headers.set(
