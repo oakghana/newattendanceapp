@@ -11,6 +11,7 @@ import {
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { HRExecutiveMemoDashboard } from "@/components/leave/hr-executive-memo-dashboard"
 import { LeaveManagementClient } from "./leave-management-client"
+import { HrExecutiveLeaveCenter } from "@/components/leave/hr-executive-leave-center"
 
 // ── Tab type ─────────────────────────────────────────────────────────────────
 type Tab = "overview" | "leave-approvals" | "payment-advice" | "analytics" | "leave-center" | "balance-calendar"
@@ -237,27 +238,7 @@ export function HrExecutiveLeaveModule({
         )}
 
         {activeTab === "leave-center" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-blue-600" />
-              <div>
-                <h2 className="text-base font-semibold">Leave Center</h2>
-                <p className="text-xs text-muted-foreground">View all leave requests and activities in the system</p>
-              </div>
-            </div>
-            <LeaveManagementClient
-              userId={userId}
-              userRole={userRole ?? ""}
-              userDepartment={userDepartment}
-              userFirstName={userFirstName}
-              userLastName={userLastName}
-              hasHodLinkage={hasHodLinkage}
-              inactivityDays={inactivityDays}
-              initialStaffRequests={initialStaffRequests}
-              initialManagerNotifications={initialManagerNotifications}
-              initialApprovedStaffRequests={initialApprovedStaffRequests}
-            />
-          </div>
+          <HrExecutiveLeaveCenter />
         )}
 
         {activeTab === "balance-calendar" && (
