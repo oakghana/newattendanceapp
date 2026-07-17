@@ -3,11 +3,10 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
-  CheckCircle2, FileText, TrendingUp, Users,
-  CheckCircle, BarChart3, AlertCircle, BookOpen, Calendar, BarChart,
+  CheckCircle2, TrendingUp, Users,
+  CheckCircle, BookOpen, Calendar, BarChart,
 } from "lucide-react"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
-import { HRExecutiveMemoDashboard } from "@/components/leave/hr-executive-memo-dashboard"
 import { LeaveManagementClient } from "./leave-management-client"
 import { HrExecutiveLeaveCenter } from "@/components/leave/hr-executive-leave-center"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
@@ -15,7 +14,7 @@ import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrExecutiveOverviewPanel } from "@/components/leave/hr-executive-overview-panel"
 
 // ── Tab type ─────────────────────────────────────────────────────────────────
-type Tab = "overview" | "leave-approvals" | "payment-advice" | "analytics" | "leave-center" | "balance-calendar"
+type Tab = "overview" | "leave-approvals" | "analytics" | "leave-center" | "balance-calendar"
 
 // ── Overview panel ────────────────────────────────────────────────────────────
 function OverviewPanel({ onNavigate, userId }: { onNavigate: (tab: Tab) => void; userId: string }) {
@@ -42,7 +41,6 @@ interface HrExecutiveLeaveModuleProps {
 const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: "overview", label: "Overview", icon: BookOpen },
   { id: "leave-approvals", label: "Leave Approvals", icon: CheckCircle },
-  { id: "payment-advice", label: "Payment Advice", icon: FileText },
   { id: "leave-center", label: "Leave Center", icon: Calendar },
   { id: "balance-calendar", label: "Balance & Calendar", icon: BarChart },
   { id: "analytics", label: "Analytics", icon: TrendingUp },
@@ -103,19 +101,6 @@ export function HrExecutiveLeaveModule({
               initialManagerNotifications={initialManagerNotifications}
               initialApprovedStaffRequests={initialApprovedStaffRequests}
             />
-          </div>
-        )}
-
-        {activeTab === "payment-advice" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-blue-600" />
-              <div>
-                <h2 className="text-base font-semibold">Payment Advice Memos</h2>
-                <p className="text-xs text-muted-foreground">Approve pending memos and download approved payment advice</p>
-              </div>
-            </div>
-            <HRExecutiveMemoDashboard userId={userId} />
           </div>
         )}
 
