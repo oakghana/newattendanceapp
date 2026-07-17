@@ -28,6 +28,12 @@ interface StaffOnLeave {
   position: string
   category?: string
   staff_category: string
+  rank?: string
+  // Location information (beneficiary location)
+  location_name?: string
+  location_id?: string
+  assigned_location_id?: string
+  assigned_location_name?: string
   // Leave details
   start_date?: string
   end_date?: string
@@ -1183,13 +1189,15 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Department</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Location</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Period</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                   {memos.map((memo, idx) => {
-                                    // Parse memo_body to extract staff rank
+                                    // Parse memo_body to extract staff rank and location
                                     let memoBody: any = {}
                                     try {
                                       memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
@@ -1197,12 +1205,16 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       memoBody = {}
                                     }
                                     const staffRank = memoBody.staff_rank_label || category
+                                    const staffLocation = memoBody.staff_location_name || "N/A"
+                                    const staffDepartment = memoBody.staff_department || "N/A"
                                     
                                     return (
                                       <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                                         <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
                                         <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
                                         <td className="px-3 py-2 text-gray-600">{staffRank}</td>
+                                        <td className="px-3 py-2 text-gray-600">{staffDepartment}</td>
+                                        <td className="px-3 py-2 text-gray-600 font-medium text-blue-600">{staffLocation}</td>
                                         <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
                                         <td className="px-3 py-2 text-gray-600">
                                           {memo.leave_period_start && memo.leave_period_start !== "NaN-NaN-N" && !isNaN(new Date(memo.leave_period_start).getTime())
