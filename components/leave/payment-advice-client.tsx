@@ -1202,7 +1202,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       memoBody = {}
                                     }
                                     const staffRank = memoBody.staff_rank_label || category
-                                    const staffLocation = memoBody.staff_location_name || "N/A"
+                                    const staffLocation = memoBody.staffList?.[0]?.location_name || memoBody.staffList?.[0]?.assigned_location_name || memoBody.staff_location_name || "N/A"
                                     const staffDepartment = memoBody.staff_department || "N/A"
                                     
                                     return (
@@ -1483,6 +1483,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                   <tr>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Staff No.</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Location</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Position</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Leave Days</th>
@@ -1501,12 +1502,14 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     }
                                     const staffRank = memoBody.staff_rank_label || category
                                     const staffPosition = memoBody.staff_position || "N/A"
+                                    const staffLocation = memoBody.staffList?.[0]?.location_name || memoBody.staffList?.[0]?.assigned_location_name || memo.assigned_location_name || "N/A"
                                     const signerName = (memoBody.approver?.name || memo.signer_name || "").trim()
                                     
                                     return (
                                       <tr key={memo.id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                                         <td className="px-3 py-2 font-medium text-gray-900">{memo.staff_name}</td>
                                         <td className="px-3 py-2 text-gray-600">{memo.staff_number}</td>
+                                        <td className="px-3 py-2 text-gray-600 text-sm">{staffLocation}</td>
                                         <td className="px-3 py-2 text-gray-600">{staffRank}</td>
                                         <td className="px-3 py-2 text-gray-600">{staffPosition}</td>
                                         <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>

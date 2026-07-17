@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   CheckCircle2, FileText, TrendingUp, Clock, Users, ArrowRight,
-  CheckCircle, BarChart3, AlertCircle, CalendarDays, BookOpen,
+  CheckCircle, BarChart3, AlertCircle, CalendarDays, BookOpen, Calendar, BarChart,
 } from "lucide-react"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { HRExecutiveMemoDashboard } from "@/components/leave/hr-executive-memo-dashboard"
 import { LeaveManagementClient } from "./leave-management-client"
 
 // ── Tab type ─────────────────────────────────────────────────────────────────
-type Tab = "overview" | "leave-approvals" | "payment-advice" | "analytics"
+type Tab = "overview" | "leave-approvals" | "payment-advice" | "analytics" | "leave-center" | "balance-calendar"
 
 // ── Quick-stat card ───────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, color, description }: {
@@ -160,6 +160,8 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: "overview", label: "Overview", icon: BookOpen },
   { id: "leave-approvals", label: "Leave Approvals", icon: CheckCircle },
   { id: "payment-advice", label: "Payment Advice", icon: FileText },
+  { id: "leave-center", label: "Leave Center", icon: Calendar },
+  { id: "balance-calendar", label: "Balance & Calendar", icon: BarChart },
   { id: "analytics", label: "Analytics", icon: TrendingUp },
 ]
 
@@ -231,6 +233,50 @@ export function HrExecutiveLeaveModule({
               </div>
             </div>
             <HRExecutiveMemoDashboard userId={userId} />
+          </div>
+        )}
+
+        {activeTab === "leave-center" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-blue-600" />
+              <div>
+                <h2 className="text-base font-semibold">Leave Center</h2>
+                <p className="text-xs text-muted-foreground">View all leave requests and activities in the system</p>
+              </div>
+            </div>
+            <LeaveManagementClient
+              userId={userId}
+              userRole={userRole ?? ""}
+              userDepartment={userDepartment}
+              userFirstName={userFirstName}
+              userLastName={userLastName}
+              hasHodLinkage={hasHodLinkage}
+              inactivityDays={inactivityDays}
+              initialStaffRequests={initialStaffRequests}
+              initialManagerNotifications={initialManagerNotifications}
+              initialApprovedStaffRequests={initialApprovedStaffRequests}
+            />
+          </div>
+        )}
+
+        {activeTab === "balance-calendar" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <BarChart className="h-5 w-5 text-teal-600" />
+              <div>
+                <h2 className="text-base font-semibold">Balance & Calendar</h2>
+                <p className="text-xs text-muted-foreground">Leave balances and annual calendar overview</p>
+              </div>
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="py-12 text-center text-muted-foreground">
+                  <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                  <p className="text-sm">Leave balance and calendar view coming soon. Check back for the latest updates on annual leave cycles and staff balances.</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 

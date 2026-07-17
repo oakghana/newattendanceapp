@@ -59,6 +59,13 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
     return d.toISOString().slice(0, 10)
   })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [rowsPerPage, setRowsPerPage] = useState("50")
+  const [departmentFilter, setDepartmentFilter] = useState("all")
+  const [locationFilter, setLocationFilter] = useState("all")
+
+  // Extract unique departments and locations from records
+  const departments = Array.from(new Set(records.map(r => r.user_profiles?.departments?.name || "").filter(Boolean))).sort()
+  const locations = Array.from(new Set(records.map(r => r.user_profiles?.assigned_location?.name || "").filter(Boolean))).sort()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -87,10 +94,13 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
     const name = `${r.user_profiles?.first_name ?? ""} ${r.user_profiles?.last_name ?? ""}`.toLowerCase()
     const id = (r.user_profiles?.employee_id ?? "").toLowerCase()
     const dept = (r.user_profiles?.departments?.name ?? "").toLowerCase()
+    const loc = (r.user_profiles?.assigned_location?.name ?? "").toLowerCase()
     const q = search.toLowerCase()
-    const matchSearch = !q || name.includes(q) || id.includes(q) || dept.includes(q)
+    const matchSearch = !q || name.includes(q) || id.includes(q) || dept.includes(q) || loc.includes(q)
     const matchStatus = statusFilter === "all" || r.status === statusFilter
-    return matchSearch && matchStatus
+    const matchDept = departmentFilter === "all" || dept === departmentFilter.toLowerCase()
+    const matchLoc = locationFilter === "all" || loc === locationFilter.toLowerCase()
+    return matchSearch && matchStatus && matchDept && matchLoc
   })
 
   // Stats
@@ -229,6 +239,42 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                 <SelectItem value="half_day">Half Day</SelectItem>
               </SelectContent>
             </Select>
+            {/* Rows per page */}
+            <Select value={rowsPerPage} onValueChange={setRowsPerPage}>
+              <SelectTrigger className="h-9 w-32">
+                <SelectValue placeholder="Rows" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="50">50 rows</SelectItem>
+                <SelectItem value="100">100 rows</SelectItem>
+                <SelectItem value="200">200 rows</SelectItem>
+                <SelectItem value="1000">1000 rows</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Department filter */}
+            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+              <SelectTrigger className="h-9 w-40">
+                <SelectValue placeholder="All departments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map(dept => (
+                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Location filter */}
+            <Select value={locationFilter} onValueChange={setLocationFilter}>
+              <SelectTrigger className="h-9 w-40">
+                <SelectValue placeholder="All locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Locations</SelectItem>
+                {locations.map(loc => (
+                  <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -285,6 +331,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                     <th className="px-5 py-3 text-left font-medium text-muted-foreground">Name</th>
                     <th className="px-5 py-3 text-left font-medium text-muted-foreground">Staff ID</th>
                     <th className="px-5 py-3 text-left font-medium text-muted-foreground">Department</th>
+                    <th className="px-5 py-3 text-left font-medium text-muted-foreground">Location</th>
                     <th className="px-5 py-3 text-left font-medium text-muted-foreground">Date</th>
                     <th className="px-5 py-3 text-left font-medium text-muted-foreground">Check In</th>
                     <th className="px-5 py-3 text-left font-medium text-muted-foreground">Check Out</th>
@@ -293,7 +340,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filtered.slice(0, 200).map((r, i) => {
+                  {filtered.slice(0, parseInt(rowsPerPage)).map((r, i) => {
                     const name = `${r.user_profiles?.first_name ?? ""} ${r.user_profiles?.last_name ?? ""}`.trim() || "—"
                     const checkin = r.check_in_time ? new Date(r.check_in_time) : null
                     const checkout = r.check_out_time ? new Date(r.check_out_time) : null
@@ -303,6 +350,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
                         <td className="px-5 py-3 font-medium">{name}</td>
                         <td className="px-5 py-3 text-muted-foreground">{r.user_profiles?.employee_id ?? "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{r.user_profiles?.departments?.name ?? "—"}</td>
+                        <td className="px-5 py-3 text-muted-foreground text-sm">{r.user_profiles?.assigned_location?.name ?? "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{checkin ? checkin.toLocaleDateString("en-GB") : "—"}</td>
                         <td className="px-5 py-3">{checkin ? checkin.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{checkout ? checkout.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
