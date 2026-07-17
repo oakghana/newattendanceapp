@@ -210,7 +210,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const response = await fetch("/api/auth/me")
+        const response = await fetch("/api/auth/current-user")
         if (response.ok) {
           const data = await response.json()
           setCurrentUser({
