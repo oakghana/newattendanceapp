@@ -52,6 +52,8 @@ interface HRExecutive {
   full_name?: string
   position?: string
   email: string
+  role?: string
+  signature_image_url?: string | null
 }
 
 export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole?: string }) {
@@ -237,13 +239,15 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           const data = await response.json()
           const execs = (data.executives || []).map((exec: any) => ({
             id: exec.id,
+            name: exec.name || exec.full_name || "Unknown",
             full_name: exec.name || exec.full_name || "Unknown",
             position: exec.position || "HR EXECUTIVE",
             role: exec.role || "hr_executive",
             email: exec.email,
+            signature_image_url: exec.signature_image_url || null,
           }))
           setHrExecutives(execs)
-          console.log("[v0] HR Executives loaded:", execs.length)
+          console.log("[v0] HR Executives loaded:", execs.length, "Total:", execs.map((e: any) => e.full_name).join(", "))
           
           // CRITICAL FIX: Don't auto-select a signer. Users MUST explicitly choose who should sign.
           // This prevents accidentally assigning memos to the wrong person (e.g., choosing the first
@@ -585,11 +589,27 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         referenceNumbers,
         staffList: staffList?.length,
         signerCount: signersToUse.length,
-        signers: signersToUse.map(s => s.full_name || s.name),
+        signers: signersToUse.map(s => ({
+          id: s.id,
+          name: s.full_name || s.name,
+          position: s.position,
+          email: s.email,
+        })),
         memosKeys: Object.keys(memos),
         userRole: userRole,
         isHrLeaveOffice: isHrLeaveOffice,
       })
+
+      // Validate that all signers have required fields
+      const invalidSigners = signersToUse.filter(s => !s.id || !s.email)
+      if (invalidSigners.length > 0) {
+        toast({
+          title: "Invalid Signer Information",
+          description: "One or more signers are missing required information (ID or Email). Please refresh and try again.",
+          variant: "destructive",
+        })
+        return
+      }
 
       // Create a clean payload with only serializable data
       const cleanPayload = {
@@ -606,6 +626,10 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           department_name: staff.department_name,
           category: staff.category,
           staff_category: staff.staff_category,
+          location_name: staff.location_name || null,
+          location_id: staff.location_id || null,
+          assigned_location_id: staff.assigned_location_id || null,
+          assigned_location_name: staff.assigned_location_name || null,
           leave_start_date: staff.leave_start_date,
           leave_end_date: staff.leave_end_date,
           preferred_start_date: staff.preferred_start_date,
@@ -615,21 +639,27 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           approved_days: staff.approved_days,
         })),
         selectedSigner: signersToUse[0] ? {
-          id: signersToUse[0].id,
-          name: signersToUse[0].full_name || signersToUse[0].name,
-          position: signersToUse[0].position,
-          email: signersToUse[0].email,
-          signature_image_url: signersToUse[0].signature_image_url,
+          id: signersToUse[0].id || null,
+          name: signersToUse[0].full_name || signersToUse[0].name || "Unknown",
+          position: signersToUse[0].position || null,
+          email: signersToUse[0].email || null,
+          signature_image_url: signersToUse[0].signature_image_url || null,
         } : null,
         // NEW: Pass all selected signers to the API for proper assignment
         selectedSigners: signersToUse.map(s => ({
-          id: s.id,
-          name: s.full_name || s.name,
-          position: s.position,
-          email: s.email,
-          signature_image_url: s.signature_image_url,
+          id: s.id || null,
+          name: s.full_name || s.name || "Unknown",
+          position: s.position || null,
+          email: s.email || null,
+          signature_image_url: s.signature_image_url || null,
         })),
       }
+
+      console.log("[v0] Final payload before submission:", {
+        selectedSigner: cleanPayload.selectedSigner,
+        selectedSignersCount: cleanPayload.selectedSigners?.length,
+        firstSigner: cleanPayload.selectedSigners?.[0],
+      })
 
       const response = await fetch("/api/leave/payment-advice/submit-memo", {
         method: "POST",
@@ -1797,10 +1827,19 @@ We count on your co-operation.`,
                             setSelectedSigner(null)
                           }
                         } else {
-                          // Add signer
-                          const updated = [...selectedSigners, exec]
+                          // Add signer - ensure consistent object structure
+                          const normalizedSigner: HRExecutive = {
+                            id: exec.id,
+                            full_name: exec.full_name || exec.name || "Unknown",
+                            name: exec.name || exec.full_name || "Unknown",
+                            position: exec.position || "HR EXECUTIVE",
+                            email: exec.email,
+                            role: exec.role,
+                            signature_image_url: exec.signature_image_url,
+                          }
+                          const updated = [...selectedSigners, normalizedSigner]
                           setSelectedSigners(updated)
-                          setSelectedSigner(exec) // Set as primary signer when added
+                          setSelectedSigner(normalizedSigner) // Set as primary signer when added
                         }
                       }}
                       disabled={loadingHrExecutives}

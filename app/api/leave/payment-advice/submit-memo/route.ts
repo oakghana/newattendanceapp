@@ -42,9 +42,20 @@ export async function POST(request: NextRequest) {
     const { month, memos, staffList, selectedSigner, referenceNumbers } = requestBody
 
     if (!month || !memos || !staffList || !selectedSigner || !referenceNumbers) {
-      console.error("[v0] Missing fields:", { month: !!month, memos: !!memos, staffList: !!staffList, selectedSigner: !!selectedSigner, referenceNumbers: !!referenceNumbers })
+      console.error("[v0] Missing fields:", { 
+        month: !!month, 
+        memos: !!memos, 
+        staffList: !!staffList, 
+        selectedSigner: !!selectedSigner, 
+        referenceNumbers: !!referenceNumbers,
+        selectedSignerValue: selectedSigner
+      })
       return NextResponse.json(
-        { error: "Missing required fields", details: "month, memos, staffList, selectedSigner, and referenceNumbers are all required" },
+        { 
+          error: "Missing required fields", 
+          details: `Required: month (${!!month}), memos (${!!memos}), staffList (${!!staffList}), selectedSigner (${!!selectedSigner}), referenceNumbers (${!!referenceNumbers}). Ensure at least one HR executive is selected.`,
+          receivedSigner: selectedSigner ? "object" : selectedSigner
+        },
         { status: 400 }
       )
     }
