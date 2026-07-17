@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
-import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter, Eye } from "lucide-react"
+import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter, Eye, Info } from "lucide-react"
 import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { MonthlySummaryTab } from "@/components/leave/monthly-summary-tab"
 import { PaymentAdviceViewAllTab } from "@/components/leave/payment-advice-view-all-tab"
@@ -82,6 +82,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   })
   const [pendingMemos, setPendingMemos] = useState<any[]>([])
   const [loadingPendingMemos, setLoadingPendingMemos] = useState(false)
+  const [pendingMemosError, setPendingMemosError] = useState<string | null>(null)
   const [approvedMemos, setApprovedMemos] = useState<any[]>([])
   const [loadingApprovedMemos, setLoadingApprovedMemos] = useState(false)
   const [approvedFilterMonth, setApprovedFilterMonth] = useState("")
@@ -280,22 +281,29 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
     if (isHrExecutive) {
       const fetchPendingMemos = async () => {
         setLoadingPendingMemos(true)
+        setPendingMemosError(null)
         try {
           // Use the restricted endpoint that only shows memos assigned to this HR Executive
           const response = await fetch("/api/leave/payment-advice/pending-assigned")
           if (response.ok) {
             const data = await response.json()
             setPendingMemos(data.memos || [])
-            console.log("[v0] Fetched pending memos assigned to current HR Executive:", data.count, "memos")
-          } else {
-            if (response.status === 403) {
-              console.warn("[v0] User is not authorized to view payment memos:", response.statusText)
-            } else {
-              console.error("[v0] Failed to fetch pending memos:", response.statusText)
+            // Show debug info if no memos but some exist in system
+            if (data.debugMessage && data.debugMessage !== "Loading successful") {
+              setPendingMemosError(data.debugMessage)
+              console.log("[v0] Pending memos debug:", data.debugMessage)
             }
+            console.log("[v0] Fetched pending memos assigned to current HR Executive:", data.count, "memos out of", data.totalPendingInSystem, "total")
+          } else {
+            const errorData = await response.json()
+            const errorMsg = errorData.error || response.statusText
+            setPendingMemosError(`Error loading memos: ${errorMsg}`)
+            console.error("[v0] Failed to fetch pending memos:", errorMsg)
             setPendingMemos([])
           }
         } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : "Unknown error"
+          setPendingMemosError(`Failed to load pending memos: ${errorMsg}`)
           console.error("[v0] Error fetching pending memos:", err)
           setPendingMemos([])
         } finally {
@@ -1163,6 +1171,17 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                     <div className="text-center">
                       <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                       <p className="mt-2 text-gray-600 text-sm">Loading pending memos...</p>
+                    </div>
+                  </div>
+                ) : pendingMemosError ? (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex gap-3">
+                      <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-900">Loading Information</p>
+                        <p className="text-sm text-blue-700 mt-1">{pendingMemosError}</p>
+                        <p className="text-xs text-blue-600 mt-2">Verify that memos have been created and assigned to you in the Payment Advice section.</p>
+                      </div>
                     </div>
                   </div>
                 ) : pendingMemos.length === 0 ? (
