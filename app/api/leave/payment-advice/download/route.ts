@@ -7,12 +7,20 @@ import autoTable from "jspdf-autotable"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-// Helper: Format date for memo
+// Helper: Format date for memo — returns empty string if no date (never falls back to today)
 function fmtDate(value?: string | null): string {
-  if (!value) return new Date().toISOString().slice(0, 10)
+  if (!value) return ""
   const date = new Date(value)
   if (isNaN(date.getTime())) return String(value)
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+}
+
+// Helper: Format month/year label for subject line
+function fmtMonthYear(value?: string | null): string {
+  if (!value) return ""
+  const date = new Date(value)
+  if (isNaN(date.getTime())) return ""
+  return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" }).toUpperCase()
 }
 
 // Helper: Get best signature from registry (proven pattern)
@@ -92,16 +100,30 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Parse memo body to extract staff list
+    // Parse memo body to extract staff list and approval metadata
     let staffList: any[] = []
+    let approvedAt: string | null = null
+    let approverPosition: string | null = null
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
         staffList = body.staffList || body.staff || []
+        // Use the approval date stored at approval time — NOT today's date
+        approvedAt = body.approver?.approved_at || null
+        approverPosition = body.selectedSigner?.position || body.approver?.position || null
+        if (approverPosition) {
+          // Override signerName with the stored approver name from memo_body
+          const approverName = body.approver?.name || body.selectedSigner?.name
+          if (approverName) signerName = approverName
+        }
       } catch (e) {
         console.warn("[v0] Could not parse memo_body")
       }
     }
+
+    // The memo date is the approval date; fall back to created_at only if not yet approved
+    const memoDateStr = approvedAt || memo.created_at
+    const memoDate = new Date(memoDateStr)
 
     // Create professional QCC memorandum format PDF
     const doc = new jsPDF({
@@ -113,7 +135,6 @@ export async function GET(request: NextRequest) {
     const pageWidth = doc.internal.pageSize.getWidth()
     const margin = 20
     const contentWidth = pageWidth - 2 * margin
-    const memoDate = new Date(memo.created_at)
     let y = margin
 
     // === LEFT SIDE HEADER ===
@@ -143,7 +164,7 @@ export async function GET(request: NextRequest) {
     // Date on right
     doc.setFontSize(9)
     doc.setFont(undefined, "normal")
-    doc.text(`DATE: ${fmtDate(memo.created_at)}`, pageWidth / 2 + 15, margin + 13, { align: "center" })
+    doc.text(`DATE: ${fmtDate(memoDateStr)}`, pageWidth / 2 + 15, margin + 13, { align: "center" })
 
     y = margin + 22
 
@@ -171,16 +192,18 @@ export async function GET(request: NextRequest) {
     doc.setFont(undefined, "bold")
     doc.text("FROM:", margin, y)
     doc.setFont(undefined, "normal")
-    doc.text("DEPUTY HUMAN RESOURCE MANAGER", margin + 15, y)
+    // Use the actual approver's position from memo_body (set at approval time)
+    const fromPosition = (approverPosition || "HUMAN RESOURCE MANAGER").toUpperCase()
+    doc.text(fromPosition, margin + 15, y)
     y += 6
 
     doc.setFont(undefined, "bold")
     doc.text("SUBJECT:", margin, y)
     doc.setFont(undefined, "normal")
     
-    // Dynamic subject based on staff category
+    // Use approval date for subject month/year — NOT today
     const categoryLabel = memo.staff_category ? `(${memo.staff_category.toUpperCase()} STAFF)` : ""
-    const monthYear = memoDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" }).toUpperCase()
+    const monthYear = fmtMonthYear(memoDateStr)
     const subject = `PAYMENT OF LEAVE ALLOWANCE ${categoryLabel} – ${monthYear}`
     const subjectLines = doc.splitTextToSize(subject, contentWidth - 30)
     doc.text(subjectLines, margin + 30, y)
@@ -191,7 +214,7 @@ export async function GET(request: NextRequest) {
     doc.setFont(undefined, "normal")
     
     const staffCount = staffList.length > 0 ? staffList.length : 1
-    const bodyText1 = `We wish to inform you that the attached list of ${staffCount} ${memo.staff_category || ""}staff are scheduled to proceed on their annual vacation leave in ${monthYear}.`
+    const bodyText1 = `We wish to inform you that the attached list of ${staffCount} ${memo.staff_category ? memo.staff_category + " " : ""}staff are scheduled to proceed on their annual vacation leave in ${monthYear}.`
     const bodyLines1 = doc.splitTextToSize(bodyText1, contentWidth)
     doc.text(bodyLines1, margin, y)
     y += bodyLines1.length * 4 + 4
@@ -340,7 +363,7 @@ export async function GET(request: NextRequest) {
     response.headers.set("Content-Type", "application/pdf")
     response.headers.set(
       "Content-Disposition",
-      `attachment; filename="payment-advice-${memo.staff_name.replace(/\s+/g, "-")}-${memoDate.toISOString().split("T")[0]}.pdf"`
+      `attachment; filename="payment-advice-${memo.staff_name.replace(/\s+/g, "-")}-${memoDateStr.slice(0, 10)}.pdf"`
     )
     response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate")
 

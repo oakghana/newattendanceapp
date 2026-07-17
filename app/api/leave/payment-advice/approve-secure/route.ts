@@ -74,51 +74,23 @@ export async function POST(request: NextRequest) {
     // Build signer name from the authenticated user's profile
     const signerName = `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim()
 
-    console.log("[v0] APPROVE FLOW: Authenticated approver signing:", {
-      id: signerProfile.id,
-      name: signerName,
-      role: signerProfile.role,
-      hasSignatureInProfile: !!signerProfile.signature_data_url,
-    })
-    
     // Smart signature lookup: First check user_profiles (primary), then approval_signature_registry (fallback)
     let signatureUrl: string | null = signerProfile.signature_data_url || null
     
-    if (signatureUrl) {
-      console.log("[v0] Found signature in user_profiles for user:", {
-        userId: signerProfile.id,
-        userName: signerName,
-        signatureLength: signatureUrl.length,
-      })
-    } else {
-      // Priority 2: Check approval_signature_registry (fallback for older signatures)
-      const { data: signatureRecords, error: sigError } = await admin
+    if (!signatureUrl) {
+      // Fallback: Check approval_signature_registry for older signatures
+      const { data: signatureRecords } = await admin
         .from("approval_signature_registry")
-        .select("id, signature_data_url, user_id, is_active, workflow_domain")
+        .select("id, signature_data_url, user_id, is_active")
         .eq("user_id", signerProfile.id)
         .eq("is_active", true)
-      
-      console.log("[v0] Registry signature query result:", {
-        userId: signerProfile.id,
-        recordCount: signatureRecords?.length,
-        error: sigError?.message,
-      })
 
       if (signatureRecords && signatureRecords.length > 0 && signatureRecords[0].signature_data_url) {
         signatureUrl = signatureRecords[0].signature_data_url
-        console.log("[v0] Found signature in approval_signature_registry for user:", {
-          userId: signerProfile.id,
-          userName: signerName,
-          signatureLength: signatureUrl.length,
-        })
       }
     }
 
     if (!signatureUrl) {
-      console.warn("[v0] APPROVAL BLOCKED - No signature found for user:", {
-        userId: signerProfile.id,
-        userName: signerName,
-      })
       return NextResponse.json(
         { 
           error: "Signature required",
@@ -129,12 +101,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    
-    console.log("[v0] Signature validation PASSED for signer:", {
-      userId: signerProfile.id,
-      userName: signerName,
-      signatureLength: signatureUrl?.length || 0,
-    })
     
     // Fetch all memos to update their memo_body with approver info, ALSO get the leave_plan_request_id
     const { data: memosToUpdate } = await admin
@@ -199,14 +165,12 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Track the leave_plan_request_id so we can update it too
         if (memo.leave_plan_request_id) {
           leaveRequestIds.push(memo.leave_plan_request_id)
         }
       }
       
-      // CRITICAL: Also update the leave_plan_requests with the selected signer's name
-      // This ensures the PDF generation shows the correct signer, not a stale value
+      // Also update leave_plan_requests with the approver's info
       if (leaveRequestIds.length > 0) {
         await admin
           .from("leave_plan_requests")
@@ -216,22 +180,8 @@ export async function POST(request: NextRequest) {
             hr_approved_at: new Date().toISOString(),
           })
           .in("id", leaveRequestIds)
-        
-        console.log("[v0] Updated leave_plan_requests with selected signer:", {
-          signerName,
-          signerId: selectedSigner.id,
-          requestCount: leaveRequestIds.length,
-        })
       }
     }
-
-    console.log("[v0] Memos approved by selected HR Executive:", {
-      signerName,
-      signerId: selectedSigner.id,
-      signerRole: signerProfile.role,
-      memoCount: memoIds.length,
-      timestamp: new Date().toISOString(),
-    })
 
     return NextResponse.json({
       success: true,

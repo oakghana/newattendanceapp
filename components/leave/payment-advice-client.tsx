@@ -1256,19 +1256,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                 onClick={async () => {
                                   setIsApprovingMemos(true)
                                   try {
-                                    // Client-side pre-check only if we have the user id already loaded
-                                    if (currentUser?.id) {
-                                      const hasSignature = await checkSignerSignature(currentUser.id)
-                                      if (!hasSignature) {
-                                        const ids = memos.map((m: any) => m.id)
-                                        setPendingApprovalMemoIds(ids)
-                                        setIsApprovingMemos(false)
-                                        setShowSignatureRequiredDialog(true)
-                                        return
-                                      }
-                                    }
-
-                                    // Always call the server — it re-validates auth and signature server-side
+                                    // Call the server directly — it validates auth, role, and signature server-side.
+                                    // No client-side pre-check: currentUser may still be loading when clicked.
                                     const memoIds = memos.map((m) => m.id)
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
                                       method: "POST",
@@ -1279,12 +1268,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     const result = await response.json()
 
                                     if (response.ok) {
+                                      const approvedNow = new Date().toISOString()
                                       const approvedIds = new Set(memos.map((m) => m.id))
                                       setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
                                       const approvedMemosList = memos.map((m) => ({
                                         ...m,
                                         status: "reviewed_by_hr",
-                                        updated_at: new Date().toISOString(),
+                                        updated_at: approvedNow,
                                       }))
                                       setApprovedMemos((prev) => [...approvedMemosList, ...prev])
                                       toast({
@@ -1305,7 +1295,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                         toast({ title: "Approval Failed", description: errorData.error || errorData.details || "Failed to approve memos.", variant: "destructive" })
                                       }
                                     }
-                                  } catch (err) {
+                                  } catch {
                                     toast({ title: "Error", description: "A network error occurred. Please try again.", variant: "destructive" })
                                   } finally {
                                     setIsApprovingMemos(false)
