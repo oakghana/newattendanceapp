@@ -27,6 +27,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
+import { PaymentAdviceErrorBoundary } from "@/components/leave/payment-advice-error-boundary"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
 import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
 import { SubmitNewDefermentRequest } from "@/components/leave-management/submit-new-deferment-request"
@@ -3065,7 +3066,9 @@ export function LeaveManagementClient({
           )}
 
           {selectedTab === "payment-advice" && canAccessPaymentAdvice && (
-            <PaymentAdviceClient userRole={normalizedRole} />
+            <PaymentAdviceErrorBoundary>
+              <PaymentAdviceClient userRole={normalizedRole} />
+            </PaymentAdviceErrorBoundary>
           )}
 
         {isManagerView && selectedTab === "pending-approvals" && (

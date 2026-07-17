@@ -67,7 +67,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [staffList, setStaffList] = useState<StaffOnLeave[]>([])
   const [memos, setMemos] = useState<Record<string, string>>({})
-  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved">("pending")
+  const [activePaymentTab, setActivePaymentTab] = useState<"pending" | "approved" | "view-all">("pending")
   const [memoSummary, setMemoSummary] = useState<any>(null)
   const [selectedMemoCategory, setSelectedMemoCategory] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -102,36 +102,19 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
   // Load submitted memos for Monthly Summary tab
   useEffect(() => {
-    console.log("[v0] Monthly Summary useEffect triggered:", {
-      isHrLeaveOffice,
-      summaryMonth,
-      shouldLoad: isHrLeaveOffice && summaryMonth,
-    })
-
-    if (!isHrLeaveOffice || !summaryMonth) {
-      console.log("[v0] Skipping memo load - missing conditions")
-      return
-    }
+    if (!isHrLeaveOffice || !summaryMonth) return
 
     const loadSubmittedMemos = async () => {
-      console.log("[v0] Loading submitted memos for month:", summaryMonth)
       setLoadingSubmittedMemos(true)
       try {
         const response = await fetch(`/api/leave/payment-advice/my-memos?month=${summaryMonth}`)
         if (response.ok) {
           const data = await response.json()
-          console.log("[v0] Submitted memos loaded:", {
-            count: data.memos?.length || 0,
-            memos: data.memos,
-          })
           setSubmittedMemos(data.memos || [])
         } else {
-          const error = await response.json()
-          console.error("[v0] Failed to load submitted memos:", error)
           setSubmittedMemos([])
         }
-      } catch (err) {
-        console.error("[v0] Error loading submitted memos:", err)
+      } catch {
         setSubmittedMemos([])
       } finally {
         setLoadingSubmittedMemos(false)
@@ -597,23 +580,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
     setIsSubmitting(true)
     try {
-      // Log what we're sending for debugging
-      console.log("[v0] Submitting memos data:", {
-        month: selectedMonth,
-        referenceNumbers,
-        staffList: staffList?.length,
-        signerCount: signersToUse.length,
-        signers: signersToUse.map(s => ({
-          id: s.id,
-          name: s.full_name || s.name,
-          position: s.position,
-          email: s.email,
-        })),
-        memosKeys: Object.keys(memos),
-        userRole: userRole,
-        isHrLeaveOffice: isHrLeaveOffice,
-      })
-
       // Validate that all signers have required fields
       const invalidSigners = signersToUse.filter(s => !s.id || !s.email)
       if (invalidSigners.length > 0) {
@@ -668,12 +634,6 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           signature_image_url: s.signature_image_url || null,
         })),
       }
-
-      console.log("[v0] Final payload before submission:", {
-        selectedSigner: cleanPayload.selectedSigner,
-        selectedSignersCount: cleanPayload.selectedSigners?.length,
-        firstSigner: cleanPayload.selectedSigners?.[0],
-      })
 
       const response = await fetch("/api/leave/payment-advice/submit-memo", {
         method: "POST",
