@@ -1256,16 +1256,19 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                 onClick={async () => {
                                   setIsApprovingMemos(true)
                                   try {
+                                    // Client-side pre-check only if we have the user id already loaded
                                     if (currentUser?.id) {
                                       const hasSignature = await checkSignerSignature(currentUser.id)
                                       if (!hasSignature) {
                                         const ids = memos.map((m: any) => m.id)
                                         setPendingApprovalMemoIds(ids)
+                                        setIsApprovingMemos(false)
                                         setShowSignatureRequiredDialog(true)
                                         return
                                       }
                                     }
 
+                                    // Always call the server — it re-validates auth and signature server-side
                                     const memoIds = memos.map((m) => m.id)
                                     const response = await fetch("/api/leave/payment-advice/approve-secure", {
                                       method: "POST",
@@ -1274,7 +1277,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     })
 
                                     const result = await response.json()
-                                    
+
                                     if (response.ok) {
                                       const approvedIds = new Set(memos.map((m) => m.id))
                                       setPendingMemos((prev) => prev.filter((m) => !approvedIds.has(m.id)))
@@ -1285,27 +1288,25 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       }))
                                       setApprovedMemos((prev) => [...approvedMemosList, ...prev])
                                       toast({
-                                        title: "Batch Approved",
-                                        description: `${memos.length} payment advice memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
+                                        title: "Approved",
+                                        description: `${memos.length} memo${memos.length > 1 ? "s" : ""} for ${category} (${month}) approved successfully.`,
                                       })
                                       setActivePaymentTab("approved")
                                     } else {
                                       const errorData = result as any
-                                      let errorMsg = errorData.error || "Failed to approve memos."
+                                      // Server says signature is missing — show the dialog
                                       if (response.status === 400 && errorData.requiresSignatureSave) {
-                                        toast({ 
-                                          title: "Action Required: Save Your Signature", 
-                                          description: errorData.details, 
-                                          variant: "destructive" 
-                                        })
+                                        const ids = memos.map((m: any) => m.id)
+                                        setPendingApprovalMemoIds(ids)
+                                        setShowSignatureRequiredDialog(true)
                                       } else if (response.status === 403) {
-                                        toast({ title: "Access Denied", description: "You are not authorized to approve these memos.", variant: "destructive" })
+                                        toast({ title: "Access Denied", description: errorData.details || "You are not authorized to approve these memos.", variant: "destructive" })
                                       } else {
-                                        toast({ title: "Error", description: errorMsg, variant: "destructive" })
+                                        toast({ title: "Approval Failed", description: errorData.error || errorData.details || "Failed to approve memos.", variant: "destructive" })
                                       }
                                     }
-                                  } catch {
-                                    toast({ title: "Error", description: "Failed to approve memos.", variant: "destructive" })
+                                  } catch (err) {
+                                    toast({ title: "Error", description: "A network error occurred. Please try again.", variant: "destructive" })
                                   } finally {
                                     setIsApprovingMemos(false)
                                   }

@@ -20,7 +20,18 @@ export async function GET(
       )
     }
 
-    // Check if user has an active signature in approval_signature_registry
+    // PRIMARY: Check user_profiles first (this is where signature-save stores it)
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("signature_data_url")
+      .eq("id", userId)
+      .single()
+
+    if (profile?.signature_data_url) {
+      return NextResponse.json({ hasSignature: true, userId, source: "user_profiles" })
+    }
+
+    // FALLBACK: Check approval_signature_registry
     const { data: signature, error: sigErr } = await admin
       .from("approval_signature_registry")
       .select("id, signature_data_url")
@@ -29,21 +40,12 @@ export async function GET(
       .single()
 
     if (sigErr && sigErr.code !== "PGRST116") {
-      // PGRST116 = no rows found
-      console.error("[v0] Error checking signature:", sigErr)
-      return NextResponse.json(
-        { error: "Failed to check signature" },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: "Failed to check signature" }, { status: 500 })
     }
 
-    // Return whether signature exists and has data
     const hasSignature = !!signature?.signature_data_url
 
-    return NextResponse.json({
-      hasSignature,
-      userId,
-    })
+    return NextResponse.json({ hasSignature, userId, source: "approval_signature_registry" })
   } catch (error) {
     console.error("[v0] Error in GET signature-check:", error)
     return NextResponse.json(

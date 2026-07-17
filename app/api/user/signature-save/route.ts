@@ -34,7 +34,18 @@ export async function POST(request: NextRequest) {
     let signatureUrl: string | null = null
     if (signature_data_url) {
       try {
-        const base64Data = signature_data_url.split(",")[1]
+        // Handle both "data:image/png;base64,..." and raw base64 strings
+        let base64Data: string
+        if (signature_data_url.includes(",")) {
+          base64Data = signature_data_url.split(",")[1]
+        } else {
+          base64Data = signature_data_url
+        }
+
+        if (!base64Data) {
+          throw new Error("Could not extract base64 data from signature_data_url")
+        }
+
         const binaryData = Buffer.from(base64Data, "base64")
         
         // Delete old signature if exists
