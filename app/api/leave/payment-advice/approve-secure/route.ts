@@ -85,11 +85,13 @@ export async function POST(request: NextRequest) {
     let signatureUrl: string | null = signerProfile.signature_data_url || null
     
     if (signatureUrl) {
-      console.log("[v0] Found signature in user_profiles for user:", signerProfile.id)
-    }
-    
-    // Priority 2: Check approval_signature_registry (fallback for older signatures)
-    if (!signatureUrl) {
+      console.log("[v0] Found signature in user_profiles for user:", {
+        userId: signerProfile.id,
+        userName: signerName,
+        signatureLength: signatureUrl.length,
+      })
+    } else {
+      // Priority 2: Check approval_signature_registry (fallback for older signatures)
       const { data: signatureRecords, error: sigError } = await admin
         .from("approval_signature_registry")
         .select("id, signature_data_url, user_id, is_active, workflow_domain")
@@ -97,13 +99,18 @@ export async function POST(request: NextRequest) {
         .eq("is_active", true)
       
       console.log("[v0] Registry signature query result:", {
+        userId: signerProfile.id,
         recordCount: signatureRecords?.length,
         error: sigError?.message,
       })
 
       if (signatureRecords && signatureRecords.length > 0 && signatureRecords[0].signature_data_url) {
         signatureUrl = signatureRecords[0].signature_data_url
-        console.log("[v0] Found signature in approval_signature_registry for user:", signerProfile.id)
+        console.log("[v0] Found signature in approval_signature_registry for user:", {
+          userId: signerProfile.id,
+          userName: signerName,
+          signatureLength: signatureUrl.length,
+        })
       }
     }
 

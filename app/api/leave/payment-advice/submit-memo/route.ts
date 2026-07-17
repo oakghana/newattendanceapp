@@ -90,9 +90,24 @@ export async function POST(request: NextRequest) {
     }
 
     // FETCH SIGNER'S SIGNATURE IMAGE for inclusion in memo
-    // Prefer signature passed from frontend, but fallback to fetching from registry
+    // Priority: Frontend → user_profiles → approval_signature_registry
     let signerSignatureUrl: string | undefined = selectedSigner.signature_image_url
     
+    // First priority: Check user_profiles (primary storage location)
+    if (!signerSignatureUrl) {
+      const { data: userProfile } = await admin
+        .from("user_profiles")
+        .select("signature_data_url")
+        .eq("id", selectedSigner.id)
+        .single()
+
+      if (userProfile?.signature_data_url) {
+        signerSignatureUrl = userProfile.signature_data_url
+        console.log("[v0] Signer signature found in user_profiles for:", selectedSigner.id)
+      }
+    }
+    
+    // Second priority: Check approval_signature_registry (fallback)
     if (!signerSignatureUrl) {
       const { data: signatureRecord } = await admin
         .from("approval_signature_registry")
@@ -103,11 +118,16 @@ export async function POST(request: NextRequest) {
 
       if (signatureRecord?.signature_data_url) {
         signerSignatureUrl = signatureRecord.signature_data_url
+        console.log("[v0] Signer signature found in approval_signature_registry for:", selectedSigner.id)
       }
     }
     
     if (signerSignatureUrl) {
-      console.log("[v0] Signer signature found and will be included in memos")
+      console.log("[v0] Signer signature found and will be included in memos:", {
+        signerId: selectedSigner.id,
+        signerName: selectedSigner.name,
+        signatureLength: signerSignatureUrl.length,
+      })
     } else {
       console.warn("[v0] Signer has no saved signature - memos will be generated without signature image:", selectedSigner.id)
     }
@@ -206,6 +226,7 @@ export async function POST(request: NextRequest) {
           // CRITICAL: Store the list of HR executives who can approve this memo
           assigned_signers: assignedSigners,
         })
+      } else {
         console.log("[v0] Staff validation failed:", {
           name: staff.full_name,
           has_leave_plan_request_id: !!staff.leave_plan_request_id,
