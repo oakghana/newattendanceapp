@@ -213,14 +213,20 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         const response = await fetch("/api/auth/current-user")
         if (response.ok) {
           const data = await response.json()
+          // The endpoint returns { success, user: {...} }
+          const user = data.user
+          const fullName = user?.first_name && user?.last_name 
+            ? `${user.first_name} ${user.last_name}` 
+            : user?.first_name || user?.last_name || "User"
+          
           setCurrentUser({
-            id: data.user?.id,
-            name: data.user?.full_name || data.user?.name,
-            email: data.user?.email,
+            id: user?.id,
+            name: fullName,
+            email: user?.email,
           })
           // Also track the current user's ID for signer assignment checks
-          setCurrentUserId(data.user?.id || null)
-          console.log("[v0] Current user loaded:", data.user?.name || data.user?.email, "ID:", data.user?.id)
+          setCurrentUserId(user?.id || null)
+          console.log("[v0] Current user loaded:", fullName, "ID:", user?.id)
         }
       } catch (err) {
         console.error("[v0] Error fetching current user:", err)
