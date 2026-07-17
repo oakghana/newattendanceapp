@@ -804,17 +804,27 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
 
       // ============ STAFF TABLE ============
       const staffData = staffByCategory[category] || []
-      const tableHeaders = ["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]
+      const tableHeaders = ["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LOCATION", "LEAVE DATE"]
       const tableData = staffData.map((staff, index) => {
-        // Try multiple date fields to find a valid leave date
+        // Try multiple date fields to find a valid leave date (with NaN protection)
         let leaveDate = "N/A"
-        if (staff.leave_start_date) {
-          leaveDate = format(new Date(staff.leave_start_date), "dd-MMM-yy")
-        } else if (staff.preferred_start_date) {
-          leaveDate = format(new Date(staff.preferred_start_date), "dd-MMM-yy")
-        } else if (staff.start_date) {
-          leaveDate = format(new Date(staff.start_date), "dd-MMM-yy")
+        const dateFields = [staff.leave_start_date, staff.preferred_start_date, staff.start_date]
+        for (const dateField of dateFields) {
+          if (dateField && dateField !== "NaN" && dateField !== "NaN-NaN-N") {
+            try {
+              const parsedDate = new Date(dateField)
+              if (!isNaN(parsedDate.getTime())) {
+                leaveDate = format(parsedDate, "dd-MMM-yy")
+                break
+              }
+            } catch {
+              // Continue to next date field
+            }
+          }
         }
+        
+        // Get location name from memo body or staff data
+        const locationName = staff.location_name || staff.assigned_location_name || "HQ"
         
         return [
           (index + 1).toString(),
@@ -822,12 +832,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           staff.employee_id || staff.staff_number || "",
           staff.position || "",
           staff.department_name || "",
+          locationName,
           leaveDate,
         ]
       })
 
-      // Table parameters - simple clean layout
-      const colWidths = [8, 45, 18, 35, 35, 24]
+      // Table parameters - adjusted widths to include location column
+      const colWidths = [8, 35, 15, 28, 28, 20, 18]
       const rowHeight = 6
       const headerHeight = 8
       // Calculate centered position: (pageWidth - totalTableWidth) / 2
@@ -1194,7 +1205,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                         <td className="px-3 py-2 text-gray-600">{staffRank}</td>
                                         <td className="px-3 py-2 text-gray-600">{memo.approved_days} days</td>
                                         <td className="px-3 py-2 text-gray-600">
-                                          {memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A"}
+                                          {memo.leave_period_start && memo.leave_period_start !== "NaN-NaN-N" && !isNaN(new Date(memo.leave_period_start).getTime())
+                                            ? new Date(memo.leave_period_start).toLocaleDateString("en-GB", {
+                                                day: "2-digit",
+                                                month: "short",
+                                                year: "numeric",
+                                              })
+                                            : "N/A"}
                                         </td>
                                       </tr>
                                     )

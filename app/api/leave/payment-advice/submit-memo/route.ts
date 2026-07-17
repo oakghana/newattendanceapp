@@ -181,6 +181,8 @@ export async function POST(request: NextRequest) {
         staff_position: staff.position || staff.rank || "",
         staff_department: staff.department_name || staff.department || "",
         staff_rank_label: staff.staff_category || category,
+        staff_location_name: staff.location_name || staff.assigned_location_name || "HQ", // Beneficiary location name
+        staff_location_id: staff.location_id || staff.assigned_location_id || null,
         selectedSigner: {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
@@ -210,6 +212,34 @@ export async function POST(request: NextRequest) {
 
       // Only insert if we have required fields
       if (staff.leave_plan_request_id && staff.user_id) {
+        // Validate and format dates to ensure they're not NaN
+        let leave_start = null
+        let leave_end = null
+        
+        // Try multiple date field sources
+        const startDateCandidates = [staff.leave_start_date, staff.preferred_start_date, staff.start_date]
+        const endDateCandidates = [staff.leave_end_date, staff.preferred_end_date, staff.end_date]
+        
+        for (const dateStr of startDateCandidates) {
+          if (dateStr && dateStr !== "NaN" && dateStr !== "NaN-NaN-N") {
+            const parsed = new Date(dateStr)
+            if (!isNaN(parsed.getTime())) {
+              leave_start = dateStr
+              break
+            }
+          }
+        }
+        
+        for (const dateStr of endDateCandidates) {
+          if (dateStr && dateStr !== "NaN" && dateStr !== "NaN-NaN-N") {
+            const parsed = new Date(dateStr)
+            if (!isNaN(parsed.getTime())) {
+              leave_end = dateStr
+              break
+            }
+          }
+        }
+        
         memoRecords.push({
           leave_plan_request_id: staff.leave_plan_request_id,
           staff_id: staff.user_id,
@@ -219,8 +249,8 @@ export async function POST(request: NextRequest) {
           memo_subject: `Payment of Leave Allowance (${category} Staff) - ${month}`,
           hr_leave_office_id: user.id,
           hr_leave_office_name: submitterName,
-          leave_period_start: staff.leave_start_date || staff.preferred_start_date || null,
-          leave_period_end: staff.leave_end_date || staff.preferred_end_date || null,
+          leave_period_start: leave_start || null,
+          leave_period_end: leave_end || null,
           approved_days: staff.approved_days || staff.requested_days || 0,
           status: "ready_for_review",
           // CRITICAL: Store the list of HR executives who can approve this memo
