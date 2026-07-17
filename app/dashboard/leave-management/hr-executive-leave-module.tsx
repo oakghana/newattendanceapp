@@ -1,143 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
-  CheckCircle2, FileText, TrendingUp, Clock, Users, ArrowRight,
-  CheckCircle, BarChart3, AlertCircle, CalendarDays, BookOpen, Calendar, BarChart,
+  CheckCircle2, FileText, TrendingUp, Users,
+  CheckCircle, BarChart3, AlertCircle, BookOpen, Calendar, BarChart,
 } from "lucide-react"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { HRExecutiveMemoDashboard } from "@/components/leave/hr-executive-memo-dashboard"
 import { LeaveManagementClient } from "./leave-management-client"
 import { HrExecutiveLeaveCenter } from "@/components/leave/hr-executive-leave-center"
+import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
+import { TeamCalendarView } from "@/components/leave/team-calendar-view"
+import { HrExecutiveOverviewPanel } from "@/components/leave/hr-executive-overview-panel"
 
 // ── Tab type ─────────────────────────────────────────────────────────────────
 type Tab = "overview" | "leave-approvals" | "payment-advice" | "analytics" | "leave-center" | "balance-calendar"
 
-// ── Quick-stat card ───────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, label, value, color, description }: {
-  icon: any; label: string; value: string | number; color: string; description?: string
-}) {
-  return (
-    <Card className="border shadow-sm">
-      <CardContent className="pt-5 pb-4 px-5">
-        <div className="flex items-start gap-3">
-          <div className={`p-2 rounded-lg ${color} shrink-0`}>
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">{label}</p>
-            <p className="text-2xl font-bold mt-1 text-foreground leading-none">{value}</p>
-            {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ── Quick-action card ─────────────────────────────────────────────────────────
-function ActionCard({ icon: Icon, title, description, badge, badgeVariant = "secondary", onClick }: {
-  icon: any; title: string; description: string; badge?: string | number; badgeVariant?: "secondary" | "destructive" | "outline"; onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full text-left p-4 rounded-xl border bg-card hover:bg-muted/40 hover:border-primary/30 transition-all duration-200 group"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-muted group-hover:bg-background transition-colors shrink-0">
-            <Icon className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
-          </div>
-          <div>
-            <p className="font-medium text-sm text-foreground">{title}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {badge !== undefined && badge !== 0 && (
-            <Badge variant={badgeVariant} className="text-xs">{badge}</Badge>
-          )}
-          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-        </div>
-      </div>
-    </button>
-  )
-}
-
 // ── Overview panel ────────────────────────────────────────────────────────────
 function OverviewPanel({ onNavigate, userId }: { onNavigate: (tab: Tab) => void; userId: string }) {
-  const [stats, setStats] = useState({ pendingLeave: 0, pendingMemos: 0, approvedThisMonth: 0 })
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const [leaveRes, memoRes] = await Promise.all([
-          fetch("/api/leave/requests?status=pending_hr&limit=1"),
-          fetch("/api/leave/payment-advice/pending-memos"),
-        ])
-        const [leaveJson, memoJson] = await Promise.all([
-          leaveRes.ok ? leaveRes.json() : null,
-          memoRes.ok ? memoRes.json() : null,
-        ])
-        setStats({
-          pendingLeave: leaveJson?.total ?? leaveJson?.count ?? 0,
-          pendingMemos: memoJson?.count ?? memoJson?.total ?? 0,
-          approvedThisMonth: 0,
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchStats()
-  }, [])
-
-  return (
-    <div className="space-y-6">
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard icon={Clock} label="Pending Leave" value={loading ? "…" : stats.pendingLeave}
-          color="bg-amber-50 text-amber-600" description="Awaiting your decision" />
-        <StatCard icon={FileText} label="Pending Memos" value={loading ? "…" : stats.pendingMemos}
-          color="bg-blue-50 text-blue-600" description="Payment advice to approve" />
-        <StatCard icon={CheckCircle2} label="Your Queue" value={loading ? "…" : stats.pendingLeave + stats.pendingMemos}
-          color="bg-green-50 text-green-600" description="Total items to action" />
-      </div>
-
-      {/* Quick actions */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Quick Actions</h3>
-        <div className="space-y-2">
-          <ActionCard
-            icon={CheckCircle}
-            title="Review Leave Requests"
-            description="Approve or reject pending staff leave applications"
-            badge={stats.pendingLeave || undefined}
-            badgeVariant={stats.pendingLeave > 0 ? "destructive" : "secondary"}
-            onClick={() => onNavigate("leave-approvals")}
-          />
-          <ActionCard
-            icon={FileText}
-            title="Payment Advice Memos"
-            description="Approve and download leave allowance payment memos"
-            badge={stats.pendingMemos || undefined}
-            badgeVariant={stats.pendingMemos > 0 ? "destructive" : "secondary"}
-            onClick={() => onNavigate("payment-advice")}
-          />
-          <ActionCard
-            icon={BarChart3}
-            title="Leave Analytics"
-            description="View leave trends, statistics and department summaries"
-            onClick={() => onNavigate("analytics")}
-          />
-        </div>
-      </div>
-    </div>
-  )
+  return <HrExecutiveOverviewPanel />
 }
 
 // ── Main module ───────────────────────────────────────────────────────────────
@@ -242,22 +124,16 @@ export function HrExecutiveLeaveModule({
         )}
 
         {activeTab === "balance-calendar" && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex items-center gap-2">
               <BarChart className="h-5 w-5 text-teal-600" />
               <div>
                 <h2 className="text-base font-semibold">Balance & Calendar</h2>
-                <p className="text-xs text-muted-foreground">Leave balances and annual calendar overview</p>
+                <p className="text-xs text-muted-foreground">Staff leave balances and team calendar overview</p>
               </div>
             </div>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="py-12 text-center text-muted-foreground">
-                  <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
-                  <p className="text-sm">Leave balance and calendar view coming soon. Check back for the latest updates on annual leave cycles and staff balances.</p>
-                </div>
-              </CardContent>
-            </Card>
+            <LeaveBalanceWidget />
+            <TeamCalendarView />
           </div>
         )}
 
