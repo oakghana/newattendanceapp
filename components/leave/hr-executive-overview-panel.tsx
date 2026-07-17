@@ -29,28 +29,47 @@ export function HrExecutiveOverviewPanel() {
       try {
         setLoading(true)
         
-        // Fetch pending leave requests
+        // Fetch pending leave requests from HR staff pending requests
         const pendingRes = await fetch('/api/leave/hr-staff-pending-requests')
         const pendingData = pendingRes.ok ? await pendingRes.json() : { requests: [], stats: {} }
         
-        // Fetch payment advice stats from memo dashboard
-        const memoRes = await fetch('/api/leave/payment-advice/approved-memos')
-        const memoData = memoRes.ok ? await memoRes.json() : { memos: [] }
+        // Fetch all leave requests to get approved and HOD pending counts
+        const allRequestsRes = await fetch('/api/leave/requests?limit=1000')
+        const allRequestsData = allRequestsRes.ok ? await allRequestsRes.json() : { records: [] }
         
-        // Calculate stats
+        // Fetch payment advice pending memos awaiting HR approval
+        const pendingMemosRes = await fetch('/api/leave/payment-advice/pending-approval')
+        const pendingMemosData = pendingMemosRes.ok ? await pendingMemosRes.json() : { memos: [] }
+        
+        // Fetch approved payment memos
+        const approvedMemosRes = await fetch('/api/leave/payment-advice/approved-memos')
+        const approvedMemosData = approvedMemosRes.ok ? await approvedMemosRes.json() : { memos: [] }
+        
+        // Get requests data
         const pendingRequests = pendingData.requests || []
-        const approvedRequests = pendingRequests.filter((r: any) => r.status === 'approved').length
-        const memoPending = memoData.memos?.filter((m: any) => m.status === 'pending').length || 0
-        const memoApproved = memoData.memos?.filter((m: any) => m.status === 'approved').length || 0
+        const allRequests = allRequestsData.records || []
+        
+        // Count approved leave (status = 'approved')
+        const approvedLeave = allRequests.filter((r: any) => r.status === 'approved').length
+        
+        // Count HOD pending (status = 'hod_review' or 'pending_hod')
+        const hodPending = allRequests.filter((r: any) => 
+          r.status === 'hod_review' || r.status === 'pending_hod' || r.hod_review_status === 'pending'
+        ).length
+        
+        // Count payment memos
+        const paymentPending = (pendingMemosData.memos || []).length
+        const paymentApproved = (approvedMemosData.memos || []).length
         
         setStats({
-          pendingApprovals: pendingRequests.filter((r: any) => r.status === 'pending').length,
-          approvedLeave: approvedRequests,
-          paymentAdvicePending: memoPending,
-          paymentAdviceApproved: memoApproved,
-          hodPending: pendingData.stats?.hodPending || 0,
+          pendingApprovals: pendingRequests.length,
+          approvedLeave: approvedLeave,
+          paymentAdvicePending: paymentPending,
+          paymentAdviceApproved: paymentApproved,
+          hodPending: hodPending,
         })
       } catch (err) {
+        console.error('[v0] Stats fetch error:', err)
         setError('Failed to load statistics')
       } finally {
         setLoading(false)
