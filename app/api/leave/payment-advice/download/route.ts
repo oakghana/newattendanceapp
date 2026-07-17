@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
 
     // === BODY TEXT ===
     doc.setFontSize(9)
-    doc.setFont(undefined, "normal")
+    doc.setFont("helvetica", "normal")
     
     const staffCount = staffList.length > 0 ? staffList.length : 1
     const bodyText1 = `We wish to inform you that the attached list of ${staffCount} ${memo.staff_category ? memo.staff_category + " " : ""}staff are scheduled to proceed on their annual vacation leave in ${monthYear}.`
@@ -250,7 +250,7 @@ export async function GET(request: NextRequest) {
         name: memo.staff_name,
         employeeId: memo.staff_number,
         position: memo.memo_body ? (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b.staffList?.[0]?.position || b.staffList?.[0]?.rank || "" } catch { return "" } })() : "",
-        location: "",
+        location_name: memo.memo_body ? (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b.staffList?.[0]?.location_name || b.staffList?.[0]?.assigned_location_name || b.staffList?.[0]?.location || "" } catch { return "" } })() : "",
         leaveDate: fmtDate(memo.leave_period_start),
       },
     ]).map((s: any, idx: number) => [
@@ -258,7 +258,7 @@ export async function GET(request: NextRequest) {
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",
       s.position || s.rank || "",
-      s.location || s.station || s.workStation || "",
+      s.location_name || s.assigned_location_name || s.location || s.station || s.workStation || "",
       s.leaveDate || fmtDate(memo.leave_period_start),
     ])
 

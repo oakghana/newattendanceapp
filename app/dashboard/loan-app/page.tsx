@@ -1091,7 +1091,10 @@ export default function LoanAppPage() {
     return tabs
   }, [data, canAccessLoanOfficeWorkspace, isAdmin])
 
-  const defaultTab = visibleTabs[0]?.key || "staff"
+  // HR Executives land directly on their approval queue
+  const defaultTab = (!isAdmin && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.committee)
+    ? "director"
+    : visibleTabs[0]?.key || "staff"
 
   const filteredHod = useMemo(
     () => filterAndSortRows(data?.inbox?.hod || [], hodSearch, hodStatus, hodSort, hodLocation, hodDept),

@@ -15,6 +15,7 @@ import { HRExecutiveMemoDashboard } from "@/components/leave/hr-executive-memo-d
 import { HRLeaveOfficeRequestDashboard } from "@/components/leave/hr-leave-office-request-dashboard"
 import { DefermentRequestsTracking } from "@/components/leave-management/deferment-requests-tracking"
 import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planning"
+import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
@@ -63,6 +64,27 @@ export function LeaveManagementModuleClient({
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
+
+  // HR Executives get a simplified dedicated module instead of the full tab bar
+  if (isHrExecutive) {
+    return (
+      <HrExecutiveLeaveModule
+        userId={userId}
+        userRole={userRole}
+        userDepartment={userDepartment}
+        userFirstName={userFirstName}
+        userLastName={userLastName}
+        inactivityDays={inactivityDays}
+        userDepartmentName={userDepartmentName}
+        userDepartmentCode={userDepartmentCode}
+        userLocationName={userLocationName}
+        hasHodLinkage={hasHodLinkage}
+        initialStaffRequests={initialStaffRequests}
+        initialManagerNotifications={initialManagerNotifications}
+        initialApprovedStaffRequests={initialApprovedStaffRequests}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6 w-full">
