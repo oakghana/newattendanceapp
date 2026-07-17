@@ -102,6 +102,9 @@ export async function GET(request: NextRequest) {
         is_active,
         assigned_location_id,
         profile_image_url,
+        date_of_appointment,
+        years_of_service,
+        contact_number,
         created_at,
         updated_at
       `, { count: 'exact' })
@@ -299,7 +302,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password } =
+    const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password, date_of_appointment, years_of_service, contact_number } =
       body
 
     if (profile.role === "it-admin") {
@@ -392,6 +395,9 @@ export async function POST(request: NextRequest) {
           position: position || null,
           role: role || "staff",
           is_active: true,
+          date_of_appointment: date_of_appointment || null,
+          years_of_service: years_of_service ? parseInt(years_of_service, 10) : null,
+          contact_number: contact_number || null,
         })
         .eq("id", authUser.user.id)
         .select(`
@@ -419,6 +425,9 @@ export async function POST(request: NextRequest) {
           position: position || null,
           role: role || "staff",
           is_active: true,
+          date_of_appointment: date_of_appointment || null,
+          years_of_service: years_of_service ? parseInt(years_of_service, 10) : null,
+          contact_number: contact_number || null,
         })
         .select(`
           *,
