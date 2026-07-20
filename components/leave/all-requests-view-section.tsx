@@ -68,14 +68,26 @@ export function AllRequestsViewSection() {
       const res = await fetch('/api/leave/requests?limit=1000')
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`)
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       }
 
-      const data = await res.json()
-      setRequests(Array.isArray(data.records) ? data.records : Array.isArray(data.data) ? data.data : [])
+      const responseData = await res.json()
+      
+      // Extract data from response - handle multiple possible response formats
+      let requestsList: LeaveRequest[] = []
+      
+      if (Array.isArray(responseData.data)) {
+        requestsList = responseData.data
+      } else if (Array.isArray(responseData.records)) {
+        requestsList = responseData.records
+      } else if (Array.isArray(responseData)) {
+        requestsList = responseData
+      }
+      
+      setRequests(requestsList)
     } catch (err) {
       console.error('[v0] All requests fetch error:', err)
-      setError('Failed to load requests')
+      setError(err instanceof Error ? err.message : 'Failed to load requests')
     } finally {
       setLoading(false)
     }

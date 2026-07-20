@@ -13,7 +13,17 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50")
     const offset = parseInt(searchParams.get("offset") || "0")
 
-    let query = supabase.from("leave_requests").select("*", { count: "exact" })
+    // Include user_profiles relationship for name, department, etc.
+    let query = supabase.from("leave_requests").select(`
+      *,
+      user_profiles:user_id (
+        first_name,
+        last_name,
+        employee_id,
+        department_id,
+        departments:department_id (name)
+      )
+    `, { count: "exact" })
 
     if (userId) query = query.eq("user_id", userId)
     if (status) query = query.eq("status", status)
