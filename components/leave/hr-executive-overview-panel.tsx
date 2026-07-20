@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2, Clock, FileText, TrendingUp } from 'lucide-react'
+import { RequestDetailsModal } from './request-details-modal'
+import { HodPendingSummary } from './hod-pending-summary'
 
 interface Stats {
   pendingApprovals: number
@@ -23,6 +25,15 @@ export function HrExecutiveOverviewPanel() {
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalFilter, setModalFilter] = useState<'pending' | 'approved' | 'payment-pending' | 'payment-approved' | 'hod-pending'>('pending')
+  const [modalTitle, setModalTitle] = useState('')
+
+  const openModal = (filter: typeof modalFilter, title: string) => {
+    setModalFilter(filter)
+    setModalTitle(title)
+    setModalOpen(true)
+  }
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -103,77 +114,112 @@ export function HrExecutiveOverviewPanel() {
         <p className="text-sm text-muted-foreground">Key metrics and pending actions at a glance</p>
       </div>
 
+      <HodPendingSummary />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Pending Approvals */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-500" />
-              Pending Approvals
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.pendingApprovals}</div>
-            <p className="text-xs text-muted-foreground mt-1">Leave requests awaiting decision</p>
-          </CardContent>
-        </Card>
+        <button
+          onClick={() => openModal('pending', 'Pending Leave Approvals')}
+          className="text-left hover:shadow-md transition-shadow"
+        >
+          <Card className="cursor-pointer h-full hover:border-primary/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-500" />
+                Pending Approvals
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.pendingApprovals}</div>
+              <p className="text-xs text-muted-foreground mt-1">Leave requests awaiting decision</p>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* Approved Leave */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-              Approved Leave
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.approvedLeave}</div>
-            <p className="text-xs text-muted-foreground mt-1">Leave approved this period</p>
-          </CardContent>
-        </Card>
+        <button
+          onClick={() => openModal('approved', 'Approved Leave Requests')}
+          className="text-left hover:shadow-md transition-shadow"
+        >
+          <Card className="cursor-pointer h-full hover:border-primary/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                Approved Leave
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.approvedLeave}</div>
+              <p className="text-xs text-muted-foreground mt-1">Leave approved this period</p>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* Payment Advice Pending */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-orange-500" />
-              Payment Pending
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.paymentAdvicePending}</div>
-            <p className="text-xs text-muted-foreground mt-1">Memos awaiting approval</p>
-          </CardContent>
-        </Card>
+        <button
+          onClick={() => openModal('payment-pending', 'Pending Payment Advice')}
+          className="text-left hover:shadow-md transition-shadow"
+        >
+          <Card className="cursor-pointer h-full hover:border-primary/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4 text-orange-500" />
+                Payment Pending
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.paymentAdvicePending}</div>
+              <p className="text-xs text-muted-foreground mt-1">Memos awaiting approval</p>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* Payment Advice Approved */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-blue-500" />
-              Payment Approved
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.paymentAdviceApproved}</div>
-            <p className="text-xs text-muted-foreground mt-1">Memos approved</p>
-          </CardContent>
-        </Card>
+        <button
+          onClick={() => openModal('payment-approved', 'Approved Payment Advice')}
+          className="text-left hover:shadow-md transition-shadow"
+        >
+          <Card className="cursor-pointer h-full hover:border-primary/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-blue-500" />
+                Payment Approved
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.paymentAdviceApproved}</div>
+              <p className="text-xs text-muted-foreground mt-1">Memos approved</p>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* HOD Pending */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-500" />
-              HOD Pending
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.hodPending}</div>
-            <p className="text-xs text-muted-foreground mt-1">Awaiting HOD review</p>
-          </CardContent>
-        </Card>
+        <button
+          onClick={() => openModal('hod-pending', 'Pending HOD Review')}
+          className="text-left hover:shadow-md transition-shadow"
+        >
+          <Card className="cursor-pointer h-full hover:border-primary/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-500" />
+                HOD Pending
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.hodPending}</div>
+              <p className="text-xs text-muted-foreground mt-1">Awaiting HOD review</p>
+            </CardContent>
+          </Card>
+        </button>
       </div>
+
+      {/* Request Details Modal */}
+      <RequestDetailsModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        title={modalTitle}
+        filter={modalFilter}
+      />
     </div>
   )
 }
