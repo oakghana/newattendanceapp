@@ -37,11 +37,11 @@ interface HrExecutiveLeaveModuleProps {
   initialApprovedStaffRequests: any[]
 }
 
-const TABS: { id: Tab; label: string; icon: any }[] = [
-  { id: "overview", label: "Overview", icon: BookOpen },
-  { id: "leave-approvals", label: "Leave Center", icon: Calendar },
-  { id: "balance-calendar", label: "Balance & Calendar", icon: BarChart },
-  { id: "analytics", label: "Analytics", icon: TrendingUp },
+const TABS: { id: Tab; label: string; icon: any; activeClass: string }[] = [
+  { id: "overview",        label: "Overview",           icon: BookOpen,  activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
+  { id: "leave-approvals", label: "Leave Center",       icon: Calendar,  activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
+  { id: "balance-calendar",label: "Balance & Calendar", icon: BarChart,  activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
+  { id: "analytics",       label: "Analytics",          icon: TrendingUp,activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
 ]
 
 export function HrExecutiveLeaveModule({
@@ -55,14 +55,14 @@ export function HrExecutiveLeaveModule({
     <div className="space-y-4">
       {/* Clean horizontal tab bar */}
       <div className="flex gap-1 p-1 bg-muted rounded-xl w-full overflow-x-auto">
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {TABS.map(({ id, label, icon: Icon, activeClass }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
             className={[
               "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap flex-1 justify-center",
               activeTab === id
-                ? "bg-background text-foreground shadow-sm border"
+                ? activeClass
                 : "text-muted-foreground hover:text-foreground hover:bg-background/60",
             ].join(" ")}
           >

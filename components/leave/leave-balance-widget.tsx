@@ -85,7 +85,7 @@ export function LeaveBalanceWidget() {
 
   useEffect(() => {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+    const timeout = setTimeout(() => controller.abort(), 15000) // 15 second timeout
 
     fetch("/api/leave/balance", { 
       cache: "no-store",
@@ -97,12 +97,13 @@ export function LeaveBalanceWidget() {
       })
       .then((d) => {
         if (d.error) throw new Error(d.error)
-        if (!d.balances || d.balances.length === 0) {
-          console.log("[v0] LeaveBalanceWidget: No balance data returned")
-          setError("No leave balance data available")
-        } else {
-          setData(d)
-        }
+        // Show data even if balances array is empty — user just has no usage yet
+        setData({
+          balances: d.balances || [],
+          period: d.period || String(new Date().getFullYear()),
+          showLeadershipMetrics: d.showLeadershipMetrics ?? false,
+          totalActiveStaff: d.totalActiveStaff ?? 0,
+        })
         setLoading(false)
       })
       .catch((e) => {
@@ -127,12 +128,23 @@ export function LeaveBalanceWidget() {
     )
   }
 
-  if (error || !data) {
+  if (error) {
     return (
       <Card className="border-slate-200 bg-white/85 shadow-sm">
         <CardContent className="py-8 text-center text-sm text-slate-500">
           <AlertCircle className="mx-auto mb-2 h-8 w-8 text-slate-300" />
           Could not load leave balances
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!data || data.balances.length === 0) {
+    return (
+      <Card className="border-slate-200 bg-white/85 shadow-sm">
+        <CardContent className="py-8 text-center text-sm text-slate-500">
+          <AlertCircle className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+          No leave types configured for this period
         </CardContent>
       </Card>
     )

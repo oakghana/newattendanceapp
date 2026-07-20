@@ -27,31 +27,42 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="hod-review" className="flex items-center gap-1">
+        <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1 bg-muted rounded-xl">
+          <TabsTrigger
+            value="hod-review"
+            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
             <UserCheck className="h-4 w-4" />
-            <span className="hidden sm:inline text-xs">HOD</span>
-            <span className="sm:hidden text-xs">HOD</span>
+            <span>HOD</span>
           </TabsTrigger>
-          <TabsTrigger value="all-requests" className="flex items-center gap-1">
+          <TabsTrigger
+            value="all-requests"
+            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
             <Eye className="h-4 w-4" />
-            <span className="hidden sm:inline text-xs">All</span>
-            <span className="sm:hidden text-xs">All</span>
+            <span>All</span>
           </TabsTrigger>
-          <TabsTrigger value="payment-advice" className="flex items-center gap-1">
+          <TabsTrigger
+            value="payment-advice"
+            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
             <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline text-xs">Payment</span>
-            <span className="sm:hidden text-xs">Pay</span>
+            <span className="hidden sm:inline">Payment</span>
+            <span className="sm:hidden">Pay</span>
           </TabsTrigger>
-          <TabsTrigger value="deferments" className="flex items-center gap-1">
+          <TabsTrigger
+            value="deferments"
+            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
             <Clock className="h-4 w-4" />
-            <span className="hidden sm:inline text-xs">Defer</span>
-            <span className="sm:hidden text-xs">Def</span>
+            <span>Defer</span>
           </TabsTrigger>
-          <TabsTrigger value="recalls" className="flex items-center gap-1">
+          <TabsTrigger
+            value="recalls"
+            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
             <RotateCcw className="h-4 w-4" />
-            <span className="hidden sm:inline text-xs">Recall</span>
-            <span className="sm:hidden text-xs">Rec</span>
+            <span>Recall</span>
           </TabsTrigger>
         </TabsList>
 
