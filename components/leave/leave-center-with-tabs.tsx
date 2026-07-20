@@ -3,9 +3,11 @@
 import React, { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CheckCircle, Eye, UserCheck } from 'lucide-react'
+import { CheckCircle, Eye, UserCheck, FileText, Clock, RotateCcw } from 'lucide-react'
 import { HODReviewSection } from './hod-review-section'
 import { AllRequestsViewSection } from './all-requests-view-section'
+import { PaymentAdviceClient } from './payment-advice-client'
+import { HRDefermentRecallManagement } from './hr-deferment-recall-management'
 
 interface LeaveCenterWithTabsProps {
   userDepartmentId: string
@@ -25,16 +27,31 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="hod-review" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="hod-review" className="flex items-center gap-1">
             <UserCheck className="h-4 w-4" />
-            <span className="hidden sm:inline">HOD Review</span>
-            <span className="sm:hidden">HOD</span>
+            <span className="hidden sm:inline text-xs">HOD</span>
+            <span className="sm:hidden text-xs">HOD</span>
           </TabsTrigger>
-          <TabsTrigger value="all-requests" className="flex items-center gap-2">
+          <TabsTrigger value="all-requests" className="flex items-center gap-1">
             <Eye className="h-4 w-4" />
-            <span className="hidden sm:inline">All Requests</span>
-            <span className="sm:hidden">View</span>
+            <span className="hidden sm:inline text-xs">All</span>
+            <span className="sm:hidden text-xs">All</span>
+          </TabsTrigger>
+          <TabsTrigger value="payment-advice" className="flex items-center gap-1">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline text-xs">Payment</span>
+            <span className="sm:hidden text-xs">Pay</span>
+          </TabsTrigger>
+          <TabsTrigger value="deferments" className="flex items-center gap-1">
+            <Clock className="h-4 w-4" />
+            <span className="hidden sm:inline text-xs">Defer</span>
+            <span className="sm:hidden text-xs">Def</span>
+          </TabsTrigger>
+          <TabsTrigger value="recalls" className="flex items-center gap-1">
+            <RotateCcw className="h-4 w-4" />
+            <span className="hidden sm:inline text-xs">Recall</span>
+            <span className="sm:hidden text-xs">Rec</span>
           </TabsTrigger>
         </TabsList>
 
@@ -68,6 +85,54 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
           </Card>
 
           <AllRequestsViewSection />
+        </TabsContent>
+
+        <TabsContent value="payment-advice" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-5 w-5 text-blue-600" />
+                Payment Advice Memos
+              </CardTitle>
+              <CardDescription>
+                Manage and approve payment advice memos for staff on approved leave
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <PaymentAdviceClient userRole="hr_leave_office" />
+        </TabsContent>
+
+        <TabsContent value="deferments" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-5 w-5 text-amber-600" />
+                Deferments & Recalls
+              </CardTitle>
+              <CardDescription>
+                Review and approve leave deferment and recall requests
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <HRDefermentRecallManagement />
+        </TabsContent>
+
+        <TabsContent value="recalls" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <RotateCcw className="h-5 w-5 text-purple-600" />
+                Recalls
+              </CardTitle>
+              <CardDescription>
+                Manage leave recall requests from the organization
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <HRDefermentRecallManagement />
         </TabsContent>
       </Tabs>
     </div>
