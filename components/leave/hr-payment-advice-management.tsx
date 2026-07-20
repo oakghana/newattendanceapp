@@ -105,19 +105,21 @@ export function HRPaymentAdviceManagement() {
         description: 'Preparing payment advice for download...',
       })
 
-      const res = await fetch(`/api/leave/payment-advice/${batchId}/download`, {
-        method: 'POST',
+      // Use the download-batch endpoint with memo IDs
+      const res = await fetch(`/api/leave/payment-advice/download-batch?memo_ids=${encodeURIComponent(batchId)}`, {
+        method: 'GET',
       })
 
       if (!res.ok) {
-        throw new Error('Failed to download payment advice')
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Failed to download: HTTP ${res.status}`)
       }
 
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `payment-advice-${batchId}.pdf`
+      link.download = `payment-advice-${new Date().toISOString().split('T')[0]}.zip`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)

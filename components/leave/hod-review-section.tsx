@@ -46,15 +46,25 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
       setLoading(true)
       setError(null)
 
-      // Fetch pending HOD review requests for this department
-      const res = await fetch(`/api/leave/hod-pending-requests?department_id=${userDepartmentId}`)
+      // Fetch pending HOD review requests
+      const res = await fetch('/api/leave/hod-pending-requests')
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`)
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       }
 
       const data = await res.json()
-      setRequests(Array.isArray(data.requests) ? data.requests : [])
+      
+      // Filter requests for user's department if available
+      let requests = Array.isArray(data.requests) ? data.requests : []
+      if (userDepartmentId) {
+        requests = requests.filter((req: any) => {
+          const deptName = req.user_profiles?.departments?.name?.toLowerCase() || ''
+          return deptName.includes(userDepartmentId.toLowerCase())
+        })
+      }
+      
+      setRequests(requests)
     } catch (err) {
       console.error('[v0] HOD Review fetch error:', err)
       setError('Failed to load HOD review requests')
