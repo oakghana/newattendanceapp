@@ -4,13 +4,13 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
   CheckCircle2, TrendingUp, Users,
-  CheckCircle, BookOpen, Calendar, BarChart,
+  BookOpen, Calendar, BarChart,
 } from "lucide-react"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
-import { LeaveManagementClient } from "./leave-management-client"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrExecutiveOverviewPanel } from "@/components/leave/hr-executive-overview-panel"
+import { LeaveCenterWithTabs } from "@/components/leave/leave-center-with-tabs"
 
 // ── Tab type ─────────────────────────────────────────────────────────────────
 type Tab = "overview" | "leave-approvals" | "analytics" | "balance-calendar"
@@ -79,27 +79,10 @@ export function HrExecutiveLeaveModule({
         )}
 
         {activeTab === "leave-approvals" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <div>
-                <h2 className="text-base font-semibold">Leave Approvals</h2>
-                <p className="text-xs text-muted-foreground">Review and action pending leave requests</p>
-              </div>
-            </div>
-            <LeaveManagementClient
-              userId={userId}
-              userRole={userRole ?? ""}
-              userDepartment={userDepartment}
-              userFirstName={userFirstName}
-              userLastName={userLastName}
-              hasHodLinkage={hasHodLinkage}
-              inactivityDays={inactivityDays}
-              initialStaffRequests={initialStaffRequests}
-              initialManagerNotifications={initialManagerNotifications}
-              initialApprovedStaffRequests={initialApprovedStaffRequests}
-            />
-          </div>
+          <LeaveCenterWithTabs
+            userDepartmentId={userDepartment ?? ""}
+            userName={userFirstName && userLastName ? `${userFirstName} ${userLastName}` : undefined}
+          />
         )}
 
         {activeTab === "balance-calendar" && (
