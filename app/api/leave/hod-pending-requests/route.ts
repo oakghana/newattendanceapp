@@ -8,30 +8,25 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all leave requests with HOD review status pending
+    // Get all leave requests with pending HOD review status
     const { data: requests, error } = await supabase
-      .from('leave_plan_requests')
+      .from('leave_requests')
       .select(`
         id,
-        staff_id,
-        staff_name,
+        user_id,
         leave_type,
         start_date,
         end_date,
+        status,
         hod_review_status,
-        hod_reviewed_at,
         created_at,
-        user_profiles:staff_id (
+        user_profiles:user_id (
           first_name,
           last_name,
           employee_id,
+          department_id,
           departments:department_id (
             name
-          ),
-          loan_hod_linkages:hod_id (
-            id,
-            name,
-            employee_id
           )
         )
       `)
@@ -40,12 +35,19 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('[v0] HOD pending requests error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: error.message, details: error }, { status: 500 })
+    }
+
+    if (!requests) {
+      return NextResponse.json({
+        requests: [],
+        total: 0,
+      })
     }
 
     // Calculate days pending for each request
     const now = new Date()
-    const enrichedRequests = (requests || []).map((req: any) => {
+    const enrichedRequests = requests.map((req: any) => {
       const createdDate = new Date(req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
       
@@ -58,38 +60,17 @@ export async function GET(request: NextRequest) {
         ...req,
         daysPending,
         ageColor,
+        staff_name: req.user_profiles ? `${req.user_profiles.first_name} ${req.user_profiles.last_name}` : 'N/A',
+        department_name: req.user_profiles?.departments?.name || 'N/A',
       }
     })
 
-    // Group by HOD
-    const hodGroups = enrichedRequests.reduce((acc: any, req: any) => {
-      const hodId = req.user_profiles?.loan_hod_linkages?.[0]?.id || 'unassigned'
-      const hodName = req.user_profiles?.loan_hod_linkages?.[0]?.name || 'Unassigned'
-      
-      if (!acc[hodId]) {
-        acc[hodId] = {
-          hodId,
-          hodName,
-          requests: [],
-          totalPending: 0,
-          oldestDaysPending: 0,
-        }
-      }
-      
-      acc[hodId].requests.push(req)
-      acc[hodId].totalPending += 1
-      acc[hodId].oldestDaysPending = Math.max(acc[hodId].oldestDaysPending, req.daysPending)
-      
-      return acc
-    }, {})
-
     return NextResponse.json({
       requests: enrichedRequests,
-      hodGroups: Object.values(hodGroups),
       total: enrichedRequests.length,
     })
   } catch (err) {
     console.error('[v0] HOD pending requests error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error', details: err }, { status: 500 })
   }
 }
