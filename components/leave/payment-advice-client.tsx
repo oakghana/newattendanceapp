@@ -1202,7 +1202,12 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                       memoBody = {}
                                     }
                                     const staffRank = memoBody.staff_rank_label || category
-                                    const staffLocation = memoBody.staffList?.[0]?.location_name || memoBody.staffList?.[0]?.assigned_location_name || memoBody.staff_location_name || "N/A"
+                                    const staffLocation = memoBody.staff_location_name
+                                      || memoBody.staffList?.[0]?.location_name
+                                      || memoBody.staffList?.[0]?.assigned_location_name
+                                      || memoBody.location_name
+                                      || memoBody.staff_department
+                                      || "N/A"
                                     const staffDepartment = memoBody.staff_department || "N/A"
                                     
                                     return (
@@ -1502,7 +1507,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                                     }
                                     const staffRank = memoBody.staff_rank_label || category
                                     const staffPosition = memoBody.staff_position || "N/A"
-                                    const staffLocation = memoBody.staffList?.[0]?.location_name || memoBody.staffList?.[0]?.assigned_location_name || memo.assigned_location_name || "N/A"
+                                    const staffLocation = memoBody.staff_location_name
+                                      || memoBody.staffList?.[0]?.location_name
+                                      || memoBody.staffList?.[0]?.assigned_location_name
+                                      || memoBody.location_name
+                                      || (memo as any).assigned_location_name
+                                      || memoBody.staff_department
+                                      || "N/A"
                                     const signerName = (memoBody.approver?.name || memo.signer_name || "").trim()
                                     
                                     return (

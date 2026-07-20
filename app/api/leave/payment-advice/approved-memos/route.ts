@@ -82,21 +82,58 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log("[v0] Approved memos fetched successfully:", {
-      userId: user.id,
-      month: month || "all",
-      count: approvedMemos?.length || 0,
-      memoStatuses: approvedMemos?.map(m => ({ id: m.id, status: m.status })) || [],
+    // Enrich memos with location from user_profiles + geofence_locations for memos missing location
+    const memoList = approvedMemos || []
+    const staffIds = [...new Set(memoList.map((m: any) => m.staff_id).filter(Boolean))]
+
+    let locationMap: Record<string, string> = {}
+    if (staffIds.length > 0) {
+      // Fetch user profiles with assigned_location_id
+      const { data: profiles } = await admin
+        .from("user_profiles")
+        .select("id, assigned_location_id")
+        .in("id", staffIds)
+
+      if (profiles && profiles.length > 0) {
+        const locationIds = [...new Set(profiles.map((p: any) => p.assigned_location_id).filter(Boolean))]
+        let geoMap: Record<string, string> = {}
+
+        if (locationIds.length > 0) {
+          const { data: locations } = await admin
+            .from("geofence_locations")
+            .select("id, name")
+            .in("id", locationIds)
+          if (locations) {
+            locations.forEach((l: any) => { geoMap[l.id] = l.name })
+          }
+        }
+
+        profiles.forEach((p: any) => {
+          if (p.assigned_location_id && geoMap[p.assigned_location_id]) {
+            locationMap[p.id] = geoMap[p.assigned_location_id]
+          }
+        })
+      }
+    }
+
+    // Merge location into memo_body where missing
+    const enrichedMemos = memoList.map((memo: any) => {
+      let memoBody: any = {}
+      try {
+        memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+      } catch { memoBody = {} }
+
+      if (!memoBody.staff_location_name && locationMap[memo.staff_id]) {
+        memoBody.staff_location_name = locationMap[memo.staff_id]
+        return { ...memo, memo_body: JSON.stringify(memoBody) }
+      }
+      return memo
     })
 
     return NextResponse.json({
       success: true,
-      memos: approvedMemos || [],
-      count: approvedMemos?.length || 0,
-      debug: {
-        queryStatus: ["signed_by_hr_executive", "reviewed_by_hr", "approved", "finalized"],
-        month: month || "all",
-      },
+      memos: enrichedMemos,
+      count: enrichedMemos.length,
     })
   } catch (err) {
     console.error("[v0] Unexpected error in approved-memos:", err)
