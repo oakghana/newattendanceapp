@@ -56,16 +56,19 @@ export function HrExecutiveOverviewPanel() {
         const approvedMemosRes = await fetch('/api/leave/payment-advice/approved-memos')
         const approvedMemosData = approvedMemosRes.ok ? await approvedMemosRes.json() : { memos: [] }
         
-        // Get requests data
+        // Get requests data — endpoint returns { data, total }
         const pendingRequests = pendingData.requests || []
-        const allRequests = allRequestsData.records || []
-        
-        // Count approved leave (status = 'approved')
-        const approvedLeave = allRequests.filter((r: any) => r.status === 'approved').length
-        
-        // Count HOD pending (status = 'hod_review' or 'pending_hod')
-        const hodPending = allRequests.filter((r: any) => 
-          r.status === 'hod_review' || r.status === 'pending_hod' || r.hod_review_status === 'pending'
+        const allRequests = allRequestsData.data || allRequestsData.records || []
+
+        // Count approved leave across both leave_plan_requests statuses
+        const approvedLeave = allRequests.filter((r: any) =>
+          r.status === 'approved' || r.status === 'finalized' || r.status === 'completed'
+        ).length
+
+        // Count HOD pending
+        const hodPending = allRequests.filter((r: any) =>
+          r.status === 'hod_review' || r.status === 'pending_hod' ||
+          r.hod_review_status === 'pending' || r.hod_decision === 'pending' || r.hod_decision === null
         ).length
         
         // Count payment memos

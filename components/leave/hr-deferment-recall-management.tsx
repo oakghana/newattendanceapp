@@ -105,65 +105,47 @@ export function HRDefermentRecallManagement() {
     }
   }
 
-  const handleApprove = async (type: 'deferment' | 'recall', id: string) => {
-    try {
-      setProcessingId(id)
-      const res = await fetch('/api/leave/hr-deferment-recall-management', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          request_type: type,
-          request_id: id,
-          decision: 'approved',
-          decision_note: decisionNote,
-          generate_memo: true
-        })
-      })
-
-      if (!res.ok) throw new Error('Failed to approve')
-      
-      toast({ title: 'Success', description: `${type} approved and memo generated` })
-      setDecisionNote('')
-      fetchRequests()
-    } catch (error) {
-      console.error(`[v0] Error approving ${type}:`, error)
-      toast({ title: 'Error', description: `Failed to approve ${type}`, variant: 'destructive' })
-    } finally {
-      setProcessingId(null)
-    }
-  }
-
-  const handleReject = async (type: 'deferment' | 'recall', id: string) => {
-    if (!decisionNote) {
+  const submitDecision = async (type: 'deferment' | 'recall', id: string, decision: 'approved' | 'rejected') => {
+    if (decision === 'rejected' && !decisionNote) {
       toast({ title: 'Error', description: 'Please provide a rejection reason', variant: 'destructive' })
       return
     }
-
     try {
       setProcessingId(id)
-      const res = await fetch('/api/leave/hr-deferment-recall-management', {
+      // Get current user id from the session
+      const sessionRes = await fetch('/api/auth/session')
+      const sessionData = sessionRes.ok ? await sessionRes.json() : {}
+      const hrExecutiveId = sessionData?.user?.id || sessionData?.id || ''
+
+      const res = await fetch('/api/leave/deferment-recall/hr-executive-decision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          request_type: type,
           request_id: id,
-          decision: 'rejected',
-          decision_note: decisionNote
-        })
+          request_type: type,
+          decision,
+          rejection_reason: decisionNote || undefined,
+          hr_executive_id: hrExecutiveId,
+          hr_executive_role: 'hr_executive',
+        }),
       })
 
-      if (!res.ok) throw new Error('Failed to reject')
-      
-      toast({ title: 'Success', description: `${type} rejected` })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Failed to ${decision}`)
+
+      toast({ title: 'Success', description: data.message || `${type} ${decision}` })
       setDecisionNote('')
       fetchRequests()
-    } catch (error) {
-      console.error(`[v0] Error rejecting ${type}:`, error)
-      toast({ title: 'Error', description: `Failed to reject ${type}`, variant: 'destructive' })
+    } catch (error: any) {
+      console.error(`[v0] Error on ${type} ${decision}:`, error)
+      toast({ title: 'Error', description: error.message || `Failed to ${decision} ${type}`, variant: 'destructive' })
     } finally {
       setProcessingId(null)
     }
   }
+
+  const handleApprove = (type: 'deferment' | 'recall', id: string) => submitDecision(type, id, 'approved')
+  const handleReject = (type: 'deferment' | 'recall', id: string) => submitDecision(type, id, 'rejected')
 
   const getStatusColor = (status: string) => {
     switch (status) {

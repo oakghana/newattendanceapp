@@ -3,11 +3,12 @@
 import React, { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CheckCircle, Eye, UserCheck, FileText, Clock, RotateCcw } from 'lucide-react'
+import { CheckCircle, Eye, UserCheck, FileText, Clock, RotateCcw, ClipboardCheck } from 'lucide-react'
 import { HODReviewSection } from './hod-review-section'
 import { AllRequestsViewSection } from './all-requests-view-section'
 import { PaymentAdviceClient } from './payment-advice-client'
 import { HRDefermentRecallManagement } from './hr-deferment-recall-management'
+import { HrExecutiveApprovalDashboard } from './hr-executive-approval-dashboard'
 
 interface LeaveCenterWithTabsProps {
   userDepartmentId: string
@@ -27,7 +28,7 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1 bg-white border border-slate-200 rounded-xl shadow-sm">
+        <TabsList className="grid w-full grid-cols-6 h-auto p-1 gap-1 bg-white border border-slate-200 rounded-xl shadow-sm">
           <TabsTrigger
             value="hod-review"
             className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
@@ -63,6 +64,14 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
           >
             <RotateCcw className="h-4 w-4" />
             <span>Recall</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="hr-approve"
+            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            <span className="hidden sm:inline">HR Approve</span>
+            <span className="sm:hidden">HR</span>
           </TabsTrigger>
         </TabsList>
 
@@ -132,6 +141,22 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
           </Card>
 
           <HRDefermentRecallManagement />
+        </TabsContent>
+
+        <TabsContent value="hr-approve" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5 text-orange-600" />
+                HR Executive Approvals
+              </CardTitle>
+              <CardDescription>
+                All leave requests submitted by the Leave Office for HR Executive approval — view, approve, and download approved memos
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <HrExecutiveApprovalDashboard />
         </TabsContent>
       </Tabs>
     </div>
