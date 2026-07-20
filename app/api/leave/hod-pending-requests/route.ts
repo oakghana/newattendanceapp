@@ -8,58 +8,78 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all leave requests with pending HOD review status
+    // Query leave_plan_requests where HOD decision is pending (null or 'pending')
     const { data: requests, error } = await supabase
-      .from('leave_requests')
+      .from('leave_plan_requests')
       .select(`
         id,
         user_id,
-        leave_type,
-        start_date,
-        end_date,
+        leave_type_key,
+        preferred_start_date,
+        preferred_end_date,
+        requested_days,
+        adjusted_days,
         status,
-        hod_review_status,
+        hod_decision,
+        staff_category,
         created_at,
-        user_profiles:user_id (
-          id,
-          first_name,
-          last_name,
-          employee_id,
-          department_id
-        )
+        submitted_at
       `)
-      .eq('hod_review_status', 'pending')
+      .or('hod_decision.is.null,hod_decision.eq.pending')
+      .neq('status', 'rejected')
       .order('created_at', { ascending: true })
 
     if (error) {
       console.error('[v0] HOD pending requests error:', error)
-      return NextResponse.json({ error: error.message, details: error }, { status: 500 })
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    if (!requests) {
-      return NextResponse.json({
-        requests: [],
-        total: 0,
-      })
+    const planRequests = requests || []
+
+    // Enrich with user details from unified_user_management
+    const userIds = [...new Set(planRequests.map((r: any) => r.user_id).filter(Boolean))]
+    let userMap: Record<string, any> = {}
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('unified_user_management')
+        .select('user_id, full_name, department_name, position, employee_id')
+        .in('user_id', userIds)
+      if (users) {
+        users.forEach((u: any) => { userMap[u.user_id] = u })
+      }
     }
 
-    // Calculate days pending for each request
+    // Calculate days pending and enrich with user details
     const now = new Date()
-    const enrichedRequests = requests.map((req: any) => {
-      const createdDate = new Date(req.created_at)
+    const enrichedRequests = planRequests.map((req: any) => {
+      const createdDate = new Date(req.submitted_at || req.created_at)
       const daysPending = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
-      
-      // Determine aging color
+
       let ageColor = 'green'
       if (daysPending > 7) ageColor = 'red'
       else if (daysPending > 3) ageColor = 'amber'
-      
+
+      const user = userMap[req.user_id] || {}
+
       return {
         ...req,
+        leave_type: req.leave_type_key || 'Annual',
+        start_date: req.preferred_start_date,
+        end_date: req.preferred_end_date,
+        hod_review_status: req.hod_decision || 'pending',
         daysPending,
         ageColor,
-        staff_name: req.user_profiles ? `${req.user_profiles.first_name} ${req.user_profiles.last_name}` : 'N/A',
-        department_id: req.user_profiles?.department_id || 'N/A',
+        staff_name: user.full_name || 'Unknown',
+        department_name: user.department_name || 'N/A',
+        position: user.position || 'N/A',
+        employee_id: user.employee_id || 'N/A',
+        user_profiles: {
+          first_name: (user.full_name || '').split(' ')[0] || '',
+          last_name: (user.full_name || '').split(' ').slice(1).join(' ') || '',
+          employee_id: user.employee_id || '',
+          department_name: user.department_name || '',
+          position: user.position || '',
+        },
       }
     })
 
@@ -69,6 +89,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     console.error('[v0] HOD pending requests error:', err)
-    return NextResponse.json({ error: 'Internal server error', details: err }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

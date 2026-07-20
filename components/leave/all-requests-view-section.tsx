@@ -22,15 +22,22 @@ interface LeaveRequest {
     first_name?: string
     last_name?: string
     employee_id?: string
+    department_name?: string
+    position?: string
+    full_name?: string
     departments?: { name?: string }
   }
   leave_type?: string
+  leave_type_key?: string
   start_date?: string
   end_date?: string
+  preferred_start_date?: string
+  preferred_end_date?: string
   status?: string
   hod_review_status?: string
+  hod_decision?: string
   created_at?: string
-  daysPending?: number
+  staff_category?: string
 }
 
 export function AllRequestsViewSection() {
@@ -47,15 +54,18 @@ export function AllRequestsViewSection() {
   useEffect(() => {
     // Filter requests based on search term
     const filtered = requests.filter((req) => {
-      const staffName =
-        `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.toLowerCase() ||
-        req.staff_name?.toLowerCase() ||
-        ''
-      const deptName = req.user_profiles?.departments?.name?.toLowerCase() || ''
-      const empId = req.user_profiles?.employee_id?.toLowerCase() || ''
+      const staffName = (
+        req.user_profiles?.full_name ||
+        `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() ||
+        req.staff_name || ''
+      ).toLowerCase()
+      const deptName = (req.user_profiles?.department_name || req.user_profiles?.departments?.name || '').toLowerCase()
+      const empId = (req.user_profiles?.employee_id || '').toLowerCase()
+      const leaveType = (req.leave_type || req.leave_type_key || '').toLowerCase()
       const searchLower = searchTerm.toLowerCase()
 
-      return staffName.includes(searchLower) || deptName.includes(searchLower) || empId.includes(searchLower)
+      return staffName.includes(searchLower) || deptName.includes(searchLower) ||
+             empId.includes(searchLower) || leaveType.includes(searchLower)
     })
     setFilteredRequests(filtered)
   }, [searchTerm, requests])
@@ -177,24 +187,33 @@ export function AllRequestsViewSection() {
             <TableBody>
               {filteredRequests.map((req) => {
                 const staffName =
+                  req.user_profiles?.full_name ||
                   `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() ||
                   req.staff_name ||
                   'Unknown'
-                const deptName = req.user_profiles?.departments?.name || 'N/A'
-                const startDate = req.start_date ? new Date(req.start_date).toLocaleDateString() : 'N/A'
-                const endDate = req.end_date ? new Date(req.end_date).toLocaleDateString() : 'N/A'
+                const deptName =
+                  req.user_profiles?.department_name ||
+                  req.user_profiles?.departments?.name ||
+                  'N/A'
+                const startDate = (req.start_date || req.preferred_start_date)
+                  ? new Date(req.start_date || req.preferred_start_date!).toLocaleDateString()
+                  : 'N/A'
+                const endDate = (req.end_date || req.preferred_end_date)
+                  ? new Date(req.end_date || req.preferred_end_date!).toLocaleDateString()
+                  : 'N/A'
+                const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
 
                 return (
                   <TableRow key={req.id}>
                     <TableCell className="font-medium">{staffName}</TableCell>
                     <TableCell>{deptName}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{req.leave_type || 'Leave'}</Badge>
+                      <Badge variant="outline">{req.leave_type || req.leave_type_key || 'Annual'}</Badge>
                     </TableCell>
                     <TableCell>{startDate}</TableCell>
                     <TableCell>{endDate}</TableCell>
                     <TableCell>{getStatusBadge(req.status)}</TableCell>
-                    <TableCell>{getHodStatusBadge(req.hod_review_status)}</TableCell>
+                    <TableCell>{getHodStatusBadge(hodStatus)}</TableCell>
                   </TableRow>
                 )
               })}
