@@ -27,7 +27,7 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1 bg-muted rounded-xl">
+        <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1 bg-white border border-slate-200 rounded-xl shadow-sm">
           <TabsTrigger
             value="hod-review"
             className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"

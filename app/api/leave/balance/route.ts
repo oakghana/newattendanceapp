@@ -44,10 +44,11 @@ export async function GET() {
     // Fetch entitlements from policy catalog
     let entitlements: Record<string, { label: string; entitlement: number }> = {}
     try {
+      // Accept rows where is_enabled is true OR null (not explicitly disabled)
       const { data: policyRows } = await supabase
         .from("leave_policy_catalog")
         .select("leave_type_key, leave_type_label, entitlement_days, is_enabled, is_active_period, leave_year_period")
-        .eq("is_enabled", true)
+        .neq("is_enabled", false)
 
       if (policyRows && policyRows.length > 0) {
         // Prefer the active period rows; fall back to any if none flagged active.

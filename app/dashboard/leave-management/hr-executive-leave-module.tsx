@@ -53,8 +53,8 @@ export function HrExecutiveLeaveModule({
 
   return (
     <div className="space-y-4">
-      {/* Clean horizontal tab bar */}
-      <div className="flex gap-1 p-1 bg-muted rounded-xl w-full overflow-x-auto">
+      {/* Top nav tab bar — white container so inactive tabs are clearly distinct */}
+      <div className="flex gap-1 p-1 bg-white border border-slate-200 rounded-xl w-full overflow-x-auto shadow-sm">
         {TABS.map(({ id, label, icon: Icon, activeClass }) => (
           <button
             key={id}
@@ -63,7 +63,7 @@ export function HrExecutiveLeaveModule({
               "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap flex-1 justify-center",
               activeTab === id
                 ? activeClass
-                : "text-muted-foreground hover:text-foreground hover:bg-background/60",
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-100",
             ].join(" ")}
           >
             <Icon className="h-4 w-4 shrink-0" />
