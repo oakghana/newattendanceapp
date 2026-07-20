@@ -13,15 +13,15 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50")
     const offset = parseInt(searchParams.get("offset") || "0")
 
-    // Include user_profiles relationship for name, department, etc.
+    // Fetch leave requests with basic user profile info
     let query = supabase.from("leave_requests").select(`
       *,
       user_profiles:user_id (
+        id,
         first_name,
         last_name,
         employee_id,
-        department_id,
-        departments:department_id (name)
+        department_id
       )
     `, { count: "exact" })
 

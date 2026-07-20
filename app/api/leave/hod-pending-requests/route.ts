@@ -21,13 +21,11 @@ export async function GET(request: NextRequest) {
         hod_review_status,
         created_at,
         user_profiles:user_id (
+          id,
           first_name,
           last_name,
           employee_id,
-          department_id,
-          departments:department_id (
-            name
-          )
+          department_id
         )
       `)
       .eq('hod_review_status', 'pending')
@@ -61,7 +59,7 @@ export async function GET(request: NextRequest) {
         daysPending,
         ageColor,
         staff_name: req.user_profiles ? `${req.user_profiles.first_name} ${req.user_profiles.last_name}` : 'N/A',
-        department_name: req.user_profiles?.departments?.name || 'N/A',
+        department_id: req.user_profiles?.department_id || 'N/A',
       }
     })
 
