@@ -8,13 +8,12 @@ import {
 } from "lucide-react"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { LeaveManagementClient } from "./leave-management-client"
-import { HrExecutiveLeaveCenter } from "@/components/leave/hr-executive-leave-center"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrExecutiveOverviewPanel } from "@/components/leave/hr-executive-overview-panel"
 
 // ── Tab type ─────────────────────────────────────────────────────────────────
-type Tab = "overview" | "leave-approvals" | "analytics" | "leave-center" | "balance-calendar"
+type Tab = "overview" | "leave-approvals" | "analytics" | "balance-calendar"
 
 // ── Overview panel ────────────────────────────────────────────────────────────
 function OverviewPanel({ onNavigate, userId }: { onNavigate: (tab: Tab) => void; userId: string }) {
@@ -40,8 +39,7 @@ interface HrExecutiveLeaveModuleProps {
 
 const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: "overview", label: "Overview", icon: BookOpen },
-  { id: "leave-approvals", label: "Leave Approvals", icon: CheckCircle },
-  { id: "leave-center", label: "Leave Center", icon: Calendar },
+  { id: "leave-approvals", label: "Leave Center", icon: Calendar },
   { id: "balance-calendar", label: "Balance & Calendar", icon: BarChart },
   { id: "analytics", label: "Analytics", icon: TrendingUp },
 ]
@@ -102,10 +100,6 @@ export function HrExecutiveLeaveModule({
               initialApprovedStaffRequests={initialApprovedStaffRequests}
             />
           </div>
-        )}
-
-        {activeTab === "leave-center" && (
-          <HrExecutiveLeaveCenter />
         )}
 
         {activeTab === "balance-calendar" && (

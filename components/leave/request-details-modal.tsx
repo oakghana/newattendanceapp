@@ -57,18 +57,33 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
         }
 
         const res = await fetch(endpoint)
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+        }
+
         const data = await res.json()
 
-        if (filter === 'hod-pending') {
-          setRequests(data.requests || [])
-        } else if (filter === 'payment-pending' || filter === 'payment-approved') {
-          setRequests(data.memos || [])
-        } else {
-          setRequests(data.records || data.requests || [])
+        if (!data) {
+          setRequests([])
+          return
         }
+
+        // Extract requests from different response formats
+        let results: LeaveRequest[] = []
+        
+        if (filter === 'hod-pending') {
+          results = Array.isArray(data.requests) ? data.requests : []
+        } else if (filter === 'payment-pending' || filter === 'payment-approved') {
+          results = Array.isArray(data.memos) ? data.memos : Array.isArray(data) ? data : []
+        } else {
+          results = Array.isArray(data.records) ? data.records : Array.isArray(data.requests) ? data.requests : Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : []
+        }
+
+        setRequests(Array.isArray(results) ? results : [])
       } catch (err) {
         console.error('[v0] Fetch requests error:', err)
-        setError('Failed to load requests')
+        setError(`Failed to load requests: ${err instanceof Error ? err.message : 'Unknown error'}`)
       } finally {
         setLoading(false)
       }
@@ -137,11 +152,19 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Calendar className="h-4 w-4" />
-                      <span>{new Date(req.start_date).toLocaleDateString()}</span>
+                      <span>
+                        {req.start_date 
+                          ? new Date(req.start_date).toLocaleDateString() 
+                          : 'N/A'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Calendar className="h-4 w-4" />
-                      <span>{new Date(req.end_date).toLocaleDateString()}</span>
+                      <span>
+                        {req.end_date 
+                          ? new Date(req.end_date).toLocaleDateString() 
+                          : 'N/A'}
+                      </span>
                     </div>
                   </div>
 

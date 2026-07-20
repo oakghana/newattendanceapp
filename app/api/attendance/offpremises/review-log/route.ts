@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const departmentId = searchParams.get("department_id")
     const status = searchParams.get("status") || "approved"
-    const limit = parseInt(searchParams.get("limit") || "50")
+    const limit = parseInt(searchParams.get("limit") || "500")
     const offset = parseInt(searchParams.get("offset") || "0")
 
     console.log("[v0] Fetching off-premises review log:", { departmentId, status, limit, offset })

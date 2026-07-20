@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     // Get query parameters for filtering
     const searchParams = request.nextUrl.searchParams
     const departmentId = searchParams.get("department_id")
-    const limit = parseInt(searchParams.get("limit") || "50")
+    const limit = parseInt(searchParams.get("limit") || "500")
     const offset = parseInt(searchParams.get("offset") || "0")
 
     console.log("[v0] Fetching approved off-premises check-ins:", { departmentId, limit, offset })
