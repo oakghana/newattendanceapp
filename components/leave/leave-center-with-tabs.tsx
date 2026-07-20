@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CheckCircle, Eye, UserCheck, FileText, Clock, RotateCcw } from 'lucide-react'
 import { HODReviewSection } from './hod-review-section'
 import { AllRequestsViewSection } from './all-requests-view-section'
-import { PaymentAdviceClient } from './payment-advice-client'
+import { HRPaymentAdviceManagement } from './hr-payment-advice-management'
 import { HRDefermentRecallManagement } from './hr-deferment-recall-management'
 
 interface LeaveCenterWithTabsProps {
@@ -88,19 +88,7 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
         </TabsContent>
 
         <TabsContent value="payment-advice" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-600" />
-                Payment Advice Memos
-              </CardTitle>
-              <CardDescription>
-                Manage and approve payment advice memos for staff on approved leave
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <PaymentAdviceClient userRole="hr_leave_office" />
+          <HRPaymentAdviceManagement />
         </TabsContent>
 
         <TabsContent value="deferments" className="space-y-4">
