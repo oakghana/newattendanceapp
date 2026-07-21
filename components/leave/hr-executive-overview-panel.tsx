@@ -60,15 +60,16 @@ export function HrExecutiveOverviewPanel() {
         const pendingRequests = pendingData.requests || []
         const allRequests = allRequestsData.data || allRequestsData.records || []
 
-        // Count approved leave across both leave_plan_requests statuses
+        // Count approved leave — DB statuses are 'hr_approved', 'hod_approved', 'approved', etc.
+        const APPROVED_STATUSES = ['approved', 'hr_approved', 'hod_approved', 'finalized', 'completed']
         const approvedLeave = allRequests.filter((r: any) =>
-          r.status === 'approved' || r.status === 'finalized' || r.status === 'completed'
+          APPROVED_STATUSES.includes(r.status)
         ).length
 
-        // Count HOD pending
+        // Count HOD pending — DB status is 'pending_hod_review'
+        const HOD_PENDING_STATUSES = ['pending_hod_review', 'hod_review', 'pending_hod']
         const hodPending = allRequests.filter((r: any) =>
-          r.status === 'hod_review' || r.status === 'pending_hod' ||
-          r.hod_review_status === 'pending' || r.hod_decision === 'pending' || r.hod_decision === null
+          HOD_PENDING_STATUSES.includes(r.status)
         ).length
         
         // Count payment memos

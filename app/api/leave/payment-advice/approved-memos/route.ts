@@ -54,10 +54,17 @@ export async function GET(request: NextRequest) {
         signer_name
       `
       )
-      // Include all approved/reviewed statuses for HR Executives to download
-      // Memos transition through: ready_for_review -> reviewed_by_hr -> forwarded_to_accounts -> acknowledged_by_accounts
-      // Show approved or forwarded memos (anything after HR review)
-      .in("status", ["reviewed_by_hr", "forwarded_to_accounts", "acknowledged_by_accounts"])
+      // HR executives see ALL memos regardless of status — no stage-based restriction
+      // DB statuses found: ready_for_review, reviewed_by_hr, forwarded_to_accounts, acknowledged_by_accounts
+      .in("status", [
+        "ready_for_review",
+        "reviewed_by_hr",
+        "signed_by_hr_executive",
+        "forwarded_to_accounts",
+        "acknowledged_by_accounts",
+        "approved",
+        "completed",
+      ])
       .order("updated_at", { ascending: false })
 
     // Optionally filter by month
