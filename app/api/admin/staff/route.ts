@@ -78,16 +78,23 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Staff API - Filters:", { searchTerm: trimmedSearchTerm, departmentFilter, roleFilter, sortBy, sortOrder, page, limit })
 
-    // Fetch the requesting user's profile to check role and location
-    const { data: requestingProfile } = await supabase
+    // Build a direct service-role admin client to bypass RLS entirely
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      "https://vgtajtqxgczhjboatvol.supabase.co"
+    const serviceKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY
+    const adminDb = createSupabaseClient(supabaseUrl, serviceKey!)
+
+    // Fetch the requesting user's profile to check role and location (use admin client)
+    const { data: requestingProfile } = await adminDb
       .from("user_profiles")
       .select("role, assigned_location_id")
       .eq("id", user.id)
       .single()
-
-    // Use admin client to bypass RLS so HR/admin can read all staff
-    let { createAdminClient: mkAdmin } = await import("@/lib/supabase/server")
-    const adminDb = await mkAdmin()
 
     // Build a server-side query with pagination and optional filters (returns count)
     let query = adminDb
@@ -185,7 +192,7 @@ export async function GET(request: NextRequest) {
     try {
       const staffIds = enrichedStaff.map((s) => s.id)
       if (staffIds.length > 0) {
-        const { data: audits } = await supabase
+        const { data: audits } = await adminDb
           .from("audit_logs")
           .select("user_id, action, record_id, created_at")
           .in("record_id", staffIds)
@@ -200,7 +207,7 @@ export async function GET(request: NextRequest) {
         const actorIds = [...new Set((audits || []).map((a: any) => a.user_id).filter(Boolean))]
         let actors: any[] = []
         if (actorIds.length > 0) {
-          const { data: actorProfiles } = await supabase.from("user_profiles").select("id, first_name, last_name, role").in("id", actorIds)
+          const { data: actorProfiles } = await adminDb.from("user_profiles").select("id, first_name, last_name, role").in("id", actorIds)
           actors = actorProfiles || []
         }
 
@@ -261,13 +268,16 @@ export async function POST(request: NextRequest) {
       const supabaseModule = await import("@/lib/supabase/server")
       supabase = await supabaseModule.createClient()
 
-      // Create admin client with service role key
+      // Create admin client — prefer service role key, fall back to anon for reads
       const { createClient } = await import("@supabase/supabase-js")
-      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "https://vgtajtqxgczhjboatvol.supabase.co"
+      const serviceRoleKey =
+        process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        process.env.SUPABASE_ANON_KEY
 
       if (!supabaseUrl || !serviceRoleKey) {
-        throw new Error("Missing Supabase admin credentials")
+        throw new Error("Missing Supabase credentials")
       }
 
       adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -299,9 +309,9 @@ export async function POST(request: NextRequest) {
       return createJsonResponse({ success: false, error: "Authentication required" }, 401)
     }
 
-    const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const { data: profile } = await adminSupabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    if (!profile || (profile.role !== "admin" && profile.role !== "it-admin" && profile.role !== "regional_manager")) {
+    if (!profile || (profile.role !== "admin" && profile.role !== "it-admin" && profile.role !== "regional_manager" && profile.role !== "manager_hr")) {
       return createJsonResponse({ success: false, error: "Admin, IT-Admin, or Regional Manageror Regional Manager access required" }, 403)
     }
 
