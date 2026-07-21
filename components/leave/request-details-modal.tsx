@@ -26,7 +26,10 @@ interface LeaveRequest {
   ageColor?: string
   user_profiles?: {
     employee_id?: string
+    department_name?: string
     departments?: { name?: string }
+    full_name?: string
+    first_name?: string
   }
 }
 
@@ -62,9 +65,9 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
           throw new Error(`HTTP ${res.status}: ${res.statusText}`)
         }
 
-        const data = await res.json()
+        const responseData = await res.json()
 
-        if (!data) {
+        if (!responseData) {
           setRequests([])
           return
         }
@@ -73,14 +76,30 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
         let results: LeaveRequest[] = []
         
         if (filter === 'hod-pending') {
-          results = Array.isArray(data.requests) ? data.requests : []
+          results = Array.isArray(responseData.requests) ? responseData.requests : []
         } else if (filter === 'payment-pending' || filter === 'payment-approved') {
-          results = Array.isArray(data.memos) ? data.memos : Array.isArray(data) ? data : []
+          results = Array.isArray(responseData.memos) ? responseData.memos : Array.isArray(responseData) ? responseData : []
+        } else if (filter === 'approved' || filter === 'pending') {
+          // For approved/pending: the endpoint returns { data: [...], total, success }
+          results = Array.isArray(responseData.data) ? responseData.data : 
+                    Array.isArray(responseData.records) ? responseData.records : 
+                    Array.isArray(responseData.requests) ? responseData.requests : 
+                    Array.isArray(responseData) ? responseData : []
         } else {
-          results = Array.isArray(data.records) ? data.records : Array.isArray(data.requests) ? data.requests : Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : []
+          results = Array.isArray(responseData.records) ? responseData.records : 
+                    Array.isArray(responseData.requests) ? responseData.requests : 
+                    Array.isArray(responseData.data) ? responseData.data : 
+                    Array.isArray(responseData) ? responseData : []
         }
 
-        setRequests(Array.isArray(results) ? results : [])
+        // Map fields to match interface: ensure staff_name is populated
+        const mapped = results.map((req: any) => ({
+          ...req,
+          staff_name: req.staff_name || req.user_profiles?.full_name || req.user_profiles?.first_name || 'N/A',
+          staff_id: req.staff_id || req.user_profiles?.employee_id || 'N/A',
+        }))
+
+        setRequests(Array.isArray(mapped) ? mapped : [])
       } catch (err) {
         console.error('[v0] Fetch requests error:', err)
         setError(`Failed to load requests: ${err instanceof Error ? err.message : 'Unknown error'}`)
@@ -134,7 +153,7 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-foreground">{req.staff_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {req.user_profiles?.employee_id} • {req.user_profiles?.departments?.name || 'N/A'}
+                        {req.user_profiles?.employee_id || req.staff_id || 'Staff'} • {req.user_profiles?.department_name || req.user_profiles?.departments?.name || 'General'}
                       </p>
                     </div>
                     <div className="flex gap-2 shrink-0">
