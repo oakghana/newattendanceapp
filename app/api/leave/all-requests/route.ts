@@ -1,33 +1,32 @@
-import { createAdminClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/client"
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const auth = createClient()
-    const { data: { user } } = await auth.auth.getUser()
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user's role and department
-    const { data: profile } = await auth.from("user_profiles").select("role, department_id").eq("id", user.id).single()
+    // Get user's role
+    const { data: profile } = await supabase.from("user_profiles").select("role, department_id").eq("id", user.id).single()
 
     if (!profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    // Check authorization — must be hr_leave_office or admin
+    // Expand allowed roles to include all HR-level roles
     const roleStr = String(profile.role || "").toLowerCase().trim()
-    if (!["hr_leave_office", "admin", "director_hr", "manager_hr"].includes(roleStr)) {
-      return NextResponse.json({ error: "Forbidden — requires HR leave office role" }, { status: 403 })
+    const allowedRoles = ["hr_leave_office", "admin", "director_hr", "manager_hr", "hr_office", "it-admin"]
+    if (!allowedRoles.includes(roleStr)) {
+      return NextResponse.json({ error: "Forbidden — requires HR role" }, { status: 403 })
     }
 
-    const admin = createAdminClient()
+    const admin = await createAdminClient()
 
-    // Get query params for filtering
     const statusParam = searchParams.get("status")
     const searchParam = searchParams.get("search")
     const departmentParam = searchParams.get("department")
@@ -38,53 +37,30 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(500, parseInt(pageSizeParam, 10) || 50)
     const offset = (page - 1) * pageSize
 
-    // Build leave requests query
+    // Fetch leave requests with user profiles
     let query = admin
       .from("leave_plan_requests")
       .select(
-        `
-        id,
-        user_id,
-        preferred_start_date,
-        preferred_end_date,
-        reason,
-        status,
-        created_at,
-        updated_at,
-        is_archived,
-        user_profiles!user_id (
-          id,
-          first_name,
-          last_name,
-          email,
-          department_id,
-          department_profiles!department_id (
-            name,
-            code
-          )
-        )
-        `,
+        `id, user_id, leave_type_key, preferred_start_date, preferred_end_date,
+         requested_days, reason, status, created_at, updated_at,
+         hod_status, hod_reviewed_at,
+         user_profiles!user_id (id, first_name, last_name, email, department_id, employee_id, position)`,
         { count: "exact" }
       )
-      .eq("is_archived", false)
       .order("created_at", { ascending: false })
 
-    // Filter by status if provided
     if (statusParam && statusParam !== "all") {
       query = query.eq("status", statusParam)
     }
-
-    // Filter by department if provided (and user is not admin)
-    if (departmentParam && roleStr !== "admin") {
+    if (departmentParam) {
       query = query.eq("user_profiles.department_id", departmentParam)
     }
-
-    // Search by staff name or email
     if (searchParam) {
-      query = query.or(`user_profiles.first_name.ilike.%${searchParam}%,user_profiles.last_name.ilike.%${searchParam}%,user_profiles.email.ilike.%${searchParam}%`)
+      query = query.or(
+        `user_profiles.first_name.ilike.%${searchParam}%,user_profiles.last_name.ilike.%${searchParam}%,user_profiles.email.ilike.%${searchParam}%`
+      )
     }
 
-    // Apply pagination
     query = query.range(offset, offset + pageSize - 1)
 
     const { data: requests, count: totalCount, error } = await query
@@ -94,21 +70,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Format response
-    const formattedRequests = (requests || []).map((req: any) => ({
-      id: req.id,
-      userId: req.user_id,
-      staffName: `${req.user_profiles?.first_name || ""} ${req.user_profiles?.last_name || ""}`.trim(),
-      staffEmail: req.user_profiles?.email,
-      department: req.user_profiles?.department_profiles?.[0]?.name || "N/A",
-      departmentCode: req.user_profiles?.department_profiles?.[0]?.code,
-      startDate: req.preferred_start_date,
-      endDate: req.preferred_end_date,
-      reason: req.reason,
-      status: req.status,
-      createdAt: req.created_at,
-      updatedAt: req.updated_at,
-    }))
+    // Collect all unique department_ids and resolve names in one query
+    const deptIds = [...new Set((requests || []).map((r: any) => r.user_profiles?.department_id).filter(Boolean))]
+    let deptMap: Record<string, string> = {}
+    if (deptIds.length > 0) {
+      const { data: depts } = await admin.from("departments").select("id, name").in("id", deptIds)
+      deptMap = Object.fromEntries((depts || []).map((d: any) => [d.id, d.name]))
+    }
+
+    const formattedRequests = (requests || []).map((req: any) => {
+      const prof = req.user_profiles || {}
+      const deptName = deptMap[prof.department_id] || "N/A"
+      return {
+        id: req.id,
+        userId: req.user_id,
+        staffName: `${prof.first_name || ""} ${prof.last_name || ""}`.trim() || "Unknown",
+        staffEmail: prof.email,
+        employeeId: prof.employee_id,
+        position: prof.position,
+        department: deptName,
+        departmentId: prof.department_id,
+        leaveType: req.leave_type_key,
+        startDate: req.preferred_start_date,
+        endDate: req.preferred_end_date,
+        requestedDays: req.requested_days,
+        reason: req.reason,
+        status: req.status,
+        hodStatus: req.hod_status,
+        hodReviewedAt: req.hod_reviewed_at,
+        createdAt: req.created_at,
+        updatedAt: req.updated_at,
+      }
+    })
 
     return NextResponse.json({
       success: true,
@@ -122,6 +115,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error("[v0] Error in all-requests route:", err)
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: String(err?.message || "Internal server error") }, { status: 500 })
   }
 }

@@ -1,5 +1,3 @@
-'use server'
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { jsPDF } from 'jspdf'
@@ -7,197 +5,260 @@ import { jsPDF } from 'jspdf'
 export async function GET(request: NextRequest) {
   try {
     const requestId = request.nextUrl.searchParams.get('request_id')
-    
+
     if (!requestId) {
       return NextResponse.json({ error: 'request_id parameter required' }, { status: 400 })
     }
 
     const admin = await createAdminClient()
 
-    // Find the leave_plan_request by ID
+    // Fetch leave request
     const { data: leaveRequest, error: leaveError } = await admin
       .from('leave_plan_requests')
-      .select('id, user_id, leave_type_key, preferred_start_date, preferred_end_date, requested_days, status')
+      .select('id, user_id, leave_type_key, preferred_start_date, preferred_end_date, requested_days, status, created_at')
       .eq('id', requestId)
       .single()
 
     if (leaveError || !leaveRequest) {
-      console.error('[v0] Error fetching leave request:', leaveError)
       return NextResponse.json({ error: 'Leave request not found' }, { status: 404 })
     }
 
-    // Check if it's HR approved
     if (leaveRequest.status !== 'hr_approved') {
       return NextResponse.json({ error: 'Leave request is not HR approved' }, { status: 403 })
     }
 
-    // Fetch user profile for staff name
-    const { data: userProfile, error: userError } = await admin
+    // Fetch user profile
+    const { data: userProfile } = await admin
       .from('user_profiles')
-      .select('first_name, last_name, employee_id, department_name')
+      .select('first_name, last_name, employee_id, department_id, position')
       .eq('id', leaveRequest.user_id)
       .single()
 
-    if (userError) {
-      console.error('[v0] Error fetching user profile:', userError)
+    // Resolve department name
+    let departmentName = 'N/A'
+    let departmentCode = ''
+    if (userProfile?.department_id) {
+      const { data: dept } = await admin
+        .from('departments')
+        .select('name, code')
+        .eq('id', userProfile.department_id)
+        .single()
+      if (dept) {
+        departmentName = dept.name || 'N/A'
+        departmentCode = dept.code || ''
+      }
     }
 
-    // Fetch the corresponding leave_payment_memos record (optional — we can generate without it)
-    const { data: memo, error: memoError } = await admin
+    // Fetch memo record (optional — graceful fallback)
+    const { data: memo } = await admin
       .from('leave_payment_memos')
-      .select('*')
+      .select('signer_name, leave_period_start, leave_period_end, approved_days, created_at')
       .eq('leave_plan_request_id', requestId)
       .single()
 
-    if (memoError && memoError.code !== 'PGRST116') {
-      // If it's a real error (not "no rows"), log it
-      console.warn('[v0] Warning fetching leave memo:', memoError)
-    }
-
-    // Extract data
+    // Build all display values
     const staffName = userProfile
       ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim()
       : 'Unknown'
     const employeeId = userProfile?.employee_id || 'N/A'
-    const department = userProfile?.department_name || 'N/A'
+    const position = userProfile?.position || ''
     const leaveType = leaveRequest.leave_type_key
       ? leaveRequest.leave_type_key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-      : 'Leave'
-    const startDate = new Date(leaveRequest.preferred_start_date).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    })
-    const endDate = new Date(leaveRequest.preferred_end_date).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    })
-    const daysRequested = leaveRequest.requested_days || 0
-    // Use memo data if available, otherwise generate reasonable defaults
+      : 'Annual'
+
+    const approvedDays = memo?.approved_days || leaveRequest.requested_days || 0
+    const startDateRaw = memo?.leave_period_start || leaveRequest.preferred_start_date
+    const endDateRaw = memo?.leave_period_end || leaveRequest.preferred_end_date
     const signerName = memo?.signer_name || 'HR Executive'
-    const memoDate = memo?.created_at
-      ? new Date(memo.created_at).toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-        })
-      : new Date().toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-        })
+    const letterDate = memo?.created_at || leaveRequest.created_at || new Date().toISOString()
 
-    // Generate PDF using jsPDF with professional corporate letterhead
-    const pdf = new jsPDF()
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    const pageHeight = pdf.internal.pageSize.getHeight()
-    let yPosition = 12
+    const fmtDate = (raw: string) =>
+      new Date(raw).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    const fmtDateShort = (raw: string) =>
+      new Date(raw).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
-    // ── COMPANY LETTERHEAD (Professional) ──────────────────────────────────
-    pdf.setFontSize(16)
+    const startDate = fmtDate(startDateRaw)
+    const endDate = fmtDate(endDateRaw)
+    const letterDateStr = fmtDate(letterDate)
+
+    // Compute resume duty date (day after end date)
+    const resumeDate = new Date(endDateRaw)
+    resumeDate.setDate(resumeDate.getDate() + 1)
+    // Skip to Monday if it falls on weekend
+    if (resumeDate.getDay() === 6) resumeDate.setDate(resumeDate.getDate() + 2)
+    if (resumeDate.getDay() === 0) resumeDate.setDate(resumeDate.getDate() + 1)
+    const resumeDateStr = resumeDate.toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    })
+
+    // Generate ref number from request id suffix
+    const refSuffix = requestId.split('-').pop()?.toUpperCase().slice(0, 6) || 'MEMO'
+    const refNumber = `QCC/HRD/CSL/2026/${refSuffix}`
+
+    // ── BUILD PDF ───────────────────────────────────────────────────────────
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+    const W = pdf.internal.pageSize.getWidth()   // 210
+    const H = pdf.internal.pageSize.getHeight()  // 297
+    const marginL = 20
+    const marginR = W - 20
+    let y = 15
+
+    // ── HEADER: company name + address block ────────────────────────────────
+    // Left: placeholder circle for logo
+    pdf.setDrawColor(120)
+    pdf.setLineWidth(0.3)
+    pdf.circle(marginL + 8, y + 8, 8)
+    pdf.setFontSize(6)
+    pdf.setTextColor(120)
+    pdf.text('QCC', marginL + 5.5, y + 9)
+
+    // Company name (centered, bold)
+    pdf.setTextColor(0)
     pdf.setFont('helvetica', 'bold')
-    pdf.setTextColor(0, 0, 0)
-    pdf.text('QCC ATTENDANCE MANAGEMENT SYSTEM', pageWidth / 2, yPosition, { align: 'center' } as any)
-    yPosition += 5
-
-    pdf.setFontSize(10)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text('Human Resources Department', pageWidth / 2, yPosition, { align: 'center' } as any)
-    yPosition += 10
-
-    // Thick divider line
-    pdf.setDrawColor(0)
-    pdf.setLineWidth(1)
-    pdf.line(20, yPosition, pageWidth - 20, yPosition)
-    yPosition += 10
-
-    // ── REFERENCE NUMBERS AND DATE ──────────────────────────────────────────
-    pdf.setFontSize(9)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text('Our Ref No: MEMO/HR/2026', 20, yPosition)
-    pdf.text(`Date: ${memoDate}`, pageWidth - 20, yPosition, { align: 'right' } as any)
-    yPosition += 7
-
-    pdf.text('Your Ref No: _______________', 20, yPosition)
-    yPosition += 12
-
-    // ── RECIPIENT DETAILS ──────────────────────────────────────────────────
-    pdf.setFontSize(9)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text(`${staffName.toUpperCase()} (S.NO: ${employeeId})`, 20, yPosition)
-    yPosition += 5
-    pdf.text(leaveType.toUpperCase() + ' ' + department.toUpperCase(), 20, yPosition)
-    yPosition += 5
-    pdf.text(department || 'N/A', 20, yPosition)
-    yPosition += 12
-
-    // ── TO/FROM/RE SECTION ──────────────────────────────────────────────────
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(9)
-    pdf.text('THRO:', 20, yPosition)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text('THE HUMAN RESOURCE MANAGER', 28, yPosition)
-    yPosition += 5
-    pdf.text(`${department || 'THE ORGANIZATION'}`, 28, yPosition)
-    yPosition += 12
-
-    // ── LEAVE TYPE HEADING ──────────────────────────────────────────────────
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(13)
+    pdf.text('QUALITY CONTROL COMPANY LTD.', W / 2, y + 4, { align: 'center' } as any)
     pdf.setFontSize(11)
-    pdf.text(`${leaveType.toUpperCase()} LEAVE`, 20, yPosition)
-    yPosition += 12
+    pdf.text('(COCOBOD)', W / 2, y + 10, { align: 'center' } as any)
 
-    // ── BODY TEXT - APPROVAL NOTIFICATION ──────────────────────────────────
+    // Right: address
     pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(9)
-    
-    const mainText = `We acknowledge receipt of your leave letter dated ${memoDate} in relation to the above mentioned subject and wish to inform you that Management has given approval for you to proceed on ${daysRequested} working day${daysRequested !== 1 ? 's' : ''} ${leaveType.toLowerCase()} leave with effect from ${startDate} to ${endDate}.`
-    const splitMain = pdf.splitTextToSize(mainText, pageWidth - 40)
-    pdf.text(splitMain, 20, yPosition)
-    yPosition += splitMain.length * 4.5 + 6
+    pdf.setFontSize(7)
+    pdf.setTextColor(80)
+    pdf.text('P.O. Box M54', marginR, y + 3, { align: 'right' } as any)
+    pdf.text('Accra', marginR, y + 7, { align: 'right' } as any)
+    pdf.text('Ghana', marginR, y + 11, { align: 'right' } as any)
 
-    // Resume duty text
-    const resumeText = `You are expected to resume duty on the next working day after your leave period ends.`
-    const splitResume = pdf.splitTextToSize(resumeText, pageWidth - 40)
-    pdf.text(splitResume, 20, yPosition)
-    yPosition += splitResume.length * 4.5 + 6
+    y += 20
 
-    // Adjustment details
-    pdf.text(`Adjustment Details: ${daysRequested} working day${daysRequested !== 1 ? 's' : ''}`, 20, yPosition)
-    yPosition += 8
-
-    // Cooperation text
-    pdf.text('You can count on our co-operation.', 20, yPosition)
-    yPosition += 14
-
-    // ── SIGNATURE SECTION ──────────────────────────────────────────────────
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(9)
-    pdf.text('_________________________', 20, yPosition)
-    yPosition += 10
-
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('HR MANAGER', 20, yPosition)
-    yPosition += 4
-    
-    pdf.setFont('helvetica', 'normal')
-    pdf.text(`${signerName}`, 20, yPosition)
-    yPosition += 8
-
-    // ── APPROVAL STAMP ──────────────────────────────────────────────────────
+    // ── DIVIDER: green top, black bottom ───────────────────────────────────
     pdf.setDrawColor(0, 128, 0)
-    pdf.setFillColor(144, 238, 144)
-    pdf.rect(20, yPosition, 140, 10, 'FD')
-    
-    pdf.setTextColor(0, 128, 0)
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(11)
-    pdf.text('✓  H R  A P P R O V E D  &  S I G N E D', 90, yPosition + 6.5, { align: 'center' } as any)
+    pdf.setLineWidth(1.5)
+    pdf.line(marginL, y, marginR, y)
+    y += 1
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.5)
+    pdf.line(marginL, y, marginR, y)
+    y += 8
 
-    // Get PDF as buffer
+    // ── REF + DATE ROW ──────────────────────────────────────────────────────
+    pdf.setTextColor(0, 100, 0)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    pdf.text(`Our Ref No:  ${refNumber}`, marginL, y)
+    pdf.setTextColor(0)
+    pdf.text(`Date: ${letterDateStr}`, marginR, y, { align: 'right' } as any)
+    y += 5
+    pdf.setTextColor(0, 100, 0)
+    pdf.text('Your Ref No: _____________________', marginL, y)
+    pdf.setTextColor(0)
+    y += 10
+
+    // ── RECIPIENT BLOCK ────────────────────────────────────────────────────
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.text(`${staffName.toUpperCase()}  (S/NO.:  ${employeeId})`, marginL, y)
+    y += 5
+    pdf.setTextColor(0, 100, 0)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    pdf.text(position.toUpperCase(), marginL, y)
+    y += 5
+    pdf.text(departmentName.toUpperCase(), marginL, y)
+    y += 9
+
+    // ── THRO SECTION ───────────────────────────────────────────────────────
+    pdf.setTextColor(0)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(8.5)
+    pdf.text('THRO:', marginL, y)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(0, 100, 0)
+    pdf.text(`THE ${departmentCode ? departmentCode.toUpperCase() + ' ' : ''}MANAGER`, marginL + 14, y)
+    y += 5
+    pdf.text('QUALITY CONTROL COMPANY LIMITED', marginL + 14, y)
+    y += 5
+    pdf.text(departmentName.toUpperCase(), marginL + 14, y)
+    y += 12
+
+    // ── LEAVE TYPE HEADING (underlined) ────────────────────────────────────
+    pdf.setTextColor(0)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10)
+    const heading = `${leaveType.toUpperCase()} LEAVE`
+    pdf.text(heading, marginL, y)
+    const headingW = pdf.getTextWidth(heading)
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.4)
+    pdf.line(marginL, y + 1, marginL + headingW, y + 1)
+    y += 10
+
+    // ── BODY TEXT ───────────────────────────────────────────────────────────
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    pdf.setTextColor(0)
+
+    const para1 = `We acknowledge receipt of your letter dated ${fmtDateShort(leaveRequest.created_at || startDateRaw)} in relation to the above-mentioned subject and wish to inform you that Management has given approval for you to proceed on ${approvedDays} working day${approvedDays !== 1 ? 's' : ''} ${leaveType.toLowerCase()} leave with effect from ${startDate} to ${endDate}.`
+    const split1 = pdf.splitTextToSize(para1, marginR - marginL)
+    pdf.text(split1, marginL, y)
+    y += split1.length * 5 + 6
+
+    const para2 = `You are expected to resume duty on ${resumeDateStr}.`
+    pdf.text(para2, marginL, y)
+    y += 8
+
+    pdf.text(`Adjustment Details: ${approvedDays} working day${approvedDays !== 1 ? 's' : ''} approved`, marginL, y)
+    y += 8
+
+    pdf.text('You can count on our co-operation.', marginL, y)
+    y += 18
+
+    // ── SIGNATURE BLOCK ────────────────────────────────────────────────────
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    // Signature line
+    pdf.setDrawColor(150)
+    pdf.setLineWidth(0.3)
+    pdf.line(marginL, y, marginL + 55, y)
+    y += 6
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(signerName.toUpperCase(), marginL, y)
+    y += 5
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(0, 100, 0)
+    pdf.text('HUMAN RESOURCE MANAGER', marginL, y)
+    y += 5
+    pdf.text('FOR: MANAGING DIRECTOR', marginL, y)
+    y += 14
+
+    // ── CC LIST ────────────────────────────────────────────────────────────
+    pdf.setTextColor(0)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.text('cc:', marginL, y)
+    const ccItems = ['Managing Director', 'Deputy Managing Director', 'HR Leave Office', 'File']
+    ccItems.forEach((item, i) => {
+      pdf.text(item, marginL + 10, y + i * 4.5)
+    })
+    y += ccItems.length * 4.5 + 6
+
+    // ── FOOTER LINE + CONTACT ───────────────────────────────────────────────
+    const footerY = H - 15
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.4)
+    pdf.line(marginL, footerY - 4, marginR, footerY - 4)
+    pdf.setFontSize(7)
+    pdf.setTextColor(80)
+    pdf.text(
+      `Tel: +233-571-461-114  |  Fax: GA-005-8378  |  Email: info@qccgh.com  |  www.qccgh.com`,
+      W / 2,
+      footerY,
+      { align: 'center' } as any
+    )
+
+    // ── OUTPUT ─────────────────────────────────────────────────────────────
     const pdfBuffer = Buffer.from(pdf.output('arraybuffer') as ArrayBuffer)
-    const fileName = `Leave_Memo_${staffName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`
+    const fileName = `Leave_Memo_${staffName.replace(/\s+/g, '_')}_${Date.now()}.pdf`
 
     return new NextResponse(pdfBuffer as any, {
       status: 200,

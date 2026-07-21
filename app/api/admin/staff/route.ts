@@ -85,8 +85,12 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
+    // Use admin client to bypass RLS so HR/admin can read all staff
+    let { createAdminClient: mkAdmin } = await import("@/lib/supabase/server")
+    const adminDb = await mkAdmin()
+
     // Build a server-side query with pagination and optional filters (returns count)
-    let query = supabase
+    let query = adminDb
       .from("user_profiles")
       .select(`
         id,
@@ -158,10 +162,10 @@ export async function GET(request: NextRequest) {
 
     const [departmentsResult, locationsResult] = await Promise.all([
       departmentIds.length > 0
-        ? supabase.from("departments").select("id, name, code").in("id", departmentIds)
+        ? adminDb.from("departments").select("id, name, code").in("id", departmentIds)
         : { data: [], error: null },
       locationIds.length > 0
-        ? supabase.from("geofence_locations").select("id, name, address").in("id", locationIds)
+        ? adminDb.from("geofence_locations").select("id, name, address").in("id", locationIds)
         : { data: [], error: null },
     ])
 
