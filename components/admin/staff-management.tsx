@@ -436,7 +436,10 @@ export function StaffManagement() {
         role: editingStaff.role,
         department_id: editingStaff.department_id || editingStaff.departments?.id,
         is_active: editingStaff.is_active,
-        assigned_location_id: editingStaff.assigned_location_id,
+        assigned_location_id:
+          editingStaff.assigned_location_id ||
+          editingStaff.geofence_locations?.id ||
+          null,
         date_of_appointment: editingStaff.date_of_appointment || null,
         years_of_service:
           editingStaff.years_of_service !== undefined && editingStaff.years_of_service !== ""
@@ -455,8 +458,8 @@ export function StaffManagement() {
 
       console.log("[v0] Update response status:", response.status)
 
-      if (response.status === 401 || response.status === 403) {
-        const msg = "Session expired or unauthorized. Please sign in again."
+      if (response.status === 401) {
+        const msg = "Session expired. Please sign in again."
         showError(msg, "Authentication Required")
         setError(msg)
         setTimeout(() => (window.location.href = "/signin"), 1200)
