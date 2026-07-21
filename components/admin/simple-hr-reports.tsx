@@ -50,6 +50,7 @@ function statusBadge(status: string) {
 
 export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId }: SimpleHrReportsProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -59,7 +60,7 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
     return d.toISOString().slice(0, 10)
   })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10))
-  const [rowsPerPage, setRowsPerPage] = useState("50")
+  const [rowsPerPage, setRowsPerPage] = useState("1000")
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [locationFilter, setLocationFilter] = useState("all")
 
@@ -70,22 +71,29 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
+      // Use start_date/end_date and page_size — matches the attendance route's expected params
       const params = new URLSearchParams({
-        startDate: dateFrom,
-        endDate: dateTo,
-        scopeRole,
-        ...(scopeDepartmentId ? { departmentId: scopeDepartmentId } : {}),
-        ...(scopeLocationId ? { locationId: scopeLocationId } : {}),
-        limit: "500",
+        start_date: dateFrom,
+        end_date: dateTo,
+        page: "1",
+        page_size: "5000",
       })
-      const res = await fetch(`/api/admin/reports/attendance?${params}`)
+      if (scopeDepartmentId) params.append("department_id", scopeDepartmentId)
+      if (scopeLocationId) params.append("location_id", scopeLocationId)
+
+      const res = await fetch(`/api/admin/reports/attendance?${params}`, { cache: "no-store" })
       if (!res.ok) return
       const json = await res.json()
-      setRecords(json.data?.records || [])
+      if (json.success) {
+        const fetched: AttendanceRecord[] = json.data?.records || []
+        setRecords(fetched)
+        // Use the API's true total count (from DB count query) for headline metrics
+        setTotalCount(json.data?.summary?.totalRecords ?? fetched.length)
+      }
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, scopeRole, scopeDepartmentId, scopeLocationId])
+  }, [dateFrom, dateTo, scopeDepartmentId, scopeLocationId])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -103,13 +111,13 @@ export function SimpleHrReports({ scopeRole, scopeDepartmentId, scopeLocationId 
     return matchSearch && matchStatus && matchDept && matchLoc
   })
 
-  // Stats
-  const total = records.length
+  // Stats — use totalCount (true DB count) for headline; compute status breakdown from fetched records
+  const total = totalCount || records.length
   const present = records.filter(r => r.status === "present" || r.status === "on_time").length
   const late = records.filter(r => r.status === "late").length
   const absent = records.filter(r => r.status === "absent").length
   const totalHours = records.reduce((s, r) => s + (r.work_hours ?? 0), 0)
-  const avgHours = total > 0 ? (totalHours / total).toFixed(1) : "0.0"
+  const avgHours = records.length > 0 ? (totalHours / records.length).toFixed(1) : "0.0"
 
   // Export
   const handleExcel = () => {
