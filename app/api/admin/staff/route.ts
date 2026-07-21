@@ -113,9 +113,11 @@ export async function GET(request: NextRequest) {
         is_active,
         assigned_location_id,
         profile_image_url,
-        date_of_appointment,
-        years_of_service,
-        contact_number,
+        region_id,
+        is_on_leave,
+        leave_status,
+        annual_leave_days,
+        sick_leave_days,
         created_at,
         updated_at
       `, { count: 'exact' })
