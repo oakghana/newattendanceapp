@@ -88,82 +88,109 @@ export async function GET(request: NextRequest) {
           year: 'numeric',
         })
 
-    // Generate PDF using jsPDF
+    // Generate PDF using jsPDF with professional letterhead
     const pdf = new jsPDF()
     const pageWidth = pdf.internal.pageSize.getWidth()
     const pageHeight = pdf.internal.pageSize.getHeight()
-    let yPosition = 20
+    let yPosition = 15
 
-    // Title
-    pdf.setFontSize(18)
+    // ── COMPANY LETTERHEAD ──────────────────────────────────────────────
+    pdf.setFontSize(14)
     pdf.setFont('helvetica', 'bold')
-    pdf.text('LEAVE APPROVAL MEMO', pageWidth / 2, yPosition, { align: 'center' } as any)
-    
-    yPosition += 15
+    pdf.text('QCC ATTENDANCE MANAGEMENT SYSTEM', pageWidth / 2, yPosition, { align: 'center' } as any)
+    yPosition += 6
+
+    pdf.setFontSize(11)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text('Human Resources Department', pageWidth / 2, yPosition, { align: 'center' } as any)
+    yPosition += 1
+    pdf.setFontSize(9)
+    pdf.text('Electronic Attendance System', pageWidth / 2, yPosition, { align: 'center' } as any)
+    yPosition += 8
 
     // Divider line
-    pdf.setDrawColor(100)
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.5)
     pdf.line(20, yPosition, pageWidth - 20, yPosition)
+    yPosition += 8
+
+    // Reference and Date on the right
+    pdf.setFontSize(9)
+    pdf.setFont('helvetica', 'normal')
+    const currentDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    pdf.text(`Date: ${currentDate}`, pageWidth - 20, yPosition, { align: 'right' } as any)
+    yPosition += 8
+
+    // ── RECIPIENT AND PURPOSE ──────────────────────────────────────────────
+    pdf.setFontSize(10)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('TO:', 20, yPosition)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(`${staffName} (${employeeId})`, 30, yPosition)
+    yPosition += 6
+    pdf.text(department || 'N/A', 30, yPosition)
     yPosition += 10
 
-    // Staff Information Section
-    pdf.setFontSize(11)
     pdf.setFont('helvetica', 'bold')
-    pdf.text('STAFF INFORMATION', 20, yPosition)
-    yPosition += 8
-
+    pdf.text('RE:', 20, yPosition)
     pdf.setFont('helvetica', 'normal')
+    pdf.text(`LEAVE APPROVAL - ${leaveType} LEAVE`, 30, yPosition)
+    yPosition += 10
+
+    // ── BODY TEXT ──────────────────────────────────────────────────────────
     pdf.setFontSize(10)
-    pdf.text(`Name: ${staffName}`, 25, yPosition)
-    yPosition += 7
-    pdf.text(`Employee ID: ${employeeId}`, 25, yPosition)
-    yPosition += 7
-    pdf.text(`Department: ${department}`, 25, yPosition)
-    yPosition += 12
-
-    // Leave Details Section
-    pdf.setFontSize(11)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('LEAVE DETAILS', 20, yPosition)
-    yPosition += 8
-
     pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(10)
-    pdf.text(`Leave Type: ${leaveType}`, 25, yPosition)
-    yPosition += 7
-    pdf.text(`Start Date: ${startDate}`, 25, yPosition)
-    yPosition += 7
-    pdf.text(`End Date: ${endDate}`, 25, yPosition)
-    yPosition += 7
-    pdf.text(`Duration: ${daysRequested} day${daysRequested !== 1 ? 's' : ''}`, 25, yPosition)
-    yPosition += 12
-
-    // Approval Section
-    pdf.setFontSize(11)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('APPROVAL INFORMATION', 20, yPosition)
-    yPosition += 8
-
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(10)
-    pdf.text(`Approved By: ${signerName}`, 25, yPosition)
-    yPosition += 7
-    pdf.text(`Approval Date: ${memoDate}`, 25, yPosition)
-    yPosition += 7
-    pdf.setTextColor(0, 128, 0)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Status: HR APPROVED & SIGNED', 25, yPosition)
     
-    yPosition = pageHeight - 30
-    pdf.setDrawColor(100)
-    pdf.line(20, yPosition, pageWidth - 20, yPosition)
-    yPosition += 8
+    const bodyText = `This is to inform you that your leave request for ${leaveType.toLowerCase()} leave from ${startDate} to ${endDate} (${daysRequested} working day${daysRequested !== 1 ? 's' : ''}) has been approved by the Human Resources Department.`
+    const splitBody = pdf.splitTextToSize(bodyText, pageWidth - 40)
+    pdf.text(splitBody, 20, yPosition)
+    yPosition += splitBody.length * 5 + 5
 
-    pdf.setTextColor(0)
+    const detailsText = `Please note that you are expected to resume duty on the next working day after your leave period ends. Any adjustments or amendments to your leave schedule must be communicated to the HR Department immediately.`
+    const splitDetails = pdf.splitTextToSize(detailsText, pageWidth - 40)
+    pdf.text(splitDetails, 20, yPosition)
+    yPosition += splitDetails.length * 5 + 10
+
+    // ── APPROVAL DETAILS ──────────────────────────────────────────────────
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.text('Approved Details:', 20, yPosition)
+    yPosition += 5
+
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(9)
-    const generatedDate = new Date().toLocaleString('en-GB')
-    pdf.text(`Generated on: ${generatedDate}`, pageWidth / 2, yPosition, { align: 'center' } as any)
+    pdf.text(`Leave Type: ${leaveType}`, 25, yPosition)
+    yPosition += 4
+    pdf.text(`Period: ${startDate} to ${endDate}`, 25, yPosition)
+    yPosition += 4
+    pdf.text(`Duration: ${daysRequested} day${daysRequested !== 1 ? 's' : ''}`, 25, yPosition)
+    yPosition += 4
+    pdf.text(`Approved By: ${signerName}`, 25, yPosition)
+    yPosition += 4
+    pdf.text(`Approval Date: ${memoDate}`, 25, yPosition)
+    yPosition += 10
+
+    // ── SIGNATURE SECTION ──────────────────────────────────────────────────
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    pdf.text('_________________________', 20, yPosition)
+    yPosition += 5
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('HR MANAGER', 20, yPosition)
+    yPosition += 4
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(`${signerName}`, 20, yPosition)
+    yPosition += 8
+
+    // ── STATUS BADGE ──────────────────────────────────────────────────────
+    pdf.setDrawColor(0, 128, 0)
+    pdf.setFillColor(200, 255, 200)
+    pdf.rect(20, yPosition, 100, 8, 'FD')
+    
+    pdf.setTextColor(0, 128, 0)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10)
+    pdf.text('✓ HR APPROVED & SIGNED', 22, yPosition + 5.5)
 
     // Get PDF as buffer
     const pdfBuffer = Buffer.from(pdf.output('arraybuffer') as ArrayBuffer)
