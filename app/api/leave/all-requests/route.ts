@@ -1,0 +1,120 @@
+import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { NextRequest, NextResponse } from "next/server"
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Get user's role
+    const { data: profile } = await supabase.from("user_profiles").select("role, department_id").eq("id", user.id).single()
+
+    if (!profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    // Expand allowed roles to include all HR-level roles
+    const roleStr = String(profile.role || "").toLowerCase().trim()
+    const allowedRoles = ["hr_leave_office", "admin", "director_hr", "manager_hr", "hr_office", "it-admin"]
+    if (!allowedRoles.includes(roleStr)) {
+      return NextResponse.json({ error: "Forbidden — requires HR role" }, { status: 403 })
+    }
+
+    const admin = await createAdminClient()
+
+    const statusParam = searchParams.get("status")
+    const searchParam = searchParams.get("search")
+    const departmentParam = searchParams.get("department")
+    const pageParam = searchParams.get("page") || "1"
+    const pageSizeParam = searchParams.get("page_size") || "50"
+
+    const page = Math.max(1, parseInt(pageParam, 10) || 1)
+    const pageSize = Math.min(500, parseInt(pageSizeParam, 10) || 50)
+    const offset = (page - 1) * pageSize
+
+    // Fetch leave requests with user profiles
+    let query = admin
+      .from("leave_plan_requests")
+      .select(
+        `id, user_id, leave_type_key, preferred_start_date, preferred_end_date,
+         requested_days, reason, status, created_at, updated_at,
+         hod_status, hod_reviewed_at,
+         user_profiles!user_id (id, first_name, last_name, email, department_id, employee_id, position)`,
+        { count: "exact" }
+      )
+      .order("created_at", { ascending: false })
+
+    if (statusParam && statusParam !== "all") {
+      query = query.eq("status", statusParam)
+    }
+    if (departmentParam) {
+      query = query.eq("user_profiles.department_id", departmentParam)
+    }
+    if (searchParam) {
+      query = query.or(
+        `user_profiles.first_name.ilike.%${searchParam}%,user_profiles.last_name.ilike.%${searchParam}%,user_profiles.email.ilike.%${searchParam}%`
+      )
+    }
+
+    query = query.range(offset, offset + pageSize - 1)
+
+    const { data: requests, count: totalCount, error } = await query
+
+    if (error) {
+      console.error("[v0] Error fetching leave requests:", error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Collect all unique department_ids and resolve names in one query
+    const deptIds = [...new Set((requests || []).map((r: any) => r.user_profiles?.department_id).filter(Boolean))]
+    let deptMap: Record<string, string> = {}
+    if (deptIds.length > 0) {
+      const { data: depts } = await admin.from("departments").select("id, name").in("id", deptIds)
+      deptMap = Object.fromEntries((depts || []).map((d: any) => [d.id, d.name]))
+    }
+
+    const formattedRequests = (requests || []).map((req: any) => {
+      const prof = req.user_profiles || {}
+      const deptName = deptMap[prof.department_id] || "N/A"
+      return {
+        id: req.id,
+        userId: req.user_id,
+        staffName: `${prof.first_name || ""} ${prof.last_name || ""}`.trim() || "Unknown",
+        staffEmail: prof.email,
+        employeeId: prof.employee_id,
+        position: prof.position,
+        department: deptName,
+        departmentId: prof.department_id,
+        leaveType: req.leave_type_key,
+        startDate: req.preferred_start_date,
+        endDate: req.preferred_end_date,
+        requestedDays: req.requested_days,
+        reason: req.reason,
+        status: req.status,
+        hodStatus: req.hod_status,
+        hodReviewedAt: req.hod_reviewed_at,
+        createdAt: req.created_at,
+        updatedAt: req.updated_at,
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: formattedRequests,
+      pagination: {
+        page,
+        pageSize,
+        totalCount: totalCount || 0,
+        totalPages: Math.ceil((totalCount || 0) / pageSize),
+      },
+    })
+  } catch (err: any) {
+    console.error("[v0] Error in all-requests route:", err)
+    return NextResponse.json({ error: String(err?.message || "Internal server error") }, { status: 500 })
+  }
+}

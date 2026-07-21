@@ -62,10 +62,56 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Enrich memos with location from user_profiles + geofence_locations
+    const memoList = pendingMemos || []
+    const staffIds = [...new Set(memoList.map((m: any) => m.staff_id).filter(Boolean))]
+
+    let locationMap: Record<string, string> = {}
+    if (staffIds.length > 0) {
+      const { data: profiles } = await admin
+        .from("user_profiles")
+        .select("id, assigned_location_id")
+        .in("id", staffIds)
+
+      if (profiles && profiles.length > 0) {
+        const locationIds = [...new Set(profiles.map((p: any) => p.assigned_location_id).filter(Boolean))]
+        let geoMap: Record<string, string> = {}
+
+        if (locationIds.length > 0) {
+          const { data: locations } = await admin
+            .from("geofence_locations")
+            .select("id, name")
+            .in("id", locationIds)
+          if (locations) {
+            locations.forEach((l: any) => { geoMap[l.id] = l.name })
+          }
+        }
+
+        profiles.forEach((p: any) => {
+          if (p.assigned_location_id && geoMap[p.assigned_location_id]) {
+            locationMap[p.id] = geoMap[p.assigned_location_id]
+          }
+        })
+      }
+    }
+
+    const enrichedMemos = memoList.map((memo: any) => {
+      let memoBody: any = {}
+      try {
+        memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+      } catch { memoBody = {} }
+
+      if (!memoBody.staff_location_name && locationMap[memo.staff_id]) {
+        memoBody.staff_location_name = locationMap[memo.staff_id]
+        return { ...memo, memo_body: JSON.stringify(memoBody) }
+      }
+      return memo
+    })
+
     return NextResponse.json({
       success: true,
-      memos: pendingMemos || [],
-      count: pendingMemos?.length || 0,
+      memos: enrichedMemos,
+      count: enrichedMemos.length,
     })
   } catch (err: any) {
     console.error("[v0] Error fetching pending memos:", err.message || err)

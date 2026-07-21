@@ -129,13 +129,13 @@ export async function GET(request: NextRequest) {
 
     // Apply ordering and pagination
     const pageParam = searchParams.get("page")
-    const pageSizeParam = searchParams.get("page_size")
+    const pageSizeParam = searchParams.get("page_size") || searchParams.get("limit")
     const exportMode = searchParams.get("export") === "true"
     const page = pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1
-    // Cap normal page size at 200 for UI performance; export mode fetches in large chunks
+    // Allow up to 5000 rows for UI (was capped at 200 — caused wrong metrics)
     const pageSize = exportMode
-      ? Math.min(1000, pageSizeParam ? parseInt(pageSizeParam, 10) || 1000 : 1000)
-      : Math.min(200, pageSizeParam ? parseInt(pageSizeParam, 10) || 50 : 50)
+      ? Math.min(10000, pageSizeParam ? parseInt(pageSizeParam, 10) || 5000 : 5000)
+      : Math.min(5000, pageSizeParam ? parseInt(pageSizeParam, 10) || 1000 : 1000)
     const startIndex = (page - 1) * pageSize
     const endIndex = startIndex + pageSize - 1
 
@@ -298,11 +298,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate summary statistics
-    // Calculate total matching records (without pagination)
-    // Use filtered record count as total (accurate because DB-level filters applied above)
+    // Calculate total matching records (without pagination) via a dedicated count query.
+    // IMPORTANT: every filter chain call MUST be reassigned — Supabase builder is immutable.
     let totalRecords = filteredRecords.length
     try {
-      // Build a count query that mirrors the main query filters exactly
       let countQuery = supabase
         .from("attendance_records")
         .select("id", { count: "exact", head: true })
@@ -314,30 +313,24 @@ export async function GET(request: NextRequest) {
       } else if (userId) {
         countQuery = countQuery.eq("user_id", userId)
       }
-      if (safeLocationId) countQuery = countQuery.eq("check_in_location_id", safeLocationId)
-      if (safeStatus) countQuery = countQuery.eq("status", safeStatus)
-
-      // Mirror department user scoping for the count
-      if (safeDepartmentId && profile.role !== "staff") {
-        let deptUsersCountQuery = supabase
-          .from("user_profiles")
-          .select("id")
-          .eq("department_id", safeDepartmentId)
-        if (profile.role === "department_head") {
-          deptUsersCountQuery = deptUsersCountQuery.eq("department_id", profile.department_id)
-        }
-        const { data: deptUsersCount } = await deptUsersCountQuery
-        const deptUserIdsCount = (deptUsersCount || []).map((u: any) => u.id)
-        if (deptUserIdsCount.length > 0) {
-          countQuery = countQuery.in("user_id", deptUserIdsCount)
-        } else {
-          countQuery = countQuery.eq("user_id", "00000000-0000-0000-0000-000000000000")
-        }
-      } else if (profile.role === "department_head" && !safeDepartmentId) {
+      // Mirror location scoping
+      if (profile.role === "regional_manager" && profile.assigned_location_id) {
+        countQuery = countQuery.eq("check_in_location_id", profile.assigned_location_id)
+      } else if (safeLocationId) {
+        countQuery = countQuery.eq("check_in_location_id", safeLocationId)
+      }
+      // Mirror status filter
+      if (safeStatus) {
+        countQuery = countQuery.eq("status", safeStatus)
+      }
+      // Mirror department scoping
+      const deptIdForCount =
+        profile.role === "department_head" ? profile.department_id : safeDepartmentId
+      if (deptIdForCount && profile.role !== "staff") {
         const { data: deptUsersCount } = await supabase
           .from("user_profiles")
           .select("id")
-          .eq("department_id", profile.department_id)
+          .eq("department_id", deptIdForCount)
         const deptUserIdsCount = (deptUsersCount || []).map((u: any) => u.id)
         if (deptUserIdsCount.length > 0) {
           countQuery = countQuery.in("user_id", deptUserIdsCount)
@@ -350,14 +343,15 @@ export async function GET(request: NextRequest) {
       if (countError) {
         console.error("[v0] Reports API - Count query error:", countError)
       } else {
-        totalRecords = countResult || 0
+        totalRecords = countResult ?? filteredRecords.length
       }
     } catch (err) {
       console.error("[v0] Reports API - Count exception:", err)
     }
 
     const totalWorkHours = enrichedRecords.reduce((sum, record) => sum + (record.work_hours || 0), 0)
-    const averageWorkHours = totalRecords > 0 ? totalWorkHours / totalRecords : 0
+    // Average over the fetched records (not totalRecords which may span multiple pages)
+    const averageWorkHours = enrichedRecords.length > 0 ? totalWorkHours / enrichedRecords.length : 0
 
     // Group by status
     const statusCounts = enrichedRecords.reduce(

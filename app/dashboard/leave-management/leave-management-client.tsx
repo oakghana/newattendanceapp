@@ -27,6 +27,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
+import { PaymentAdviceErrorBoundary } from "@/components/leave/payment-advice-error-boundary"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
 import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
 import { SubmitNewDefermentRequest } from "@/components/leave-management/submit-new-deferment-request"
@@ -193,11 +194,14 @@ export function LeaveManagementClient({
   // Signer assignment state for hr_leave_office
   const [signerAssignId, setSignerAssignId] = useState<string | null>(null)
   const [signerAssignType, setSignerAssignType] = useState<"deferment" | "recall" | null>(null)
+  const [selectedSignerUser, setSelectedSignerUser] = useState<{ id: string; name: string; position: string } | null>(null)
   const [signerName, setSignerName] = useState("")
   const [signerTitle, setSignerTitle] = useState("")
   const [signerWriteDate, setSignerWriteDate] = useState("")
   const [signerNotes, setSignerNotes] = useState("")
   const [isSavingSigner, setIsSavingSigner] = useState(false)
+  const [hrSignerCandidates, setHrSignerCandidates] = useState<any[]>([])
+  const [loadingSignerCandidates, setLoadingSignerCandidates] = useState(false)
   const [showTemplateComposer, setShowTemplateComposer] = useState(false)
   const [showPlaceholderGuide, setShowPlaceholderGuide] = useState(false)
   const [showMemoTemplatesSection, setShowMemoTemplatesSection] = useState(false)
@@ -246,6 +250,125 @@ export function LeaveManagementClient({
       toast({ title: `${label} copied`, description: "Template copied to clipboard." })
     } catch {
       toast({ title: "Copy failed", description: "Please copy manually.", variant: "destructive" })
+    }
+  }
+
+  // ─── Fetch HR Executive Candidates for Signer Assignment ───
+  const fetchHrSignerCandidates = async () => {
+    try {
+      setLoadingSignerCandidates(true)
+      const response = await fetch(`/api/user/hr-executives?role=${encodeURIComponent(userRole)}`)
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch HR executives")
+      }
+
+      const data = await response.json()
+      setHrSignerCandidates(data.executives || [])
+      console.log("[v0] HR executives loaded:", data.executives?.length || 0)
+    } catch (error) {
+      console.error("[v0] Error fetching HR executives:", error)
+      toast({ 
+        title: "Error", 
+        description: "Failed to load HR executives", 
+        variant: "destructive" 
+      })
+    } finally {
+      setLoadingSignerCandidates(false)
+    }
+  }
+
+  // ─── Open Signer Assignment Dialog ───
+  const openSignerAssignDialog = (requestId: string, requestType: "deferment" | "recall") => {
+    setSignerAssignId(requestId)
+    setSignerAssignType(requestType)
+    setSelectedSignerUser(null)
+    setSignerName("")
+    setSignerTitle("")
+    setSignerWriteDate(new Date().toISOString().split("T")[0])
+    setSignerNotes("")
+    fetchHrSignerCandidates()
+  }
+
+  // ─── Close Signer Assignment Dialog ───
+  const closeSignerAssignDialog = () => {
+    setSignerAssignId(null)
+    setSignerAssignType(null)
+    setSelectedSignerUser(null)
+    setSignerName("")
+    setSignerTitle("")
+    setSignerWriteDate("")
+    setSignerNotes("")
+  }
+
+  // ─── Handle Signer Selection from Dropdown ───
+  const handleSelectSigner = (signer: any) => {
+    setSelectedSignerUser({
+      id: signer.id,
+      name: `${signer.first_name} ${signer.last_name}`.trim(),
+      position: signer.position || ""
+    })
+    setSignerName(`${signer.first_name} ${signer.last_name}`.trim())
+    setSignerTitle(signer.position || "")
+  }
+
+  // ─── Save Signer Assignment ───
+  const saveSignerAssignment = async () => {
+    if (!signerAssignId || !signerAssignType) {
+      toast({ title: "Error", description: "Missing assignment details", variant: "destructive" })
+      return
+    }
+
+    if (!signerName.trim()) {
+      toast({ title: "Error", description: "Signer name is required", variant: "destructive" })
+      return
+    }
+
+    setIsSavingSigner(true)
+    try {
+      const response = await fetch("/api/leave/deferment-recall/assign-signer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: signerAssignType,
+          id: signerAssignId,
+          signer_name: signerName,
+          signer_title: signerTitle,
+          signer_user_id: selectedSignerUser?.id || null,
+          write_date: signerWriteDate,
+          notes: signerNotes,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to assign signer")
+      }
+
+      toast({
+        title: "Success",
+        description: `Signer assigned to ${signerAssignType} successfully`,
+      })
+
+      console.log("[v0] Signer assigned:", result.signer)
+      closeSignerAssignDialog()
+      
+      // Refresh the relevant data
+      if (signerAssignType === "deferment") {
+        fetchMyDefermentMemos()
+      } else {
+        fetchMyRecallMemos()
+      }
+    } catch (error) {
+      console.error("[v0] Error assigning signer:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to assign signer",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingSigner(false)
     }
   }
 
@@ -2943,7 +3066,9 @@ export function LeaveManagementClient({
           )}
 
           {selectedTab === "payment-advice" && canAccessPaymentAdvice && (
-            <PaymentAdviceClient userRole={normalizedRole} />
+            <PaymentAdviceErrorBoundary>
+              <PaymentAdviceClient userRole={normalizedRole} />
+            </PaymentAdviceErrorBoundary>
           )}
 
         {isManagerView && selectedTab === "pending-approvals" && (

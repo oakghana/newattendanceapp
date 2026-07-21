@@ -122,12 +122,13 @@ export async function POST(request: NextRequest) {
     
     let userProfiles: any[] = []
     let departments: any[] = []
+    let locations: any[] = []
     
     if (userIds.length > 0) {
-      // Fetch user profiles
+      // Fetch user profiles with location information
       const { data: profiles, error: profileError } = await supabase
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, role, department_id")
+        .select("id, first_name, last_name, employee_id, position, role, department_id, assigned_location_id")
         .in("id", userIds)
 
       if (profileError) {
@@ -148,10 +149,25 @@ export async function POST(request: NextRequest) {
         departments = depts || []
         console.log("[v0] Fetched departments:", departments.length)
       }
+
+      // Fetch all locations (geofence_locations)
+      const { data: locs, error: locError } = await supabase
+        .from("geofence_locations")
+        .select("id, name")
+
+      if (locError) {
+        console.error("[v0] Error querying locations:", locError)
+      } else {
+        locations = locs || []
+        console.log("[v0] Fetched locations:", locations.length)
+      }
     }
 
     // Create a map of departments for easy lookup
     const departmentMap = new Map(departments.map((d: any) => [d.id, d.name]))
+    
+    // Create a map of locations for easy lookup
+    const locationMap = new Map(locations.map((l: any) => [l.id, l.name]))
     
     // Create a map of user profiles for easy lookup
     const profileMap = new Map(userProfiles.map((p: any) => [p.id, p]))
@@ -202,6 +218,9 @@ export async function POST(request: NextRequest) {
       // Get department name from the map
       const departmentName = profile?.department_id ? (departmentMap.get(profile.department_id) || "N/A") : (profile?.department_name || "N/A")
       
+      // Get location name from the map (beneficiary location)
+      const locationName = profile?.assigned_location_id ? (locationMap.get(profile.assigned_location_id) || "HQ") : "HQ"
+      
       // Get position from profile
       const position = profile?.position || "N/A"
 
@@ -217,6 +236,11 @@ export async function POST(request: NextRequest) {
         position: position,
         category: staffCategory,
         staff_category: staffCategory,
+        // Location information (beneficiary location)
+        location_name: locationName,
+        location_id: profile?.assigned_location_id || null,
+        assigned_location_id: profile?.assigned_location_id || null,
+        assigned_location_name: locationName,
         // Leave details
         preferred_start_date: record.preferred_start_date,
         preferred_end_date: record.preferred_end_date,

@@ -45,6 +45,9 @@ interface StaffMember {
   is_active: boolean
   department_id?: string
   assigned_location_id?: string
+  date_of_appointment?: string | null
+  years_of_service?: number | string | null
+  contact_number?: string | null
   departments?: {
     id: string
     name: string
@@ -113,6 +116,9 @@ export function StaffManagement() {
     position: "",
     role: "staff",
     assigned_location_id: "",
+    date_of_appointment: "",
+    years_of_service: "",
+    contact_number: "",
   })
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
@@ -430,7 +436,16 @@ export function StaffManagement() {
         role: editingStaff.role,
         department_id: editingStaff.department_id || editingStaff.departments?.id,
         is_active: editingStaff.is_active,
-        assigned_location_id: editingStaff.assigned_location_id,
+        assigned_location_id:
+          editingStaff.assigned_location_id ||
+          editingStaff.geofence_locations?.id ||
+          null,
+        date_of_appointment: editingStaff.date_of_appointment || null,
+        years_of_service:
+          editingStaff.years_of_service !== undefined && editingStaff.years_of_service !== ""
+            ? parseInt(String(editingStaff.years_of_service), 10)
+            : null,
+        contact_number: editingStaff.contact_number || null,
       }
 
       console.log("[v0] Updating staff member:", editingStaff.id, updateData)
@@ -443,8 +458,8 @@ export function StaffManagement() {
 
       console.log("[v0] Update response status:", response.status)
 
-      if (response.status === 401 || response.status === 403) {
-        const msg = "Session expired or unauthorized. Please sign in again."
+      if (response.status === 401) {
+        const msg = "Session expired. Please sign in again."
         showError(msg, "Authentication Required")
         setError(msg)
         setTimeout(() => (window.location.href = "/signin"), 1200)
@@ -465,16 +480,7 @@ export function StaffManagement() {
         const errorDetail = hasDetails ? parsed.details : (parsed.error || text || `HTTP ${response.status}`)
         const errorString = typeof errorDetail === "object" ? JSON.stringify(errorDetail) : String(errorDetail)
 
-        // Show a user-friendly message for known server configuration issues without noisy console errors
-        if (String(errorString).toLowerCase().includes("supabase") || String(parsed.error).toLowerCase().includes("supabase")) {
-          console.warn("[v0] Update response warning:", errorString)
-          const friendly = "This admin update needs the server SUPABASE_SERVICE_ROLE_KEY to be configured. Staff search and viewing still work normally."
-          showError(friendly, "Server Configuration")
-          setError(friendly)
-          return
-        }
-
-        console.warn("[v0] Update response warning:", errorDetail)
+        console.error("[v0] Update response error:", errorDetail)
         throw new Error(`HTTP ${response.status}: ${errorString}`)
       }
 
@@ -484,7 +490,19 @@ export function StaffManagement() {
       if (result.success) {
         showSuccess("Staff member updated successfully", "Staff Updated")
         setSuccess("Staff member updated successfully")
+
+        // Immediately update the local staff array so the table shows fresh data
+        const updatedMember: StaffMember = result.data ?? { ...editingStaff, ...updateData }
+        setStaff((prev) =>
+          prev.map((s) =>
+            s.id === editingStaff.id
+              ? { ...s, ...updatedMember, role: canonicalRole(updatedMember.role ?? s.role) }
+              : s
+          )
+        )
+
         setEditingStaff(null)
+        // Also re-fetch in background to sync any server-computed fields
         fetchStaff()
       } else {
         console.error("[v0] Update failed:", result.error)
@@ -845,6 +863,49 @@ export function StaffManagement() {
                         tracking
                       </p>
                     </div>
+                    <div>
+                      <Label htmlFor="dateOfAppointment" className="font-medium">
+                        Date of Appointment <span className="text-muted-foreground font-normal">(Optional)</span>
+                      </Label>
+                      <Input
+                        id="dateOfAppointment"
+                        type="date"
+                        value={newStaff.date_of_appointment}
+                        onChange={(e) => setNewStaff({ ...newStaff, date_of_appointment: e.target.value })}
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Used for leave eligibility and service calculations</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="yearsOfService" className="font-medium">
+                        Years of Service <span className="text-muted-foreground font-normal">(Optional)</span>
+                      </Label>
+                      <Input
+                        id="yearsOfService"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={newStaff.years_of_service}
+                        onChange={(e) => setNewStaff({ ...newStaff, years_of_service: e.target.value })}
+                        className="mt-1"
+                        placeholder="0"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">For leave entitlements and loan calculations</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="contactNumber" className="font-medium">
+                        Contact Number <span className="text-muted-foreground font-normal">(Optional)</span>
+                      </Label>
+                      <Input
+                        id="contactNumber"
+                        type="tel"
+                        value={newStaff.contact_number}
+                        onChange={(e) => setNewStaff({ ...newStaff, contact_number: e.target.value })}
+                        className="mt-1"
+                        placeholder="+233 123 456 7890"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">For leave and loan notifications</p>
+                    </div>
                   </div>
                   <DialogFooter className="gap-2">
                     <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -1026,6 +1087,45 @@ export function StaffManagement() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Staff must be assigned to their actual work location
                     </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="editDateOfAppointment" className="font-medium">
+                      Date of Appointment <span className="text-muted-foreground font-normal">(Optional)</span>
+                    </Label>
+                    <Input
+                      id="editDateOfAppointment"
+                      type="date"
+                      value={editingStaff.date_of_appointment || ""}
+                      onChange={(e) => setEditingStaff({ ...editingStaff, date_of_appointment: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editYearsOfService" className="font-medium">
+                      Years of Service <span className="text-muted-foreground font-normal">(Optional)</span>
+                    </Label>
+                    <Input
+                      id="editYearsOfService"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={editingStaff.years_of_service ?? ""}
+                      onChange={(e) => setEditingStaff({ ...editingStaff, years_of_service: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editContactNumber" className="font-medium">
+                      Contact Number <span className="text-muted-foreground font-normal">(Optional)</span>
+                    </Label>
+                    <Input
+                      id="editContactNumber"
+                      type="tel"
+                      value={editingStaff.contact_number || ""}
+                      onChange={(e) => setEditingStaff({ ...editingStaff, contact_number: e.target.value })}
+                      className="mt-1"
+                      placeholder="+233 123 456 7890"
+                    />
                   </div>
                 </div>
                 <DialogFooter>

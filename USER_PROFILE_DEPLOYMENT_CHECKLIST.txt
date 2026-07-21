@@ -1,0 +1,292 @@
+================================================================================
+USER PROFILE FIELDS - DEPLOYMENT CHECKLIST
+================================================================================
+Date: July 17, 2026
+Fields: date_of_appointment, years_of_service, contact_number
+Status: READY FOR PRODUCTION
+================================================================================
+
+PHASE 1: PRE-DEPLOYMENT VERIFICATION
+================================================================================
+
+Code Review:
+[ ] Reviewed components/admin/staff-management.tsx
+[ ] Reviewed app/api/admin/staff/route.ts
+[ ] Reviewed app/api/admin/staff/[id]/route.ts
+[ ] Reviewed migration file: supabase/migrations/067_add_staff_profile_fields.sql
+
+Documentation:
+[ ] Read USER_PROFILE_FIELDS_IMPLEMENTATION.md
+[ ] Understood backward compatibility approach
+[ ] Understood database changes
+[ ] Verified no breaking changes
+
+Testing Environment:
+[ ] Development server running
+[ ] Database connected
+[ ] No build errors
+[ ] No TypeScript errors
+[ ] No ESLint warnings
+
+================================================================================
+PHASE 2: DATABASE MIGRATION
+================================================================================
+
+Pre-Migration:
+[ ] Backup current database
+[ ] Document current staff count
+[ ] Test migration script locally
+
+Migration Execution:
+[ ] Run: supabase db push
+[ ] Verify migration completed
+[ ] Check for any errors in logs
+[ ] Confirm new columns exist
+
+Verification:
+[ ] Query user_profiles table
+[ ] Confirm date_of_appointment column exists
+[ ] Confirm years_of_service column exists  
+[ ] Confirm contact_number column exists
+[ ] Verify columns are nullable
+[ ] Verify indexes created
+
+SQL Verification Commands:
+```
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_name = 'user_profiles'
+AND column_name IN ('date_of_appointment', 'years_of_service', 'contact_number');
+
+SELECT schemaname, tablename, indexname
+FROM pg_indexes
+WHERE tablename = 'user_profiles'
+AND indexname LIKE 'idx_user_profiles%';
+```
+
+================================================================================
+PHASE 3: CODE DEPLOYMENT
+================================================================================
+
+Files Changed:
+[ ] components/admin/staff-management.tsx (UI form updates)
+[ ] app/api/admin/staff/route.ts (GET, POST methods)
+[ ] app/api/admin/staff/[id]/route.ts (PUT method)
+[ ] supabase/migrations/067_add_staff_profile_fields.sql (DB schema)
+
+Deploy Steps:
+[ ] Commit all changes
+[ ] Push to main branch
+[ ] Trigger deployment
+[ ] Wait for build to complete
+[ ] Verify no deployment errors
+
+Build Verification:
+[ ] No TypeScript errors
+[ ] No eslint errors
+[ ] Build completes successfully
+[ ] No warnings in console
+
+================================================================================
+PHASE 4: FUNCTIONAL TESTING
+================================================================================
+
+Staff Management Page:
+[ ] Page loads without errors
+[ ] Staff list displays correctly
+[ ] Search functionality works
+[ ] Filters work properly
+[ ] Pagination works
+
+Add New Staff Form:
+[ ] Form displays all new fields
+[ ] Date input accepts valid dates
+[ ] Number input accepts 0+
+[ ] Contact number accepts various formats
+[ ] Can submit without new fields
+[ ] Can submit with new fields
+[ ] New staff created successfully in database
+[ ] New fields appear in staff list
+
+Edit Staff Form:
+[ ] Form loads existing staff
+[ ] New fields pre-populate with existing data
+[ ] Can modify new fields
+[ ] Can clear new fields (set to NULL)
+[ ] Updates persist after save
+[ ] No data loss on update
+
+Staff List Display:
+[ ] Existing staff continue to display
+[ ] New staff appear in list
+[ ] Search still works with existing fields
+[ ] Filters still work properly
+[ ] No broken styling
+
+API Testing:
+[ ] GET /api/admin/staff returns all fields
+[ ] POST /api/admin/staff creates with fields
+[ ] PUT /api/admin/staff/[id] updates fields
+[ ] All error cases handled properly
+[ ] No null pointer exceptions
+
+================================================================================
+PHASE 5: SECURITY & PERMISSIONS
+================================================================================
+
+Authentication:
+[ ] Login still works
+[ ] Sessions still valid
+[ ] Auth tokens not affected
+[ ] Password reset still works
+
+Authorization:
+[ ] Only admin/it-admin can add staff
+[ ] Only admin/it-admin can edit staff
+[ ] Regional managers see their staff
+[ ] Department heads see their staff
+[ ] Staff can't edit their own admin fields
+
+Data Safety:
+[ ] No SQL injection vectors
+[ ] Input validation working
+[ ] Type conversion safe
+[ ] No console errors
+[ ] No database errors
+
+================================================================================
+PHASE 6: REGRESSION TESTING
+================================================================================
+
+Leave Management:
+[ ] Leave requests still work
+[ ] Leave approvals still work
+[ ] Payment advice generation still works
+[ ] No date issues in leave memos
+
+Loan System:
+[ ] Loan applications still work
+[ ] Loan calculations still work
+[ ] No errors in loan module
+
+User Management:
+[ ] User activation/deactivation works
+[ ] Password management works
+[ ] Role assignments work
+[ ] Department assignments work
+
+Dashboard:
+[ ] Dashboard loads
+[ ] All widgets display
+[ ] No 404 errors
+[ ] No console errors
+
+================================================================================
+PHASE 7: MONITORING & LOGGING
+================================================================================
+
+First 24 Hours:
+[ ] Monitor server logs for errors
+[ ] Check error tracking (if available)
+[ ] Verify API response times normal
+[ ] Watch database query performance
+[ ] Monitor user reports
+
+Look For:
+[ ] "Undefined" or "null" errors
+[ ] Database constraint violations
+[ ] Type conversion errors
+[ ] Permission denied errors
+[ ] API timeout errors
+
+Performance Metrics:
+[ ] Page load time < 2s
+[ ] API response time < 500ms
+[ ] No spike in database load
+[ ] No memory leaks
+[ ] No hanging connections
+
+================================================================================
+PHASE 8: POST-DEPLOYMENT
+================================================================================
+
+Documentation:
+[ ] Update system documentation
+[ ] Note new fields in staff records
+[ ] Update API documentation
+[ ] Update user guide (if needed)
+
+Communication:
+[ ] Notify administrators
+[ ] Provide training on new fields
+[ ] Share deployment summary
+[ ] Document any issues found
+
+Data Population (Optional):
+[ ] Plan data migration strategy
+[ ] Identify priority staff for data entry
+[ ] Create data entry instructions
+[ ] Schedule gradual data population
+
+================================================================================
+ROLLBACK PROCEDURE (If Needed)
+================================================================================
+
+Quick Rollback (Keep DB Changes):
+1. Revert code to previous version
+2. Restart application
+3. Database changes remain (safe)
+4. Users see old UI (fields ignored)
+
+Complete Rollback (Remove DB Changes):
+1. Revert code changes
+2. Run rollback migration:
+   - DROP COLUMN date_of_appointment;
+   - DROP COLUMN years_of_service;
+   - DROP COLUMN contact_number;
+3. Restart application
+
+Note: Complete rollback is permanent. Only if absolutely necessary.
+
+================================================================================
+SUCCESS CRITERIA
+================================================================================
+
+Deployment is successful when:
+[ ] All new fields visible in Add Staff form
+[ ] All new fields visible in Edit Staff form
+[ ] Can create staff with new fields
+[ ] Can update existing staff with new fields
+[ ] New fields persist in database
+[ ] No errors in logs
+[ ] No broken functionality
+[ ] All tests pass
+[ ] Staff can still work normally
+[ ] Leave management still works
+[ ] Loan system still works
+
+================================================================================
+STAKEHOLDERS & CONTACTS
+================================================================================
+
+Technical Lead:         [Name/Contact]
+Database Administrator: [Name/Contact]
+QA Lead:               [Name/Contact]
+HR Manager:            [Name/Contact]
+
+For Issues During Deployment:
+1. Check error logs
+2. Contact Technical Lead
+3. Review rollback procedure if critical
+
+================================================================================
+SIGN-OFF
+================================================================================
+
+Deployed By:           [Name] _________________ Date: _______
+Verified By:           [Name] _________________ Date: _______
+Approved By:           [Name] _________________ Date: _______
+
+================================================================================
+DEPLOYMENT COMPLETE ✅
+================================================================================

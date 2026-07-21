@@ -78,15 +78,26 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Staff API - Filters:", { searchTerm: trimmedSearchTerm, departmentFilter, roleFilter, sortBy, sortOrder, page, limit })
 
-    // Fetch the requesting user's profile to check role and location
-    const { data: requestingProfile } = await supabase
+    // Build a direct service-role admin client to bypass RLS entirely
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      "https://vgtajtqxgczhjboatvol.supabase.co"
+    const serviceKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY
+    const adminDb = createSupabaseClient(supabaseUrl, serviceKey!)
+
+    // Fetch the requesting user's profile to check role and location (use admin client)
+    const { data: requestingProfile } = await adminDb
       .from("user_profiles")
       .select("role, assigned_location_id")
       .eq("id", user.id)
       .single()
 
     // Build a server-side query with pagination and optional filters (returns count)
-    let query = supabase
+    let query = adminDb
       .from("user_profiles")
       .select(`
         id,
@@ -102,6 +113,14 @@ export async function GET(request: NextRequest) {
         is_active,
         assigned_location_id,
         profile_image_url,
+        region_id,
+        is_on_leave,
+        leave_status,
+        annual_leave_days,
+        sick_leave_days,
+        date_of_appointment,
+        years_of_service,
+        contact_number,
         created_at,
         updated_at
       `, { count: 'exact' })
@@ -155,10 +174,10 @@ export async function GET(request: NextRequest) {
 
     const [departmentsResult, locationsResult] = await Promise.all([
       departmentIds.length > 0
-        ? supabase.from("departments").select("id, name, code").in("id", departmentIds)
+        ? adminDb.from("departments").select("id, name, code").in("id", departmentIds)
         : { data: [], error: null },
       locationIds.length > 0
-        ? supabase.from("geofence_locations").select("id, name, address").in("id", locationIds)
+        ? adminDb.from("geofence_locations").select("id, name, address").in("id", locationIds)
         : { data: [], error: null },
     ])
 
@@ -178,7 +197,7 @@ export async function GET(request: NextRequest) {
     try {
       const staffIds = enrichedStaff.map((s) => s.id)
       if (staffIds.length > 0) {
-        const { data: audits } = await supabase
+        const { data: audits } = await adminDb
           .from("audit_logs")
           .select("user_id, action, record_id, created_at")
           .in("record_id", staffIds)
@@ -193,7 +212,7 @@ export async function GET(request: NextRequest) {
         const actorIds = [...new Set((audits || []).map((a: any) => a.user_id).filter(Boolean))]
         let actors: any[] = []
         if (actorIds.length > 0) {
-          const { data: actorProfiles } = await supabase.from("user_profiles").select("id, first_name, last_name, role").in("id", actorIds)
+          const { data: actorProfiles } = await adminDb.from("user_profiles").select("id, first_name, last_name, role").in("id", actorIds)
           actors = actorProfiles || []
         }
 
@@ -254,13 +273,16 @@ export async function POST(request: NextRequest) {
       const supabaseModule = await import("@/lib/supabase/server")
       supabase = await supabaseModule.createClient()
 
-      // Create admin client with service role key
+      // Create admin client — prefer service role key, fall back to anon for reads
       const { createClient } = await import("@supabase/supabase-js")
-      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "https://vgtajtqxgczhjboatvol.supabase.co"
+      const serviceRoleKey =
+        process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        process.env.SUPABASE_ANON_KEY
 
       if (!supabaseUrl || !serviceRoleKey) {
-        throw new Error("Missing Supabase admin credentials")
+        throw new Error("Missing Supabase credentials")
       }
 
       adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -292,14 +314,14 @@ export async function POST(request: NextRequest) {
       return createJsonResponse({ success: false, error: "Authentication required" }, 401)
     }
 
-    const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
+    const { data: profile } = await adminSupabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    if (!profile || (profile.role !== "admin" && profile.role !== "it-admin" && profile.role !== "regional_manager")) {
+    if (!profile || (profile.role !== "admin" && profile.role !== "it-admin" && profile.role !== "regional_manager" && profile.role !== "manager_hr")) {
       return createJsonResponse({ success: false, error: "Admin, IT-Admin, or Regional Manageror Regional Manager access required" }, 403)
     }
 
     const body = await request.json()
-    const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password } =
+    const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password, date_of_appointment, years_of_service, contact_number } =
       body
 
     if (profile.role === "it-admin") {
@@ -392,6 +414,9 @@ export async function POST(request: NextRequest) {
           position: position || null,
           role: role || "staff",
           is_active: true,
+          date_of_appointment: date_of_appointment || null,
+          years_of_service: years_of_service !== undefined && years_of_service !== "" ? parseInt(String(years_of_service), 10) : null,
+          contact_number: contact_number || null,
         })
         .eq("id", authUser.user.id)
         .select(`
@@ -409,7 +434,7 @@ export async function POST(request: NextRequest) {
       const { data, error } = await adminSupabase
         .from("user_profiles")
         .insert({
-          id: authUser.user.id, // Use the auth user ID
+          id: authUser.user.id,
           email,
           first_name,
           last_name,
@@ -419,6 +444,9 @@ export async function POST(request: NextRequest) {
           position: position || null,
           role: role || "staff",
           is_active: true,
+          date_of_appointment: date_of_appointment || null,
+          years_of_service: years_of_service !== undefined && years_of_service !== "" ? parseInt(String(years_of_service), 10) : null,
+          contact_number: contact_number || null,
         })
         .select(`
           *,

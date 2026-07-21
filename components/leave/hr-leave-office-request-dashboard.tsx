@@ -89,23 +89,38 @@ export function HRLeaveOfficeRequestDashboard() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      // Fetch pending requests
+      // Fetch pending deferment and recall requests — route checks authenticated user is hr_leave_office role
       const requestsRes = await fetch('/api/leave/deferment-recall/pending-requests')
-      if (!requestsRes.ok) throw new Error('Failed to fetch requests')
-      const { defermentRequests: def, recallRequests: rec } = await requestsRes.json()
-      setDefermentRequests(def || [])
-      setRecallRequests(rec || [])
+      if (!requestsRes.ok) {
+        const errData = await requestsRes.json().catch(() => ({}))
+        throw new Error(errData.error || `Failed to fetch requests (${requestsRes.status})`)
+      }
+      const requestsData = await requestsRes.json()
+      // Route returns { defermentRequests: [], recallRequests: [], total: 0 }
+      setDefermentRequests(requestsData.defermentRequests || [])
+      setRecallRequests(requestsData.recallRequests || [])
 
-      // Fetch HR executives
-      const execRes = await fetch('/api/leave/hr-executives')
-      if (!execRes.ok) throw new Error('Failed to fetch executives')
-      const { executives } = await execRes.json()
-      setHrExecutives(executives || [])
-    } catch (error) {
+      // Fetch HR executives — query the user_profiles table directly for hr_executive role
+      const execRes = await fetch('/api/admin/users/by-role?role=hr_executive')
+      if (execRes.ok) {
+        const execData = await execRes.json()
+        const executives = (execData.data || execData.users || []).map((user: any) => ({
+          id: user.id,
+          name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+          email: user.email,
+          position: user.position || 'HR Executive',
+          department: user.department,
+        }))
+        setHrExecutives(executives)
+      } else {
+        console.warn('[v0] Failed to fetch HR executives, using empty list')
+        setHrExecutives([])
+      }
+    } catch (error: any) {
       console.error('[v0] Error fetching data:', error)
       toast({
         title: 'Error',
-        description: 'Failed to load requests. Please try again.',
+        description: error.message || 'Failed to load requests. Please try again.',
         variant: 'destructive',
       })
     } finally {

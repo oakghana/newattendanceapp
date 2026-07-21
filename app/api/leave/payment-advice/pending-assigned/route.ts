@@ -82,16 +82,25 @@ export async function GET(request: NextRequest) {
 
     // Filter memos to only include those where user is an assigned signer
     const pendingMemos = (allPendingMemos || []).filter((memo: any) => {
-      const signers = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : []
-      const isAssigned = signers.includes(user.id)
+      const signers = Array.isArray(memo.assigned_signers) ? memo.assigned_signers : 
+                     typeof memo.assigned_signers === 'string' ? [memo.assigned_signers] : []
+      
+      // Try multiple matching strategies
+      const isAssignedByUUID = signers.includes(user.id)
+      const isAssignedByEmail = signers.includes(user.email)
+      const isAssigned = isAssignedByUUID || isAssignedByEmail
       
       // Enhanced logging for debugging signer visibility issues
       console.log(`[v0] Memo visibility check:`, {
         memoId: memo.id,
         staffName: memo.staff_name,
         storedSigners: signers,
+        storedSignersType: typeof memo.assigned_signers,
         currentUserId: user.id,
-        isMatch: isAssigned,
+        currentUserEmail: user.email,
+        matchByUUID: isAssignedByUUID,
+        matchByEmail: isAssignedByEmail,
+        isAssigned: isAssigned,
         signerCount: signers.length,
       })
       
@@ -102,7 +111,15 @@ export async function GET(request: NextRequest) {
       assignedToUser: pendingMemos?.length || 0,
       totalPending: allPendingMemos?.length || 0,
       userId: user.id,
+      userEmail: user.email,
       userRole: userProfile.role,
+      debugInfo: {
+        message: pendingMemos?.length === 0 && allPendingMemos?.length > 0 ? 
+          "Memos exist but none are assigned to this user" : 
+          "Either no pending memos exist or user is properly assigned",
+        totalMemoCount: allPendingMemos?.length,
+        assignedCount: pendingMemos?.length,
+      }
     })
 
     return NextResponse.json({
@@ -111,6 +128,12 @@ export async function GET(request: NextRequest) {
       count: pendingMemos?.length || 0,
       currentUserRole: userProfile.role,
       signerPosition: userProfile.position,
+      totalPendingInSystem: allPendingMemos?.length || 0,
+      userEmail: user.email,
+      userId: user.id,
+      debugMessage: pendingMemos?.length === 0 && allPendingMemos?.length > 0 ? 
+        `No memos assigned to you, but ${allPendingMemos?.length} pending memos exist in system` : 
+        "Loading successful",
     })
   } catch (err) {
     console.error("[v0] Unexpected error fetching pending memos:", err)

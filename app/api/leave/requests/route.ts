@@ -10,19 +10,65 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get("userId")
     const status = searchParams.get("status")
-    const limit = parseInt(searchParams.get("limit") || "50")
+    const limit = parseInt(searchParams.get("limit") || "200")
     const offset = parseInt(searchParams.get("offset") || "0")
 
-    let query = supabase.from("leave_requests").select("*", { count: "exact" })
+    // Use leave_plan_requests which has leave_type_key, hod_decision, status, etc.
+    // Join with unified_user_management view to get full staff details including rank, position, department
+    let query = supabase.from("leave_plan_requests").select(`
+      id,
+      user_id,
+      leave_type_key,
+      preferred_start_date,
+      preferred_end_date,
+      requested_days,
+      adjusted_days,
+      status,
+      hod_decision,
+      staff_category,
+      created_at,
+      submitted_at
+    `, { count: "exact" })
 
     if (userId) query = query.eq("user_id", userId)
     if (status) query = query.eq("status", status)
 
-    const { data, count, error } = await query
+    const { data: planRequests, count, error } = await query
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1)
 
     if (error) throw error
+
+    // Enrich with user details from unified_user_management view
+    const userIds = [...new Set((planRequests || []).map((r: any) => r.user_id).filter(Boolean))]
+    
+    let userMap: Record<string, any> = {}
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from("unified_user_management")
+        .select("user_id, full_name, department_name, position, role, employee_id")
+        .in("user_id", userIds)
+      
+      if (users) {
+        users.forEach((u: any) => { userMap[u.user_id] = u })
+      }
+    }
+
+    const data = (planRequests || []).map((req: any) => ({
+      ...req,
+      leave_type: req.leave_type_key || "Annual",
+      start_date: req.preferred_start_date,
+      end_date: req.preferred_end_date,
+      hod_review_status: req.hod_decision || "pending",
+      user_profiles: userMap[req.user_id] ? {
+        first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
+        last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",
+        employee_id: userMap[req.user_id].employee_id || "",
+        department_name: userMap[req.user_id].department_name || "",
+        position: userMap[req.user_id].position || "",
+        full_name: userMap[req.user_id].full_name || "",
+      } : null,
+    }))
 
     return NextResponse.json({ data, total: count, success: true })
   } catch (error) {

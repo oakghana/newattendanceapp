@@ -208,12 +208,38 @@ export async function POST(request: NextRequest) {
             .single()
 
           if (fullDeferment) {
-            // Generate memo using deferment-recall-memo-service
+            // Get HR signer details first so we can pass into generateDefermentMemo
+            const { data: signerProfileEarly } = await admin
+              .from("user_profiles")
+              .select("id, first_name, last_name, position")
+              .eq("id", approverUserId)
+              .single()
+
+            const { data: signerSigEarly } = await admin
+              .from("approval_signature_registry")
+              .select("signature_image_url")
+              .eq("user_id", approverUserId)
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .single()
+
+            const staffProfile = (fullDeferment.leave_plan_requests as any)?.user_profiles
             const memoData = await generateDefermentMemo({
-              staffName: fullDeferment.leave_plan_requests?.user_profiles?.first_name + " " + fullDeferment.leave_plan_requests?.user_profiles?.last_name,
-              defermentStart: fullDeferment.deferment_start_date,
-              defermentEnd: fullDeferment.deferment_end_date,
-              reason: fullDeferment.reason,
+              staff: {
+                name: staffProfile ? `${staffProfile.first_name} ${staffProfile.last_name}` : 'Unknown',
+                position: staffProfile?.position || '',
+                department: staffProfile?.departments?.[0]?.name || staffProfile?.departments?.name || '',
+                employee_id: staffProfile?.employee_id || '',
+              },
+              originalLeaveStart: (fullDeferment.leave_plan_requests as any)?.preferred_start_date || '',
+              originalLeaveEnd: (fullDeferment.leave_plan_requests as any)?.preferred_end_date || '',
+              deferredStart: fullDeferment.deferment_start_date || '',
+              deferredEnd: fullDeferment.deferment_end_date || '',
+              reason: fullDeferment.reason || '',
+              generatedDate: new Date().toLocaleDateString('en-GB'),
+              signerName: `${signerProfileEarly?.first_name || ''} ${signerProfileEarly?.last_name || ''}`.trim() || 'HR Executive',
+              signerPosition: signerProfileEarly?.position || 'HR EXECUTIVE',
+              signatureImageUrl: signerSigEarly?.signature_image_url,
             })
 
             // Get HR signer info and signature
@@ -325,14 +351,7 @@ export async function POST(request: NextRequest) {
             .single()
 
           if (fullRecall) {
-            // Generate memo using deferment-recall-memo-service
-            const memoData = await generateRecallMemo({
-              staffName: fullRecall.leave_plan_requests?.user_profiles?.first_name + " " + fullRecall.leave_plan_requests?.user_profiles?.last_name,
-              recallDate: fullRecall.recall_date,
-              reason: fullRecall.recall_reason,
-            })
-
-            // Get HR signer info and signature
+            // Get HR signer info and signature upfront
             const { data: signerProfile } = await admin
               .from("user_profiles")
               .select("id, first_name, last_name, position")
@@ -346,6 +365,23 @@ export async function POST(request: NextRequest) {
               .order("updated_at", { ascending: false })
               .limit(1)
               .single()
+
+            const recallStaffProfile = (fullRecall.leave_plan_requests as any)?.user_profiles
+            const memoData = await generateRecallMemo({
+              staff: {
+                name: recallStaffProfile ? `${recallStaffProfile.first_name} ${recallStaffProfile.last_name}` : 'Unknown',
+                position: recallStaffProfile?.position || '',
+                department: recallStaffProfile?.departments?.[0]?.name || recallStaffProfile?.departments?.name || '',
+                employee_id: recallStaffProfile?.employee_id || '',
+              },
+              recallDate: fullRecall.recall_date || '',
+              originalLeaveEnd: (fullRecall.leave_plan_requests as any)?.preferred_end_date || '',
+              reason: fullRecall.recall_reason || '',
+              generatedDate: new Date().toLocaleDateString('en-GB'),
+              signerName: `${signerProfile?.first_name || ''} ${signerProfile?.last_name || ''}`.trim() || 'HR Executive',
+              signerPosition: signerProfile?.position || 'HR EXECUTIVE',
+              signatureImageUrl: signerSignature?.signature_image_url,
+            })
 
             // Create recall memo record
             const { data: createdMemo, error: memoErr } = await admin

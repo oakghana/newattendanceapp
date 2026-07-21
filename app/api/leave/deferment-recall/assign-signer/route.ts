@@ -29,18 +29,45 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { type, id, signer_name, signer_title, write_date, notes } = body
+    const { type, id, signer_name, signer_title, write_date, notes, signer_user_id } = body
 
     if (!type || !id) {
       return NextResponse.json({ error: "Missing required fields: type and id" }, { status: 400 })
+    }
+
+    // If a user_id is provided, fetch their signature and profile info
+    let signerSignatureUrl: string | null = null
+    let finalSignerName = signer_name
+    let finalSignerTitle = signer_title
+
+    if (signer_user_id) {
+      const { data: signerProfile, error: signerError } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, signature_data_url")
+        .eq("id", signer_user_id)
+        .single()
+
+      if (!signerError && signerProfile) {
+        signerSignatureUrl = signerProfile.signature_data_url || null
+        finalSignerName = `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim()
+        finalSignerTitle = signerProfile.position || signer_title || null
+        console.log("[v0] Signer user fetched:", {
+          userId: signer_user_id,
+          name: finalSignerName,
+          hasSignature: !!signerSignatureUrl,
+        })
+      } else {
+        console.warn("[v0] Signer user not found:", signer_user_id)
+      }
     }
 
     if (type === "deferment") {
       const { error } = await admin
         .from("leave_deferment_requests")
         .update({
-          hr_signer_name: signer_name || null,
-          hr_signer_title: signer_title || null,
+          hr_signer_name: finalSignerName || null,
+          hr_signer_title: finalSignerTitle || null,
+          hr_signer_user_id: signer_user_id || null,
           hr_write_date: write_date || null,
           hr_office_notes: notes || null,
           hr_office_reviewed_by: user.id,
@@ -53,12 +80,20 @@ export async function PATCH(request: NextRequest) {
         console.error("[v0] Error assigning signer to deferment:", error)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
+      
+      console.log("[v0] Deferment signer assigned:", {
+        defermentId: id,
+        signerName: finalSignerName,
+        signerUserId: signer_user_id,
+        hasSignature: !!signerSignatureUrl,
+      })
     } else if (type === "recall") {
       const { error } = await admin
         .from("leave_recall_requests")
         .update({
-          hr_signer_name: signer_name || null,
-          hr_signer_title: signer_title || null,
+          hr_signer_name: finalSignerName || null,
+          hr_signer_title: finalSignerTitle || null,
+          hr_signer_user_id: signer_user_id || null,
           hr_write_date: write_date || null,
           hr_office_notes: notes || null,
           hr_reviewed_by: user.id,
@@ -71,11 +106,27 @@ export async function PATCH(request: NextRequest) {
         console.error("[v0] Error assigning signer to recall:", error)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
+      
+      console.log("[v0] Recall signer assigned:", {
+        recallId: id,
+        signerName: finalSignerName,
+        signerUserId: signer_user_id,
+        hasSignature: !!signerSignatureUrl,
+      })
     } else {
       return NextResponse.json({ error: "Invalid type. Must be 'deferment' or 'recall'" }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true, message: "Signer assigned successfully" })
+    return NextResponse.json({ 
+      success: true, 
+      message: "Signer assigned successfully",
+      signer: {
+        name: finalSignerName,
+        title: finalSignerTitle,
+        userId: signer_user_id || null,
+        signatureUrl: signerSignatureUrl || null,
+      }
+    })
   } catch (error) {
     console.error("[v0] Assign signer error:", error)
     return NextResponse.json(

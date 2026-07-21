@@ -12,25 +12,54 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 interface DefermentRequest {
   id: string
-  staff_name: string
-  staff_email: string
-  leave_type: string
-  deferment_start_date: string
-  deferment_end_date: string
-  reason: string
-  status: 'pending' | 'approved' | 'rejected'
+  user_id?: string
+  leave_plan_request_id?: string
+  staff_name?: string
+  staff_email?: string
+  leave_type?: string
+  deferment_start_date?: string
+  deferment_end_date?: string
+  reason?: string
+  status: 'pending' | 'approved' | 'rejected' | 'pending_hod_review' | string
   created_at: string
+  requested_deferment_year?: number
+  requested_deferment_period?: string
+  hod_decision?: string
+  hr_office_decision?: string
+  leave_plan_requests?: {
+    user_profiles?: {
+      first_name?: string
+      last_name?: string
+      email?: string
+      employee_id?: string
+      position?: string
+      departments?: { name?: string }
+    }
+  }
 }
 
 interface RecallRequest {
   id: string
-  staff_name: string
-  staff_email: string
-  leave_type: string
-  recall_date: string
-  recall_reason: string
-  status: 'pending' | 'approved' | 'rejected'
+  staff_user_id?: string
+  staff_name?: string
+  staff_email?: string
+  leave_type?: string
+  recall_date?: string
+  recall_reason?: string
+  recall_notes?: string
+  status: 'pending' | 'approved' | 'rejected' | string
   created_at: string
+  hr_decision?: string
+  leave_plan_requests?: {
+    user_profiles?: {
+      first_name?: string
+      last_name?: string
+      email?: string
+      employee_id?: string
+      position?: string
+      departments?: { name?: string }
+    }
+  }
 }
 
 export function HRDefermentRecallManagement() {
@@ -51,12 +80,23 @@ export function HRDefermentRecallManagement() {
   const fetchRequests = async () => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/leave/hr-deferment-recall-management?status=${filterStatus}`)
-      if (!res.ok) throw new Error('Failed to fetch requests')
-      
-      const data = await res.json()
-      setDeferrments(data.deferments || [])
-      setRecalls(data.recalls || [])
+      // Fetch deferments and recalls in parallel with correct type parameter
+      const statusParam = filterStatus === 'all' ? 'all' : filterStatus
+      const [deferRes, recallRes] = await Promise.all([
+        fetch(`/api/leave/hr-deferment-recall-management?type=deferment&status=${statusParam}`),
+        fetch(`/api/leave/hr-deferment-recall-management?type=recall&status=${statusParam}`),
+      ])
+
+      if (!deferRes.ok && !recallRes.ok) throw new Error('Failed to fetch requests')
+
+      const [deferData, recallData] = await Promise.all([
+        deferRes.ok ? deferRes.json() : { requests: [] },
+        recallRes.ok ? recallRes.json() : { requests: [] },
+      ])
+
+      // Both endpoints return { requests: [], type, count }
+      setDeferrments(deferData.requests || [])
+      setRecalls(recallData.requests || [])
     } catch (error) {
       console.error('[v0] Error fetching requests:', error)
       toast({ title: 'Error', description: 'Failed to load requests', variant: 'destructive' })
@@ -65,65 +105,47 @@ export function HRDefermentRecallManagement() {
     }
   }
 
-  const handleApprove = async (type: 'deferment' | 'recall', id: string) => {
-    try {
-      setProcessingId(id)
-      const res = await fetch('/api/leave/hr-deferment-recall-management', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          request_type: type,
-          request_id: id,
-          decision: 'approved',
-          decision_note: decisionNote,
-          generate_memo: true
-        })
-      })
-
-      if (!res.ok) throw new Error('Failed to approve')
-      
-      toast({ title: 'Success', description: `${type} approved and memo generated` })
-      setDecisionNote('')
-      fetchRequests()
-    } catch (error) {
-      console.error(`[v0] Error approving ${type}:`, error)
-      toast({ title: 'Error', description: `Failed to approve ${type}`, variant: 'destructive' })
-    } finally {
-      setProcessingId(null)
-    }
-  }
-
-  const handleReject = async (type: 'deferment' | 'recall', id: string) => {
-    if (!decisionNote) {
+  const submitDecision = async (type: 'deferment' | 'recall', id: string, decision: 'approved' | 'rejected') => {
+    if (decision === 'rejected' && !decisionNote) {
       toast({ title: 'Error', description: 'Please provide a rejection reason', variant: 'destructive' })
       return
     }
-
     try {
       setProcessingId(id)
-      const res = await fetch('/api/leave/hr-deferment-recall-management', {
+      // Get current user id from the session
+      const sessionRes = await fetch('/api/auth/session')
+      const sessionData = sessionRes.ok ? await sessionRes.json() : {}
+      const hrExecutiveId = sessionData?.user?.id || sessionData?.id || ''
+
+      const res = await fetch('/api/leave/deferment-recall/hr-executive-decision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          request_type: type,
           request_id: id,
-          decision: 'rejected',
-          decision_note: decisionNote
-        })
+          request_type: type,
+          decision,
+          rejection_reason: decisionNote || undefined,
+          hr_executive_id: hrExecutiveId,
+          hr_executive_role: 'hr_executive',
+        }),
       })
 
-      if (!res.ok) throw new Error('Failed to reject')
-      
-      toast({ title: 'Success', description: `${type} rejected` })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Failed to ${decision}`)
+
+      toast({ title: 'Success', description: data.message || `${type} ${decision}` })
       setDecisionNote('')
       fetchRequests()
-    } catch (error) {
-      console.error(`[v0] Error rejecting ${type}:`, error)
-      toast({ title: 'Error', description: `Failed to reject ${type}`, variant: 'destructive' })
+    } catch (error: any) {
+      console.error(`[v0] Error on ${type} ${decision}:`, error)
+      toast({ title: 'Error', description: error.message || `Failed to ${decision} ${type}`, variant: 'destructive' })
     } finally {
       setProcessingId(null)
     }
   }
+
+  const handleApprove = (type: 'deferment' | 'recall', id: string) => submitDecision(type, id, 'approved')
+  const handleReject = (type: 'deferment' | 'recall', id: string) => submitDecision(type, id, 'rejected')
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -179,7 +201,7 @@ export function HRDefermentRecallManagement() {
 
         <TabsContent value="deferrments" className="space-y-4 mt-4">
           {loading ? (
-            <p className="text-center text-gray-500 py-8">Loading deferrments...</p>
+            <p className="text-center text-gray-500 py-8">Loading deferments...</p>
           ) : deferrments.length === 0 ? (
             <Card>
               <CardContent className="pt-6">
@@ -187,17 +209,29 @@ export function HRDefermentRecallManagement() {
               </CardContent>
             </Card>
           ) : (
-            deferrments.map((deferment) => (
+            deferrments.map((deferment) => {
+              const profile = deferment.leave_plan_requests?.user_profiles
+              const staffName = deferment.staff_name ||
+                (profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown')
+              const staffEmail = deferment.staff_email || profile?.email || ''
+              const department = profile?.departments?.name || ''
+              const position = profile?.position || ''
+              const leaveType = deferment.leave_type || 'Annual'
+              const statusLabel = (deferment.status || 'pending').replace(/_/g, ' ').toUpperCase()
+
+              return (
               <Card key={deferment.id} className="border-l-4 border-l-blue-500">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-lg">{deferment.staff_name}</CardTitle>
-                      <CardDescription>{deferment.staff_email}</CardDescription>
+                      <CardTitle className="text-lg">{staffName}</CardTitle>
+                      <CardDescription>
+                        {position}{department ? ` — ${department}` : ''}{staffEmail ? ` | ${staffEmail}` : ''}
+                      </CardDescription>
                     </div>
                     <Badge className={getStatusColor(deferment.status)}>
                       {getStatusIcon(deferment.status)}
-                      <span className="ml-1">{deferment.status.toUpperCase()}</span>
+                      <span className="ml-1">{statusLabel}</span>
                     </Badge>
                   </div>
                 </CardHeader>
@@ -205,17 +239,24 @@ export function HRDefermentRecallManagement() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="font-medium">Leave Type:</span>
-                      <p>{deferment.leave_type}</p>
+                      <p>{leaveType}</p>
                     </div>
                     <div>
                       <span className="font-medium">Deferment Period:</span>
-                      <p>{new Date(deferment.deferment_start_date).toLocaleDateString()} - {new Date(deferment.deferment_end_date).toLocaleDateString()}</p>
+                      <p>
+                        {deferment.deferment_start_date
+                          ? new Date(deferment.deferment_start_date).toLocaleDateString()
+                          : 'N/A'}
+                        {deferment.deferment_end_date
+                          ? ` - ${new Date(deferment.deferment_end_date).toLocaleDateString()}`
+                          : ''}
+                      </p>
                     </div>
                   </div>
-                  
+
                   <div>
                     <span className="font-medium text-sm">Reason:</span>
-                    <p className="text-sm text-gray-600 mt-1">{deferment.reason}</p>
+                    <p className="text-sm text-gray-600 mt-1">{deferment.reason || 'No reason provided'}</p>
                   </div>
 
                   {deferment.status === 'pending' && selectedDeferment === deferment.id && (
@@ -265,7 +306,8 @@ export function HRDefermentRecallManagement() {
                   )}
                 </CardContent>
               </Card>
-            ))
+              )
+            })
           )}
         </TabsContent>
 
@@ -279,17 +321,29 @@ export function HRDefermentRecallManagement() {
               </CardContent>
             </Card>
           ) : (
-            recalls.map((recall) => (
+            recalls.map((recall) => {
+              const profile = recall.leave_plan_requests?.user_profiles
+              const staffName = recall.staff_name ||
+                (profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown')
+              const staffEmail = recall.staff_email || profile?.email || ''
+              const department = profile?.departments?.name || ''
+              const position = profile?.position || ''
+              const leaveType = recall.leave_type || 'Annual'
+              const statusLabel = (recall.status || 'pending').replace(/_/g, ' ').toUpperCase()
+
+              return (
               <Card key={recall.id} className="border-l-4 border-l-orange-500">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-lg">{recall.staff_name}</CardTitle>
-                      <CardDescription>{recall.staff_email}</CardDescription>
+                      <CardTitle className="text-lg">{staffName}</CardTitle>
+                      <CardDescription>
+                        {position}{department ? ` — ${department}` : ''}{staffEmail ? ` | ${staffEmail}` : ''}
+                      </CardDescription>
                     </div>
                     <Badge className={getStatusColor(recall.status)}>
                       {getStatusIcon(recall.status)}
-                      <span className="ml-1">{recall.status.toUpperCase()}</span>
+                      <span className="ml-1">{statusLabel}</span>
                     </Badge>
                   </div>
                 </CardHeader>
@@ -297,17 +351,17 @@ export function HRDefermentRecallManagement() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="font-medium">Leave Type:</span>
-                      <p>{recall.leave_type}</p>
+                      <p>{leaveType}</p>
                     </div>
                     <div>
                       <span className="font-medium">Recall Date:</span>
-                      <p>{new Date(recall.recall_date).toLocaleDateString()}</p>
+                      <p>{recall.recall_date ? new Date(recall.recall_date).toLocaleDateString() : 'N/A'}</p>
                     </div>
                   </div>
-                  
+
                   <div>
                     <span className="font-medium text-sm">Reason:</span>
-                    <p className="text-sm text-gray-600 mt-1">{recall.recall_reason}</p>
+                    <p className="text-sm text-gray-600 mt-1">{recall.recall_reason || recall.recall_notes || 'No reason provided'}</p>
                   </div>
 
                   {recall.status === 'pending' && selectedRecall === recall.id && (
@@ -357,7 +411,8 @@ export function HRDefermentRecallManagement() {
                   )}
                 </CardContent>
               </Card>
-            ))
+              )
+            })
           )}
         </TabsContent>
       </Tabs>

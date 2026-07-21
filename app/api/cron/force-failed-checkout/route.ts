@@ -109,23 +109,49 @@ async function runForceFailedCheckout(request: NextRequest) {
   }
 
   const candidates = Array.from(grouped.values()).filter((g) => g.attempts >= minAttempts)
-  if (candidates.length === 0) {
+  
+  // Fetch user departments early to check for Security staff
+  const { data: earlyProfiles, error: earlyProfileErr } = await admin
+    .from("user_profiles")
+    .select("id, department_id, department:departments!inner(name)")
+    .in("id", candidates.map((c) => c.userId))
+
+  const securityStaffIds = new Set<string>()
+  if (earlyProfiles) {
+    for (const profile of earlyProfiles) {
+      const deptName = profile.department?.name?.toLowerCase() || ""
+      if (deptName.includes("security")) {
+        securityStaffIds.add(profile.id)
+      }
+    }
+  }
+
+  const nonSecurityCandidates = candidates.filter((c) => !securityStaffIds.has(c.userId))
+  const securityExemptCount = candidates.length - nonSecurityCandidates.length
+
+  if (nonSecurityCandidates.length === 0) {
     return NextResponse.json({
       success: true,
       day,
       criteria: { minAttempts, maxDistanceM },
-      candidates: 0,
+      candidates: candidates.length,
+      security_exempted: securityExemptCount,
       updated: 0,
       skipped: 0,
-      report: [],
+      report: candidates.map((c) => ({ 
+        user_id: c.userId, 
+        status: securityStaffIds.has(c.userId) ? "exempted" : "skipped", 
+        reason: securityStaffIds.has(c.userId) ? "security_department_exemption" : "no_open_attendance" 
+      })),
     })
   }
 
-  const userIds = candidates.map((c) => c.userId)
+  const filteredUserIds = nonSecurityCandidates.map((c) => c.userId)
+
   const { data: openAttendance, error: openErr } = await admin
     .from("attendance_records")
     .select("id, user_id, check_in_time, check_out_time, check_in_location_name")
-    .in("user_id", userIds)
+    .in("user_id", filteredUserIds)
     .gte("check_in_time", start)
     .lte("check_in_time", end)
     .is("check_out_time", null)
@@ -146,7 +172,7 @@ async function runForceFailedCheckout(request: NextRequest) {
   let updated = 0
   let skipped = 0
 
-  for (const c of candidates) {
+  for (const c of nonSecurityCandidates) {
     const attendance = openByUser.get(c.userId)
     if (!attendance) {
       skipped += 1
@@ -219,6 +245,7 @@ async function runForceFailedCheckout(request: NextRequest) {
     day,
     criteria: { minAttempts, maxDistanceM },
     candidates: candidates.length,
+    security_exempted: securityExemptCount,
     updated,
     skipped,
     report,

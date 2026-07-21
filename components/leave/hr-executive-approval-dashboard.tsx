@@ -1,582 +1,460 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Loader2,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertCircle,
-  Calendar,
-  User,
-  CalendarClock,
-  RotateCcw,
-  ChevronDown,
-  FileText,
-  Building2
+  Loader2, CheckCircle, XCircle, Clock, FileText, ChevronDown, ChevronUp,
+  Download, Eye, AlertCircle, CalendarClock, RotateCcw
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { format } from 'date-fns'
 
-interface StaffProfile {
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface UserProfile {
   id: string
   first_name: string
   last_name: string
   employee_id: string
   position: string
-  department_id: string
   departments?: { name: string }
 }
 
 interface DefermentRequest {
   id: string
   user_id: string
-  user_profiles?: StaffProfile
-  initiator?: {
-    id: string
-    first_name: string
-    last_name: string
-    employee_id: string
-    position: string
-  }
   reason: string
   requested_deferment_year?: number
   requested_deferment_period?: string
+  deferment_start_date?: string
+  deferment_end_date?: string
   status: string
-  hr_executive_decision: string
+  hr_office_decision?: string
+  hod_decision?: string
   created_at: string
-  updated_at: string
+  user_profiles?: UserProfile
   leave_plan_requests?: {
     id: string
-    leave_type_key: string
-    preferred_start_date: string
-    preferred_end_date: string
-    adjusted_start_date?: string
-    adjusted_end_date?: string
+    leave_type_key?: string
+    preferred_start_date?: string
+    preferred_end_date?: string
     requested_days?: number
-    adjusted_days?: number
   }
 }
 
 interface RecallRequest {
   id: string
   staff_user_id: string
-  user_profiles?: StaffProfile
-  initiator?: {
-    id: string
-    first_name: string
-    last_name: string
-    employee_id: string
-    position: string
-  }
   recall_reason: string
-  recall_date: string
+  recall_date?: string
   status: string
-  hr_executive_decision: string
+  hr_decision?: string
   created_at: string
-  updated_at: string
+  user_profiles?: UserProfile
   leave_plan_requests?: {
     id: string
-    leave_type_key: string
-    preferred_start_date: string
-    preferred_end_date: string
-    adjusted_start_date?: string
-    adjusted_end_date?: string
+    leave_type_key?: string
+    preferred_start_date?: string
+    preferred_end_date?: string
   }
 }
 
-interface HRExecutiveApprovalDashboardProps {
-  hrExecutiveId: string
-  userRole: string
+interface PaymentMemo {
+  id: string
+  staff_id: string
+  status: string
+  memo_body: string | Record<string, any>
+  created_at: string
+  signed_at?: string
+  signer_name?: string
+  signer_position?: string
+  staff_category?: string
+  leave_month?: string
 }
 
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case 'approved':
-      return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100"><CheckCircle className="h-3 w-3 mr-1" />Approved</Badge>
-    case 'rejected':
-      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />Rejected</Badge>
-    case 'pending':
-      return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
-    default:
-      return <Badge className="bg-slate-100 text-slate-700">{status?.replace(/_/g, ' ')}</Badge>
-  }
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const statusBadge = (status: string) => {
+  const s = (status || '').toLowerCase()
+  if (s === 'approved') return <Badge className="bg-emerald-100 text-emerald-700 border-0"><CheckCircle className="h-3 w-3 mr-1" />Approved</Badge>
+  if (s === 'rejected') return <Badge className="bg-red-100 text-red-700 border-0"><XCircle className="h-3 w-3 mr-1" />Rejected</Badge>
+  return <Badge className="bg-amber-100 text-amber-700 border-0"><Clock className="h-3 w-3 mr-1" />{s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</Badge>
 }
 
-const formatLeaveType = (key: string | undefined) => {
-  if (!key) return 'N/A'
-  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+const fmtDate = (d?: string | null) =>
+  d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'
+
+const fmtLeaveType = (k?: string) =>
+  k ? k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Annual Leave'
+
+// ── Main Component ─────────────────────────────────────────────────────────────
+
+// Alias for backward compatibility with leave-management-client.tsx
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function HRExecutiveApprovalDashboard(_props: any) {
+  return <HrExecutiveApprovalDashboard />
 }
 
-export function HRExecutiveApprovalDashboard({ hrExecutiveId, userRole }: HRExecutiveApprovalDashboardProps) {
+export function HrExecutiveApprovalDashboard() {
   const { toast } = useToast()
+
+  const [userId, setUserId]       = useState<string | null>(null)
   const [deferments, setDeferments] = useState<DefermentRequest[]>([])
-  const [recalls, setRecalls] = useState<RecallRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'pending' | 'processed'>('pending')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  
-  // Decision dialog state
-  const [decisionDialog, setDecisionDialog] = useState<{
-    open: boolean
-    type: 'deferment' | 'recall'
-    requestId: string
-    decision: 'approved' | 'rejected'
-    staffName: string
-  } | null>(null)
-  const [rejectionReason, setRejectionReason] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [recalls, setRecalls]       = useState<RecallRequest[]>([])
+  const [memos, setMemos]           = useState<PaymentMemo[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [activeSection, setActiveSection] = useState<'pending' | 'memos'>('pending')
+  const [expandedId, setExpandedId]       = useState<string | null>(null)
+  const [decisionNote, setDecisionNote]   = useState('')
+  const [processingId, setProcessingId]   = useState<string | null>(null)
 
-  const fetchRequests = async () => {
-    try {
-      setLoading(true)
-      const status = activeTab === 'pending' ? 'pending' : 'all'
-      const res = await fetch(
-        `/api/leave/deferment-recall/hr-executive-requests?hr_executive_id=${hrExecutiveId}&user_role=${encodeURIComponent(userRole)}&status=${status}&type=all`
-      )
-      
-      if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.error || 'Failed to fetch requests')
-      }
-
-      const data = await res.json()
-      
-      if (activeTab === 'pending') {
-        setDeferments(data.deferments?.filter((d: DefermentRequest) => d.hr_executive_decision === 'pending') || [])
-        setRecalls(data.recalls?.filter((r: RecallRequest) => r.hr_executive_decision === 'pending') || [])
-      } else {
-        setDeferments(data.deferments?.filter((d: DefermentRequest) => d.hr_executive_decision !== 'pending') || [])
-        setRecalls(data.recalls?.filter((r: RecallRequest) => r.hr_executive_decision !== 'pending') || [])
-      }
-    } catch (error) {
-      console.error('[v0] Error fetching HR executive requests:', error)
-      toast({ 
-        title: 'Error', 
-        description: error instanceof Error ? error.message : 'Failed to fetch requests', 
-        variant: 'destructive' 
+  // ── Fetch session user ──────────────────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const id = d?.user?.id || d?.id || null
+        setUserId(id)
       })
+      .catch(() => setUserId(null))
+  }, [])
+
+  // ── Fetch deferments / recalls / approved leaves ─────────────────────────
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const [deferRes, recallRes, memosRes] = await Promise.all([
+        fetch('/api/leave/hr-deferment-recall-management?type=deferment&status=all'),
+        fetch('/api/leave/hr-deferment-recall-management?type=recall&status=all'),
+        fetch('/api/leave/payment-advice/view-all'),
+      ])
+
+      const [deferData, recallData, memosData] = await Promise.all([
+        deferRes.ok ? deferRes.json() : { requests: [] },
+        recallRes.ok ? recallRes.json() : { requests: [] },
+        memosRes.ok ? memosRes.json() : { memos: [] },
+      ])
+
+      setDeferments(deferData.requests || [])
+      setRecalls(recallData.requests || [])
+      setMemos(memosData.memos || [])
+    } catch (err) {
+      console.error('[v0] HrExecutiveApprovalDashboard fetch error:', err)
+      toast({ title: 'Error', description: 'Failed to load data', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    if (hrExecutiveId) {
-      fetchRequests()
-    }
-  }, [hrExecutiveId, activeTab])
+    fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const openDecisionDialog = (
-    type: 'deferment' | 'recall',
-    requestId: string,
-    decision: 'approved' | 'rejected',
-    staffName: string
-  ) => {
-    setDecisionDialog({ open: true, type, requestId, decision, staffName })
-    setRejectionReason('')
-  }
-
-  const handleDecision = async () => {
-    if (!decisionDialog) return
-
-    if (decisionDialog.decision === 'rejected' && !rejectionReason.trim()) {
-      toast({ title: 'Error', description: 'Please provide a reason for rejection', variant: 'destructive' })
+  // ── Submit approve/reject decision ─────────────────────────────────────────
+  const submitDecision = async (type: 'deferment' | 'recall', id: string, decision: 'approved' | 'rejected') => {
+    if (decision === 'rejected' && !decisionNote.trim()) {
+      toast({ title: 'Error', description: 'Please provide a rejection reason', variant: 'destructive' })
       return
     }
-
     try {
-      setSubmitting(true)
+      setProcessingId(id)
       const res = await fetch('/api/leave/deferment-recall/hr-executive-decision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          request_id: decisionDialog.requestId,
-          request_type: decisionDialog.type,
-          decision: decisionDialog.decision,
-          rejection_reason: decisionDialog.decision === 'rejected' ? rejectionReason : undefined,
-          hr_executive_id: hrExecutiveId,
-          hr_executive_role: userRole
-        })
+          request_id: id,
+          request_type: type,
+          decision,
+          rejection_reason: decision === 'rejected' ? decisionNote : undefined,
+          hr_executive_id: userId || '',
+          hr_executive_role: 'hr_executive',
+        }),
       })
-
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to process decision')
-
-      toast({ 
-        title: 'Success', 
-        description: data.message || `Request ${decisionDialog.decision} successfully`
-      })
-      
-      setDecisionDialog(null)
-      fetchRequests()
-    } catch (error) {
-      console.error('[v0] Decision error:', error)
-      toast({ 
-        title: 'Error', 
-        description: error instanceof Error ? error.message : 'Failed to process decision', 
-        variant: 'destructive' 
-      })
+      if (!res.ok) throw new Error(data.error || `Failed to ${decision}`)
+      toast({ title: 'Success', description: data.message || `${type} ${decision}` })
+      setDecisionNote('')
+      setExpandedId(null)
+      fetchData()
+    } catch (err: any) {
+      console.error(`[v0] ${type} ${decision} error:`, err)
+      const errorMsg = err?.message || `Failed to ${decision} ${type}`
+      toast({ title: 'Error', description: String(errorMsg), variant: 'destructive' })
     } finally {
-      setSubmitting(false)
+      setProcessingId(null)
     }
   }
 
-  const renderDefermentCard = (req: DefermentRequest) => {
-    const isExpanded = expandedId === `deferment-${req.id}`
-    const staffName = req.user_profiles 
-      ? `${req.user_profiles.first_name} ${req.user_profiles.last_name}`
-      : 'Unknown Staff'
-    const initiatorName = req.initiator
-      ? `${req.initiator.first_name} ${req.initiator.last_name}`
-      : 'Unknown'
-    const department = req.user_profiles?.departments?.name || 'N/A'
-    const leaveType = formatLeaveType(req.leave_plan_requests?.leave_type_key)
-    const deferYear = req.requested_deferment_period || `${req.requested_deferment_year}` || 'N/A'
-    const startDate = req.leave_plan_requests?.adjusted_start_date || req.leave_plan_requests?.preferred_start_date
-    const endDate = req.leave_plan_requests?.adjusted_end_date || req.leave_plan_requests?.preferred_end_date
-    const leaveDays = req.leave_plan_requests?.adjusted_days || req.leave_plan_requests?.requested_days || 0
-
-    return (
-      <div key={req.id} className="border border-amber-200 rounded-lg bg-gradient-to-br from-amber-50 to-yellow-50/50 overflow-hidden">
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-2">
-                <CalendarClock className="h-4 w-4 text-amber-600" />
-                <h4 className="font-semibold text-slate-800">{staffName}</h4>
-                <Badge variant="outline" className="text-xs bg-amber-100 text-amber-700 border-amber-200">
-                  Deferment
-                </Badge>
-                {getStatusBadge(req.hr_executive_decision)}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-xs">
-                <div>
-                  <p className="text-slate-500">Department</p>
-                  <p className="font-medium text-slate-700">{department}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Leave Type</p>
-                  <p className="font-medium text-slate-700">{leaveType}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Defer To</p>
-                  <p className="font-medium text-slate-700">{deferYear}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Requested By</p>
-                  <p className="font-medium text-slate-700">{initiatorName}</p>
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setExpandedId(isExpanded ? null : `deferment-${req.id}`)}
-              className="p-2 hover:bg-amber-100 rounded-lg transition-colors"
-            >
-              <ChevronDown className={`h-5 w-5 text-amber-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-        </div>
-        
-        {isExpanded && (
-          <div className="border-t border-amber-200 p-4 bg-white space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-semibold text-slate-600 mb-1">ORIGINAL LEAVE PERIOD</p>
-                <div className="bg-slate-50 rounded p-3">
-                  <p className="text-sm text-slate-700">
-                    {startDate ? format(new Date(startDate), 'dd MMM yyyy') : 'Not set'} - {endDate ? format(new Date(endDate), 'dd MMM yyyy') : 'Not set'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">{leaveDays} days</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-600 mb-1">STAFF DETAILS</p>
-                <div className="bg-slate-50 rounded p-3">
-                  <p className="text-sm text-slate-700">{req.user_profiles?.employee_id || 'N/A'}</p>
-                  <p className="text-xs text-slate-500 mt-1">{req.user_profiles?.position || 'N/A'}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <p className="text-xs font-semibold text-slate-600 mb-2">REASON FOR DEFERMENT</p>
-              <div className="bg-amber-50 border border-amber-200 rounded p-3">
-                <p className="text-sm text-slate-700">{req.reason || 'No reason provided'}</p>
-              </div>
-            </div>
-
-            {/* Action buttons for pending requests */}
-            {req.hr_executive_decision === 'pending' && (
-              <div className="flex gap-3 pt-2 border-t border-slate-100">
-                <Button 
-                  onClick={() => openDecisionDialog('deferment', req.id, 'approved', staffName)}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve Deferment
-                </Button>
-                <Button 
-                  onClick={() => openDecisionDialog('deferment', req.id, 'rejected', staffName)}
-                  variant="outline"
-                  className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    )
+  // ── Download approved memo PDF ──────────────────────────────────────────────
+  const downloadMemo = async (memoId: string, category: string) => {
+    try {
+      // Route expects query param named memo_id (not memoId)
+      const res = await fetch(`/api/leave/payment-advice/download?memo_id=${memoId}`)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Download failed (${res.status})`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `payment-advice-${category}-memo.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      console.error('[v0] Memo download error:', err)
+      const errorMsg = err?.message || 'Failed to download memo'
+      toast({ title: 'Error', description: String(errorMsg), variant: 'destructive' })
+    }
   }
 
-  const renderRecallCard = (req: RecallRequest) => {
-    const isExpanded = expandedId === `recall-${req.id}`
-    const staffName = req.user_profiles 
-      ? `${req.user_profiles.first_name} ${req.user_profiles.last_name}`
-      : 'Unknown Staff'
-    const initiatorName = req.initiator
-      ? `${req.initiator.first_name} ${req.initiator.last_name}`
-      : 'Unknown'
-    const department = req.user_profiles?.departments?.name || 'N/A'
-    const leaveType = formatLeaveType(req.leave_plan_requests?.leave_type_key)
-    const startDate = req.leave_plan_requests?.adjusted_start_date || req.leave_plan_requests?.preferred_start_date
-    const endDate = req.leave_plan_requests?.adjusted_end_date || req.leave_plan_requests?.preferred_end_date
+  // ── Pending deferments / recalls ────────────────────────────────────────────
+  const pendingDeferments = deferments.filter(d => !d.hr_office_decision || d.hr_office_decision === 'pending')
+  const pendingRecalls    = recalls.filter(r => !r.hr_decision || r.hr_decision === 'pending')
+  const approvedMemos     = memos.filter(m => ['approved', 'signed_by_hr_executive', 'reviewed_by_hr', 'finalized'].includes(m.status))
 
+  if (loading) {
     return (
-      <div key={req.id} className="border border-rose-200 rounded-lg bg-gradient-to-br from-rose-50 to-red-50/50 overflow-hidden">
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-2">
-                <RotateCcw className="h-4 w-4 text-rose-600" />
-                <h4 className="font-semibold text-slate-800">{staffName}</h4>
-                <Badge variant="outline" className="text-xs bg-rose-100 text-rose-700 border-rose-200">
-                  Recall
-                </Badge>
-                {getStatusBadge(req.hr_executive_decision)}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-xs">
-                <div>
-                  <p className="text-slate-500">Department</p>
-                  <p className="font-medium text-slate-700">{department}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Leave Type</p>
-                  <p className="font-medium text-slate-700">{leaveType}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Recall Date</p>
-                  <p className="font-medium text-slate-700">{req.recall_date ? format(new Date(req.recall_date), 'dd MMM yyyy') : 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Requested By</p>
-                  <p className="font-medium text-slate-700">{initiatorName}</p>
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setExpandedId(isExpanded ? null : `recall-${req.id}`)}
-              className="p-2 hover:bg-rose-100 rounded-lg transition-colors"
-            >
-              <ChevronDown className={`h-5 w-5 text-rose-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-        </div>
-        
-        {isExpanded && (
-          <div className="border-t border-rose-200 p-4 bg-white space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-semibold text-slate-600 mb-1">ORIGINAL LEAVE PERIOD</p>
-                <div className="bg-slate-50 rounded p-3">
-                  <p className="text-sm text-slate-700">
-                    {startDate ? format(new Date(startDate), 'dd MMM yyyy') : 'Not set'} - {endDate ? format(new Date(endDate), 'dd MMM yyyy') : 'Not set'}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-600 mb-1">STAFF DETAILS</p>
-                <div className="bg-slate-50 rounded p-3">
-                  <p className="text-sm text-slate-700">{req.user_profiles?.employee_id || 'N/A'}</p>
-                  <p className="text-xs text-slate-500 mt-1">{req.user_profiles?.position || 'N/A'}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <p className="text-xs font-semibold text-slate-600 mb-2">REASON FOR RECALL</p>
-              <div className="bg-rose-50 border border-rose-200 rounded p-3">
-                <p className="text-sm text-slate-700">{req.recall_reason || 'No reason provided'}</p>
-              </div>
-            </div>
-
-            {/* Action buttons for pending requests */}
-            {req.hr_executive_decision === 'pending' && (
-              <div className="flex gap-3 pt-2 border-t border-slate-100">
-                <Button 
-                  onClick={() => openDecisionDialog('recall', req.id, 'approved', staffName)}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve Recall
-                </Button>
-                <Button 
-                  onClick={() => openDecisionDialog('recall', req.id, 'rejected', staffName)}
-                  variant="outline"
-                  className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <Card>
+        <CardContent className="py-10 flex items-center justify-center gap-2 text-slate-500">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Loading HR approval data...
+        </CardContent>
+      </Card>
     )
   }
-
-  const pendingCount = deferments.length + recalls.length
 
   return (
-    <Card className="border-0 shadow-sm">
-      <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-t-lg">
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Deferment &amp; Recall Approvals
-        </CardTitle>
-        <CardDescription className="text-purple-100">
-          Review and process deferment and recall requests assigned to you
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-6">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'pending' | 'processed')}>
-          <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="pending" className="relative">
-              Pending Review
-              {activeTab !== 'pending' && pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  {pendingCount}
-                </span>
-              )}
+    <div className="space-y-4">
+      {/* Section toggle */}
+      <div className="flex gap-2 flex-wrap">
+        <Button
+          variant={activeSection === 'pending' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActiveSection('pending')}
+          className={activeSection === 'pending' ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''}
+        >
+          <Clock className="h-4 w-4 mr-1" />
+          Pending Decisions ({pendingDeferments.length + pendingRecalls.length})
+        </Button>
+        <Button
+          variant={activeSection === 'memos' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActiveSection('memos')}
+          className={activeSection === 'memos' ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''}
+        >
+          <FileText className="h-4 w-4 mr-1" />
+          Approved Payment Advice ({approvedMemos.length})
+        </Button>
+      </div>
+
+      {/* ── PENDING DECISIONS ── */}
+      {activeSection === 'pending' && (
+        <Tabs defaultValue="deferments">
+          <TabsList className="bg-white border border-slate-200 rounded-lg">
+            <TabsTrigger value="deferments" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white rounded-md text-sm">
+              <CalendarClock className="h-4 w-4 mr-1" />
+              Deferments ({pendingDeferments.length})
             </TabsTrigger>
-            <TabsTrigger value="processed">Processed</TabsTrigger>
+            <TabsTrigger value="recalls" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white rounded-md text-sm">
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Recalls ({pendingRecalls.length})
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pending">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-              </div>
-            ) : deferments.length === 0 && recalls.length === 0 ? (
-              <Alert className="border-purple-200 bg-purple-50">
-                <AlertCircle className="h-4 w-4 text-purple-600" />
-                <AlertDescription className="text-purple-700">
-                  No pending requests assigned to you for review.
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-4">
-                {deferments.map(renderDefermentCard)}
-                {recalls.map(renderRecallCard)}
-              </div>
-            )}
+          {/* Deferments */}
+          <TabsContent value="deferments" className="mt-3 space-y-3">
+            {pendingDeferments.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-slate-500">No pending deferment requests</CardContent></Card>
+            ) : pendingDeferments.map(d => {
+              const profile = d.user_profiles || (d.leave_plan_requests as any)?.user_profiles as UserProfile | undefined
+              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown'
+              const dept = profile?.departments?.name || ''
+              const isExpanded = expandedId === d.id
+              return (
+                <Card key={d.id} className="border-l-4 border-l-orange-400">
+                  <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : d.id)}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-sm font-semibold">{staffName}</CardTitle>
+                        <CardDescription className="text-xs">{profile?.position || ''}{dept ? ` — ${dept}` : ''}</CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {statusBadge(d.status)}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mt-2 text-xs text-slate-600">
+                      <div><span className="font-medium">Leave Type:</span> {fmtLeaveType(d.leave_plan_requests?.leave_type_key)}</div>
+                      <div><span className="font-medium">Deferment Period:</span> {fmtDate(d.deferment_start_date)} – {fmtDate(d.deferment_end_date)}</div>
+                      <div><span className="font-medium">Submitted:</span> {fmtDate(d.created_at)}</div>
+                    </div>
+                  </CardHeader>
+                  {isExpanded && (
+                    <CardContent className="pt-0 space-y-3">
+                      <div className="p-3 bg-slate-50 rounded text-xs">
+                        <span className="font-medium">Reason: </span>{d.reason || 'No reason provided'}
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-700">Decision Note</label>
+                        <Textarea
+                          placeholder="Add notes (required for rejection)..."
+                          value={decisionNote}
+                          onChange={e => setDecisionNote(e.target.value)}
+                          className="mt-1 text-sm h-20"
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-300 text-red-600 hover:bg-red-50"
+                          disabled={!!processingId}
+                          onClick={() => submitDecision('deferment', d.id, 'rejected')}
+                        >
+                          {processingId === d.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-orange-500 hover:bg-orange-600 text-white"
+                          disabled={!!processingId}
+                          onClick={() => submitDecision('deferment', d.id, 'approved')}
+                        >
+                          {processingId === d.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                          Approve & Generate Memo
+                        </Button>
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              )
+            })}
           </TabsContent>
 
-          <TabsContent value="processed">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-              </div>
-            ) : deferments.length === 0 && recalls.length === 0 ? (
-              <Alert className="border-slate-200 bg-slate-50">
-                <AlertCircle className="h-4 w-4 text-slate-600" />
-                <AlertDescription className="text-slate-700">
-                  No processed requests found.
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-4">
-                {deferments.map(renderDefermentCard)}
-                {recalls.map(renderRecallCard)}
-              </div>
-            )}
+          {/* Recalls */}
+          <TabsContent value="recalls" className="mt-3 space-y-3">
+            {pendingRecalls.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-slate-500">No pending recall requests</CardContent></Card>
+            ) : pendingRecalls.map(r => {
+              const profile = r.user_profiles || (r.leave_plan_requests as any)?.user_profiles as UserProfile | undefined
+              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown'
+              const dept = profile?.departments?.name || ''
+              const isExpanded = expandedId === r.id
+              return (
+                <Card key={r.id} className="border-l-4 border-l-purple-400">
+                  <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : r.id)}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-sm font-semibold">{staffName}</CardTitle>
+                        <CardDescription className="text-xs">{profile?.position || ''}{dept ? ` — ${dept}` : ''}</CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {statusBadge(r.status)}
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mt-2 text-xs text-slate-600">
+                      <div><span className="font-medium">Leave Type:</span> {fmtLeaveType(r.leave_plan_requests?.leave_type_key)}</div>
+                      <div><span className="font-medium">Recall Date:</span> {fmtDate(r.recall_date)}</div>
+                      <div><span className="font-medium">Submitted:</span> {fmtDate(r.created_at)}</div>
+                    </div>
+                  </CardHeader>
+                  {isExpanded && (
+                    <CardContent className="pt-0 space-y-3">
+                      <div className="p-3 bg-slate-50 rounded text-xs">
+                        <span className="font-medium">Reason: </span>{r.recall_reason || 'No reason provided'}
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-700">Decision Note</label>
+                        <Textarea
+                          placeholder="Add notes (required for rejection)..."
+                          value={decisionNote}
+                          onChange={e => setDecisionNote(e.target.value)}
+                          className="mt-1 text-sm h-20"
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-300 text-red-600 hover:bg-red-50"
+                          disabled={!!processingId}
+                          onClick={() => submitDecision('recall', r.id, 'rejected')}
+                        >
+                          {processingId === r.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-orange-500 hover:bg-orange-600 text-white"
+                          disabled={!!processingId}
+                          onClick={() => submitDecision('recall', r.id, 'approved')}
+                        >
+                          {processingId === r.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                          Approve & Generate Memo
+                        </Button>
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              )
+            })}
           </TabsContent>
         </Tabs>
-      </CardContent>
+      )}
 
-      {/* Decision Confirmation Dialog */}
-      <Dialog open={!!decisionDialog?.open} onOpenChange={(open) => !open && setDecisionDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {decisionDialog?.decision === 'approved' ? 'Approve' : 'Reject'} {decisionDialog?.type === 'deferment' ? 'Deferment' : 'Recall'} Request
-            </DialogTitle>
-            <DialogDescription>
-              {decisionDialog?.decision === 'approved' 
-                ? `You are about to approve the ${decisionDialog.type} request for ${decisionDialog?.staffName}.`
-                : `Please provide a reason for rejecting this ${decisionDialog?.type} request for ${decisionDialog?.staffName}.`
-              }
-            </DialogDescription>
-          </DialogHeader>
-
-          {decisionDialog?.decision === 'rejected' && (
-            <div className="space-y-2">
-              <Label htmlFor="rejection-reason">Rejection Reason *</Label>
-              <Textarea
-                id="rejection-reason"
-                placeholder="Enter reason for rejection..."
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                rows={3}
-              />
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDecisionDialog(null)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleDecision}
-              disabled={submitting}
-              className={decisionDialog?.decision === 'approved' 
-                ? 'bg-emerald-600 hover:bg-emerald-700' 
-                : 'bg-red-600 hover:bg-red-700'
-              }
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : decisionDialog?.decision === 'approved' ? (
-                'Confirm Approval'
-              ) : (
-                'Confirm Rejection'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
+      {/* ── APPROVED PAYMENT ADVICE ── */}
+      {activeSection === 'memos' && (
+        <div className="space-y-3">
+          {approvedMemos.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-slate-500">
+                <FileText className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                No approved payment advice yet
+              </CardContent>
+            </Card>
+          ) : approvedMemos.map(memo => {
+            let body: any = {}
+            try { body = typeof memo.memo_body === 'string' ? JSON.parse(memo.memo_body) : (memo.memo_body || {}) } catch {}
+            const category = memo.staff_category || body.staff_category || 'Staff'
+            const month = memo.leave_month || body.leave_month || fmtDate(memo.created_at)
+            const staffCount = (body.staffList?.length) || 1
+            return (
+              <Card key={memo.id} className="border-l-4 border-l-emerald-400">
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm">{category} — {month}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {staffCount} staff member{staffCount !== 1 ? 's' : ''} &bull; Signed by {memo.signer_name || 'HR Executive'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {statusBadge(memo.status)}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={() => downloadMemo(memo.id, `${category}-${month}`)}
+                      >
+                        <Download className="h-3 w-3 mr-1" />
+                        Download PDF
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }

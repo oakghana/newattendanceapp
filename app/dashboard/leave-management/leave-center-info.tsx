@@ -1,11 +1,140 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle, BookOpen, Clock, CheckCircle2, Users, Calendar } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { AlertCircle, BookOpen, Clock, CheckCircle2, Users, Calendar, FileText, Download, Loader2, CheckCircle } from "lucide-react"
 
 interface LeaveCenterInfoProps {
   userRole?: string | null
   userDepartmentName?: string | null
+}
+
+interface StaffMemo {
+  id: string
+  staff_name: string
+  staff_category: string
+  memo_subject?: string
+  leave_period_start?: string
+  approved_days?: number
+  signer_name?: string
+  status: string
+  created_at: string
+  updated_at: string
+  memo_body?: any
+}
+
+function MyApprovedMemos() {
+  const [memos, setMemos] = useState<StaffMemo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [downloading, setDownloading] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/leave/payment-advice/staff-memos")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setMemos(d.memos || []) })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleDownload = async (memoId: string) => {
+    setDownloading(memoId)
+    try {
+      const res = await fetch(`/api/leave/payment-advice/download?memoId=${memoId}`)
+      if (!res.ok) return
+      const blob = await res.blob()
+      const cd = res.headers.get("Content-Disposition") ?? ""
+      const match = cd.match(/filename="([^"]+)"/)
+      const filename = match?.[1] ?? `payment-advice-${memoId}.pdf`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-6 text-muted-foreground text-sm">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading your approved memos...
+      </div>
+    )
+  }
+
+  if (memos.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-4">
+        No approved payment advice memos found for your account.
+      </p>
+    )
+  }
+
+  return (
+    <div className="divide-y divide-border">
+      {memos.map((memo) => {
+        let approvedAt = ""
+        try {
+          const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+          approvedAt = body.approver?.approved_at || memo.updated_at || ""
+        } catch { approvedAt = memo.updated_at || "" }
+
+        const approverName = (() => {
+          try {
+            const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+            return body.approver?.name || memo.signer_name || ""
+          } catch { return memo.signer_name || "" }
+        })()
+
+        return (
+          <div key={memo.id} className="flex items-center justify-between py-3 gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="p-2 rounded-lg bg-green-50 border border-green-200 shrink-0">
+                <FileText className="h-4 w-4 text-green-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {memo.staff_category ? `${memo.staff_category} Staff` : "Leave Allowance"} Memo
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {memo.leave_period_start
+                    ? `Leave from ${new Date(memo.leave_period_start).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                    : "Leave period not set"}
+                  {memo.approved_days ? ` · ${memo.approved_days} days` : ""}
+                </p>
+                {approverName && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Signed by: <span className="font-medium text-green-700">{approverName.toUpperCase()}</span>
+                  </p>
+                )}
+                {approvedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Approved {new Date(approvedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                  </p>
+                )}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5 text-xs"
+              disabled={downloading === memo.id}
+              onClick={() => handleDownload(memo.id)}
+            >
+              {downloading === memo.id
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Download className="h-3.5 w-3.5" />
+              }
+              Download
+            </Button>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 export function LeaveCenterInfo({ userRole, userDepartmentName }: LeaveCenterInfoProps) {
@@ -173,31 +302,19 @@ export function LeaveCenterInfo({ userRole, userDepartmentName }: LeaveCenterInf
         </CardContent>
       </Card>
 
-      {/* Statistics Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Leave Center Features</CardTitle>
-          <CardDescription>Overview of available tools and functions</CardDescription>
+      {/* My Approved Payment Advice Memos — visible to all staff */}
+      <Card className="border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <CardTitle className="text-base">My Approved Payment Advice Memos</CardTitle>
+          </div>
+          <CardDescription>
+            Approved payment advice memos issued in your name. Download for your personal records.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 rounded-lg bg-slate-50">
-              <div className="text-2xl font-bold text-blue-600">📋</div>
-              <p className="text-xs text-slate-600 mt-2">Request Management</p>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-slate-50">
-              <div className="text-2xl font-bold text-green-600">✓</div>
-              <p className="text-xs text-slate-600 mt-2">Approvals</p>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-slate-50">
-              <div className="text-2xl font-bold text-purple-600">📊</div>
-              <p className="text-xs text-slate-600 mt-2">Analytics</p>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-slate-50">
-              <div className="text-2xl font-bold text-orange-600">📅</div>
-              <p className="text-xs text-slate-600 mt-2">Calendar</p>
-            </div>
-          </div>
+          <MyApprovedMemos />
         </CardContent>
       </Card>
     </div>
