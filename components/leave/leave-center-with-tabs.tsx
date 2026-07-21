@@ -28,51 +28,35 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6 h-auto p-1 gap-1 bg-white border border-slate-200 rounded-xl shadow-sm">
-          <TabsTrigger
-            value="hod-review"
-            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
-          >
-            <UserCheck className="h-4 w-4" />
-            <span>HOD</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="all-requests"
-            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
-          >
-            <Eye className="h-4 w-4" />
-            <span>All</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="payment-advice"
-            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
-          >
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Payment</span>
-            <span className="sm:hidden">Pay</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="deferments"
-            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
-          >
-            <Clock className="h-4 w-4" />
-            <span>Defer</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="recalls"
-            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
-          >
-            <RotateCcw className="h-4 w-4" />
-            <span>Recall</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="hr-approve"
-            className="flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md"
-          >
-            <ClipboardCheck className="h-4 w-4" />
-            <span className="hidden sm:inline">HR Approve</span>
-            <span className="sm:hidden">HR</span>
-          </TabsTrigger>
+        <TabsList className="grid w-full grid-cols-6 h-auto p-1 gap-1 rounded-xl shadow-sm [background:white] border border-slate-200">
+          {(
+            [
+              { value: "hod-review",     icon: <UserCheck className="h-4 w-4 shrink-0" />,    label: "HOD" },
+              { value: "all-requests",   icon: <Eye className="h-4 w-4 shrink-0" />,           label: "All" },
+              { value: "payment-advice", icon: <FileText className="h-4 w-4 shrink-0" />,      label: "Payment" },
+              { value: "deferments",     icon: <Clock className="h-4 w-4 shrink-0" />,         label: "Defer" },
+              { value: "recalls",        icon: <RotateCcw className="h-4 w-4 shrink-0" />,     label: "Recall" },
+              { value: "hr-approve",     icon: <ClipboardCheck className="h-4 w-4 shrink-0" />,label: "HR Approve" },
+            ] as const
+          ).map(({ value, icon, label }) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className={[
+                "flex items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all duration-200",
+                "text-slate-500",                                     // inactive text
+                "data-[state=inactive]:bg-transparent",               // inactive bg
+                "data-[state=active]:!bg-orange-500",                 // active bg — ! overrides shadcn vars
+                "data-[state=active]:!text-white",                    // active text
+                "data-[state=active]:!shadow-md",                     // active shadow
+                "hover:bg-slate-100 hover:text-slate-700",            // hover state
+              ].join(" ")}
+            >
+              {icon}
+              <span className="hidden sm:inline">{label}</span>
+              <span className="sm:hidden">{label.slice(0, 3)}</span>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="hod-review" className="space-y-4">

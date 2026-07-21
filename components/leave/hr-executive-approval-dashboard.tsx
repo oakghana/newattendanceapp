@@ -191,17 +191,24 @@ export function HrExecutiveApprovalDashboard() {
   // ── Download approved memo PDF ──────────────────────────────────────────────
   const downloadMemo = async (memoId: string, category: string) => {
     try {
-      const res = await fetch(`/api/leave/payment-advice/download?memoId=${memoId}`)
-      if (!res.ok) throw new Error('Download failed')
+      // Route expects query param named memo_id (not memoId)
+      const res = await fetch(`/api/leave/payment-advice/download?memo_id=${memoId}`)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Download failed (${res.status})`)
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `payment-advice-${category}-memo.pdf`
+      document.body.appendChild(a)
       a.click()
+      document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to download memo', variant: 'destructive' })
+    } catch (err: any) {
+      console.error('[v0] Memo download error:', err)
+      toast({ title: 'Error', description: err.message || 'Failed to download memo', variant: 'destructive' })
     }
   }
 
