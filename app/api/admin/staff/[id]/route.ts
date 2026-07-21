@@ -105,6 +105,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       is_active,
       assigned_location_id,
       email,
+      date_of_appointment,
+      years_of_service,
+      contact_number,
     } = body
 
     if (!first_name || !last_name || !employee_id) {
@@ -177,6 +180,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       role,
       is_active,
       assigned_location_id: locationId,
+      date_of_appointment: date_of_appointment || null,
+      years_of_service: years_of_service !== undefined && years_of_service !== "" ? parseInt(String(years_of_service), 10) : null,
+      contact_number: contact_number || null,
       updated_at: new Date().toISOString(),
     }
 
