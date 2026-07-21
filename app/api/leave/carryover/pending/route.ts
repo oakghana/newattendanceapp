@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const admin = await createAdminClient()
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') || 'PENDING'
+    const status = searchParams.get('status') || 'ALL'  // Default to ALL (no filter) unless explicitly set
     const leaveYear = searchParams.get('leave_year')
     const limit = Math.min(Number(searchParams.get('limit')) || 100, 500)
     const offset = Math.max(Number(searchParams.get('offset')) || 0, 0)
@@ -16,8 +16,9 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact' })
       .order('requested_at', { ascending: false })
 
-    // Filter by status only if not ALL
-    if (status && status !== 'ALL') {
+    // Filter by status ONLY if explicitly set to PENDING/APPROVED/REJECTED
+    // If not set or set to ALL, fetch all statuses (no status filter)
+    if (status && status !== 'ALL' && ['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
       query = query.eq('status', status)
     }
 

@@ -13,7 +13,6 @@ import { toast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
 const POLL_INTERVAL_MS = 30_000 // 30 seconds
-const PRODUCT_FLASH_KEY = "qcc_product_rollout_flash_dismissed_v1"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -27,7 +26,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter()
   const lastSeenIdRef = useRef<string | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [showProductFlash, setShowProductFlash] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -97,10 +95,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return () => clearTimeout(timeoutId)
   }, [router])
 
-  useEffect(() => {
-    const dismissed = typeof window !== "undefined" ? localStorage.getItem(PRODUCT_FLASH_KEY) : "1"
-    setShowProductFlash(!dismissed)
-  }, [])
+
 
   // Poll for new notifications and show modern flash toasts.
   useEffect(() => {
@@ -184,31 +179,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className={`transition-all duration-300 ease-in-out ${isCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <main className="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-5 sm:pb-32 sm:pt-5 lg:px-12 lg:pb-12 lg:pt-12">
           <div className="relative">
-            {showProductFlash && (
-              <div className="relative mb-4 overflow-hidden rounded-2xl border border-pink-300/80 bg-gradient-to-r from-pink-100 via-fuchsia-100 to-rose-100 p-4 shadow-[0_10px_30px_-12px_rgba(236,72,153,0.65)]">
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_10%,rgba(255,255,255,0.58)_32%,transparent_54%)] animate-[shine_3.6s_linear_infinite]" />
-                <div className="relative flex items-start justify-between gap-3">
-                  <div>
-                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-rose-900">
-                      <span className="inline-block h-2 w-2 rounded-full bg-pink-600 animate-pulse" />
-                      News Flash: Loan & Leave Administration Upgrade
-                    </p>
-                    <p className="mt-1 text-xs font-medium text-rose-800">
-                      We&apos;re introducing a smarter system with stronger approval tracking and improved manager notifications to enhance loan and leave administration. Stay tuned for the rollout soon.
-                    </p>
-                  </div>
-                  <button
-                    className="text-xs font-semibold text-rose-700 transition-colors hover:text-rose-900"
-                    onClick={() => {
-                      setShowProductFlash(false)
-                      localStorage.setItem(PRODUCT_FLASH_KEY, "1")
-                    }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            )}
             {children}
             <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-accent/[0.02] pointer-events-none -z-10 rounded-3xl" />
           </div>

@@ -89,18 +89,30 @@ export function HRLeaveOfficeRequestDashboard() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      // Fetch pending requests
-      const requestsRes = await fetch('/api/leave/deferment-recall/pending-requests')
-      if (!requestsRes.ok) throw new Error('Failed to fetch requests')
-      const { defermentRequests: def, recallRequests: rec } = await requestsRes.json()
-      setDefermentRequests(def || [])
-      setRecallRequests(rec || [])
+      // Fetch pending requests — pass user_role so the API returns leave office pending requests
+      const requestsParams = new URLSearchParams({ user_role: 'hr_leave_office' })
+      const requestsRes = await fetch(`/api/leave/deferment-recall/pending-requests?${requestsParams}`)
+      if (!requestsRes.ok) throw new Error(`Failed to fetch requests (${requestsRes.status})`)
+      const requestsData = await requestsRes.json()
+      setDefermentRequests(requestsData.defermentRequests || requestsData.data?.defermentRequests || [])
+      setRecallRequests(requestsData.recallRequests || requestsData.data?.recallRequests || [])
 
-      // Fetch HR executives
-      const execRes = await fetch('/api/leave/hr-executives')
-      if (!execRes.ok) throw new Error('Failed to fetch executives')
-      const { executives } = await execRes.json()
-      setHrExecutives(executives || [])
+      // Fetch HR executives — query the user_profiles table directly for hr_executive role
+      const execRes = await fetch('/api/admin/users/by-role?role=hr_executive')
+      if (execRes.ok) {
+        const execData = await execRes.json()
+        const executives = (execData.data || execData.users || []).map((user: any) => ({
+          id: user.id,
+          name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+          email: user.email,
+          position: user.position || 'HR Executive',
+          department: user.department,
+        }))
+        setHrExecutives(executives)
+      } else {
+        console.warn('[v0] Failed to fetch HR executives')
+        setHrExecutives([])
+      }
     } catch (error) {
       console.error('[v0] Error fetching data:', error)
       toast({
