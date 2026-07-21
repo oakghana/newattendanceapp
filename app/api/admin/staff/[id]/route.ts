@@ -87,7 +87,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Use adminSupabase to bypass RLS and read the user's role
     const { data: profile } = await adminSupabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    if (!profile || !["admin", "it-admin", "department_head", "regional_manager"].includes(profile.role)) {
+    if (!profile || !["admin", "it-admin", "department_head", "regional_manager", "manager_hr", "director_hr", "hr_leave_office"].includes(profile.role)) {
       console.log("[v0] Insufficient permissions for user:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
@@ -155,7 +155,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     let locationId = null
     if (assigned_location_id && assigned_location_id !== "none") {
       // Verify location exists
-      const { data: locationExists } = await supabase
+      const { data: locationExists } = await adminSupabase
         .from("geofence_locations")
         .select("id")
         .eq("id", assigned_location_id)

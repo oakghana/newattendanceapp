@@ -477,16 +477,7 @@ export function StaffManagement() {
         const errorDetail = hasDetails ? parsed.details : (parsed.error || text || `HTTP ${response.status}`)
         const errorString = typeof errorDetail === "object" ? JSON.stringify(errorDetail) : String(errorDetail)
 
-        // Show a user-friendly message for known server configuration issues without noisy console errors
-        if (String(errorString).toLowerCase().includes("supabase") || String(parsed.error).toLowerCase().includes("supabase")) {
-          console.warn("[v0] Update response warning:", errorString)
-          const friendly = "This admin update needs the server SUPABASE_SERVICE_ROLE_KEY to be configured. Staff search and viewing still work normally."
-          showError(friendly, "Server Configuration")
-          setError(friendly)
-          return
-        }
-
-        console.warn("[v0] Update response warning:", errorDetail)
+        console.error("[v0] Update response error:", errorDetail)
         throw new Error(`HTTP ${response.status}: ${errorString}`)
       }
 
