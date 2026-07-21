@@ -75,6 +75,21 @@ interface PaymentMemo {
   leave_month?: string
 }
 
+interface ApprovedLeave {
+  id: string
+  staff_name: string
+  employee_id: string
+  department: string
+  leave_type: string
+  start_date: string
+  end_date: string
+  days_requested: number
+  status: string
+  signed_by: string
+  signed_at: string
+  approval_date: string
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const statusBadge = (status: string) => {
@@ -105,8 +120,9 @@ export function HrExecutiveApprovalDashboard() {
   const [deferments, setDeferments] = useState<DefermentRequest[]>([])
   const [recalls, setRecalls]       = useState<RecallRequest[]>([])
   const [memos, setMemos]           = useState<PaymentMemo[]>([])
+  const [approvedLeaves, setApprovedLeaves] = useState<ApprovedLeave[]>([])
   const [loading, setLoading]     = useState(true)
-  const [activeSection, setActiveSection] = useState<'pending' | 'memos'>('pending')
+  const [activeSection, setActiveSection] = useState<'pending' | 'memos' | 'approved-leaves'>('pending')
   const [expandedId, setExpandedId]       = useState<string | null>(null)
   const [decisionNote, setDecisionNote]   = useState('')
   const [processingId, setProcessingId]   = useState<string | null>(null)
@@ -122,25 +138,28 @@ export function HrExecutiveApprovalDashboard() {
       .catch(() => setUserId(null))
   }, [])
 
-  // ── Fetch deferments / recalls (all, not filtered by assigned exec) ─────────
+  // ── Fetch deferments / recalls / approved leaves ─────────────────────────
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [deferRes, recallRes, memosRes] = await Promise.all([
+      const [deferRes, recallRes, memosRes, leavesRes] = await Promise.all([
         fetch('/api/leave/hr-deferment-recall-management?type=deferment&status=all'),
         fetch('/api/leave/hr-deferment-recall-management?type=recall&status=all'),
         fetch('/api/leave/payment-advice/view-all'),
+        fetch('/api/leave/approved-leaves'),
       ])
 
-      const [deferData, recallData, memosData] = await Promise.all([
+      const [deferData, recallData, memosData, leavesData] = await Promise.all([
         deferRes.ok ? deferRes.json() : { requests: [] },
         recallRes.ok ? recallRes.json() : { requests: [] },
         memosRes.ok ? memosRes.json() : { memos: [] },
+        leavesRes.ok ? leavesRes.json() : { data: [] },
       ])
 
       setDeferments(deferData.requests || [])
       setRecalls(recallData.requests || [])
       setMemos(memosData.memos || [])
+      setApprovedLeaves(leavesData.data || [])
     } catch (err) {
       console.error('[v0] HrExecutiveApprovalDashboard fetch error:', err)
       toast({ title: 'Error', description: 'Failed to load data', variant: 'destructive' })
@@ -231,7 +250,7 @@ export function HrExecutiveApprovalDashboard() {
   return (
     <div className="space-y-4">
       {/* Section toggle */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Button
           variant={activeSection === 'pending' ? 'default' : 'outline'}
           size="sm"
@@ -240,6 +259,15 @@ export function HrExecutiveApprovalDashboard() {
         >
           <Clock className="h-4 w-4 mr-1" />
           Pending Decisions ({pendingDeferments.length + pendingRecalls.length})
+        </Button>
+        <Button
+          variant={activeSection === 'approved-leaves' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActiveSection('approved-leaves')}
+          className={activeSection === 'approved-leaves' ? 'bg-teal-500 hover:bg-teal-600 text-white' : ''}
+        >
+          <CheckCircle className="h-4 w-4 mr-1" />
+          Approved Leaves ({approvedLeaves.length})
         </Button>
         <Button
           variant={activeSection === 'memos' ? 'default' : 'outline'}
@@ -406,6 +434,77 @@ export function HrExecutiveApprovalDashboard() {
             })}
           </TabsContent>
         </Tabs>
+      )}
+
+      {/* ── APPROVED LEAVES ── */}
+      {activeSection === 'approved-leaves' && (
+        <div className="space-y-3">
+          {approvedLeaves.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-slate-500">
+                <CheckCircle className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                No approved leave requests yet
+              </CardContent>
+            </Card>
+          ) : approvedLeaves.map(leave => {
+              const isExpanded = expandedId === `leave-${leave.id}`
+              const startDate = new Date(leave.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+              const endDate = new Date(leave.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+              return (
+                <Card key={leave.id} className="border-l-4 border-l-teal-400">
+                  <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : `leave-${leave.id}`)}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <CardTitle className="text-sm font-semibold">{leave.staff_name}</CardTitle>
+                        <CardDescription className="text-xs">
+                          {leave.employee_id} • {leave.department}
+                        </CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-teal-100 text-teal-700 border-0">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {leave.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        </Badge>
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mt-2 text-xs text-slate-600">
+                      <div><span className="font-medium">Leave Type:</span> {leave.leave_type}</div>
+                      <div><span className="font-medium">Duration:</span> {leave.days_requested} day{leave.days_requested !== 1 ? 's' : ''}</div>
+                      <div><span className="font-medium">Period:</span> {startDate} – {endDate}</div>
+                    </div>
+                  </CardHeader>
+                  {isExpanded && (
+                    <CardContent className="pt-0 space-y-3 border-t pt-4">
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="p-2 bg-slate-50 rounded">
+                          <span className="font-medium text-slate-600">Signed By:</span>
+                          <p className="text-slate-900 font-semibold mt-1">{leave.signed_by}</p>
+                        </div>
+                        <div className="p-2 bg-slate-50 rounded">
+                          <span className="font-medium text-slate-600">Signed Date:</span>
+                          <p className="text-slate-900 font-semibold mt-1">
+                            {new Date(leave.signed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="w-full bg-teal-500 hover:bg-teal-600 text-white"
+                        onClick={() => {
+                          // Generate leave certificate PDF or download approval letter
+                          toast({ title: 'Info', description: 'Leave certificate download available soon', variant: 'default' })
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Download Leave Certificate
+                      </Button>
+                    </CardContent>
+                  )}
+                </Card>
+              )
+            })}
+        </div>
       )}
 
       {/* ── APPROVED MEMOS ── */}
