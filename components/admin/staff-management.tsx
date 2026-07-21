@@ -45,9 +45,6 @@ interface StaffMember {
   is_active: boolean
   department_id?: string
   assigned_location_id?: string
-  date_of_appointment?: string
-  years_of_service?: number | string
-  contact_number?: string
   departments?: {
     id: string
     name: string
@@ -116,9 +113,6 @@ export function StaffManagement() {
     position: "",
     role: "staff",
     assigned_location_id: "",
-    date_of_appointment: "",
-    years_of_service: "",
-    contact_number: "",
   })
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
@@ -851,49 +845,6 @@ export function StaffManagement() {
                         tracking
                       </p>
                     </div>
-                    <div>
-                      <Label htmlFor="dateOfAppointment" className="font-medium">
-                        Date of Appointment
-                      </Label>
-                      <Input
-                        id="dateOfAppointment"
-                        type="date"
-                        value={newStaff.date_of_appointment}
-                        onChange={(e) => setNewStaff({ ...newStaff, date_of_appointment: e.target.value })}
-                        className="mt-1"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">Used for leave eligibility and service calculations</p>
-                    </div>
-                    <div>
-                      <Label htmlFor="yearsOfService" className="font-medium">
-                        Years of Service
-                      </Label>
-                      <Input
-                        id="yearsOfService"
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={newStaff.years_of_service}
-                        onChange={(e) => setNewStaff({ ...newStaff, years_of_service: e.target.value })}
-                        className="mt-1"
-                        placeholder="0"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">For leave entitlements and loan calculations</p>
-                    </div>
-                    <div>
-                      <Label htmlFor="contactNumber" className="font-medium">
-                        Contact Number
-                      </Label>
-                      <Input
-                        id="contactNumber"
-                        type="tel"
-                        value={newStaff.contact_number}
-                        onChange={(e) => setNewStaff({ ...newStaff, contact_number: e.target.value })}
-                        className="mt-1"
-                        placeholder="+233 123 456 7890"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">For leave and loan notifications</p>
-                    </div>
                   </div>
                   <DialogFooter className="gap-2">
                     <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -1075,44 +1026,6 @@ export function StaffManagement() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Staff must be assigned to their actual work location
                     </p>
-                  </div>
-                  <div>
-                    <Label htmlFor="editDateOfAppointment" className="font-medium">
-                      Date of Appointment
-                    </Label>
-                    <Input
-                      id="editDateOfAppointment"
-                      type="date"
-                      value={editingStaff.date_of_appointment || ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, date_of_appointment: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="editYearsOfService" className="font-medium">
-                      Years of Service
-                    </Label>
-                    <Input
-                      id="editYearsOfService"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={editingStaff.years_of_service || ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, years_of_service: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="editContactNumber" className="font-medium">
-                      Contact Number
-                    </Label>
-                    <Input
-                      id="editContactNumber"
-                      type="tel"
-                      value={editingStaff.contact_number || ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, contact_number: e.target.value })}
-                      className="mt-1"
-                    />
                   </div>
                 </div>
                 <DialogFooter>
