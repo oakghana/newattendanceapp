@@ -1,5 +1,8 @@
+'use server'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { jsPDF } from 'jspdf'
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,7 +54,7 @@ export async function GET(request: NextRequest) {
       console.error('[v0] Error fetching user profile:', userError)
     }
 
-    // Generate a simple HTML-to-PDF representation (or use a library if available)
+    // Extract data
     const staffName = userProfile
       ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim()
       : 'Unknown'
@@ -60,42 +63,111 @@ export async function GET(request: NextRequest) {
     const leaveType = leaveRequest.leave_type_key
       ? leaveRequest.leave_type_key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
       : 'Leave'
-    const startDate = new Date(leaveRequest.preferred_start_date).toLocaleDateString('en-GB')
-    const endDate = new Date(leaveRequest.preferred_end_date).toLocaleDateString('en-GB')
+    const startDate = new Date(leaveRequest.preferred_start_date).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+    const endDate = new Date(leaveRequest.preferred_end_date).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
     const daysRequested = leaveRequest.requested_days || 0
     const signerName = memo.signer_name || 'HR Executive'
-    const memoDate = new Date(memo.created_at).toLocaleDateString('en-GB')
+    const memoDate = new Date(memo.created_at).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
 
-    // Create a simple text-based memo document as a downloadable file
-    const memoContent = `
-LEAVE MEMO
-${'-'.repeat(80)}
+    // Generate PDF using jsPDF
+    const pdf = new jsPDF()
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    let yPosition = 20
 
-Staff Information:
-  Name: ${staffName}
-  Employee ID: ${employeeId}
-  Department: ${department}
+    // Title
+    pdf.setFontSize(18)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('LEAVE APPROVAL MEMO', pageWidth / 2, yPosition, { align: 'center' } as any)
+    
+    yPosition += 15
 
-Leave Details:
-  Leave Type: ${leaveType}
-  Period: ${startDate} to ${endDate}
-  Duration: ${daysRequested} day(s)
+    // Divider line
+    pdf.setDrawColor(100)
+    pdf.line(20, yPosition, pageWidth - 20, yPosition)
+    yPosition += 10
 
-Approval Information:
-  Approved By: ${signerName}
-  Approval Date: ${memoDate}
-  Status: HR Approved & Signed
+    // Staff Information Section
+    pdf.setFontSize(11)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('STAFF INFORMATION', 20, yPosition)
+    yPosition += 8
 
-${'-'.repeat(80)}
-Generated on: ${new Date().toLocaleString('en-GB')}
-    `.trim()
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    pdf.text(`Name: ${staffName}`, 25, yPosition)
+    yPosition += 7
+    pdf.text(`Employee ID: ${employeeId}`, 25, yPosition)
+    yPosition += 7
+    pdf.text(`Department: ${department}`, 25, yPosition)
+    yPosition += 12
 
-    // Return as text file (or generate PDF if a library is available)
-    return new NextResponse(memoContent, {
+    // Leave Details Section
+    pdf.setFontSize(11)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('LEAVE DETAILS', 20, yPosition)
+    yPosition += 8
+
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    pdf.text(`Leave Type: ${leaveType}`, 25, yPosition)
+    yPosition += 7
+    pdf.text(`Start Date: ${startDate}`, 25, yPosition)
+    yPosition += 7
+    pdf.text(`End Date: ${endDate}`, 25, yPosition)
+    yPosition += 7
+    pdf.text(`Duration: ${daysRequested} day${daysRequested !== 1 ? 's' : ''}`, 25, yPosition)
+    yPosition += 12
+
+    // Approval Section
+    pdf.setFontSize(11)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('APPROVAL INFORMATION', 20, yPosition)
+    yPosition += 8
+
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    pdf.text(`Approved By: ${signerName}`, 25, yPosition)
+    yPosition += 7
+    pdf.text(`Approval Date: ${memoDate}`, 25, yPosition)
+    yPosition += 7
+    pdf.setTextColor(0, 128, 0)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('Status: HR APPROVED & SIGNED', 25, yPosition)
+    
+    yPosition = pageHeight - 30
+    pdf.setDrawColor(100)
+    pdf.line(20, yPosition, pageWidth - 20, yPosition)
+    yPosition += 8
+
+    pdf.setTextColor(0)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    const generatedDate = new Date().toLocaleString('en-GB')
+    pdf.text(`Generated on: ${generatedDate}`, pageWidth / 2, yPosition, { align: 'center' } as any)
+
+    // Get PDF as buffer
+    const pdfBuffer = Buffer.from(pdf.output('arraybuffer') as ArrayBuffer)
+    const fileName = `Leave_Memo_${staffName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`
+
+    return new NextResponse(pdfBuffer as any, {
       status: 200,
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': `attachment; filename="Leave_Memo_${staffName.replace(/\s+/g, '_')}_${new Date().getTime()}.txt"`,
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+        'Content-Length': pdfBuffer.length.toString(),
       },
     })
   } catch (error) {
