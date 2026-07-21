@@ -1,6 +1,6 @@
 "use client"
 
-import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle, Send, Shuffle } from "lucide-react"
+import { BarChart3, CalendarRange, TrendingUp, Gift, Info, FileText, CheckCircle, Send, Shuffle, List } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
@@ -13,6 +13,7 @@ import { CarryoverApprovalDashboard } from "./carryover-approval-dashboard"
 import { AuditComplianceDashboard } from "./audit-compliance-dashboard"
 import { HRExecutiveMemoDashboard } from "@/components/leave/hr-executive-memo-dashboard"
 import { HRLeaveOfficeRequestDashboard } from "@/components/leave/hr-leave-office-request-dashboard"
+import { AllLeaveRequestsDashboard } from "@/components/leave/all-leave-requests-dashboard"
 import { DefermentRequestsTracking } from "@/components/leave-management/deferment-requests-tracking"
 import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planning"
 import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
@@ -136,6 +137,16 @@ export function LeaveManagementModuleClient({
             </TabsTrigger>
           )}
 
+          {/* All Requests Tab - HR Leave Office only */}
+          {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
+            <TabsTrigger value="all-requests" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-teal-300 transition-all duration-300 ease-out data-[state=active]:border-teal-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-teal-500 data-[state=active]:to-teal-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(20,184,166,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
+              <List className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-data-[state=active]:animate-pulse" />
+              <span className="hidden sm:inline">All Requests</span>
+              <span className="sm:hidden">Requests</span>
+              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-1 bg-teal-500 rounded-full transition-all duration-300 group-data-[state=active]:w-3/4" />
+            </TabsTrigger>
+          )}
+
           {/* Carryover & Audit Tab - HR Leave Office only */}
           {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
             <TabsTrigger value="carryover-audit" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-rose-300 transition-all duration-300 ease-out data-[state=active]:border-rose-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-rose-500 data-[state=active]:to-rose-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(244,63,94,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">
@@ -225,6 +236,19 @@ export function LeaveManagementModuleClient({
         {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
           <TabsContent value="processing-requests" className="space-y-4 sm:space-y-6 w-full">
             <HRLeaveOfficeRequestDashboard />
+          </TabsContent>
+        )}
+
+        {/* All Requests Tab - HR Leave Office only */}
+        {isHrLeaveOfficeRole(userRole) && !isRegionalHR && (
+          <TabsContent value="all-requests" className="space-y-4 sm:space-y-6 w-full">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">All Leave Requests</h2>
+                <p className="text-sm text-slate-600 mt-1">View all leave requests submitted by staff with their current approval status</p>
+              </div>
+              <AllLeaveRequestsDashboard />
+            </div>
           </TabsContent>
         )}
 
