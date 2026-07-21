@@ -437,6 +437,12 @@ export function StaffManagement() {
         department_id: editingStaff.department_id || editingStaff.departments?.id,
         is_active: editingStaff.is_active,
         assigned_location_id: editingStaff.assigned_location_id,
+        date_of_appointment: editingStaff.date_of_appointment || null,
+        years_of_service:
+          editingStaff.years_of_service !== undefined && editingStaff.years_of_service !== ""
+            ? parseInt(String(editingStaff.years_of_service), 10)
+            : null,
+        contact_number: editingStaff.contact_number || null,
       }
 
       console.log("[v0] Updating staff member:", editingStaff.id, updateData)
@@ -490,7 +496,19 @@ export function StaffManagement() {
       if (result.success) {
         showSuccess("Staff member updated successfully", "Staff Updated")
         setSuccess("Staff member updated successfully")
+
+        // Immediately update the local staff array so the table shows fresh data
+        const updatedMember: StaffMember = result.data ?? { ...editingStaff, ...updateData }
+        setStaff((prev) =>
+          prev.map((s) =>
+            s.id === editingStaff.id
+              ? { ...s, ...updatedMember, role: canonicalRole(updatedMember.role ?? s.role) }
+              : s
+          )
+        )
+
         setEditingStaff(null)
+        // Also re-fetch in background to sync any server-computed fields
         fetchStaff()
       } else {
         console.error("[v0] Update failed:", result.error)
