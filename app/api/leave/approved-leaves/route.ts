@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 interface ApprovedLeave {
   id: string
+  leave_plan_request_id: string | null
   staff_name: string
   employee_id: string
   department: string
@@ -14,71 +15,72 @@ interface ApprovedLeave {
   signed_by: string
   signed_at: string
   approval_date: string
+  payment_amount: number | null
+  payment_currency: string
 }
 
 export async function GET() {
   try {
     const admin = await createAdminClient()
 
-    // Query approved leave memos from payment_advice table
+    // Correct table is leave_payment_memos, approved status is 'reviewed_by_hr'
+    // All fields are flat columns — no joins needed
     const { data, error } = await admin
-      .from('payment_advice')
+      .from('leave_payment_memos')
       .select(`
         id,
-        memo_body,
+        leave_plan_request_id,
+        staff_name,
+        staff_number,
         staff_id,
+        staff_category,
+        leave_period_start,
+        leave_period_end,
+        approved_days,
         status,
-        signed_at,
+        signer_name,
+        signer_id,
+        hr_leave_office_name,
+        memo_subject,
+        payment_amount,
+        payment_currency,
         created_at,
-        user_profiles!staff_id (
-          id,
-          first_name,
-          last_name,
-          employee_id,
-          departments!department_id (
-            name
-          )
-        ),
-        signer:user_profiles!signer_id (
-          first_name,
-          last_name,
-          position
-        )
+        forwarded_at,
+        acknowledged_at
       `)
-      .eq('memo_type', 'leave')
-      .in('status', ['approved', 'Approved & Signed', 'hr_approved'])
-      .order('signed_at', { ascending: false })
+      .eq('status', 'reviewed_by_hr')
+      .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('[v0] Error fetching approved leaves:', error)
+      console.error('[v0] Error fetching approved leave memos:', error)
       return NextResponse.json({ error: 'Failed to fetch approved leaves' }, { status: 500 })
     }
 
-    // Map to response format - extract leave details from memo_body
-    const approvedLeaves: ApprovedLeave[] = (data || []).map((record: any) => {
-      const memo = typeof record.memo_body === 'string' ? JSON.parse(record.memo_body) : record.memo_body
-      const startDate = memo?.start_date || memo?.preferred_start_date || ''
-      const endDate = memo?.end_date || memo?.preferred_end_date || ''
-      const leaveType = memo?.leave_type || memo?.leave_type_key || 'Leave'
-      const daysRequested = memo?.days_requested || memo?.requested_days || 0
-
-      return {
-        id: record.id,
-        staff_name: `${record.user_profiles?.first_name || ''} ${record.user_profiles?.last_name || ''}`.trim(),
-        employee_id: record.user_profiles?.employee_id || 'N/A',
-        department: record.user_profiles?.departments?.name || 'General',
-        leave_type: typeof leaveType === 'string'
-          ? leaveType.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-          : 'Leave',
-        start_date: startDate,
-        end_date: endDate,
-        days_requested: daysRequested,
-        status: record.status,
-        signed_by: `${record.signer?.first_name || ''} ${record.signer?.last_name || ''}`.trim() || 'HR Executive',
-        signed_at: record.signed_at || record.created_at,
-        approval_date: record.created_at,
-      }
-    })
+    const approvedLeaves: ApprovedLeave[] = (data || []).map((record: any) => ({
+      id: record.id,
+      leave_plan_request_id: record.leave_plan_request_id,
+      staff_name: record.staff_name || 'Unknown Staff',
+      employee_id: record.staff_number || 'N/A',
+      department: record.staff_category || 'General',
+      // Clean up the memo_subject to extract a readable leave type
+      leave_type: record.memo_subject
+        ? record.memo_subject
+            .replace(/leave memo/gi, '')
+            .replace(/memo/gi, '')
+            .replace(/[-:]/g, '')
+            .trim() || 'Annual Leave'
+        : 'Annual Leave',
+      start_date: record.leave_period_start || '',
+      end_date: record.leave_period_end || '',
+      days_requested: record.approved_days || 0,
+      status: record.status,
+      // Prefer the signer name; fall back to the HR leave office name
+      signed_by: record.signer_name || record.hr_leave_office_name || 'HR Executive',
+      signed_at: record.forwarded_at || record.acknowledged_at || record.created_at,
+      approval_date: record.created_at,
+      payment_amount: record.payment_amount ?? null,
+      payment_currency: record.payment_currency || 'GHS',
+    }))
 
     return NextResponse.json({
       success: true,

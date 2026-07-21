@@ -77,6 +77,7 @@ interface PaymentMemo {
 
 interface ApprovedLeave {
   id: string
+  leave_plan_request_id: string | null
   staff_name: string
   employee_id: string
   department: string
@@ -88,6 +89,8 @@ interface ApprovedLeave {
   signed_by: string
   signed_at: string
   approval_date: string
+  payment_amount: number | null
+  payment_currency: string
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -448,8 +451,6 @@ export function HrExecutiveApprovalDashboard() {
             </Card>
           ) : approvedLeaves.map(leave => {
               const isExpanded = expandedId === `leave-${leave.id}`
-              const startDate = new Date(leave.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-              const endDate = new Date(leave.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
               return (
                 <Card key={leave.id} className="border-l-4 border-l-teal-400">
                   <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : `leave-${leave.id}`)}>
@@ -457,47 +458,57 @@ export function HrExecutiveApprovalDashboard() {
                       <div className="flex-1">
                         <CardTitle className="text-sm font-semibold">{leave.staff_name}</CardTitle>
                         <CardDescription className="text-xs">
-                          {leave.employee_id} • {leave.department}
+                          {leave.employee_id !== 'N/A' ? `${leave.employee_id} • ` : ''}{leave.department}
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className="bg-teal-100 text-teal-700 border-0">
                           <CheckCircle className="h-3 w-3 mr-1" />
-                          {leave.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                          Approved &amp; Signed
                         </Badge>
                         {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-3 mt-2 text-xs text-slate-600">
-                      <div><span className="font-medium">Leave Type:</span> {leave.leave_type}</div>
+                      <div><span className="font-medium">Leave Type:</span> {leave.leave_type || 'Annual Leave'}</div>
                       <div><span className="font-medium">Duration:</span> {leave.days_requested} day{leave.days_requested !== 1 ? 's' : ''}</div>
-                      <div><span className="font-medium">Period:</span> {startDate} – {endDate}</div>
+                      <div>
+                        <span className="font-medium">Period:</span>{' '}
+                        {leave.start_date ? fmtDate(leave.start_date) : 'N/A'} – {leave.end_date ? fmtDate(leave.end_date) : 'N/A'}
+                      </div>
                     </div>
                   </CardHeader>
                   {isExpanded && (
-                    <CardContent className="pt-0 space-y-3 border-t pt-4">
+                    <CardContent className="pt-0 border-t pt-4 space-y-3">
                       <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="p-2 bg-slate-50 rounded">
+                        <div className="p-2 bg-teal-50 rounded">
                           <span className="font-medium text-slate-600">Signed By:</span>
                           <p className="text-slate-900 font-semibold mt-1">{leave.signed_by}</p>
                         </div>
-                        <div className="p-2 bg-slate-50 rounded">
-                          <span className="font-medium text-slate-600">Signed Date:</span>
-                          <p className="text-slate-900 font-semibold mt-1">
-                            {new Date(leave.signed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </p>
+                        <div className="p-2 bg-teal-50 rounded">
+                          <span className="font-medium text-slate-600">Approval Date:</span>
+                          <p className="text-slate-900 font-semibold mt-1">{fmtDate(leave.signed_at)}</p>
+                        </div>
+                        {leave.payment_amount != null && (
+                          <div className="p-2 bg-teal-50 rounded">
+                            <span className="font-medium text-slate-600">Payment Amount:</span>
+                            <p className="text-slate-900 font-semibold mt-1">
+                              {leave.payment_currency} {Number(leave.payment_amount).toLocaleString('en-GH', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        )}
+                        <div className="p-2 bg-teal-50 rounded">
+                          <span className="font-medium text-slate-600">Memo Created:</span>
+                          <p className="text-slate-900 font-semibold mt-1">{fmtDate(leave.approval_date)}</p>
                         </div>
                       </div>
                       <Button
                         size="sm"
                         className="w-full bg-teal-500 hover:bg-teal-600 text-white"
-                        onClick={() => {
-                          // Generate leave certificate PDF or download approval letter
-                          toast({ title: 'Info', description: 'Leave certificate download available soon', variant: 'default' })
-                        }}
+                        onClick={() => downloadMemo(leave.id, `${leave.staff_name}-leave`)}
                       >
                         <Download className="h-4 w-4 mr-1" />
-                        Download Leave Certificate
+                        Download Leave Memo PDF
                       </Button>
                     </CardContent>
                   )}
