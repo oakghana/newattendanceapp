@@ -89,13 +89,16 @@ export function HRLeaveOfficeRequestDashboard() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      // Fetch pending requests — pass user_role so the API returns leave office pending requests
-      const requestsParams = new URLSearchParams({ user_role: 'hr_leave_office' })
-      const requestsRes = await fetch(`/api/leave/deferment-recall/pending-requests?${requestsParams}`)
-      if (!requestsRes.ok) throw new Error(`Failed to fetch requests (${requestsRes.status})`)
+      // Fetch pending deferment and recall requests — route checks authenticated user is hr_leave_office role
+      const requestsRes = await fetch('/api/leave/deferment-recall/pending-requests')
+      if (!requestsRes.ok) {
+        const errData = await requestsRes.json().catch(() => ({}))
+        throw new Error(errData.error || `Failed to fetch requests (${requestsRes.status})`)
+      }
       const requestsData = await requestsRes.json()
-      setDefermentRequests(requestsData.defermentRequests || requestsData.data?.defermentRequests || [])
-      setRecallRequests(requestsData.recallRequests || requestsData.data?.recallRequests || [])
+      // Route returns { defermentRequests: [], recallRequests: [], total: 0 }
+      setDefermentRequests(requestsData.defermentRequests || [])
+      setRecallRequests(requestsData.recallRequests || [])
 
       // Fetch HR executives — query the user_profiles table directly for hr_executive role
       const execRes = await fetch('/api/admin/users/by-role?role=hr_executive')
@@ -110,14 +113,14 @@ export function HRLeaveOfficeRequestDashboard() {
         }))
         setHrExecutives(executives)
       } else {
-        console.warn('[v0] Failed to fetch HR executives')
+        console.warn('[v0] Failed to fetch HR executives, using empty list')
         setHrExecutives([])
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[v0] Error fetching data:', error)
       toast({
         title: 'Error',
-        description: 'Failed to load requests. Please try again.',
+        description: error.message || 'Failed to load requests. Please try again.',
         variant: 'destructive',
       })
     } finally {
