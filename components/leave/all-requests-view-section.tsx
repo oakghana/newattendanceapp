@@ -157,9 +157,10 @@ export function AllRequestsViewSection() {
       toast({ title: 'Success', description: 'Leave memo downloaded successfully' })
     } catch (err) {
       console.error('[v0] Download memo error:', err)
+      const errorMsg = err instanceof Error ? (err.message || 'Failed to download leave memo') : 'Failed to download leave memo'
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to download leave memo',
+        description: String(errorMsg),
         variant: 'destructive',
       })
     } finally {

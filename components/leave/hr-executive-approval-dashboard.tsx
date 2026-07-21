@@ -204,7 +204,8 @@ export function HrExecutiveApprovalDashboard() {
       fetchData()
     } catch (err: any) {
       console.error(`[v0] ${type} ${decision} error:`, err)
-      toast({ title: 'Error', description: err.message || `Failed to ${decision} ${type}`, variant: 'destructive' })
+      const errorMsg = err?.message || `Failed to ${decision} ${type}`
+      toast({ title: 'Error', description: String(errorMsg), variant: 'destructive' })
     } finally {
       setProcessingId(null)
     }
@@ -230,7 +231,8 @@ export function HrExecutiveApprovalDashboard() {
       URL.revokeObjectURL(url)
     } catch (err: any) {
       console.error('[v0] Memo download error:', err)
-      toast({ title: 'Error', description: err.message || 'Failed to download memo', variant: 'destructive' })
+      const errorMsg = err?.message || 'Failed to download memo'
+      toast({ title: 'Error', description: String(errorMsg), variant: 'destructive' })
     }
   }
 
