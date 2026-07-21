@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { jsPDF } from 'jspdf'
+import fs from 'fs'
+import path from 'path'
 
 export async function GET(request: NextRequest) {
   try {
@@ -69,7 +71,25 @@ export async function GET(request: NextRequest) {
     const approvedDays = memo?.approved_days || leaveRequest.requested_days || 0
     const startDateRaw = memo?.leave_period_start || leaveRequest.preferred_start_date
     const endDateRaw = memo?.leave_period_end || leaveRequest.preferred_end_date
-    const signerName = memo?.signer_name || 'HR Executive'
+    // Resolve signer: use memo signer → look up the HR user who approved → fallback
+    let signerName = memo?.signer_name || ''
+    if (!signerName) {
+      // Try to get the logged-in HR user's name as the signer
+      const { createClient } = await import('@/lib/supabase/server')
+      const supabase = await createClient()
+      const { data: { user: sessionUser } } = await supabase.auth.getUser()
+      if (sessionUser) {
+        const { data: hrProfile } = await admin
+          .from('user_profiles')
+          .select('first_name, last_name')
+          .eq('id', sessionUser.id)
+          .single()
+        if (hrProfile) {
+          signerName = `${hrProfile.first_name || ''} ${hrProfile.last_name || ''}`.trim()
+        }
+      }
+    }
+    if (!signerName) signerName = 'HR Executive'
     const letterDate = memo?.created_at || leaveRequest.created_at || new Date().toISOString()
 
     const fmtDate = (raw: string) =>
@@ -104,13 +124,19 @@ export async function GET(request: NextRequest) {
     let y = 15
 
     // ── HEADER: company name + address block ────────────────────────────────
-    // Left: placeholder circle for logo
-    pdf.setDrawColor(120)
-    pdf.setLineWidth(0.3)
-    pdf.circle(marginL + 8, y + 8, 8)
-    pdf.setFontSize(6)
-    pdf.setTextColor(120)
-    pdf.text('QCC', marginL + 5.5, y + 9)
+    // Left: QCC logo
+    try {
+      const logoPath = path.join(process.cwd(), 'public', 'qcc-logo.png')
+      const logoData = fs.readFileSync(logoPath)
+      const logoBase64 = `data:image/png;base64,${logoData.toString('base64')}`
+      // Logo: 22mm wide × 15mm tall, positioned at left margin
+      pdf.addImage(logoBase64, 'PNG', marginL, y, 22, 15)
+    } catch {
+      // Fallback: draw a simple circle placeholder if logo file missing
+      pdf.setDrawColor(120)
+      pdf.setLineWidth(0.3)
+      pdf.circle(marginL + 8, y + 8, 8)
+    }
 
     // Company name (centered, bold)
     pdf.setTextColor(0)
