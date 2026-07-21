@@ -118,6 +118,9 @@ export async function GET(request: NextRequest) {
         leave_status,
         annual_leave_days,
         sick_leave_days,
+        date_of_appointment,
+        years_of_service,
+        contact_number,
         created_at,
         updated_at
       `, { count: 'exact' })
