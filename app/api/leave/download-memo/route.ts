@@ -31,18 +31,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Leave request is not HR approved' }, { status: 403 })
     }
 
-    // Fetch the corresponding leave_payment_memos record
-    const { data: memo, error: memoError } = await admin
-      .from('leave_payment_memos')
-      .select('*')
-      .eq('leave_plan_request_id', requestId)
-      .single()
-
-    if (memoError || !memo) {
-      console.error('[v0] Error fetching leave memo:', memoError)
-      return NextResponse.json({ error: 'Leave memo not found' }, { status: 404 })
-    }
-
     // Fetch user profile for staff name
     const { data: userProfile, error: userError } = await admin
       .from('user_profiles')
@@ -52,6 +40,18 @@ export async function GET(request: NextRequest) {
 
     if (userError) {
       console.error('[v0] Error fetching user profile:', userError)
+    }
+
+    // Fetch the corresponding leave_payment_memos record (optional — we can generate without it)
+    const { data: memo, error: memoError } = await admin
+      .from('leave_payment_memos')
+      .select('*')
+      .eq('leave_plan_request_id', requestId)
+      .single()
+
+    if (memoError && memoError.code !== 'PGRST116') {
+      // If it's a real error (not "no rows"), log it
+      console.warn('[v0] Warning fetching leave memo:', memoError)
     }
 
     // Extract data
@@ -74,12 +74,19 @@ export async function GET(request: NextRequest) {
       year: 'numeric',
     })
     const daysRequested = leaveRequest.requested_days || 0
-    const signerName = memo.signer_name || 'HR Executive'
-    const memoDate = new Date(memo.created_at).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    })
+    // Use memo data if available, otherwise generate reasonable defaults
+    const signerName = memo?.signer_name || 'HR Executive'
+    const memoDate = memo?.created_at
+      ? new Date(memo.created_at).toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+        })
+      : new Date().toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+        })
 
     // Generate PDF using jsPDF
     const pdf = new jsPDF()
