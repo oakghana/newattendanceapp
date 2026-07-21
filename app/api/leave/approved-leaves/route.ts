@@ -20,21 +20,17 @@ export async function GET() {
   try {
     const admin = await createAdminClient()
 
-    // Query approved leave requests with staff and signing info
+    // Query approved leave memos from payment_advice table
     const { data, error } = await admin
-      .from('leave_plan_requests')
+      .from('payment_advice')
       .select(`
         id,
-        leave_type_key,
-        preferred_start_date,
-        preferred_end_date,
-        requested_days,
+        memo_body,
+        staff_id,
         status,
-        approved_by,
-        approved_at,
-        signed_by,
         signed_at,
-        user_profiles!user_id (
+        created_at,
+        user_profiles!staff_id (
           id,
           first_name,
           last_name,
@@ -43,14 +39,14 @@ export async function GET() {
             name
           )
         ),
-        signed_by_user:user_profiles!signed_by (
+        signer:user_profiles!signer_id (
           first_name,
           last_name,
           position
         )
       `)
-      .eq('status', 'approved')
-      .not('signed_at', 'is', null)
+      .eq('memo_type', 'leave')
+      .in('status', ['approved', 'Approved & Signed', 'hr_approved'])
       .order('signed_at', { ascending: false })
 
     if (error) {
@@ -58,23 +54,31 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch approved leaves' }, { status: 500 })
     }
 
-    // Map to response format
-    const approvedLeaves: ApprovedLeave[] = (data || []).map((record: any) => ({
-      id: record.id,
-      staff_name: `${record.user_profiles?.first_name || ''} ${record.user_profiles?.last_name || ''}`.trim(),
-      employee_id: record.user_profiles?.employee_id || 'N/A',
-      department: record.user_profiles?.departments?.name || 'General',
-      leave_type: record.leave_type_key
-        ? record.leave_type_key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-        : 'Annual Leave',
-      start_date: record.preferred_start_date,
-      end_date: record.preferred_end_date,
-      days_requested: record.requested_days || 0,
-      status: record.status,
-      signed_by: `${record.signed_by_user?.first_name || ''} ${record.signed_by_user?.last_name || ''}`.trim() || 'HR Executive',
-      signed_at: record.signed_at,
-      approval_date: record.approved_at || record.signed_at,
-    }))
+    // Map to response format - extract leave details from memo_body
+    const approvedLeaves: ApprovedLeave[] = (data || []).map((record: any) => {
+      const memo = typeof record.memo_body === 'string' ? JSON.parse(record.memo_body) : record.memo_body
+      const startDate = memo?.start_date || memo?.preferred_start_date || ''
+      const endDate = memo?.end_date || memo?.preferred_end_date || ''
+      const leaveType = memo?.leave_type || memo?.leave_type_key || 'Leave'
+      const daysRequested = memo?.days_requested || memo?.requested_days || 0
+
+      return {
+        id: record.id,
+        staff_name: `${record.user_profiles?.first_name || ''} ${record.user_profiles?.last_name || ''}`.trim(),
+        employee_id: record.user_profiles?.employee_id || 'N/A',
+        department: record.user_profiles?.departments?.name || 'General',
+        leave_type: typeof leaveType === 'string'
+          ? leaveType.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+          : 'Leave',
+        start_date: startDate,
+        end_date: endDate,
+        days_requested: daysRequested,
+        status: record.status,
+        signed_by: `${record.signer?.first_name || ''} ${record.signer?.last_name || ''}`.trim() || 'HR Executive',
+        signed_at: record.signed_at || record.created_at,
+        approval_date: record.created_at,
+      }
+    })
 
     return NextResponse.json({
       success: true,

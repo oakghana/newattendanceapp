@@ -276,7 +276,7 @@ export function HrExecutiveApprovalDashboard() {
           className={activeSection === 'memos' ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''}
         >
           <FileText className="h-4 w-4 mr-1" />
-          Approved Memos ({approvedMemos.length})
+          Approved Payment Advice ({approvedMemos.length})
         </Button>
       </div>
 
@@ -507,14 +507,14 @@ export function HrExecutiveApprovalDashboard() {
         </div>
       )}
 
-      {/* ── APPROVED MEMOS ── */}
+      {/* ── APPROVED PAYMENT ADVICE ── */}
       {activeSection === 'memos' && (
         <div className="space-y-3">
           {approvedMemos.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-slate-500">
                 <FileText className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                No approved memos yet
+                No approved payment advice yet
               </CardContent>
             </Card>
           ) : approvedMemos.map(memo => {
