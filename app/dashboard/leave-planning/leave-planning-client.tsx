@@ -2311,23 +2311,30 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 <p className="text-xs text-slate-500 hidden">Leave Year: {leaveYearPeriod}</p>
               </CardHeader>
               <CardContent className="p-5 space-y-5">
-                {/* October Planning Reminder Alert */}
-                <div className="border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg px-4 py-3.5">
+                {/* How to Request Leave Guide */}
+                <div className="border-2 border-blue-300 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg px-4 py-3.5">
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 mt-0.5">
-                      <AlertCircle className="h-5 w-5 text-amber-600 font-bold" />
+                      <AlertCircle className="h-5 w-5 text-blue-600 font-bold" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="text-sm font-bold text-amber-900 mb-1">
-                        Annual Leave 📌 Planning Reminder:
+                      <h4 className="text-sm font-bold text-blue-900 mb-2">
+                        How to Request Leave
                       </h4>
-                      <p className="text-sm text-amber-800 leading-relaxed">
-                        In October, all staff are expected to submit their annual leave requests for the next cocoa season. This helps HODs and Regional Managers review and approve leave early, so everything runs smoothly as the season begins.
-                        <br className="my-2" />
-                        Kindly plan ahead and submit your requests on time to avoid any inconvenience. Please note that staff who do not submit their leave plans will not be able to access leave once the season is active.
-                        <br className="my-2" />
-                        Let's all cooperate and do our part to keep operations flowing well 👍🏽.
-                      </p>
+                      <div className="space-y-1.5 text-sm text-blue-800">
+                        <div className="flex gap-2">
+                          <span className="flex-shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">1</span>
+                          <span>Select leave type and dates</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="flex-shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
+                          <span>Add reason (optional) and sign</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="flex-shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">3</span>
+                          <span>Submit for HOD review and approval</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
