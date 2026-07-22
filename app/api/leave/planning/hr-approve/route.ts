@@ -83,11 +83,10 @@ export async function GET(request: NextRequest) {
         adjusted_days,
         reason,
         created_at,
-        submitted_at,
-        user:user_profiles(id, first_name, last_name, employee_id, position, email, department_id, departments(id, name, code))
+        submitted_at
       `)
       .in("id", requestIds)
-      .in("status", HR_APPROVE_ELIGIBLE as any)
+      .in("status", [...HR_APPROVE_ELIGIBLE])
       .order("created_at", { ascending: false })
 
     if (requestError) {
@@ -95,15 +94,44 @@ export async function GET(request: NextRequest) {
       throw requestError
     }
 
+    // Fetch user details separately to avoid join issues
+    const userIds = (requests || []).map((r: any) => r.user_id).filter(Boolean)
+    let usersMap: Record<string, any> = {}
+    
+    if (userIds.length > 0) {
+      const { data: users, error: usersError } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, position, email, department_id, departments(id, name, code)")
+        .in("id", userIds)
+      
+      if (!usersError && users) {
+        usersMap = Object.fromEntries(users.map((u: any) => [u.id, u]))
+      }
+    }
+
+    // Merge user data into requests
+    const enrichedRequests = (requests || []).map((req: any) => ({
+      ...req,
+      user: usersMap[req.user_id] || null,
+    }))
+
     return NextResponse.json({
-      requests: requests || [],
-      count: (requests || []).length,
+      requests: enrichedRequests || [],
+      count: (enrichedRequests || []).length,
       user_id: user.id,
       role,
     })
   } catch (error) {
     console.error("[v0] GET /api/leave/planning/hr-approve error:", error)
-    const msg = error instanceof Error ? error.message : String(error)
+    let msg = "Unknown error"
+    if (error instanceof Error) {
+      msg = error.message
+    } else if (typeof error === "object" && error !== null) {
+      msg = JSON.stringify(error)
+    } else {
+      msg = String(error)
+    }
+    console.error("[v0] Error message:", msg)
     return NextResponse.json({ error: `Failed to fetch HR approval requests: ${msg}` }, { status: 500 })
   }
 }
