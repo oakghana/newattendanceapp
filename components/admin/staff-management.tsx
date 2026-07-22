@@ -554,7 +554,8 @@ export function StaffManagement() {
   const [hodLinkStaff, setHodLinkStaff] = useState<StaffMember | null>(null)
   const [hodLinkHodId, setHodLinkHodId] = useState<string>("")
   const [hodLinkLoading, setHodLinkLoading] = useState(false)
-  const [hodLinkError, setHodLinkError] = useState<string | null>(null)
+  const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
+
   const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
 
   const openHodLinkDialog = async (member: StaffMember) => {
@@ -1348,7 +1349,13 @@ export function StaffManagement() {
     </div>
 
       {/* HOD Linkage Dialog */}
-      <Dialog open={!!hodLinkStaff} onOpenChange={(open) => { if (!open) setHodLinkStaff(null) }}>
+      <Dialog open={!!hodLinkStaff} onOpenChange={(open) => {
+        if (!open) {
+          setHodLinkStaff(null)
+          setHodSearchQuery("")
+          setHodLinkHodId("")
+        }
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Link Staff to HOD</DialogTitle>
@@ -1360,20 +1367,57 @@ export function StaffManagement() {
             {hodLinkError && (
               <Alert variant="destructive"><AlertDescription>{hodLinkError}</AlertDescription></Alert>
             )}
+            <div className="space-y-2.5">
+              <Label htmlFor="hod-search" className="text-sm font-medium">Search HOD / Regional Manager</Label>
+              <Input
+                id="hod-search"
+                placeholder="Search by name, staff ID, or department..."
+                value={hodSearchQuery}
+                onChange={(e) => setHodSearchQuery(e.target.value.toLowerCase())}
+                className="h-10"
+              />
+              <p className="text-xs text-muted-foreground">
+                {hodCandidates.length > 0
+                  ? `Found ${hodCandidates.filter((h) => 
+                      `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                      (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                      (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                    ).length} of ${hodCandidates.length} HODs`
+                  : "No HODs available"}
+              </p>
+            </div>
             <div className="space-y-1">
-              <Label>Select HOD / Regional Manager</Label>
+              <Label htmlFor="hod-select">Select from Results</Label>
               <Select value={hodLinkHodId} onValueChange={setHodLinkHodId}>
-                <SelectTrigger>
+                <SelectTrigger id="hod-select">
                   <SelectValue placeholder="Choose a HOD or Regional Manager..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {hodCandidates.map((hod) => (
+                  {hodCandidates.filter((h) =>
+                    hodSearchQuery === "" ||
+                    `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                    (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                    (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                  ).map((hod) => (
                     <SelectItem key={hod.id} value={hod.id}>
-                      {hod.first_name} {hod.last_name} — {hod.role.replace("_", " ")} {hod.departments?.name ? `(${hod.departments.name})` : ""}
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">{hod.first_name} {hod.last_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {hod.employee_id && `ID: ${hod.employee_id} • `}
+                          {hod.role.replace("_", " ")} {hod.departments?.name ? `• ${hod.departments.name}` : ""}
+                        </span>
+                      </div>
                     </SelectItem>
                   ))}
-                  {hodCandidates.length === 0 && (
-                    <SelectItem value="__none__" disabled>No HODs found</SelectItem>
+                  {hodCandidates.filter((h) =>
+                    hodSearchQuery === "" ||
+                    `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                    (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                    (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                  ).length === 0 && (
+                    <SelectItem value="__none__" disabled>
+                      {hodSearchQuery ? "No matching HODs found" : "No HODs available"}
+                    </SelectItem>
                   )}
                 </SelectContent>
               </Select>
