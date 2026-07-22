@@ -36,23 +36,26 @@ function isHeadOfficeStaff(staff: any): boolean {
   return locationName.includes("head office")
 }
 
+// Roles that are considered heads of department and can be linked to any staff
+const HOD_ROLES = new Set(["department_head", "manager_hr", "director_hr", "admin", "it_admin"])
+
 function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: string } {
   const staffLoc = String(staff?.assigned_location_id || "")
   const hodLoc = String(hod?.assigned_location_id || "")
   const hodRole = normalizeRole(String(hod?.role || ""))
 
-  // Admin/it-admin linkages are fully trusted — only validate HOD role type
+  // Head-office staff can be linked to any HOD role (department_head, manager_hr, director_hr, admin)
   if (isHeadOfficeStaff(staff)) {
-    if (hodRole !== "department_head" && hodRole !== "admin" && hodRole !== "it_admin") {
-      return { ok: false, reason: "Head-office staff can only be linked to Department Heads." }
+    if (!HOD_ROLES.has(hodRole)) {
+      return { ok: false, reason: "Head-office staff can only be linked to a Department Head, HR Manager, or HR Director." }
     }
-    // Department matching is NOT enforced — admin decides the correct HOD assignment
     return { ok: true }
   }
 
-  // Regional staff must link to a regional_manager; enforce same location
-  if (hodRole !== "regional_manager" && hodRole !== "admin" && hodRole !== "it_admin") {
-    return { ok: false, reason: "Regional staff can only be linked to Regional Managers." }
+  // Regional staff can link to a regional_manager or any HOD role; enforce same location for regional_manager
+  const isValidHodForRegional = HOD_ROLES.has(hodRole) || hodRole === "regional_manager"
+  if (!isValidHodForRegional) {
+    return { ok: false, reason: "Regional staff can only be linked to Regional Managers or Department Heads." }
   }
   if (hodRole === "regional_manager" && staffLoc && hodLoc && staffLoc !== hodLoc) {
     return { ok: false, reason: "Regional staff can only be linked to Regional Managers in the same location." }
