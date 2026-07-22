@@ -1,13 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
 
 export async function GET(request: NextRequest) {
   try {
+    // Initialize Supabase server client
+    const supabase = await createClient()
     // Query leave_plan_requests where HOD decision is pending (null or 'pending')
     const { data: requests, error } = await supabase
       .from('leave_plan_requests')
