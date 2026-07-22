@@ -609,7 +609,10 @@ export function StaffManagement() {
       const result = await res.json()
       if (result.success) {
         showSuccess(`${hodLinkStaff.first_name} ${hodLinkStaff.last_name} linked successfully`, "HOD Linked")
+        // Refresh staff data to show updated HOD linkage
+        await fetchStaff()
         setHodLinkStaff(null)
+        setHodLinkHodId("")
       } else {
         setHodLinkError(result.error || "Failed to link")
       }
