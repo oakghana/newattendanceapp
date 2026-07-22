@@ -35,6 +35,7 @@ interface LeaveRequest {
   status: string
   createdAt: string
   updatedAt: string
+  hodReviewers?: string[]
 }
 
 interface PaginationInfo {
@@ -222,6 +223,8 @@ export function AllLeaveRequestsDashboard() {
                 <TableHead className="font-semibold text-slate-700">Department</TableHead>
                 <TableHead className="font-semibold text-slate-700">Leave Period</TableHead>
                 <TableHead className="font-semibold text-slate-700 text-center">Days</TableHead>
+                <TableHead className="font-semibold text-slate-700">Submitted</TableHead>
+                <TableHead className="font-semibold text-slate-700">Assigned HOD</TableHead>
                 <TableHead className="font-semibold text-slate-700">Reason</TableHead>
                 <TableHead className="font-semibold text-slate-700">Status</TableHead>
               </TableRow>
@@ -250,6 +253,14 @@ export function AllLeaveRequestsDashboard() {
                     </TableCell>
                     <TableCell className="text-center text-sm font-semibold text-slate-900">
                       {days}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-700">
+                      {request.createdAt ? formatDate(request.createdAt) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-700">
+                      {Array.isArray(request.hodReviewers) && request.hodReviewers.length > 0
+                        ? request.hodReviewers.join(", ")
+                        : "—"}
                     </TableCell>
                     <TableCell className="text-sm text-slate-700 max-w-xs truncate">
                       {request.reason || "—"}

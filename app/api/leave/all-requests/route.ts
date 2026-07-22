@@ -78,6 +78,32 @@ export async function GET(request: NextRequest) {
       deptMap = Object.fromEntries((depts || []).map((d: any) => [d.id, d.name]))
     }
 
+    // Fetch all HOD reviewers for these requests
+    const requestIds = (requests || []).map((r: any) => r.id).filter(Boolean)
+    let hodReviewersMap: Record<string, string[]> = {}
+    if (requestIds.length > 0) {
+      const { data: reviewRows } = await admin
+        .from("leave_plan_reviews")
+        .select("leave_plan_request_id, reviewer_id")
+        .in("leave_plan_request_id", requestIds)
+
+      const reviewerIds = [...new Set((reviewRows || []).map((r: any) => r.reviewer_id).filter(Boolean))]
+      if (reviewerIds.length > 0) {
+        const { data: reviewerProfiles } = await admin
+          .from("user_profiles")
+          .select("id, first_name, last_name")
+          .in("id", reviewerIds)
+
+        const profileMap = new Map((reviewerProfiles || []).map((p: any) => [p.id, `${p.first_name || ""} ${p.last_name || ""}`.trim()]))
+        for (const row of (reviewRows || [])) {
+          const name = profileMap.get(row.reviewer_id) || ""
+          if (!name) continue
+          if (!hodReviewersMap[row.leave_plan_request_id]) hodReviewersMap[row.leave_plan_request_id] = []
+          hodReviewersMap[row.leave_plan_request_id].push(name)
+        }
+      }
+    }
+
     const formattedRequests = (requests || []).map((req: any) => {
       const prof = req.user_profiles || {}
       const deptName = deptMap[prof.department_id] || "N/A"
@@ -100,6 +126,7 @@ export async function GET(request: NextRequest) {
         hodReviewedAt: req.hod_reviewed_at,
         createdAt: req.created_at,
         updatedAt: req.updated_at,
+        hodReviewers: hodReviewersMap[req.id] || [],
       }
     })
 
