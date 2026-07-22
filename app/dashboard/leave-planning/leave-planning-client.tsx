@@ -2328,7 +2328,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                         </div>
                         <div className="flex gap-2">
                           <span className="flex-shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
-                          <span>Add reason (optional) and sign</span>
+                          <span>Add reason (optional)</span>
                         </div>
                         <div className="flex gap-2">
                           <span className="flex-shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">3</span>
