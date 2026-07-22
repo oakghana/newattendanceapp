@@ -1744,11 +1744,28 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   }, [data])
 
   const hodPendingReviews: any[] = useMemo(() => {
-    if (!data) return []
-    return (data.reviews || []).filter((r: any) => {
+    if (!data) {
+      console.log("[v0] hodPendingReviews - no data object")
+      return []
+    }
+    if (!Array.isArray(data.reviews)) {
+      console.log("[v0] hodPendingReviews - data.reviews not an array:", data.reviews)
+      return []
+    }
+    console.log("[v0] hodPendingReviews - filtering", data.reviews.length, "reviews")
+    const filtered = (data.reviews || []).filter((r: any) => {
       const status = String(r?.leave_plan_request?.status || "")
-      return (HOD_PENDING_STATUSES as string[]).includes(status) && r.decision === "pending"
+      const hasRequest = !!r?.leave_plan_request
+      const statusMatches = (HOD_PENDING_STATUSES as string[]).includes(status)
+      const decisionPending = r.decision === "pending"
+      const matches = hasRequest && statusMatches && decisionPending
+      if (!matches) {
+        console.log("[v0]   - excluded review: hasRequest:", hasRequest, "status:", status, "statusMatches:", statusMatches, "decision:", r.decision, "decisionPending:", decisionPending)
+      }
+      return matches
     })
+    console.log("[v0] hodPendingReviews - result:", filtered.length, "pending reviews")
+    return filtered
   }, [data])
 
   const hodWorkedOnReviews: any[] = useMemo(() => {
