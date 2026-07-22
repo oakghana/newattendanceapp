@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
 
     const admin = await createAdminClient()
 
-    // Fetch all pending leave plan requests
+    // Fetch all pending leave plan requests (use neq to include null is_archived rows too)
     const { data: pendingRequests, error: reqError } = await admin
       .from("leave_plan_requests")
       .select("id, user_id")
       .in("status", PENDING_STATUSES)
-      .eq("is_archived", false)
+      .neq("is_archived", true)
 
     if (reqError) {
       console.error("[v0] backfill-reviewers: failed to fetch pending requests:", reqError.message)
