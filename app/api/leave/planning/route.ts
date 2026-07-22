@@ -669,8 +669,19 @@ export async function GET(request: NextRequest) {
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
-    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ���─
-    if (isHrOffice && !isHrApprover) {
+    // Resolve HOD linkage early — HR executives who are also linked as HODs
+    // must bypass the hr_office branch and enter the HOD/manager branch so
+    // they can see and act on leave requests from their assigned staff.
+    const { data: earlyHodLinkRows } = await admin
+      .from("loan_hod_linkages")
+      .select("staff_user_id")
+      .eq("hod_user_id", user.id)
+      .limit(1)
+    const isLinkedHodEarly = (earlyHodLinkRows || []).length > 0
+
+    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ─
+    // Skip this branch if user is also a linked HOD so they enter HOD mode instead.
+    if (isHrOffice && !isHrApprover && !isLinkedHodEarly) {
       let officeQuery = admin
         .from("leave_plan_requests")
         .select(`
@@ -784,15 +795,7 @@ export async function GET(request: NextRequest) {
 
     // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
     const isAdmin = role === "admin"
-    // HR executives (manager_hr / director_hr) who are also linked as HODs must enter
-    // the HOD branch so they can see and act on requests from their assigned staff.
-    const { data: hodLinkRows } = await admin
-      .from("loan_hod_linkages")
-      .select("staff_user_id")
-      .eq("hod_user_id", user.id)
-      .limit(1)
-    const isLinkedHod = (hodLinkRows || []).length > 0
-    if ((isAdmin || isHodRole(role) || isLinkedHod)) {
+    if ((isAdmin || isHodRole(role) || isLinkedHodEarly)) {
       let nonArchivedReviews: any[] = []
 
       // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)

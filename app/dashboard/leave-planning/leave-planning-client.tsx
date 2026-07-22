@@ -1217,7 +1217,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }) || null
   }, [startDate, leaveType, data?.myRequests, editingId])
 
-  // ── Loaders ─────────────────────────────────────────────────────────
+  // ── Loaders ──────────────────────────��──────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -1639,7 +1639,20 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     if (isHrOffice) {
       void loadHrExecutives()
     }
-  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives])
+    // For HOD/manager/admin users: backfill any missing leave_plan_reviews rows
+    // that were created before the user was linked as an HOD, then reload data
+    // so newly backfilled requests appear immediately without resubmission.
+    if (isHod || isAdmin || isHrApprover) {
+      fetch("/api/leave/planning/backfill-reviewers", { method: "POST" })
+        .then((r) => r.json())
+        .then((result) => {
+          if ((result.backfilled || 0) > 0) {
+            void loadData()
+          }
+        })
+        .catch(() => {/* non-fatal */})
+    }
+  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives, isHod, isAdmin, isHrApprover])
 
   useEffect(() => {
     if (!isHrApprover && !isAdmin) return
