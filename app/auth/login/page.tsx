@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, Lock, Mail, CheckCircle2, AlertCircle } from "lucide-react"
 import { getPasswordEnforcementMessage, isPasswordChangeRequired } from "@/lib/security"
 import { isHrLeaveOfficeRole, isHrApproverRole, isManagerRole } from "@/lib/leave-planning"
 import { DEFAULT_RUNTIME_FLAGS, type RuntimeFlags } from "@/lib/runtime-flags"
@@ -546,12 +546,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4 fade-in">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-3 sm:p-4 fade-in">
       <div className="w-full max-w-md scale-in">
-        <Card className="glass-effect shadow-2xl border-border/50">
-          <CardHeader className="text-center space-y-5 pb-6 sm:pb-8 px-4 sm:px-8 pt-6 sm:pt-8">
+        <Card className="backdrop-blur-xl bg-background/95 shadow-2xl border border-border/40 hover:border-border/60 transition-all duration-300 rounded-2xl">
+          <CardHeader className="text-center space-y-5 pb-6 sm:pb-8 px-4 sm:px-8 pt-8 sm:pt-10 border-b border-border/20">
             <div className="flex justify-center">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-card border-2 border-primary/20 flex items-center justify-center shadow-lg scale-in">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/30 flex items-center justify-center shadow-lg hover:shadow-xl transition-shadow scale-in ring-4 ring-primary/5">
                 <Image
                   src="/images/qcc-logo.png"
                   alt="QCC Logo - Quality Control Company Limited"
@@ -574,35 +574,40 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent className="px-4 sm:px-8 pb-6 sm:pb-8">
             <Tabs defaultValue="password" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-lg h-11 sm:h-12 transition-all">
+              <TabsList className="grid w-full grid-cols-2 bg-muted/40 p-1 rounded-xl h-11 sm:h-12 transition-all border border-border/20">
                 <TabsTrigger
                   value="password"
-                  className="text-sm sm:text-base transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                  className="text-sm sm:text-base font-medium transition-all duration-200 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-primary/30"
                 >
-                  Staff Login
+                  <Lock className="h-4 w-4 mr-1.5" />
+                  <span className="hidden sm:inline">Password</span>
+                  <span className="sm:hidden">Login</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="otp"
-                  className="text-sm sm:text-base transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                  className="text-sm sm:text-base font-medium transition-all duration-200 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-primary/30"
                 >
-                  OTP Login
+                  <Mail className="h-4 w-4 mr-1.5" />
+                  <span className="hidden sm:inline">OTP</span>
+                  <span className="sm:hidden">Code</span>
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="password" className="space-y-5 mt-6 sm:space-y-6 fade-in">
                 <form onSubmit={handleLogin} className="space-y-5 sm:space-y-6 stagger-children">
-                  <div className="space-y-2">
-                    <Label htmlFor="identifier" className="text-sm font-medium text-foreground">
-                      Staff Number or Email Address
+                  <div className="space-y-2.5">
+                    <Label htmlFor="identifier" className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-primary/60" />
+                      Staff Number or Email
                     </Label>
                     <Input
                       id="identifier"
                       type="text"
-                      placeholder="Your staff number or email"
+                      placeholder="Enter staff number or email"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       required
-                      className="h-12 sm:h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced text-base"
+                      className="h-12 sm:h-12 border border-border/40 focus:border-primary focus:ring-2 focus:ring-primary/20 bg-input/50 hover:bg-input/70 focus:bg-input transition-all text-base rounded-lg"
                       disabled={isLoading}
                       autoComplete="email"
                       inputMode="email"
@@ -611,19 +616,20 @@ export default function LoginPage() {
                       Use your 7-digit staff number or your work email — either works!
                     </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium text-foreground">
+                  <div className="space-y-2.5">
+                    <Label htmlFor="password" className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-primary/60" />
                       Password
                     </Label>
                     <div className="relative">
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
-                        placeholder="••••••••••"
+                        placeholder="Enter your password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
-                        className="h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced pr-12"
+                        className="h-12 border border-border/40 focus:border-primary focus:ring-2 focus:ring-primary/20 bg-input/50 hover:bg-input/70 focus:bg-input transition-all text-base pr-12 rounded-lg"
                       />
                       <button
                         type="button"
@@ -639,10 +645,20 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
+                    className="w-full h-12 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/95 hover:to-primary/75 text-primary-foreground font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer border border-primary/20 hover:border-primary/40 flex items-center justify-center gap-2"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Please wait..." : "Sign In"}
+                    {isLoading ? (
+                      <>
+                        <div className="h-4 w-4 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin" />
+                        <span>Signing in...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Sign In</span>
+                      </>
+                    )}
                   </Button>
                 </form>
               </TabsContent>

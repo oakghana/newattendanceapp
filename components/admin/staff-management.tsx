@@ -124,6 +124,23 @@ export function StaffManagement() {
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
 
+  // Calculate years of service based on date of appointment
+  const calculateYearsOfService = (dateStr: string): number | string => {
+    if (!dateStr) return ""
+    try {
+      const appointmentDate = new Date(dateStr)
+      const today = new Date()
+      let years = today.getFullYear() - appointmentDate.getFullYear()
+      const monthDiff = today.getMonth() - appointmentDate.getMonth()
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < appointmentDate.getDate())) {
+        years--
+      }
+      return Math.max(0, years)
+    } catch {
+      return ""
+    }
+  }
+
   const fetchStaff = useCallback(async () => {
     try {
       console.log("[v0] Fetching staff with filters:", {
@@ -871,14 +888,21 @@ export function StaffManagement() {
                         id="dateOfAppointment"
                         type="date"
                         value={newStaff.date_of_appointment}
-                        onChange={(e) => setNewStaff({ ...newStaff, date_of_appointment: e.target.value })}
+                        onChange={(e) => {
+                          const newDate = e.target.value
+                          setNewStaff({
+                            ...newStaff,
+                            date_of_appointment: newDate,
+                            years_of_service: calculateYearsOfService(newDate),
+                          })
+                        }}
                         className="mt-1"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">Used for leave eligibility and service calculations</p>
+                      <p className="text-xs text-muted-foreground mt-1">Years of service auto-calculates from this date</p>
                     </div>
                     <div>
                       <Label htmlFor="yearsOfService" className="font-medium">
-                        Years of Service <span className="text-muted-foreground font-normal">(Optional)</span>
+                        Years of Service <span className="text-muted-foreground font-normal">(Auto-calculated)</span>
                       </Label>
                       <Input
                         id="yearsOfService"
@@ -886,11 +910,12 @@ export function StaffManagement() {
                         min="0"
                         step="1"
                         value={newStaff.years_of_service}
-                        onChange={(e) => setNewStaff({ ...newStaff, years_of_service: e.target.value })}
-                        className="mt-1"
-                        placeholder="0"
+                        readOnly
+                        disabled
+                        className="mt-1 bg-muted"
+                        placeholder="Calculated from appointment date"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">For leave entitlements and loan calculations</p>
+                      <p className="text-xs text-muted-foreground mt-1">Automatically calculated from date of appointment</p>
                     </div>
                     <div>
                       <Label htmlFor="contactNumber" className="font-medium">
@@ -1096,13 +1121,20 @@ export function StaffManagement() {
                       id="editDateOfAppointment"
                       type="date"
                       value={editingStaff.date_of_appointment || ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, date_of_appointment: e.target.value })}
+                      onChange={(e) => {
+                        const newDate = e.target.value
+                        setEditingStaff({
+                          ...editingStaff,
+                          date_of_appointment: newDate,
+                          years_of_service: calculateYearsOfService(newDate),
+                        })
+                      }}
                       className="mt-1"
                     />
                   </div>
                   <div>
                     <Label htmlFor="editYearsOfService" className="font-medium">
-                      Years of Service <span className="text-muted-foreground font-normal">(Optional)</span>
+                      Years of Service <span className="text-muted-foreground font-normal">(Auto-calculated)</span>
                     </Label>
                     <Input
                       id="editYearsOfService"
@@ -1110,8 +1142,9 @@ export function StaffManagement() {
                       min="0"
                       step="1"
                       value={editingStaff.years_of_service ?? ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, years_of_service: e.target.value })}
-                      className="mt-1"
+                      readOnly
+                      disabled
+                      className="mt-1 bg-muted"
                     />
                   </div>
                   <div>
