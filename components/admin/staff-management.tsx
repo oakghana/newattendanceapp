@@ -567,14 +567,30 @@ export function StaffManagement() {
     setHodLinkHodId("")
     setHodLinkError(null)
     try {
-      const res = await authenticatedFetch("/api/admin/staff?role=department_head&limit=200")
-      const data = await res.json()
-      const dh: StaffMember[] = data.data || []
-      // Also fetch regional managers
-      const res2 = await authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200")
-      const data2 = await res2.json()
-      const rm: StaffMember[] = data2.data || []
-      setHodCandidates([...dh, ...rm])
+      // Fetch all roles that act as head of department in parallel
+      const [resDH, resRM, resMHR, resDHR] = await Promise.all([
+        authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
+      ])
+      const [dh, rm, mhr, dhr]: StaffMember[][] = await Promise.all([
+        resDH.json().then((d: any) => d.data || []),
+        resRM.json().then((d: any) => d.data || []),
+        resMHR.json().then((d: any) => d.data || []),
+        resDHR.json().then((d: any) => d.data || []),
+      ])
+      // Deduplicate by id and sort by name
+      const all = [...dh, ...rm, ...mhr, ...dhr]
+      const seen = new Set<string>()
+      const unique = all.filter((s) => {
+        if (seen.has(s.id)) return false
+        seen.add(s.id)
+        return true
+      }).sort((a, b) =>
+        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+      )
+      setHodCandidates(unique)
     } catch {
       setHodCandidates([])
     }
