@@ -1289,19 +1289,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   }, [isHrOffice, isHod])
 
   const loadHrApproverData = useCallback(async () => {
-    console.log("[v0] loadHrApproverData called, isHrApprover:", isHrApprover)
-    if (!isHrApprover) {
-      console.log("[v0] Skipping HR approver data load - user is not HR approver")
-      return
-    }
+    if (!isHrApprover) return
     setHrApproverLoading(true)
     try {
-      console.log("[v0] Fetching from /api/leave/planning/hr-approve...")
       const res = await fetch("/api/leave/planning/hr-approve", { cache: "no-store" })
       const json = await res.json()
-      console.log("[v0] HR approver response status:", res.status, "data:", json)
       if (!res.ok) throw new Error(json.error || "Failed to load HR approver requests")
-      console.log("[v0] Setting hrApproverData with", json.requests?.length || 0, "requests")
       setHrApproverData(json)
     } catch (e) {
       console.error("[v0] Load HR approver data error:", e)
