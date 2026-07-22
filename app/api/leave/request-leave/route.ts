@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
           if (id && !hodIds.includes(id)) hodIds.push(id)
         }
 
-        // 2. Fallback: department_head in same department
+        // 2. Fallback: department_head, manager_hr, director_hr in same department
         if (hodIds.length === 0) {
           const { data: staffProfile } = await admin
             .from("user_profiles")
@@ -277,13 +277,14 @@ export async function POST(request: NextRequest) {
             .maybeSingle()
 
           if ((staffProfile as any)?.department_id) {
+            // Fetch all possible HOD roles (department_head, manager_hr, director_hr)
             const { data: deptHods } = await admin
               .from("user_profiles")
-              .select("id")
+              .select("id, role")
               .eq("department_id", (staffProfile as any).department_id)
-              .eq("role", "department_head")
+              .in("role", ["department_head", "manager_hr", "director_hr"])
               .eq("is_active", true)
-              .limit(10)
+              .limit(20)
 
             for (const hod of deptHods || []) {
               const id = (hod as any)?.id
@@ -350,6 +351,51 @@ export async function POST(request: NextRequest) {
             is_read: false,
           }))
           await admin.from("staff_notifications").insert(notifRows)
+
+          // Send email notifications to HODs for prompt review
+          try {
+            const { data: hodProfiles } = await admin
+              .from("user_profiles")
+              .select("email, first_name, last_name, role")
+              .in("id", hodIds)
+            
+            if (hodProfiles && hodProfiles.length > 0) {
+              const staffProfile = await admin
+                .from("user_profiles")
+                .select("first_name, last_name, employee_id")
+                .eq("id", user.id)
+                .maybeSingle()
+              
+              const staffData = staffProfile.data as any
+              const staffName = `${staffData?.first_name || ""} ${staffData?.last_name || ""}`.trim()
+              const staffId = staffData?.employee_id || "N/A"
+              
+              // Create email notifications
+              const emailNotifications = hodProfiles.map((hod: any) => ({
+                recipient_email: hod.email,
+                recipient_id: hod.id,
+                subject: `[URGENT] Leave Request from ${staffName} - Awaiting Review`,
+                message: `A new leave request from ${staffName} (ID: ${staffId}) requires your review:\n\nLeave Period: ${start_date} to ${end_date}\nReason: ${reasonValidation.normalized}\n\nPlease review and endorse promptly in the Leave Management system.`,
+                notification_type: "leave_request_hod",
+                leave_request_id: leaveRequest.id,
+                is_sent: false,
+                created_at: new Date().toISOString(),
+              }))
+              
+              const { error: emailError } = await admin
+                .from("email_notifications")
+                .insert(emailNotifications)
+              
+              if (emailError) {
+                console.warn("Failed to queue email notifications to HODs:", emailError.message)
+              } else {
+                console.log(`[v0] Queued ${emailNotifications.length} email notifications to HODs for leave request ${leaveRequest.id}`)
+              }
+            }
+          } catch (emailErr) {
+            // Non-fatal: email notification failure should not block the leave submission
+            console.warn("HOD email notification setup failed:", emailErr)
+          }
         }
       } catch (hodErr) {
         // Non-fatal: HOD notification failure should not block the leave submission.
