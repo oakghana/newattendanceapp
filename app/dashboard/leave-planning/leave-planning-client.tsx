@@ -1031,6 +1031,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
   const [hrExecHodDeptFilter, setHrExecHodDeptFilter] = useState("all")
 
+  // ── HR Approver Data ─────────────────────────────────────────────────
+  const [hrApproverData, setHrApproverData] = useState<any>(null)
+  const [hrApproverLoading, setHrApproverLoading] = useState(false)
+
   // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
   const [startDate, setStartDate] = useState("")
@@ -1283,6 +1287,21 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       setHodReviewLoading(false)
     }
   }, [isHrOffice, isHod])
+
+  const loadHrApproverData = useCallback(async () => {
+    if (!isHrApprover) return // Only fetch for HR approvers
+    setHrApproverLoading(true)
+    try {
+      const res = await fetch("/api/leave/planning/hr-approve", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load HR approver requests")
+      setHrApproverData(json)
+    } catch (e) {
+      console.error("[v0] Load HR approver data error:", e)
+    } finally {
+      setHrApproverLoading(false)
+    }
+  }, [isHrApprover])
 
   const loadPolicy = useCallback(async () => {
     try {
@@ -1661,6 +1680,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       void loadHrExecutives()
       void loadHodReview() // Load HR executive HOD review requests
     }
+    // Load HR approver data for HR approvers
+    if (isHrApprover) {
+      void loadHrApproverData()
+    }
     // For HOD/manager/admin users: backfill any missing leave_plan_reviews rows
     // that were created before the user was linked as an HOD, then reload data
     // so newly backfilled requests appear immediately without resubmission.
@@ -1674,7 +1697,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
         })
         .catch(() => {/* non-fatal */})
     }
-  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives, isHod, isAdmin, isHrApprover, loadHodReview])
+  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives, isHod, isAdmin, isHrApprover, loadHodReview, loadHrApproverData])
 
   useEffect(() => {
     if (!isHrApprover && !isAdmin) return
@@ -1801,11 +1824,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   }, [hodPendingReviews, hodLocationFilter, hodDeptFilter])
 
   const hrApproverQueue: any[] = useMemo(() => {
-    if (!data) return []
-    return (data.requests || []).filter((r: any) =>
+    // Combine requests from main data and dedicated HR approver data
+    const mainQueue = (data?.requests || []).filter((r: any) =>
       ["hod_approved", "manager_confirmed", "hr_office_forwarded"].includes(String(r?.status || "")),
     )
-  }, [data])
+    const hrApproveQueue = hrApproverData?.requests || []
+    // Use HR approver data if available (it has the correct scoping), otherwise fall back to main data
+    return isHrApprover && hrApproveQueue.length > 0 ? hrApproveQueue : mainQueue
+  }, [data, hrApproverData, isHrApprover])
 
   const hrApproverQueueFiltered: any[] = useMemo(() => {
     let rows = [...hrApproverQueue]
@@ -2189,6 +2215,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       })
       setHrExpandedId(null)
       await loadData()
+      if (isHrApprover) {
+        await loadHrApproverData()
+      }
     } catch (e) {
       toast({ title: "Error", description: e instanceof Error ? e.message : "Approval failed", variant: "destructive" })
     } finally {
