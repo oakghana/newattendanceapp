@@ -4033,7 +4033,20 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                             )}
                           </div>
                         </div>
-                        <p className="text-xs text-slate-400 mt-2">Submitted {fmtDate(req?.submitted_at || req?.created_at)}</p>
+                        <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2">
+                          <p className="text-xs text-slate-400">
+                            <span className="font-medium text-slate-500">Submitted:</span>{" "}
+                            {req?.submitted_at || req?.created_at
+                              ? fmtDate(req?.submitted_at || req?.created_at)
+                              : "—"}
+                          </p>
+                          {Array.isArray(req?.hod_reviewers) && req.hod_reviewers.length > 0 && (
+                            <p className="text-xs text-slate-400">
+                              <span className="font-medium text-slate-500">Assigned HOD{req.hod_reviewers.length > 1 ? "s" : ""}:</span>{" "}
+                              {req.hod_reviewers.join(", ")}
+                            </p>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   ))}

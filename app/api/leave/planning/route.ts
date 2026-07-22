@@ -1040,9 +1040,40 @@ export async function GET(request: NextRequest) {
 
       const analytics = await fetchHrOfficeAnalytics(admin)
 
+      // Enrich each request with its assigned HOD reviewer names
+      const requestIds = (data || []).map((r: any) => r.id).filter(Boolean)
+      let hodReviewerMap: Map<string, string[]> = new Map()
+      if (requestIds.length > 0) {
+        const { data: reviewRows } = await admin
+          .from("leave_plan_reviews")
+          .select("leave_plan_request_id, reviewer_id")
+          .in("leave_plan_request_id", requestIds)
+
+        const reviewerIds = [...new Set((reviewRows || []).map((r: any) => r.reviewer_id).filter(Boolean))]
+        if (reviewerIds.length > 0) {
+          const { data: reviewerProfiles } = await admin
+            .from("user_profiles")
+            .select("id, first_name, last_name")
+            .in("id", reviewerIds)
+
+          const profileMap = new Map((reviewerProfiles || []).map((p: any) => [p.id, `${p.first_name || ""} ${p.last_name || ""}`.trim()]))
+          for (const row of (reviewRows || [])) {
+            const name = profileMap.get(row.reviewer_id) || ""
+            if (!name) continue
+            if (!hodReviewerMap.has(row.leave_plan_request_id)) hodReviewerMap.set(row.leave_plan_request_id, [])
+            hodReviewerMap.get(row.leave_plan_request_id)!.push(name)
+          }
+        }
+      }
+
+      const enrichedData = (data || []).map((r: any) => ({
+        ...r,
+        hod_reviewers: hodReviewerMap.get(r.id) || [],
+      }))
+
       return NextResponse.json({
         mode: "hr",
-        requests: data || [],
+        requests: enrichedData,
         staggerRequests: stagger || [],
         myRequests: myRequests || [],
         myStaggerRequests: myStaggerRequests || [],
