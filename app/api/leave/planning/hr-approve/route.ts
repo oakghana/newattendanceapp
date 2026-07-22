@@ -7,6 +7,124 @@ import crypto from "crypto"
 
 const HR_APPROVE_ELIGIBLE = ["hr_office_forwarded", "manager_confirmed", "hod_approved"] as const
 
+export async function GET(request: NextRequest) {
+  try {
+    console.log("[v0] GET /api/leave/planning/hr-approve called")
+    
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      console.log("[v0] No authenticated user")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    console.log("[v0] User ID:", user.id)
+
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("id, role, first_name, last_name, position, department_id, departments(name, code)")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) {
+      console.log("[v0] Profile not found:", profileError)
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    const role = String((profile as any).role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
+    const deptName = (profile as any)?.departments?.name || null
+    const deptCode = (profile as any)?.departments?.code || null
+
+    console.log("[v0] User role:", role, "dept:", deptName, "code:", deptCode)
+
+    if (!isHrApproverRole(role, deptName, deptCode) && role !== "admin") {
+      console.log("[v0] User is not HR approver")
+      return NextResponse.json(
+        { error: "Only HR Approvers and admins can view HR approval requests." },
+        { status: 403 },
+      )
+    }
+
+    // Fetch all leave requests where this user is assigned as an HR approver
+    // Join with leave_plan_reviews to find requests this user should review
+    console.log("[v0] Fetching HR approval requests for user:", user.id)
+    
+    const { data: reviewAssignments, error: reviewError } = await admin
+      .from("leave_plan_reviews")
+      .select("leave_plan_request_id, reviewer_id")
+      .eq("reviewer_id", user.id)
+
+    if (reviewError) {
+      console.error("[v0] Error fetching review assignments:", reviewError)
+      throw reviewError
+    }
+
+    console.log("[v0] Found", (reviewAssignments || []).length, "review assignments")
+
+    const requestIds = (reviewAssignments || []).map((r: any) => r.leave_plan_request_id).filter(Boolean)
+    
+    if (requestIds.length === 0) {
+      console.log("[v0] No requests assigned to this HR approver")
+      return NextResponse.json({
+        requests: [],
+        count: 0,
+        message: "No leave requests assigned to you for HR approval",
+      })
+    }
+
+    // Fetch the full leave request details
+    const { data: requests, error: requestError } = await admin
+      .from("leave_plan_requests")
+      .select(`
+        id,
+        user_id,
+        status,
+        leave_type_key,
+        preferred_start_date,
+        preferred_end_date,
+        adjusted_start_date,
+        adjusted_end_date,
+        requested_days,
+        adjusted_days,
+        reason,
+        created_at,
+        submitted_at,
+        user:user_profiles(id, first_name, last_name, employee_id, position, email, departments(id, name, code), location:locations(id, name)),
+        hod_reviewers:leave_plan_reviews(reviewer_id)
+      `)
+      .in("id", requestIds)
+      .in("status", HR_APPROVE_ELIGIBLE as any)
+      .order("created_at", { ascending: false })
+
+    if (requestError) {
+      console.error("[v0] Error fetching requests:", requestError)
+      throw requestError
+    }
+
+    console.log("[v0] Fetched", (requests || []).length, "eligible requests")
+
+    return NextResponse.json({
+      requests: requests || [],
+      count: (requests || []).length,
+      user_id: user.id,
+      role,
+    })
+  } catch (error) {
+    console.error("[v0] GET /api/leave/planning/hr-approve error:", error)
+    const msg = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: `Failed to fetch HR approval requests: ${msg}` }, { status: 500 })
+  }
+}
+
 function leaveTypeLabel(key: string): string {
   const map: Record<string, string> = {
     annual: "Annual Leave",
