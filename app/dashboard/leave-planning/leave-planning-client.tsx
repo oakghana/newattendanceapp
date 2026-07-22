@@ -1744,28 +1744,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   }, [data])
 
   const hodPendingReviews: any[] = useMemo(() => {
-    if (!data) {
-      console.log("[v0] hodPendingReviews - no data object")
-      return []
-    }
-    if (!Array.isArray(data.reviews)) {
-      console.log("[v0] hodPendingReviews - data.reviews not an array:", data.reviews)
-      return []
-    }
-    console.log("[v0] hodPendingReviews - filtering", data.reviews.length, "reviews")
-    const filtered = (data.reviews || []).filter((r: any) => {
+    if (!data) return []
+    if (!Array.isArray(data.reviews)) return []
+    return (data.reviews || []).filter((r: any) => {
       const status = String(r?.leave_plan_request?.status || "")
-      const hasRequest = !!r?.leave_plan_request
-      const statusMatches = (HOD_PENDING_STATUSES as string[]).includes(status)
-      const decisionPending = r.decision === "pending"
-      const matches = hasRequest && statusMatches && decisionPending
-      if (!matches) {
-        console.log("[v0]   - excluded review: hasRequest:", hasRequest, "status:", status, "statusMatches:", statusMatches, "decision:", r.decision, "decisionPending:", decisionPending)
-      }
-      return matches
+      return r?.leave_plan_request && (HOD_PENDING_STATUSES as string[]).includes(status) && r.decision === "pending"
     })
-    console.log("[v0] hodPendingReviews - result:", filtered.length, "pending reviews")
-    return filtered
   }, [data])
 
   const hodWorkedOnReviews: any[] = useMemo(() => {
@@ -2235,7 +2219,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
-  // ── Render ────��─────────────────────────────────────────────────────
+  // ── Render ────��──────��──────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ─��� Header Banner ──────�����──────────��────────────────────────── */}
