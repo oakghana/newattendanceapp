@@ -101,9 +101,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Department scoping via user_profiles sub-query
+    // Use adminClient for department scoping lookups to bypass RLS
+    const adminClientForScope = await createAdminClient()
     if (profile.role === "department_head") {
-      // Department heads always see their own department only — ignore any dept filter param
-      const { data: deptUsers } = await supabase
+      const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
         .eq("department_id", profile.department_id)
@@ -114,8 +115,7 @@ export async function GET(request: NextRequest) {
         query = query.eq("user_id", "00000000-0000-0000-0000-000000000000")
       }
     } else if (safeDepartmentId && profile.role !== "staff") {
-      // Admin / regional_manager with an explicit dept filter
-      const { data: deptUsers } = await supabase
+      const { data: deptUsers } = await adminClientForScope
         .from("user_profiles")
         .select("id")
         .eq("department_id", safeDepartmentId)
@@ -153,7 +153,10 @@ export async function GET(request: NextRequest) {
     // Ensure we have a non-empty array to query
     let userProfiles: any[] = []
     if (userIds.length > 0) {
-      const { data: profiles, error: profileError } = await supabase
+      // Use adminClient to bypass RLS — the user client can only see its own profile row,
+      // so all other staff would return empty and show as "Staff at [location]".
+      const adminClient = await createAdminClient()
+      const { data: profiles, error: profileError } = await adminClient
         .from("user_profiles")
         .select(`
           id,
