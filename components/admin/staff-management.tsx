@@ -555,7 +555,7 @@ export function StaffManagement() {
 
   // ── HOD Linkage ─────────────────────────────────────────────
   const [hodLinkStaff, setHodLinkStaff] = useState<StaffMember | null>(null)
-  const [hodLinkHodId, setHodLinkHodId] = useState<string>("")
+  const [hodLinkHodIds, setHodLinkHodIds] = useState<string[]>([])
   const [hodLinkLoading, setHodLinkLoading] = useState(false)
   const [hodLinkError, setHodLinkError] = useState<string | null>(null)
   const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
@@ -597,22 +597,24 @@ export function StaffManagement() {
   }
 
   const handleHodLink = async () => {
-    if (!hodLinkStaff || !hodLinkHodId) return
+    if (!hodLinkStaff || hodLinkHodIds.length === 0) return
     setHodLinkLoading(true)
     setHodLinkError(null)
     try {
       const res = await authenticatedFetch("/api/loan/lookups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "upsert_hod_linkage", staff_user_id: hodLinkStaff.id, hod_user_id: hodLinkHodId }),
+        body: JSON.stringify({ action: "upsert_hod_linkage_batch", staff_user_id: hodLinkStaff.id, hod_user_ids: hodLinkHodIds }),
       })
       const result = await res.json()
       if (result.success) {
-        showSuccess(`${hodLinkStaff.first_name} ${hodLinkStaff.last_name} linked successfully`, "HOD Linked")
+        const count = hodLinkHodIds.length
+        showSuccess(`${hodLinkStaff.first_name} ${hodLinkStaff.last_name} linked to ${count} HOD(s) successfully`, "HOD Linked")
         // Refresh staff data to show updated HOD linkage
         await fetchStaff()
         setHodLinkStaff(null)
-        setHodLinkHodId("")
+        setHodLinkHodIds([])
+        setHodLinkError(null)
       } else {
         setHodLinkError(result.error || "Failed to link")
       }
@@ -1278,10 +1280,14 @@ export function StaffManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {(member as any).hod_link ? (
-                          <div className="text-sm">
-                            <div className="font-semibold text-primary">{(member as any).hod_link.name}</div>
-                            <div className="text-xs text-muted-foreground">{(member as any).hod_link.role.replace("_", " ")}</div>
+                        {(member as any).hod_links && (member as any).hod_links.length > 0 ? (
+                          <div className="space-y-1">
+                            {(member as any).hod_links.map((hod: any, idx: number) => (
+                              <div key={`${member.id}-hod-${idx}`} className="text-sm">
+                                <div className="font-semibold text-primary">{hod.name}</div>
+                                <div className="text-xs text-muted-foreground">{hod.role.replace("_", " ")}</div>
+                              </div>
+                            ))}
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Not linked</span>
@@ -1387,7 +1393,8 @@ export function StaffManagement() {
         if (!open) {
           setHodLinkStaff(null)
           setHodSearchQuery("")
-          setHodLinkHodId("")
+          setHodLinkHodIds([])
+          setHodLinkError(null)
         }
       }}>
         <DialogContent className="max-w-md">
@@ -1420,47 +1427,59 @@ export function StaffManagement() {
                   : "No HODs available"}
               </p>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="hod-select">Select from Results</Label>
-              <Select value={hodLinkHodId} onValueChange={setHodLinkHodId}>
-                <SelectTrigger id="hod-select">
-                  <SelectValue placeholder="Choose a HOD or Regional Manager..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {hodCandidates.filter((h) =>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Select HODs (can choose multiple)</Label>
+              <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+                {hodCandidates.filter((h) =>
+                  hodSearchQuery === "" ||
+                  `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                  (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                  (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                ).length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4 text-center">
+                    {hodSearchQuery ? "No matching HODs found" : "No HODs available"}
+                  </p>
+                ) : (
+                  hodCandidates.filter((h) =>
                     hodSearchQuery === "" ||
                     `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
                     (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
                     (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
                   ).map((hod) => (
-                    <SelectItem key={hod.id} value={hod.id}>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium">{hod.first_name} {hod.last_name}</span>
-                        <span className="text-xs text-muted-foreground">
+                    <div key={hod.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id={`hod-${hod.id}`}
+                        checked={hodLinkHodIds.includes(hod.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setHodLinkHodIds([...hodLinkHodIds, hod.id])
+                          } else {
+                            setHodLinkHodIds(hodLinkHodIds.filter((id) => id !== hod.id))
+                          }
+                        }}
+                        className="h-4 w-4 rounded"
+                      />
+                      <label htmlFor={`hod-${hod.id}`} className="flex-1 cursor-pointer text-sm">
+                        <div className="font-medium">{hod.first_name} {hod.last_name}</div>
+                        <div className="text-xs text-muted-foreground">
                           {hod.employee_id && `ID: ${hod.employee_id} • `}
                           {hod.role.replace("_", " ")} {hod.departments?.name ? `• ${hod.departments.name}` : ""}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                  {hodCandidates.filter((h) =>
-                    hodSearchQuery === "" ||
-                    `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
-                    (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
-                    (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
-                  ).length === 0 && (
-                    <SelectItem value="__none__" disabled>
-                      {hodSearchQuery ? "No matching HODs found" : "No HODs available"}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+                        </div>
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              {hodLinkHodIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">Selected: {hodLinkHodIds.length} HOD(s)</p>
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setHodLinkStaff(null)}>Cancel</Button>
-            <Button onClick={handleHodLink} disabled={!hodLinkHodId || hodLinkLoading}>
-              {hodLinkLoading ? "Linking..." : "Link"}
+            <Button onClick={handleHodLink} disabled={hodLinkHodIds.length === 0 || hodLinkLoading}>
+              {hodLinkLoading ? "Linking..." : `Link (${hodLinkHodIds.length})`}
             </Button>
           </DialogFooter>
         </DialogContent>

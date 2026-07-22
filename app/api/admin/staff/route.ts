@@ -250,11 +250,15 @@ export async function GET(request: NextRequest) {
           .select("id, first_name, last_name, role")
           .in("id", (hodLinkages || []).map((l: any) => l.hod_id).filter(Boolean))
 
-        const hodMap = new Map<string, any>()
+        // Build map of staff to array of HODs
+        const hodMap = new Map<string, any[]>()
         ;(hodLinkages || []).forEach((link: any) => {
           const hod = (hodProfiles || []).find((h: any) => h.id === link.hod_id)
           if (hod) {
-            hodMap.set(link.staff_id, {
+            if (!hodMap.has(link.staff_id)) {
+              hodMap.set(link.staff_id, [])
+            }
+            ;(hodMap.get(link.staff_id) as any[]).push({
               id: hod.id,
               name: `${hod.first_name} ${hod.last_name}`.trim(),
               role: hod.role,
@@ -264,7 +268,7 @@ export async function GET(request: NextRequest) {
 
         enrichedStaff = enrichedStaff.map((s) => ({
           ...s,
-          hod_link: hodMap.get(s.id) || null,
+          hod_links: hodMap.get(s.id) || [],
         }))
       }
     } catch (err) {
