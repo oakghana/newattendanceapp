@@ -9,8 +9,6 @@ const HR_APPROVE_ELIGIBLE = ["hr_office_forwarded", "manager_confirmed", "hod_ap
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("[v0] GET /api/leave/planning/hr-approve called")
-    
     const supabase = await createClient()
     const admin = await createAdminClient()
 
@@ -20,11 +18,8 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      console.log("[v0] No authenticated user")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-
-    console.log("[v0] User ID:", user.id)
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
@@ -33,7 +28,6 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (profileError || !profile) {
-      console.log("[v0] Profile not found:", profileError)
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
@@ -44,10 +38,7 @@ export async function GET(request: NextRequest) {
     const deptName = (profile as any)?.departments?.name || null
     const deptCode = (profile as any)?.departments?.code || null
 
-    console.log("[v0] User role:", role, "dept:", deptName, "code:", deptCode)
-
     if (!isHrApproverRole(role, deptName, deptCode) && role !== "admin") {
-      console.log("[v0] User is not HR approver")
       return NextResponse.json(
         { error: "Only HR Approvers and admins can view HR approval requests." },
         { status: 403 },
@@ -56,8 +47,6 @@ export async function GET(request: NextRequest) {
 
     // Fetch all leave requests where this user is assigned as an HR approver
     // Join with leave_plan_reviews to find requests this user should review
-    console.log("[v0] Fetching HR approval requests for user:", user.id)
-    
     const { data: reviewAssignments, error: reviewError } = await admin
       .from("leave_plan_reviews")
       .select("leave_plan_request_id, reviewer_id")
@@ -68,12 +57,9 @@ export async function GET(request: NextRequest) {
       throw reviewError
     }
 
-    console.log("[v0] Found", (reviewAssignments || []).length, "review assignments")
-
     const requestIds = (reviewAssignments || []).map((r: any) => r.leave_plan_request_id).filter(Boolean)
     
     if (requestIds.length === 0) {
-      console.log("[v0] No requests assigned to this HR approver")
       return NextResponse.json({
         requests: [],
         count: 0,
@@ -98,8 +84,7 @@ export async function GET(request: NextRequest) {
         reason,
         created_at,
         submitted_at,
-        user:user_profiles(id, first_name, last_name, employee_id, position, email, departments(id, name, code), location:locations(id, name)),
-        hod_reviewers:leave_plan_reviews(reviewer_id)
+        user:user_profiles(id, first_name, last_name, employee_id, position, email, department_id, departments(id, name, code))
       `)
       .in("id", requestIds)
       .in("status", HR_APPROVE_ELIGIBLE as any)
@@ -109,8 +94,6 @@ export async function GET(request: NextRequest) {
       console.error("[v0] Error fetching requests:", requestError)
       throw requestError
     }
-
-    console.log("[v0] Fetched", (requests || []).length, "eligible requests")
 
     return NextResponse.json({
       requests: requests || [],
