@@ -2268,6 +2268,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     if (isHrOffice && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
     if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
+    if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
     if (canSeeAllRequests) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
@@ -4077,6 +4078,81 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
               </div>
             )}
           </TabsContent>
+
+          {/* ── HR Approval Queue Table ──────────────────────────────────── */}
+          {(isHrApprover || isAdmin) && (
+          <TabsContent value="hr-approval-queue">
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+                <span className="text-lg">📋</span> HR Approval Queue
+              </p>
+              <p className="text-xs text-amber-800 mt-2">All leave requests forwarded by HR Leave Office awaiting your approval. Use the Action column to approve or reject each request.</p>
+            </div>
+            {hrApproverLoading ? (
+              <div className="text-center py-8 text-slate-500"><span className="animate-spin inline-block">⏳</span> Loading requests...</div>
+            ) : !hrApproverData || !Array.isArray(hrApproverData.requests) || hrApproverData.requests.length === 0 ? (
+              <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                <p className="font-medium">No requests awaiting HR approval</p>
+                <p className="text-xs mt-1">All leave requests have been processed or are pending other approvals.</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff Name</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Department</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Leave Type</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Dates</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Days</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hrApproverData.requests.map((req: any) => {
+                        const staffName = `${req.user?.first_name || ""} ${req.user?.last_name || ""}`.trim()
+                        const deptName = req.user?.departments?.name || "—"
+                        const leaveType = req.leave_type_key || "—"
+                        const startDate = req.adjusted_start_date || req.preferred_start_date
+                        const endDate = req.adjusted_end_date || req.preferred_end_date
+                        const days = req.adjusted_days || req.requested_days || "—"
+                        const statusColor = getStatusColor(req.status)
+                        const statusLabel = getStatusLabel(req.status)
+                        return (
+                          <tr key={req.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3 font-medium text-slate-900">{staffName}</td>
+                            <td className="px-4 py-3 text-slate-700">{deptName}</td>
+                            <td className="px-4 py-3 text-slate-700">{leaveTypeLabelShort(leaveType)}</td>
+                            <td className="px-4 py-3 text-slate-700 text-xs">{fmtDate(startDate)} to {fmtDate(endDate)}</td>
+                            <td className="px-4 py-3 text-center font-semibold text-slate-900">{days}</td>
+                            <td className="px-4 py-3">
+                              <Badge className={`text-xs border ${statusColor}`}>
+                                {statusLabel}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => setHrExpandedId(req.id)}
+                              >
+                                Review
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+          )}
 
           {canSeeAllRequests && (
           <TabsContent value="all-requests">
