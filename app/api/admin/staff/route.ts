@@ -242,23 +242,23 @@ export async function GET(request: NextRequest) {
       if (staffIds.length > 0) {
         const { data: hodLinkages } = await adminDb
           .from("loan_hod_linkages")
-          .select("staff_id, hod_id")
-          .in("staff_id", staffIds)
+          .select("staff_user_id, hod_user_id")
+          .in("staff_user_id", staffIds)
 
         const { data: hodProfiles } = await adminDb
           .from("user_profiles")
           .select("id, first_name, last_name, role")
-          .in("id", (hodLinkages || []).map((l: any) => l.hod_id).filter(Boolean))
+          .in("id", (hodLinkages || []).map((l: any) => l.hod_user_id).filter(Boolean))
 
-        // Build map of staff to array of HODs
+        // Build map of staff_user_id → array of linked HODs
         const hodMap = new Map<string, any[]>()
         ;(hodLinkages || []).forEach((link: any) => {
-          const hod = (hodProfiles || []).find((h: any) => h.id === link.hod_id)
+          const hod = (hodProfiles || []).find((h: any) => h.id === link.hod_user_id)
           if (hod) {
-            if (!hodMap.has(link.staff_id)) {
-              hodMap.set(link.staff_id, [])
+            if (!hodMap.has(link.staff_user_id)) {
+              hodMap.set(link.staff_user_id, [])
             }
-            ;(hodMap.get(link.staff_id) as any[]).push({
+            ;(hodMap.get(link.staff_user_id) as any[]).push({
               id: hod.id,
               name: `${hod.first_name} ${hod.last_name}`.trim(),
               role: hod.role,
@@ -266,9 +266,9 @@ export async function GET(request: NextRequest) {
           }
         })
 
-        enrichedStaff = enrichedStaff.map((s) => ({
+        enrichedStaff = enrichedStaff.map((s: any) => ({
           ...s,
-          hod_links: hodMap.get(s.id) || [],
+          hod_links: hodMap.get(String(s.id)) || [],
         }))
       }
     } catch (err) {

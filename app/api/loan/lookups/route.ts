@@ -540,6 +540,64 @@ export async function POST(request: NextRequest) {
         .select("*")
 
       if (error) throw error
+
+      // --- Trigger notifications to newly linked HODs ---
+      // Fetch staff details and all their pending leave/loan items,
+      // then push staff_notifications to each HOD so they see the
+      // work in their portal immediately on next login.
+      try {
+        const staffName = `${(staffProfile as any).first_name || ""} ${(staffProfile as any).last_name || ""}`.trim()
+
+        // Fetch pending leave requests for this staff
+        const { data: pendingLeave } = await admin
+          .from("leave_requests")
+          .select("id, leave_type, start_date, end_date, status")
+          .eq("user_id", staffUserId)
+          .in("status", ["pending_hod", "pending_hod_review"])
+
+        // Fetch pending loan requests for this staff
+        const { data: pendingLoans } = await admin
+          .from("loan_applications")
+          .select("id, loan_type, amount, status")
+          .eq("user_id", staffUserId)
+          .eq("status", "pending_hod")
+          .catch(() => ({ data: [] }))
+
+        const notifications: any[] = []
+        for (const hodId of hodUserIds) {
+          // Notify HOD about each pending leave request
+          for (const leave of pendingLeave || []) {
+            notifications.push({
+              user_id: hodId,
+              message: `[HOD Assignment] ${staffName} has a pending ${(leave as any).leave_type || "leave"} request (${(leave as any).start_date} – ${(leave as any).end_date}) awaiting your review.`,
+              type: "leave_pending_hod",
+              reference_id: (leave as any).id,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            })
+          }
+          // Notify HOD about each pending loan request
+          for (const loan of (pendingLoans as any) || []) {
+            notifications.push({
+              user_id: hodId,
+              message: `[HOD Assignment] ${staffName} has a pending loan application awaiting your review.`,
+              type: "loan_pending_hod",
+              reference_id: (loan as any).id,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            })
+          }
+        }
+
+        if (notifications.length > 0) {
+          const { error: notifErr } = await admin.from("staff_notifications").insert(notifications)
+          if (notifErr) console.warn("[v0] HOD link - failed to insert notifications:", notifErr.message)
+        }
+      } catch (notifEx) {
+        console.warn("[v0] HOD link - notification dispatch failed (non-fatal):", notifEx)
+      }
+      // --- End trigger notifications ---
+
       return NextResponse.json({ success: true, data })
     }
 
