@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { auth } from "@/lib/auth"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { isHrPlanningRole } from "@/lib/leave-planning"
 
 /**
  * GET /api/leave/hod-review
@@ -13,23 +13,19 @@ import { auth } from "@/lib/auth"
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (!user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const user = session.user
-    const admin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-      process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-      { auth: { persistSession: false } }
-    )
+    const admin = await createAdminClient()
 
-    // Get all staff members linked to this HOD
+    // Get all staff members linked to this HR executive
     const { data: linkedStaff, error: linkError } = await admin
       .from("loan_hod_linkages")
       .select("staff_user_id")
-      .eq("hod_user_id", user.id)
+      .eq("hod_user_id", user.id || "")
 
     if (linkError) {
       console.error("Error fetching HOD linkages:", linkError)
