@@ -1025,6 +1025,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
+  // ── HR Executive HOD Review ──────────────────────────────────────────
+  const [hodReviewRequests, setHodReviewRequests] = useState<any[]>([])
+  const [hodReviewLoading, setHodReviewLoading] = useState(false)
+  const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
+  const [hrExecHodDeptFilter, setHrExecHodDeptFilter] = useState("all")
+
   // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
   const [startDate, setStartDate] = useState("")
@@ -1262,6 +1268,21 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       setLoading(false)
     }
   }, [hrOfficeShowArchived])
+
+  const loadHodReview = useCallback(async () => {
+    if (!isHrOffice || isHod) return // Only fetch for HR managers who are not also HODs
+    setHodReviewLoading(true)
+    try {
+      const res = await fetch("/api/leave/hod-review", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load HOD review requests")
+      setHodReviewRequests(json.requests || [])
+    } catch (e) {
+      console.error("[v0] Load HOD review error:", e)
+    } finally {
+      setHodReviewLoading(false)
+    }
+  }, [isHrOffice, isHod])
 
   const loadPolicy = useCallback(async () => {
     try {
@@ -1638,6 +1659,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     // Load HR executives only for HR Leave Office users
     if (isHrOffice) {
       void loadHrExecutives()
+      void loadHodReview() // Load HR executive HOD review requests
     }
     // For HOD/manager/admin users: backfill any missing leave_plan_reviews rows
     // that were created before the user was linked as an HOD, then reload data
@@ -1652,7 +1674,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
         })
         .catch(() => {/* non-fatal */})
     }
-  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives, isHod, isAdmin, isHrApprover])
+  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives, isHod, isAdmin, isHrApprover, loadHodReview])
 
   useEffect(() => {
     if (!isHrApprover && !isAdmin) return
@@ -2213,11 +2235,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
+    // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
+    if (isHrOffice && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
     if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
     if (canSeeAllRequests) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
-  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
+  }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
   // ── Render ────��──────��──────────────────────────────────────────────
   return (
@@ -2676,6 +2700,95 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     </CardContent>
                   </Card>
                 )}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* ── HR Executive HOD Review ──────────────────────────────────── */}
+          <TabsContent value="hr-exec-hod-review">
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+                <span className="text-lg">📋</span> HOD Review for Your Linked Staff
+              </p>
+              <p className="text-xs text-blue-800 mt-2">Review and approve leave requests from all your department&apos;s staff members.</p>
+            </div>
+            {hodReviewLoading ? (
+              <div className="text-center py-8 text-slate-500"><span className="animate-spin inline-block">⏳</span> Loading...</div>
+            ) : hodReviewRequests.length === 0 ? (
+              <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                <UserCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                <p className="font-medium">No pending reviews</p>
+                <p className="text-sm mt-1">All leave requests from your staff have been reviewed.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                  <Select value={hrExecHodLocationFilter} onValueChange={setHrExecHodLocationFilter}>
+                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All locations</SelectItem>
+                      {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={hrExecHodDeptFilter} onValueChange={setHrExecHodDeptFilter}>
+                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All departments</SelectItem>
+                      {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hodReviewRequests, "hod-review-requests.csv")}>
+                    <Download className="w-3 h-3 mr-1" /> Export CSV
+                  </Button>
+                  <span className="w-full text-xs text-slate-500 sm:ml-auto sm:w-auto">{hodReviewRequests.filter((r: any) => {
+                    const loc = hrExecHodLocationFilter === "all" ? true : String(r.user?.location?.name || "") === hrExecHodLocationFilter
+                    const dept = hrExecHodDeptFilter === "all" ? true : String(r.user?.departments?.name || "") === hrExecHodDeptFilter
+                    return loc && dept
+                  }).length} of {hodReviewRequests.length} shown</span>
+                </div>
+                {hodReviewRequests.filter((r: any) => {
+                  const loc = hrExecHodLocationFilter === "all" ? true : String(r.user?.location?.name || "") === hrExecHodLocationFilter
+                  const dept = hrExecHodDeptFilter === "all" ? true : String(r.user?.departments?.name || "") === hrExecHodDeptFilter
+                  return loc && dept
+                }).map((req: any) => (
+                  <Card key={req.id} className="border shadow-sm">
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
+                          <p className="text-xs text-slate-500">
+                            {String(req.user?.departments?.name || "—")} · {String(req.user?.employee_id || "")}
+                          </p>
+                        </div>
+                        <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
+                          {getStatusLabel(req.status)}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                        <InfoPill label="Leave Type" value={leaveTypeLabelShort(req.leave_type_key)} />
+                        <InfoPill label="Start" value={fmtDate(req.preferred_start_date)} />
+                        <InfoPill label="End" value={fmtDate(req.preferred_end_date)} />
+                        <InfoPill label="Days" value={String(req.requested_days)} highlight />
+                      </div>
+                      <p className="text-sm text-slate-600 mb-4">{req.reason || "—"}</p>
+                      <div className="text-xs text-slate-500 mb-4">
+                        <p>
+                          <span className="font-medium">Submitted:</span>{" "}
+                          {req.submitted_at || req.created_at ? fmtDate(req.submitted_at || req.created_at) : "—"}
+                        </p>
+                        {Array.isArray(req.hod_reviewers) && req.hod_reviewers.length > 0 && (
+                          <p className="mt-1">
+                            <span className="font-medium">Assigned HOD{req.hod_reviewers.length > 1 ? "s" : ""}:</span>{" "}
+                            {req.hod_reviewers.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                      <Button className="w-full" onClick={() => {/* Open review modal to approve/reject */}}>
+                        Review Request
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             )}
           </TabsContent>
