@@ -1214,6 +1214,7 @@ export function StaffManagement() {
                   <TableHead className="font-semibold text-foreground">Email</TableHead>
                   <TableHead className="font-semibold text-foreground">Department</TableHead>
                   <TableHead className="font-semibold text-foreground">Role</TableHead>
+                  <TableHead className="font-semibold text-foreground">Assigned To (HOD)</TableHead>
                   <TableHead className="font-semibold text-foreground">Assigned Location</TableHead>
                   <TableHead className="font-semibold text-foreground">Status</TableHead>
                   <TableHead className="font-semibold text-foreground">Last modified</TableHead>
@@ -1223,7 +1224,7 @@ export function StaffManagement() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
+                    <TableCell colSpan={9} className="text-center py-12">
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                         <span className="text-muted-foreground font-medium">Loading staff...</span>
@@ -1232,7 +1233,7 @@ export function StaffManagement() {
                   </TableRow>
                 ) : staff.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
+                    <TableCell colSpan={9} className="text-center py-12">
                       <div className="space-y-2">
                         <Users className="h-12 w-12 text-muted-foreground mx-auto" />
                         <p className="text-muted-foreground font-medium">No staff members found</p>
@@ -1272,6 +1273,16 @@ export function StaffManagement() {
                         >
                           {member.role.replace("_", " ")}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {(member as any).hod_link ? (
+                          <div className="text-sm">
+                            <div className="font-semibold text-primary">{(member as any).hod_link.name}</div>
+                            <div className="text-xs text-muted-foreground">{(member as any).hod_link.role.replace("_", " ")}</div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Not linked</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {member.geofence_locations ? (

@@ -236,6 +236,41 @@ export async function GET(request: NextRequest) {
       console.error("[v0] Staff API - Failed to attach last_modified_by:", err)
     }
 
+    // Attach HOD (Head of Department) information
+    try {
+      const staffIds = enrichedStaff.map((s) => s.id)
+      if (staffIds.length > 0) {
+        const { data: hodLinkages } = await adminDb
+          .from("loan_hod_linkages")
+          .select("staff_id, hod_id")
+          .in("staff_id", staffIds)
+
+        const { data: hodProfiles } = await adminDb
+          .from("user_profiles")
+          .select("id, first_name, last_name, role")
+          .in("id", (hodLinkages || []).map((l: any) => l.hod_id).filter(Boolean))
+
+        const hodMap = new Map<string, any>()
+        ;(hodLinkages || []).forEach((link: any) => {
+          const hod = (hodProfiles || []).find((h: any) => h.id === link.hod_id)
+          if (hod) {
+            hodMap.set(link.staff_id, {
+              id: hod.id,
+              name: `${hod.first_name} ${hod.last_name}`.trim(),
+              role: hod.role,
+            })
+          }
+        })
+
+        enrichedStaff = enrichedStaff.map((s) => ({
+          ...s,
+          hod_link: hodMap.get(s.id) || null,
+        }))
+      }
+    } catch (err) {
+      console.error("[v0] Staff API - Failed to attach HOD information:", err)
+    }
+
     console.log("[v0] Staff API - Fetched page", page, "count", (enrichedStaff || []).length)
     console.log("[v0] Staff API - Response time:", Date.now() - startTime, "ms")
 
