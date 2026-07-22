@@ -564,7 +564,7 @@ export function StaffManagement() {
 
   const openHodLinkDialog = async (member: StaffMember) => {
     setHodLinkStaff(member)
-    setHodLinkHodId("")
+    setHodLinkHodIds([])
     setHodLinkError(null)
     try {
       // Fetch all roles that act as head of department in parallel
