@@ -332,6 +332,9 @@ export function StaffManagement() {
           position: "",
           role: "staff",
           assigned_location_id: "",
+          date_of_appointment: "",
+          years_of_service: "",
+          contact_number: "",
         })
         fetchStaff()
         // Auto-open HOD linkage dialog after creating staff (admin / it-admin)
@@ -554,6 +557,7 @@ export function StaffManagement() {
   const [hodLinkStaff, setHodLinkStaff] = useState<StaffMember | null>(null)
   const [hodLinkHodId, setHodLinkHodId] = useState<string>("")
   const [hodLinkLoading, setHodLinkLoading] = useState(false)
+  const [hodLinkError, setHodLinkError] = useState<string | null>(null)
   const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
 
   const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
@@ -894,7 +898,7 @@ export function StaffManagement() {
                           setNewStaff({
                             ...newStaff,
                             date_of_appointment: newDate,
-                            years_of_service: calculateYearsOfService(newDate),
+                            years_of_service: String(calculateYearsOfService(newDate)),
                           })
                         }}
                         className="mt-1"
@@ -1127,7 +1131,7 @@ export function StaffManagement() {
                         setEditingStaff({
                           ...editingStaff,
                           date_of_appointment: newDate,
-                          years_of_service: calculateYearsOfService(newDate),
+                          years_of_service: String(calculateYearsOfService(newDate)),
                         })
                       }}
                       className="mt-1"
