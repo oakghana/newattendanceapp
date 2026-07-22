@@ -132,12 +132,15 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     if (reviewerId && !linkedReviewerIds.includes(reviewerId)) linkedReviewerIds.push(reviewerId)
   }
 
+  // All roles that act as heads of department for leave review purposes
+  const HOD_ROLES = ["regional_manager", "department_head", "manager_hr", "director_hr"]
+
   if (linkedReviewerIds.length > 0) {
     const { data: linkedReviewers } = await admin
       .from("user_profiles")
       .select("id, role")
       .in("id", linkedReviewerIds)
-      .in("role", ["regional_manager", "department_head"])
+      .in("role", HOD_ROLES)
       .eq("is_active", true)
 
     const reviewers = (linkedReviewers || []).map((r: any) => ({
@@ -151,7 +154,7 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
   const { data: reviewers } = await admin
     .from("user_profiles")
     .select("id, role, department_id")
-    .in("role", ["regional_manager", "department_head"])
+    .in("role", HOD_ROLES)
     .eq("is_active", true)
 
   return (reviewers || []).filter((r: any) => {
@@ -781,9 +784,15 @@ export async function GET(request: NextRequest) {
 
     // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
     const isAdmin = role === "admin"
-    console.log("[v0] HOD Review check - role:", role, "isAdmin:", isAdmin, "isHr:", isHr, "isHodRole:", isHodRole(role))
-      // Admin always sees HOD reviews; other HOD roles only if they're not HR
-    if ((isAdmin || (isHodRole(role) && !isHr))) {
+    // HR executives (manager_hr / director_hr) who are also linked as HODs must enter
+    // the HOD branch so they can see and act on requests from their assigned staff.
+    const { data: hodLinkRows } = await admin
+      .from("loan_hod_linkages")
+      .select("staff_user_id")
+      .eq("hod_user_id", user.id)
+      .limit(1)
+    const isLinkedHod = (hodLinkRows || []).length > 0
+    if ((isAdmin || isHodRole(role) || isLinkedHod)) {
       let nonArchivedReviews: any[] = []
 
       // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)
