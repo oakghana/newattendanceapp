@@ -631,9 +631,32 @@ function HrApprovalCard({
 
         </button>
 
+        {/* Already processed indicator */}
+        {["hr_approved", "hr_rejected", "cancelled"].includes(req.status) && (
+          <div className="px-5 py-3 bg-amber-50 border border-amber-200 rounded-b-lg">
+            <div className="flex items-center gap-2 text-xs text-amber-900">
+              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+              <span className="font-medium">This leave request has already been processed and cannot be modified.</span>
+            </div>
+            {req.status === "hr_approved" && req.hr_approved_at && (
+              <p className="text-xs text-amber-700 mt-1 pl-6">Approved on {fmtDate(req.hr_approved_at)}</p>
+            )}
+          </div>
+        )}
+
         {/* Expanded action panel */}
         {expanded && (
           <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 space-y-4">
+
+            {/* Block processing for already-handled requests */}
+            {["hr_approved", "hr_rejected", "cancelled"].includes(req.status) && (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-center">
+                <p className="text-sm font-semibold text-red-800">Request Cannot Be Processed</p>
+                <p className="text-xs text-red-700 mt-1">
+                  This request is in a terminal state ({req.status.replace(/_/g, ' ')}) and cannot be approved or rejected again.
+                </p>
+              </div>
+            )}
 
             {/* Signature status */}
             {hasStoredSignature ? (
@@ -702,7 +725,8 @@ function HrApprovalCard({
                 size="sm"
                 variant="outline"
                 className="border-red-300 text-red-600 hover:bg-red-50 gap-1"
-                disabled={processing}
+                disabled={processing || ["hr_approved", "hr_rejected", "cancelled"].includes(req.status)}
+                title={["hr_approved", "hr_rejected", "cancelled"].includes(req.status) ? 'This request has already been processed' : undefined}
                 onClick={() => onReject(note)}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
@@ -711,8 +735,13 @@ function HrApprovalCard({
               <Button
                 size="sm"
                 className="bg-orange-500 hover:bg-orange-600 text-white gap-1"
-                disabled={processing || !sigReady}
-                title={!sigReady ? 'Set a signature above before approving' : undefined}
+                disabled={processing || !sigReady || ["hr_approved", "hr_rejected", "cancelled"].includes(req.status)}
+                title={
+                  ["hr_approved", "hr_rejected", "cancelled"].includes(req.status)
+                    ? 'This request has already been processed'
+                    : !sigReady ? 'Set a signature above before approving' 
+                    : undefined
+                }
                 onClick={() => onApprove(note)}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -802,10 +831,22 @@ export function HrApprovalsTab() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Approval failed')
-      toast({ title: 'Leave Approved', description: data.message || 'Memo issued successfully.' })
-      setExpandedId(null)
-      fetchRequests()
+      if (!res.ok) {
+        // Check for duplicate processing error
+        if (data.code === 'ALREADY_PROCESSED' || res.status === 409) {
+          toast({
+            title: 'Request Already Processed',
+            description: 'This leave request has already been processed and cannot be modified again. If you believe this is an error, please contact your HR administrator.',
+            variant: 'destructive',
+          })
+        } else {
+          throw new Error(data.error || 'Approval failed')
+        }
+      } else {
+        toast({ title: 'Leave Approved', description: data.message || 'Memo issued successfully.' })
+        setExpandedId(null)
+        fetchRequests()
+      }
     } catch (err: any) {
       toast({ title: 'Error', description: String(err.message || err), variant: 'destructive' })
     } finally {
@@ -827,10 +868,22 @@ export function HrApprovalsTab() {
         body: JSON.stringify({ leave_plan_request_id: reqId, action: 'reject', note }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Rejection failed')
-      toast({ title: 'Leave Rejected', description: data.message || 'Request rejected.' })
-      setExpandedId(null)
-      fetchRequests()
+      if (!res.ok) {
+        // Check for duplicate processing error
+        if (data.code === 'ALREADY_PROCESSED' || res.status === 409) {
+          toast({
+            title: 'Request Already Processed',
+            description: 'This leave request has already been processed and cannot be modified again. If you believe this is an error, please contact your HR administrator.',
+            variant: 'destructive',
+          })
+        } else {
+          throw new Error(data.error || 'Rejection failed')
+        }
+      } else {
+        toast({ title: 'Leave Rejected', description: data.message || 'Request rejected.' })
+        setExpandedId(null)
+        fetchRequests()
+      }
     } catch (err: any) {
       toast({ title: 'Error', description: String(err.message || err), variant: 'destructive' })
     } finally {
