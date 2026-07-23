@@ -15,7 +15,11 @@ interface Stats {
   hodPending: number
 }
 
-export function HrExecutiveOverviewPanel() {
+interface HrExecutiveOverviewPanelProps {
+  onNavigateToTab?: (tab: 'overview' | 'leave-approvals' | 'analytics' | 'balance-calendar') => void
+}
+
+export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOverviewPanelProps) {
   const [stats, setStats] = useState<Stats>({
     pendingApprovals: 0,
     approvedLeave: 0,
@@ -33,6 +37,15 @@ export function HrExecutiveOverviewPanel() {
     setModalFilter(filter)
     setModalTitle(title)
     setModalOpen(true)
+  }
+
+  const handleCardClick = (filter: typeof modalFilter, title: string) => {
+    // If we have a navigation callback, go to the Leave Approvals tab
+    if (onNavigateToTab && filter === 'pending') {
+      onNavigateToTab('leave-approvals')
+    } else {
+      openModal(filter, title)
+    }
   }
 
   useEffect(() => {
@@ -60,16 +73,16 @@ export function HrExecutiveOverviewPanel() {
         const pendingRequests = pendingData.requests || []
         const allRequests = allRequestsData.data || allRequestsData.records || []
 
-        // Count approved leave — DB statuses are 'hr_approved', 'hod_approved', 'approved', etc.
-        const APPROVED_STATUSES = ['approved', 'hr_approved', 'hod_approved', 'finalized', 'completed']
+        // Count approved leave — statuses set by hr-approve route and workflow
+        const APPROVED_STATUSES = ['approved', 'hr_approved', 'hod_approved', 'finalized', 'completed', 'memo_issued']
         const approvedLeave = allRequests.filter((r: any) =>
-          APPROVED_STATUSES.includes(r.status)
+          APPROVED_STATUSES.includes(String(r.status || "").toLowerCase())
         ).length
 
-        // Count HOD pending — DB status is 'pending_hod_review'
-        const HOD_PENDING_STATUSES = ['pending_hod_review', 'hod_review', 'pending_hod']
+        // Count HOD pending — submitted requests awaiting HOD review
+        const HOD_PENDING_STATUSES = ['pending_hod_review', 'hod_review', 'pending_hod', 'submitted', 'hr_office_reviewed', 'pending_hr_approval']
         const hodPending = allRequests.filter((r: any) =>
-          HOD_PENDING_STATUSES.includes(r.status)
+          HOD_PENDING_STATUSES.includes(String(r.status || "").toLowerCase())
         ).length
         
         // Count payment memos
@@ -123,7 +136,7 @@ export function HrExecutiveOverviewPanel() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Pending Approvals */}
         <button
-          onClick={() => openModal('pending', 'Pending Leave Approvals')}
+          onClick={() => handleCardClick('pending', 'Pending Leave Approvals')}
           className="text-left hover:shadow-md transition-shadow"
         >
           <Card className="cursor-pointer h-full hover:border-primary/50">

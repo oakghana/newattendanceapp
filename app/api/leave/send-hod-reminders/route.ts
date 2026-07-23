@@ -1,13 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
     // Get all pending HOD requests grouped by HOD
     const { data: requests, error } = await supabase
       .from('leave_plan_requests')

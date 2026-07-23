@@ -21,13 +21,28 @@ export async function GET(request: NextRequest) {
       leave_type_key,
       preferred_start_date,
       preferred_end_date,
+      adjusted_start_date,
+      adjusted_end_date,
       requested_days,
       adjusted_days,
+      entitlement_days,
+      travelling_days_added,
+      leave_year_period,
       status,
       hod_decision,
       staff_category,
       created_at,
-      submitted_at
+      submitted_at,
+      hr_approver_id,
+      hr_approver_name,
+      hr_approved_at,
+      hr_signature_data_url,
+      hr_signature_text,
+      hr_signature_mode,
+      memo_draft_subject,
+      memo_draft_body,
+      memo_subject,
+      memo_body
     `, { count: "exact" })
 
     if (userId) query = query.eq("user_id", userId)
@@ -54,21 +69,79 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const data = (planRequests || []).map((req: any) => ({
-      ...req,
-      leave_type: req.leave_type_key || "Annual",
-      start_date: req.preferred_start_date,
-      end_date: req.preferred_end_date,
-      hod_review_status: req.hod_decision || "pending",
-      user_profiles: userMap[req.user_id] ? {
-        first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
-        last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",
-        employee_id: userMap[req.user_id].employee_id || "",
-        department_name: userMap[req.user_id].department_name || "",
-        position: userMap[req.user_id].position || "",
-        full_name: userMap[req.user_id].full_name || "",
-      } : null,
-    }))
+    // Collect unique HR approver IDs (column is hr_approver_id) for profile join
+    const hrApproverIds = [
+      ...new Set(
+        (planRequests || [])
+          .map((r: any) => r.hr_approver_id)
+          .filter(Boolean)
+      )
+    ] as string[]
+    let hrApproverMap: Record<string, any> = {}
+    let hrSignatureRegistryMap: Record<string, string> = {}
+
+    if (hrApproverIds.length > 0) {
+      // Primary: user_profiles for name, position, current signature
+      const { data: hrUsers } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, signature_data_url")
+        .in("id", hrApproverIds)
+      if (hrUsers) {
+        hrUsers.forEach((u: any) => { hrApproverMap[u.id] = u })
+      }
+
+      // Fallback: approval_signature_registry — captures signature at time of signing
+      const { data: sigRegistry } = await supabase
+        .from("approval_signature_registry")
+        .select("user_id, signature_data_url")
+        .in("user_id", hrApproverIds)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+      if (sigRegistry) {
+        // Keep only the most recent entry per user (already sorted desc)
+        sigRegistry.forEach((s: any) => {
+          if (!hrSignatureRegistryMap[s.user_id] && s.signature_data_url) {
+            hrSignatureRegistryMap[s.user_id] = s.signature_data_url
+          }
+        })
+      }
+    }
+
+    const data = (planRequests || []).map((req: any) => {
+      const hrApprover = hrApproverMap[req.hr_approver_id] || null
+      // Resolution order for signature:
+      // 1. Row-level hr_signature_data_url (captured at approval time — most accurate)
+      // 2. user_profiles.signature_data_url (current profile signature)
+      // 3. approval_signature_registry (registry fallback)
+      const resolvedSignature =
+        req.hr_signature_data_url ||
+        hrApprover?.signature_data_url ||
+        (req.hr_approver_id ? hrSignatureRegistryMap[req.hr_approver_id] : null) ||
+        null
+      // hr_approver_name is already stored as text on the row — use it as fallback
+      const resolvedHrName = hrApprover
+        ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
+        : (req.hr_approver_name || null)
+      return {
+        ...req,
+        leave_type: req.leave_type_key || "Annual",
+        start_date: req.adjusted_start_date || req.preferred_start_date,
+        end_date: req.adjusted_end_date || req.preferred_end_date,
+        hod_review_status: req.hod_decision || "pending",
+        user_profiles: userMap[req.user_id] ? {
+          first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
+          last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",
+          employee_id: userMap[req.user_id].employee_id || "",
+          department_name: userMap[req.user_id].department_name || "",
+          position: userMap[req.user_id].position || "",
+          full_name: userMap[req.user_id].full_name || "",
+        } : null,
+        // Resolved HR approver fields for the approved-leave memo view
+        hr_approver_name: resolvedHrName,
+        hr_approver_position: hrApprover?.position || null,
+        hr_approver_signature_data_url: resolvedSignature,
+      }
+    })
 
     return NextResponse.json({ data, total: count, success: true })
   } catch (error) {

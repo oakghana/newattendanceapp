@@ -124,6 +124,23 @@ export function StaffManagement() {
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
 
+  // Calculate years of service based on date of appointment
+  const calculateYearsOfService = (dateStr: string): number | string => {
+    if (!dateStr) return ""
+    try {
+      const appointmentDate = new Date(dateStr)
+      const today = new Date()
+      let years = today.getFullYear() - appointmentDate.getFullYear()
+      const monthDiff = today.getMonth() - appointmentDate.getMonth()
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < appointmentDate.getDate())) {
+        years--
+      }
+      return Math.max(0, years)
+    } catch {
+      return ""
+    }
+  }
+
   const fetchStaff = useCallback(async () => {
     try {
       console.log("[v0] Fetching staff with filters:", {
@@ -315,6 +332,9 @@ export function StaffManagement() {
           position: "",
           role: "staff",
           assigned_location_id: "",
+          date_of_appointment: "",
+          years_of_service: "",
+          contact_number: "",
         })
         fetchStaff()
         // Auto-open HOD linkage dialog after creating staff (admin / it-admin)
@@ -535,43 +555,66 @@ export function StaffManagement() {
 
   // ── HOD Linkage ─────────────────────────────────────────────
   const [hodLinkStaff, setHodLinkStaff] = useState<StaffMember | null>(null)
-  const [hodLinkHodId, setHodLinkHodId] = useState<string>("")
+  const [hodLinkHodIds, setHodLinkHodIds] = useState<string[]>([])
   const [hodLinkLoading, setHodLinkLoading] = useState(false)
   const [hodLinkError, setHodLinkError] = useState<string | null>(null)
+  const [hodSearchQuery, setHodSearchQuery] = useState<string>("")
+
   const [hodCandidates, setHodCandidates] = useState<StaffMember[]>([])
 
   const openHodLinkDialog = async (member: StaffMember) => {
     setHodLinkStaff(member)
-    setHodLinkHodId("")
+    setHodLinkHodIds([])
     setHodLinkError(null)
     try {
-      const res = await authenticatedFetch("/api/admin/staff?role=department_head&limit=200")
-      const data = await res.json()
-      const dh: StaffMember[] = data.data || []
-      // Also fetch regional managers
-      const res2 = await authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200")
-      const data2 = await res2.json()
-      const rm: StaffMember[] = data2.data || []
-      setHodCandidates([...dh, ...rm])
+      // Fetch all roles that act as head of department in parallel
+      const [resDH, resRM, resMHR, resDHR] = await Promise.all([
+        authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
+      ])
+      const [dh, rm, mhr, dhr]: StaffMember[][] = await Promise.all([
+        resDH.json().then((d: any) => d.data || []),
+        resRM.json().then((d: any) => d.data || []),
+        resMHR.json().then((d: any) => d.data || []),
+        resDHR.json().then((d: any) => d.data || []),
+      ])
+      // Deduplicate by id and sort by name
+      const all = [...dh, ...rm, ...mhr, ...dhr]
+      const seen = new Set<string>()
+      const unique = all.filter((s) => {
+        if (seen.has(s.id)) return false
+        seen.add(s.id)
+        return true
+      }).sort((a, b) =>
+        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+      )
+      setHodCandidates(unique)
     } catch {
       setHodCandidates([])
     }
   }
 
   const handleHodLink = async () => {
-    if (!hodLinkStaff || !hodLinkHodId) return
+    if (!hodLinkStaff || hodLinkHodIds.length === 0) return
     setHodLinkLoading(true)
     setHodLinkError(null)
     try {
       const res = await authenticatedFetch("/api/loan/lookups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "upsert_hod_linkage", staff_user_id: hodLinkStaff.id, hod_user_id: hodLinkHodId }),
+        body: JSON.stringify({ action: "upsert_hod_linkage_batch", staff_user_id: hodLinkStaff.id, hod_user_ids: hodLinkHodIds }),
       })
       const result = await res.json()
       if (result.success) {
-        showSuccess(`${hodLinkStaff.first_name} ${hodLinkStaff.last_name} linked successfully`, "HOD Linked")
+        const count = hodLinkHodIds.length
+        showSuccess(`${hodLinkStaff.first_name} ${hodLinkStaff.last_name} linked to ${count} HOD(s) successfully`, "HOD Linked")
+        // Refresh staff data to show updated HOD linkage
+        await fetchStaff()
         setHodLinkStaff(null)
+        setHodLinkHodIds([])
+        setHodLinkError(null)
       } else {
         setHodLinkError(result.error || "Failed to link")
       }
@@ -871,14 +914,21 @@ export function StaffManagement() {
                         id="dateOfAppointment"
                         type="date"
                         value={newStaff.date_of_appointment}
-                        onChange={(e) => setNewStaff({ ...newStaff, date_of_appointment: e.target.value })}
+                        onChange={(e) => {
+                          const newDate = e.target.value
+                          setNewStaff({
+                            ...newStaff,
+                            date_of_appointment: newDate,
+                            years_of_service: String(calculateYearsOfService(newDate)),
+                          })
+                        }}
                         className="mt-1"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">Used for leave eligibility and service calculations</p>
+                      <p className="text-xs text-muted-foreground mt-1">Years of service auto-calculates from this date</p>
                     </div>
                     <div>
                       <Label htmlFor="yearsOfService" className="font-medium">
-                        Years of Service <span className="text-muted-foreground font-normal">(Optional)</span>
+                        Years of Service <span className="text-muted-foreground font-normal">(Auto-calculated)</span>
                       </Label>
                       <Input
                         id="yearsOfService"
@@ -886,11 +936,12 @@ export function StaffManagement() {
                         min="0"
                         step="1"
                         value={newStaff.years_of_service}
-                        onChange={(e) => setNewStaff({ ...newStaff, years_of_service: e.target.value })}
-                        className="mt-1"
-                        placeholder="0"
+                        readOnly
+                        disabled
+                        className="mt-1 bg-muted"
+                        placeholder="Calculated from appointment date"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">For leave entitlements and loan calculations</p>
+                      <p className="text-xs text-muted-foreground mt-1">Automatically calculated from date of appointment</p>
                     </div>
                     <div>
                       <Label htmlFor="contactNumber" className="font-medium">
@@ -1096,13 +1147,20 @@ export function StaffManagement() {
                       id="editDateOfAppointment"
                       type="date"
                       value={editingStaff.date_of_appointment || ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, date_of_appointment: e.target.value })}
+                      onChange={(e) => {
+                        const newDate = e.target.value
+                        setEditingStaff({
+                          ...editingStaff,
+                          date_of_appointment: newDate,
+                          years_of_service: String(calculateYearsOfService(newDate)),
+                        })
+                      }}
                       className="mt-1"
                     />
                   </div>
                   <div>
                     <Label htmlFor="editYearsOfService" className="font-medium">
-                      Years of Service <span className="text-muted-foreground font-normal">(Optional)</span>
+                      Years of Service <span className="text-muted-foreground font-normal">(Auto-calculated)</span>
                     </Label>
                     <Input
                       id="editYearsOfService"
@@ -1110,8 +1168,9 @@ export function StaffManagement() {
                       min="0"
                       step="1"
                       value={editingStaff.years_of_service ?? ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, years_of_service: e.target.value })}
-                      className="mt-1"
+                      readOnly
+                      disabled
+                      className="mt-1 bg-muted"
                     />
                   </div>
                   <div>
@@ -1160,6 +1219,7 @@ export function StaffManagement() {
                   <TableHead className="font-semibold text-foreground">Email</TableHead>
                   <TableHead className="font-semibold text-foreground">Department</TableHead>
                   <TableHead className="font-semibold text-foreground">Role</TableHead>
+                  <TableHead className="font-semibold text-foreground">Assigned To (HOD)</TableHead>
                   <TableHead className="font-semibold text-foreground">Assigned Location</TableHead>
                   <TableHead className="font-semibold text-foreground">Status</TableHead>
                   <TableHead className="font-semibold text-foreground">Last modified</TableHead>
@@ -1169,7 +1229,7 @@ export function StaffManagement() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
+                    <TableCell colSpan={9} className="text-center py-12">
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                         <span className="text-muted-foreground font-medium">Loading staff...</span>
@@ -1178,7 +1238,7 @@ export function StaffManagement() {
                   </TableRow>
                 ) : staff.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
+                    <TableCell colSpan={9} className="text-center py-12">
                       <div className="space-y-2">
                         <Users className="h-12 w-12 text-muted-foreground mx-auto" />
                         <p className="text-muted-foreground font-medium">No staff members found</p>
@@ -1218,6 +1278,20 @@ export function StaffManagement() {
                         >
                           {member.role.replace("_", " ")}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {(member as any).hod_links && (member as any).hod_links.length > 0 ? (
+                          <div className="space-y-1">
+                            {(member as any).hod_links.map((hod: any, idx: number) => (
+                              <div key={`${member.id}-hod-${idx}`} className="text-sm">
+                                <div className="font-semibold text-primary">{hod.name}</div>
+                                <div className="text-xs text-muted-foreground">{hod.role.replace("_", " ")}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Not linked</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {member.geofence_locations ? (
@@ -1315,7 +1389,14 @@ export function StaffManagement() {
     </div>
 
       {/* HOD Linkage Dialog */}
-      <Dialog open={!!hodLinkStaff} onOpenChange={(open) => { if (!open) setHodLinkStaff(null) }}>
+      <Dialog open={!!hodLinkStaff} onOpenChange={(open) => {
+        if (!open) {
+          setHodLinkStaff(null)
+          setHodSearchQuery("")
+          setHodLinkHodIds([])
+          setHodLinkError(null)
+        }
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Link Staff to HOD</DialogTitle>
@@ -1327,29 +1408,78 @@ export function StaffManagement() {
             {hodLinkError && (
               <Alert variant="destructive"><AlertDescription>{hodLinkError}</AlertDescription></Alert>
             )}
-            <div className="space-y-1">
-              <Label>Select HOD / Regional Manager</Label>
-              <Select value={hodLinkHodId} onValueChange={setHodLinkHodId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a HOD or Regional Manager..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {hodCandidates.map((hod) => (
-                    <SelectItem key={hod.id} value={hod.id}>
-                      {hod.first_name} {hod.last_name} — {hod.role.replace("_", " ")} {hod.departments?.name ? `(${hod.departments.name})` : ""}
-                    </SelectItem>
-                  ))}
-                  {hodCandidates.length === 0 && (
-                    <SelectItem value="__none__" disabled>No HODs found</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+            <div className="space-y-2.5">
+              <Label htmlFor="hod-search" className="text-sm font-medium">Search HOD / Regional Manager</Label>
+              <Input
+                id="hod-search"
+                placeholder="Search by name, staff ID, or department..."
+                value={hodSearchQuery}
+                onChange={(e) => setHodSearchQuery(e.target.value.toLowerCase())}
+                className="h-10"
+              />
+              <p className="text-xs text-muted-foreground">
+                {hodCandidates.length > 0
+                  ? `Found ${hodCandidates.filter((h) => 
+                      `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                      (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                      (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                    ).length} of ${hodCandidates.length} HODs`
+                  : "No HODs available"}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Select HODs (can choose multiple)</Label>
+              <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+                {hodCandidates.filter((h) =>
+                  hodSearchQuery === "" ||
+                  `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                  (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                  (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                ).length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4 text-center">
+                    {hodSearchQuery ? "No matching HODs found" : "No HODs available"}
+                  </p>
+                ) : (
+                  hodCandidates.filter((h) =>
+                    hodSearchQuery === "" ||
+                    `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                    (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                    (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                  ).map((hod) => (
+                    <div key={hod.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id={`hod-${hod.id}`}
+                        checked={hodLinkHodIds.includes(hod.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setHodLinkHodIds([...hodLinkHodIds, hod.id])
+                          } else {
+                            setHodLinkHodIds(hodLinkHodIds.filter((id) => id !== hod.id))
+                          }
+                        }}
+                        className="h-4 w-4 rounded"
+                      />
+                      <label htmlFor={`hod-${hod.id}`} className="flex-1 cursor-pointer text-sm">
+                        <div className="font-medium">{hod.first_name} {hod.last_name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {hod.employee_id && `ID: ${hod.employee_id} • `}
+                          {hod.role.replace("_", " ")} {hod.departments?.name ? `• ${hod.departments.name}` : ""}
+                        </div>
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              {hodLinkHodIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">Selected: {hodLinkHodIds.length} HOD(s)</p>
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setHodLinkStaff(null)}>Cancel</Button>
-            <Button onClick={handleHodLink} disabled={!hodLinkHodId || hodLinkLoading}>
-              {hodLinkLoading ? "Linking..." : "Link"}
+            <Button onClick={handleHodLink} disabled={hodLinkHodIds.length === 0 || hodLinkLoading}>
+              {hodLinkLoading ? "Linking..." : `Link (${hodLinkHodIds.length})`}
             </Button>
           </DialogFooter>
         </DialogContent>

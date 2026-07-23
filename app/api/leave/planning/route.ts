@@ -132,12 +132,15 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
     if (reviewerId && !linkedReviewerIds.includes(reviewerId)) linkedReviewerIds.push(reviewerId)
   }
 
+  // All roles that act as heads of department for leave review purposes
+  const HOD_ROLES = ["regional_manager", "department_head", "manager_hr", "director_hr"]
+
   if (linkedReviewerIds.length > 0) {
     const { data: linkedReviewers } = await admin
       .from("user_profiles")
       .select("id, role")
       .in("id", linkedReviewerIds)
-      .in("role", ["regional_manager", "department_head"])
+      .in("role", HOD_ROLES)
       .eq("is_active", true)
 
     const reviewers = (linkedReviewers || []).map((r: any) => ({
@@ -151,7 +154,7 @@ async function resolveManagerReviewers(admin: any, userId: string, departmentId:
   const { data: reviewers } = await admin
     .from("user_profiles")
     .select("id, role, department_id")
-    .in("role", ["regional_manager", "department_head"])
+    .in("role", HOD_ROLES)
     .eq("is_active", true)
 
   return (reviewers || []).filter((r: any) => {
@@ -666,8 +669,19 @@ export async function GET(request: NextRequest) {
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
-    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ���─
-    if (isHrOffice && !isHrApprover) {
+    // Resolve HOD linkage early — HR executives who are also linked as HODs
+    // must bypass the hr_office branch and enter the HOD/manager branch so
+    // they can see and act on leave requests from their assigned staff.
+    const { data: earlyHodLinkRows } = await admin
+      .from("loan_hod_linkages")
+      .select("staff_user_id")
+      .eq("hod_user_id", user.id)
+      .limit(1)
+    const isLinkedHodEarly = (earlyHodLinkRows || []).length > 0
+
+    // ── HR Leave Office mode: sees HOD-approved requests, can adjust & forward ─
+    // Skip this branch if user is also a linked HOD so they enter HOD mode instead.
+    if (isHrOffice && !isHrApprover && !isLinkedHodEarly) {
       let officeQuery = admin
         .from("leave_plan_requests")
         .select(`
@@ -781,9 +795,7 @@ export async function GET(request: NextRequest) {
 
     // Admin sees ALL HOD reviews nationwide; regular managers see only their assigned reviews
     const isAdmin = role === "admin"
-    console.log("[v0] HOD Review check - role:", role, "isAdmin:", isAdmin, "isHr:", isHr, "isHodRole:", isHodRole(role))
-      // Admin always sees HOD reviews; other HOD roles only if they're not HR
-    if ((isAdmin || (isHodRole(role) && !isHr))) {
+    if ((isAdmin || isHodRole(role) || isLinkedHodEarly)) {
       let nonArchivedReviews: any[] = []
 
       // Admin sees ALL pending HOD requests nationwide (directly from leave_plan_requests)
@@ -1027,9 +1039,40 @@ export async function GET(request: NextRequest) {
 
       const analytics = await fetchHrOfficeAnalytics(admin)
 
+      // Enrich each request with its assigned HOD reviewer names
+      const requestIds = (data || []).map((r: any) => r.id).filter(Boolean)
+      let hodReviewerMap: Map<string, string[]> = new Map()
+      if (requestIds.length > 0) {
+        const { data: reviewRows } = await admin
+          .from("leave_plan_reviews")
+          .select("leave_plan_request_id, reviewer_id")
+          .in("leave_plan_request_id", requestIds)
+
+        const reviewerIds = [...new Set((reviewRows || []).map((r: any) => r.reviewer_id).filter(Boolean))]
+        if (reviewerIds.length > 0) {
+          const { data: reviewerProfiles } = await admin
+            .from("user_profiles")
+            .select("id, first_name, last_name")
+            .in("id", reviewerIds)
+
+          const profileMap = new Map((reviewerProfiles || []).map((p: any) => [p.id, `${p.first_name || ""} ${p.last_name || ""}`.trim()]))
+          for (const row of (reviewRows || [])) {
+            const name = profileMap.get(row.reviewer_id) || ""
+            if (!name) continue
+            if (!hodReviewerMap.has(row.leave_plan_request_id)) hodReviewerMap.set(row.leave_plan_request_id, [])
+            hodReviewerMap.get(row.leave_plan_request_id)!.push(name)
+          }
+        }
+      }
+
+      const enrichedData = (data || []).map((r: any) => ({
+        ...r,
+        hod_reviewers: hodReviewerMap.get(r.id) || [],
+      }))
+
       return NextResponse.json({
         mode: "hr",
-        requests: data || [],
+        requests: enrichedData,
         staggerRequests: stagger || [],
         myRequests: myRequests || [],
         myStaggerRequests: myStaggerRequests || [],

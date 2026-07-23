@@ -17,7 +17,7 @@ type Tab = "overview" | "leave-approvals" | "analytics" | "balance-calendar"
 
 // ── Overview panel ────────────────────────────────────────────────────────────
 function OverviewPanel({ onNavigate, userId }: { onNavigate: (tab: Tab) => void; userId: string }) {
-  return <HrExecutiveOverviewPanel />
+  return <HrExecutiveOverviewPanel onNavigateToTab={onNavigate} />
 }
 
 // ── Main module ───────────────────────────────────────────────────────────────

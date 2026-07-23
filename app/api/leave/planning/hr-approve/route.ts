@@ -5,7 +5,152 @@ import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
 import { renderTemplate } from "@/lib/leave-templates"
 import crypto from "crypto"
 
+// Statuses the HR approver sees in their queue (pending action or already actioned)
 const HR_APPROVE_ELIGIBLE = ["hr_office_forwarded", "manager_confirmed", "hod_approved"] as const
+const HR_APPROVED_STATUSES = ["hr_approved", "hr_rejected"] as const
+
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from("user_profiles")
+      .select("id, role, first_name, last_name, position, department_id, departments(name, code)")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    const role = String((profile as any).role || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[-\s]+/g, "_")
+    const deptName = (profile as any)?.departments?.name || null
+    const deptCode = (profile as any)?.departments?.code || null
+
+    if (!isHrApproverRole(role, deptName, deptCode) && role !== "admin") {
+      return NextResponse.json(
+        { error: "Only HR Approvers and admins can view HR approval requests." },
+        { status: 403 },
+      )
+    }
+
+    // HR approver roles see ALL requests in eligible statuses (no per-user assignment filter).
+    // This ensures the HR executive can see every request forwarded by the HR Leave Office.
+    const allEligible = [...HR_APPROVE_ELIGIBLE, ...HR_APPROVED_STATUSES]
+
+    const { data: requests, error: requestError } = await admin
+      .from("leave_plan_requests")
+      .select(`
+        id,
+        user_id,
+        status,
+        leave_type_key,
+        preferred_start_date,
+        preferred_end_date,
+        adjusted_start_date,
+        adjusted_end_date,
+        requested_days,
+        adjusted_days,
+        original_requested_days,
+        reason,
+        adjustment_reason,
+        travelling_days_added,
+        leave_year_period,
+        memo_draft_subject,
+        memo_draft_body,
+        memo_draft_cc,
+        memo_token,
+        memo_generated_at,
+        hr_approver_id,
+        hr_approver_name,
+        hr_approved_at,
+        hr_approval_note,
+        submitted_at,
+        created_at,
+        updated_at
+      `)
+      .in("status", allEligible)
+      .order("created_at", { ascending: false })
+
+    if (requestError) {
+      console.error("[v0] Error fetching requests:", requestError)
+      throw requestError
+    }
+
+    // Fetch user details separately to avoid join issues
+    const userIds = (requests || []).map((r: any) => r.user_id).filter(Boolean)
+    let usersMap: Record<string, any> = {}
+    
+    if (userIds.length > 0) {
+      const { data: users, error: usersError } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, position, email, department_id, hire_date, date_of_appointment, years_of_service, departments(id, name, code)")
+        .in("id", userIds)
+      
+      if (!usersError && users) {
+        usersMap = Object.fromEntries(users.map((u: any) => [u.id, u]))
+      }
+    }
+
+    // Merge user data into requests
+    const enrichedRequests = (requests || []).map((req: any) => ({
+      ...req,
+      user: usersMap[req.user_id] || null,
+    }))
+
+    // Include HR executive profile for signature check and signer block
+    const { data: hrProfile } = await admin
+      .from("user_profiles")
+      .select("first_name, last_name, position, signature_data_url, signature_text")
+      .eq("id", user.id)
+      .single()
+    const hasStoredSignature =
+      String((hrProfile as any)?.signature_data_url || "").trim().length > 0 ||
+      String((hrProfile as any)?.signature_text || "").trim().length > 0
+    const signerName = [
+      String((hrProfile as any)?.first_name || ""),
+      String((hrProfile as any)?.last_name || ""),
+    ].filter(Boolean).join(" ").trim() || "HR Executive"
+    const signerPosition = String((hrProfile as any)?.position || "HR MANAGER").toUpperCase()
+    const signerSignatureDataUrl = String((hrProfile as any)?.signature_data_url || "").trim() || null
+
+    return NextResponse.json({
+      requests: enrichedRequests || [],
+      count: (enrichedRequests || []).length,
+      user_id: user.id,
+      role,
+      has_stored_signature: hasStoredSignature,
+      signer_name: signerName,
+      signer_position: signerPosition,
+      signer_signature_data_url: signerSignatureDataUrl,
+    })
+  } catch (error) {
+    console.error("[v0] GET /api/leave/planning/hr-approve error:", error)
+    let msg = "Unknown error"
+    if (error instanceof Error) {
+      msg = error.message
+    } else if (typeof error === "object" && error !== null) {
+      msg = JSON.stringify(error)
+    } else {
+      msg = String(error)
+    }
+    console.error("[v0] Error message:", msg)
+    return NextResponse.json({ error: `Failed to fetch HR approval requests: ${msg}` }, { status: 500 })
+  }
+}
 
 function leaveTypeLabel(key: string): string {
   const map: Record<string, string> = {
@@ -161,15 +306,43 @@ export async function POST(request: NextRequest) {
       .join(" ")
       .trim() || "HR Approver"
 
-    const { data: approverSignatureRows } = await admin
-      .from("approval_signature_registry")
-      .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
-      .eq("workflow_domain", "leave")
-      .eq("approval_stage", "hr_approver")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false })
+    // Priority 0: inline signature supplied in this request body
+    const inlineSigMode = hr_signature_mode ? String(hr_signature_mode).toLowerCase().trim() : ""
+    const inlineSigText = hr_signature_text ? String(hr_signature_text).trim() : ""
+    const inlineSigDataUrl = hr_signature_data_url ? String(hr_signature_data_url).trim() : ""
+    const hasInlineSignature = inlineSigDataUrl.length > 0 || inlineSigText.length > 0
 
-    const approverSignature = pickBestSignature(approverSignatureRows || [])
+    // Priority 1: user_profiles.signature_data_url (set via Profile Settings > Signature)
+    const { data: signerProfile } = await admin
+      .from("user_profiles")
+      .select("signature_data_url, signature_text, signature_mode")
+      .eq("id", user.id)
+      .single()
+
+    let resolvedSigMode = inlineSigMode || String((signerProfile as any)?.signature_mode || "draw").toLowerCase()
+    let resolvedSigText = hasInlineSignature ? inlineSigText : String((signerProfile as any)?.signature_text || "").trim()
+    let resolvedSigDataUrl = hasInlineSignature ? inlineSigDataUrl : String((signerProfile as any)?.signature_data_url || "").trim()
+
+    const hasProfileSignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
+
+    if (!hasProfileSignature) {
+      // Priority 2: fall back to approval_signature_registry
+      const { data: approverSignatureRows } = await admin
+        .from("approval_signature_registry")
+        .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
+        .eq("workflow_domain", "leave")
+        .eq("approval_stage", "hr_approver")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+
+      const approverSignature = pickBestSignature(approverSignatureRows || [])
+      resolvedSigMode = String((approverSignature as any)?.signature_mode || "typed").trim().toLowerCase()
+      resolvedSigText = String((approverSignature as any)?.signature_text || "").trim()
+      resolvedSigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
+    }
+
+    // Valid if there is either a data URL (draw/upload) or typed text
+    const hasAnySignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
 
     const now = new Date().toISOString()
     const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
@@ -305,27 +478,18 @@ export async function POST(request: NextRequest) {
     // Generate a secure memo token for PDF download
     const memoToken = crypto.randomBytes(32).toString("hex")
 
-    const registrySigMode = String((approverSignature as any)?.signature_mode || "").trim().toLowerCase()
-    const registrySigText = String((approverSignature as any)?.signature_text || "").trim()
-    const registrySigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
-
-    const hasRegistrySignature =
-      (registrySigMode === "typed" && registrySigText.length > 0)
-      || ((registrySigMode === "draw" || registrySigMode === "upload") && registrySigDataUrl.length > 0)
-
-    if (!hasRegistrySignature) {
+    if (!hasAnySignature) {
       return NextResponse.json(
         {
           error:
-            "No saved HR approval signature found for your account. Save your own signature in the signature section before approving leave requests.",
+            "No saved signature found for your account. Please upload your signature in Profile Settings > Signature before approving leave requests.",
         },
         { status: 400 },
       )
     }
 
-    const resolvedSigMode = registrySigMode
-    const resolvedSigText = resolvedSigMode === "typed" ? registrySigText : null
-    const resolvedSigDataUrl = resolvedSigMode === "draw" || resolvedSigMode === "upload" ? registrySigDataUrl : null
+    const finalSigText = resolvedSigText.length > 0 ? resolvedSigText : null
+    const finalSigDataUrl = resolvedSigDataUrl.length > 0 ? resolvedSigDataUrl : null
 
     const { error: approveError } = await admin
       .from("leave_plan_requests")
@@ -342,9 +506,9 @@ export async function POST(request: NextRequest) {
         memo_token: memoToken,
         memo_generated_at: now,
         hr_signature_mode: resolvedSigMode,
-        hr_signature_text: resolvedSigText,
+        hr_signature_text: finalSigText,
         hr_signature_image_url: null,
-        hr_signature_data_url: resolvedSigDataUrl,
+        hr_signature_data_url: finalSigDataUrl,
         hr_signature_hologram_code: buildHologramCode("HR"),
         updated_at: now,
       })

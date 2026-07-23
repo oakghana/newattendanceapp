@@ -71,6 +71,37 @@ export function HrExecutiveLeaveCenter() {
     return diffDays
   }
 
+  const calculateDaysPending = (createdAt: string): number => {
+    if (!createdAt) return 0
+    const created = new Date(createdAt)
+    const today = new Date()
+    const diffTime = Math.abs(today.getTime() - created.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  const getAgingBadge = (daysPending: number) => {
+    if (daysPending < 3) {
+      return (
+        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+          {daysPending}d pending
+        </Badge>
+      )
+    } else if (daysPending < 7) {
+      return (
+        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+          {daysPending}d pending
+        </Badge>
+      )
+    } else {
+      return (
+        <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+          {daysPending}d pending
+        </Badge>
+      )
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     const mapping: Record<string, { variant: any; label: string }> = {
       submitted: { variant: "secondary", label: "Submitted" },
@@ -152,19 +183,28 @@ export function HrExecutiveLeaveCenter() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="staff-requests" className="gap-2">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="hod-review" className="gap-2">
+            <AlertCircle className="h-4 w-4" />
+            <span className="hidden sm:inline">HOD Review</span>
+            <span className="sm:hidden">HOD</span>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{staffRequests.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="all-requests" className="gap-2">
             <Users className="h-4 w-4" />
-            <span>Staff Requests ({staffRequests.length})</span>
+            <span className="hidden sm:inline">All Requests</span>
+            <span className="sm:hidden">All</span>
           </TabsTrigger>
           <TabsTrigger value="my-requests" className="gap-2">
             <Clock className="h-4 w-4" />
-            <span>My Requests ({myRequests.length})</span>
+            <span className="hidden sm:inline">My Requests</span>
+            <span className="sm:hidden">Mine</span>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{myRequests.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
-        {/* Staff Requests Tab */}
-        <TabsContent value="staff-requests" className="space-y-4">
+        {/* HOD Review Tab - Own Department Only */}
+        <TabsContent value="hod-review" className="space-y-4">
           {loading ? (
             <Card>
               <CardContent className="py-12 flex items-center justify-center gap-2 text-muted-foreground">
@@ -185,8 +225,11 @@ export function HrExecutiveLeaveCenter() {
                 <Card key={req.id} className="hover:border-primary/50 transition-colors">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <CardTitle className="text-base">{req.staff_name}</CardTitle>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base">{req.staff_name}</CardTitle>
+                          {getAgingBadge(calculateDaysPending(req.created_at))}
+                        </div>
                         <CardDescription className="text-xs">
                           {req.staff_id} • {req.leave_type && getLeaveTypeBadge(req.leave_type)}
                         </CardDescription>
@@ -245,6 +288,95 @@ export function HrExecutiveLeaveCenter() {
                         Defer
                       </Button>
                     </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* All Requests Tab - View Only */}
+        <TabsContent value="all-requests" className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-900">
+              <AlertCircle className="h-4 w-4 inline mr-2 align-text-bottom" />
+              View-only access to all organization leave requests. Approvals limited to your department staff via HOD Review tab.
+            </p>
+          </div>
+          {loading ? (
+            <Card>
+              <CardContent className="py-12 flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading all requests...
+              </CardContent>
+            </Card>
+          ) : staffRequests.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                <p>No leave requests in the organization</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {staffRequests.map((req) => (
+                <Card key={req.id} className="hover:border-primary/50 transition-colors opacity-80">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base">{req.staff_name}</CardTitle>
+                          {getAgingBadge(calculateDaysPending(req.created_at))}
+                        </div>
+                        <CardDescription className="text-xs">
+                          {req.staff_id} • {req.department} • {req.leave_type && getLeaveTypeBadge(req.leave_type)}
+                        </CardDescription>
+                      </div>
+                      {getStatusBadge(req.status)}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground text-xs">From</p>
+                        <p className="font-medium">
+                          {new Date(req.start_date).toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">To</p>
+                        <p className="font-medium">
+                          {new Date(req.end_date).toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Days</p>
+                        <p className="font-medium">{calculateDays(req.start_date, req.end_date)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Submitted</p>
+                        <p className="font-medium">
+                          {new Date(req.created_at).toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    {req.reason && (
+                      <div className="bg-muted/30 rounded p-2 text-sm">
+                        <p className="text-muted-foreground text-xs mb-1">Reason</p>
+                        <p>{req.reason}</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
