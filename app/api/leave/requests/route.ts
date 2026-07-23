@@ -21,13 +21,24 @@ export async function GET(request: NextRequest) {
       leave_type_key,
       preferred_start_date,
       preferred_end_date,
+      adjusted_start_date,
+      adjusted_end_date,
       requested_days,
       adjusted_days,
+      travelling_days_added,
+      leave_year_period,
       status,
       hod_decision,
       staff_category,
       created_at,
-      submitted_at
+      submitted_at,
+      hr_approved_by,
+      hr_approved_at,
+      hr_signature_data_url,
+      hr_signature_text,
+      hr_signature_mode,
+      memo_draft_subject,
+      memo_draft_body
     `, { count: "exact" })
 
     if (userId) query = query.eq("user_id", userId)
@@ -54,21 +65,50 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const data = (planRequests || []).map((req: any) => ({
-      ...req,
-      leave_type: req.leave_type_key || "Annual",
-      start_date: req.preferred_start_date,
-      end_date: req.preferred_end_date,
-      hod_review_status: req.hod_decision || "pending",
-      user_profiles: userMap[req.user_id] ? {
-        first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
-        last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",
-        employee_id: userMap[req.user_id].employee_id || "",
-        department_name: userMap[req.user_id].department_name || "",
-        position: userMap[req.user_id].position || "",
-        full_name: userMap[req.user_id].full_name || "",
-      } : null,
-    }))
+    // Collect unique HR approver IDs so we can join their profiles
+    const hrApproverIds = [
+      ...new Set(
+        (planRequests || [])
+          .map((r: any) => r.hr_approved_by)
+          .filter(Boolean)
+      )
+    ]
+    let hrApproverMap: Record<string, any> = {}
+    if (hrApproverIds.length > 0) {
+      const { data: hrUsers } = await supabase
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, signature_data_url")
+        .in("id", hrApproverIds)
+      if (hrUsers) {
+        hrUsers.forEach((u: any) => { hrApproverMap[u.id] = u })
+      }
+    }
+
+    const data = (planRequests || []).map((req: any) => {
+      const hrApprover = hrApproverMap[req.hr_approved_by] || null
+      return {
+        ...req,
+        leave_type: req.leave_type_key || "Annual",
+        start_date: req.adjusted_start_date || req.preferred_start_date,
+        end_date: req.adjusted_end_date || req.preferred_end_date,
+        hod_review_status: req.hod_decision || "pending",
+        user_profiles: userMap[req.user_id] ? {
+          first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
+          last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",
+          employee_id: userMap[req.user_id].employee_id || "",
+          department_name: userMap[req.user_id].department_name || "",
+          position: userMap[req.user_id].position || "",
+          full_name: userMap[req.user_id].full_name || "",
+        } : null,
+        hr_approver_name: hrApprover
+          ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
+          : null,
+        hr_approver_position: hrApprover?.position || null,
+        hr_approver_signature_data_url: hrApprover?.signature_data_url
+          || req.hr_signature_data_url
+          || null,
+      }
+    })
 
     return NextResponse.json({ data, total: count, success: true })
   } catch (error) {
