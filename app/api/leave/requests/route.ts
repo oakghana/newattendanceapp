@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       adjusted_end_date,
       requested_days,
       adjusted_days,
+      entitlement_days,
       travelling_days_added,
       leave_year_period,
       status,
@@ -32,13 +33,16 @@ export async function GET(request: NextRequest) {
       staff_category,
       created_at,
       submitted_at,
-      hr_approved_by,
+      hr_approver_id,
+      hr_approver_name,
       hr_approved_at,
       hr_signature_data_url,
       hr_signature_text,
       hr_signature_mode,
       memo_draft_subject,
-      memo_draft_body
+      memo_draft_body,
+      memo_subject,
+      memo_body
     `, { count: "exact" })
 
     if (userId) query = query.eq("user_id", userId)
@@ -65,14 +69,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Collect unique HR approver IDs so we can join their profiles
+    // Collect unique HR approver IDs (column is hr_approver_id) for profile join
     const hrApproverIds = [
       ...new Set(
         (planRequests || [])
-          .map((r: any) => r.hr_approved_by)
+          .map((r: any) => r.hr_approver_id)
           .filter(Boolean)
       )
-    ]
+    ] as string[]
     let hrApproverMap: Record<string, any> = {}
     if (hrApproverIds.length > 0) {
       const { data: hrUsers } = await supabase
@@ -85,7 +89,11 @@ export async function GET(request: NextRequest) {
     }
 
     const data = (planRequests || []).map((req: any) => {
-      const hrApprover = hrApproverMap[req.hr_approved_by] || null
+      const hrApprover = hrApproverMap[req.hr_approver_id] || null
+      // hr_approver_name is already stored as text on the row — use it as fallback
+      const resolvedHrName = hrApprover
+        ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
+        : (req.hr_approver_name || null)
       return {
         ...req,
         leave_type: req.leave_type_key || "Annual",
@@ -100,9 +108,8 @@ export async function GET(request: NextRequest) {
           position: userMap[req.user_id].position || "",
           full_name: userMap[req.user_id].full_name || "",
         } : null,
-        hr_approver_name: hrApprover
-          ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
-          : null,
+        // Resolved HR approver fields for the approved-leave memo view
+        hr_approver_name: resolvedHrName,
         hr_approver_position: hrApprover?.position || null,
         hr_approver_signature_data_url: hrApprover?.signature_data_url
           || req.hr_signature_data_url

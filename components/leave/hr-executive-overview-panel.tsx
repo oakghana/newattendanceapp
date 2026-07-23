@@ -73,16 +73,16 @@ export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOvervie
         const pendingRequests = pendingData.requests || []
         const allRequests = allRequestsData.data || allRequestsData.records || []
 
-        // Count approved leave — DB statuses are 'hr_approved', 'hod_approved', 'approved', etc.
-        const APPROVED_STATUSES = ['approved', 'hr_approved', 'hod_approved', 'finalized', 'completed']
+        // Count approved leave — statuses set by hr-approve route and workflow
+        const APPROVED_STATUSES = ['approved', 'hr_approved', 'hod_approved', 'finalized', 'completed', 'memo_issued']
         const approvedLeave = allRequests.filter((r: any) =>
-          APPROVED_STATUSES.includes(r.status)
+          APPROVED_STATUSES.includes(String(r.status || "").toLowerCase())
         ).length
 
-        // Count HOD pending — DB status is 'pending_hod_review'
-        const HOD_PENDING_STATUSES = ['pending_hod_review', 'hod_review', 'pending_hod']
+        // Count HOD pending — submitted requests awaiting HOD review
+        const HOD_PENDING_STATUSES = ['pending_hod_review', 'hod_review', 'pending_hod', 'submitted', 'hr_office_reviewed', 'pending_hr_approval']
         const hodPending = allRequests.filter((r: any) =>
-          HOD_PENDING_STATUSES.includes(r.status)
+          HOD_PENDING_STATUSES.includes(String(r.status || "").toLowerCase())
         ).length
         
         // Count payment memos
