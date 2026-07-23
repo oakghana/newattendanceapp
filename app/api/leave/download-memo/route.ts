@@ -341,33 +341,58 @@ export async function GET(request: NextRequest) {
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
     doc.setLineWidth(0.3)
+    const hdrPadX = 2
+    const hdrPadY = 4.5
+    const hdrLineH = 4.5
     let cx = tableX
     headers.forEach((h, i) => {
-      doc.setFillColor(240, 240, 240)   // light grey — set per cell
-      doc.setDrawColor(160, 160, 160)   // mid-grey border
+      // Split on explicit \n then also wrap long lines within column width
+      const rawLines = h.split('\n')
+      const hdrLines: string[] = []
+      rawLines.forEach(rl => {
+        const wrapped: string[] = doc.splitTextToSize(rl, colWidths[i] - hdrPadX * 2)
+        hdrLines.push(...wrapped)
+      })
+      doc.setFillColor(240, 240, 240)
+      doc.setDrawColor(160, 160, 160)
       doc.setTextColor(0, 0, 0)
       doc.rect(cx, y, colWidths[i], rowH * 2, 'FD')
-      const lines2 = h.split('\n')
-      lines2.forEach((ln, li) => {
-        doc.text(ln, cx + 2, y + 4.5 + li * 4.5)
+      hdrLines.forEach((ln, li) => {
+        doc.text(ln, cx + hdrPadX, y + hdrPadY + li * hdrLineH)
       })
       cx += colWidths[i]
     })
     y += rowH * 2
 
-    // Data row
+    // Data row — wrap text inside each cell so nothing overflows
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8.5)
     doc.setTextColor(0, 0, 0)
+    const cellPadX = 2   // horizontal padding inside cell
+    const cellPadY = 4.5 // top padding for first text line
+    const lineH = 4.5    // line height for wrapped text
+
+    // Pre-wrap all values and measure the tallest cell to set uniform row height
+    const wrappedValues = values.map((v, i) =>
+      doc.splitTextToSize(String(v), colWidths[i] - cellPadX * 2)
+    )
+    const maxLines = Math.max(...wrappedValues.map(w => w.length))
+    const dataRowH = Math.max(rowH, cellPadY + maxLines * lineH + 2)
+
     cx = tableX
-    values.forEach((v, i) => {
-      doc.setFillColor(255, 255, 255)   // white fill for data cells
+    wrappedValues.forEach((lines, i) => {
+      doc.setFillColor(255, 255, 255)
       doc.setDrawColor(160, 160, 160)
-      doc.rect(cx, y, colWidths[i], rowH, 'FD')
-      doc.text(String(v), cx + 2, y + 5)
+      doc.rect(cx, y, colWidths[i], dataRowH, 'FD')
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      doc.setTextColor(0, 0, 0)
+      lines.forEach((ln: string, li: number) => {
+        doc.text(ln, cx + cellPadX, y + cellPadY + li * lineH)
+      })
       cx += colWidths[i]
     })
-    y += rowH
+    y += dataRowH
 
     // Totals row
     doc.setFont('helvetica', 'bold')
