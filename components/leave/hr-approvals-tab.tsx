@@ -325,7 +325,9 @@ function QccMemoPreviewModal({
   const endDate = req.adjusted_end_date || req.preferred_end_date
   const grantedDays = req.adjusted_days ?? req.requested_days
   const travelDays = req.travelling_days_added ?? 0
-  const entitledDays = req.original_requested_days ?? (grantedDays - travelDays)
+  const origDaysForModal = req.original_requested_days ?? (grantedDays - travelDays)
+  const wasAdjusted = travelDays > 0 || (req.adjusted_days != null && req.adjusted_days !== req.requested_days)
+  const entitledDays = origDaysForModal
   const entitledLabel = travelDays > 0
     ? `${entitledDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
     : String(entitledDays)
@@ -425,12 +427,11 @@ function QccMemoPreviewModal({
           {/* Body */}
           <div className="mt-4 space-y-3 text-[12.5px]">
             <p>
-              We acknowledge receipt of your letter dated {fmtDateOrdinal(req.submitted_at || req.created_at)} in
-              relation to the above-mentioned subject and wish to inform you that Management has given approval for
-              you to proceed on {grantedDays} working days{' '}
-              {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave with effect from{' '}
-              {fmtDateOrdinal(startDate)} to {fmtDateOrdinal(endDate)}.
+              In accordance with COCOBOD&apos;s vacation leave policy, we wish to inform you that approval has been
+              granted for you to proceed on your {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave in respect
+              of the year January to December {yearLabel}.
             </p>
+            <p>Your leave details are shown below.</p>
           </div>
 
           {/* Leave details table */}
@@ -468,7 +469,8 @@ function QccMemoPreviewModal({
 
           {/* Resume duty */}
           <div className="mt-4 text-[12.5px]">
-            <p>You are expected to resume duty on <span className="font-semibold">{resumeDate}</span>.</p>
+            <p>You are to resume duty on <span className="font-semibold">{resumeDate}</span>.</p>
+            <p className="mt-2">We wish you a pleasant and relaxing vacation.</p>
           </div>
 
           {/* Adjustment line if applicable */}
