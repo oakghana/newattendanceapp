@@ -1918,15 +1918,17 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   }, [hodPendingReviews, hodLocationFilter, hodDeptFilter])
 
   const hrApproverQueue: any[] = useMemo(() => {
-    // Filter main data for HR approver eligible statuses
-    // HR approvers see requests that have passed HOD/Manager review and reached HR
-    const queue = (data?.requests || []).filter((r: any) =>
-      ["hod_approved", "manager_confirmed", "hr_office_forwarded"].includes(String(r?.status || "")),
-    )
-    // Also include dedicated HR approver data if available (for proper scoping)
+    // If the dedicated HR approver API returned data, use it — it includes all statuses
+    // (pending, hr_approved, hr_rejected) so the sub-tabs can work correctly.
     const dedicatedQueue = hrApproverData?.requests || []
-    
-    return dedicatedQueue.length > 0 ? dedicatedQueue : queue
+    if (dedicatedQueue.length > 0) return dedicatedQueue
+
+    // Fallback: pull from the general data store for eligible pending statuses
+    return (data?.requests || []).filter((r: any) =>
+      ["hod_approved", "manager_confirmed", "hr_office_forwarded", "hr_approved", "hr_rejected"].includes(
+        String(r?.status || ""),
+      ),
+    )
   }, [data, hrApproverData])
 
   const hrApproverQueueFiltered: any[] = useMemo(() => {

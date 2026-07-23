@@ -5,7 +5,9 @@ import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
 import { renderTemplate } from "@/lib/leave-templates"
 import crypto from "crypto"
 
+// Statuses the HR approver sees in their queue (pending action or already actioned)
 const HR_APPROVE_ELIGIBLE = ["hr_office_forwarded", "manager_confirmed", "hod_approved"] as const
+const HR_APPROVED_STATUSES = ["hr_approved", "hr_rejected"] as const
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,29 +47,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Fetch all leave requests where this user is assigned as an HR approver
-    // Join with leave_plan_reviews to find requests this user should review
-    const { data: reviewAssignments, error: reviewError } = await admin
-      .from("leave_plan_reviews")
-      .select("leave_plan_request_id, reviewer_id")
-      .eq("reviewer_id", user.id)
+    // HR approver roles see ALL requests in eligible statuses (no per-user assignment filter).
+    // This ensures the HR executive can see every request forwarded by the HR Leave Office.
+    const allEligible = [...HR_APPROVE_ELIGIBLE, ...HR_APPROVED_STATUSES]
 
-    if (reviewError) {
-      console.error("[v0] Error fetching review assignments:", reviewError)
-      throw reviewError
-    }
-
-    const requestIds = (reviewAssignments || []).map((r: any) => r.leave_plan_request_id).filter(Boolean)
-    
-    if (requestIds.length === 0) {
-      return NextResponse.json({
-        requests: [],
-        count: 0,
-        message: "No leave requests assigned to you for HR approval",
-      })
-    }
-
-    // Fetch the full leave request details
     const { data: requests, error: requestError } = await admin
       .from("leave_plan_requests")
       .select(`
@@ -81,12 +64,25 @@ export async function GET(request: NextRequest) {
         adjusted_end_date,
         requested_days,
         adjusted_days,
+        original_requested_days,
         reason,
+        adjustment_reason,
+        travelling_days_added,
+        leave_year_period,
+        memo_draft_subject,
+        memo_draft_body,
+        memo_draft_cc,
+        memo_token,
+        memo_generated_at,
+        hr_approver_id,
+        hr_approver_name,
+        hr_approved_at,
+        hr_approval_note,
+        submitted_at,
         created_at,
-        submitted_at
+        updated_at
       `)
-      .in("id", requestIds)
-      .in("status", [...HR_APPROVE_ELIGIBLE])
+      .in("status", allEligible)
       .order("created_at", { ascending: false })
 
     if (requestError) {
