@@ -209,26 +209,32 @@ export async function GET(request: NextRequest) {
     let y = 13
 
     // ── Letterhead ────────────────────────────────────────────────────────────
-    // Logo LEFT
-    if (logoBase64) {
-      doc.addImage(logoBase64, 'PNG', mL, y, 22, 22)
-    }
-    // Org name CENTRED
+    const headerTopY = y  // y = 13
+
+    // Org name CENTRED (draw first so logo overlays cleanly)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(13)
-    doc.setTextColor(0)
-    doc.text('QUALITY CONTROL COMPANY LTD.', pageW / 2, y + 6, { align: 'center' })
-    doc.setFontSize(10)
-    doc.text('(COCOBOD)', pageW / 2, y + 12, { align: 'center' })
-    // Address RIGHT
+    doc.setTextColor(0, 0, 0)
+    doc.text('QUALITY CONTROL COMPANY LTD.', pageW / 2, headerTopY + 7, { align: 'center' })
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.setTextColor(60)
-    doc.text('P.O. Box M54', mR, y + 3, { align: 'right' })
-    doc.text('Accra', mR, y + 8, { align: 'right' })
-    doc.text('Ghana', mR, y + 13, { align: 'right' })
+    doc.setFontSize(10)
+    doc.text('(COCOBOD)', pageW / 2, headerTopY + 14, { align: 'center' })
 
-    y += 27
+    // Address RIGHT — black text, not grey
+    doc.setFontSize(8.5)
+    doc.setTextColor(0, 0, 0)
+    doc.text('P.O. Box M54', mR, headerTopY + 5, { align: 'right' })
+    doc.text('Accra', mR, headerTopY + 10, { align: 'right' })
+    doc.text('Ghana', mR, headerTopY + 15, { align: 'right' })
+
+    // Logo LEFT (drawn last so it sits on top)
+    if (logoBase64) {
+      try {
+        doc.addImage(logoBase64, 'PNG', mL, headerTopY, 22, 22)
+      } catch { /* skip logo if format issue */ }
+    }
+
+    y = headerTopY + 28
 
     // Solid green accent bar
     doc.setFillColor(26, 110, 26)
@@ -313,18 +319,19 @@ export async function GET(request: NextRequest) {
     const headers = ['Number of Days\nEntitled', 'Number of Days\nGranted', 'From', 'To', 'Remarks']
     const values = [entitledLabel, String(grantedDays), fmtShort(startRaw), fmtShort(endRaw), remarks]
 
-    // Header row
+    // Header row — re-apply fill colour inside every cell to avoid jsPDF state drift
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
-    doc.setFillColor(245, 245, 245)
-    doc.setDrawColor(180)
     doc.setLineWidth(0.3)
     let cx = tableX
     headers.forEach((h, i) => {
+      doc.setFillColor(240, 240, 240)   // light grey — set per cell
+      doc.setDrawColor(160, 160, 160)   // mid-grey border
+      doc.setTextColor(0, 0, 0)
       doc.rect(cx, y, colWidths[i], rowH * 2, 'FD')
       const lines2 = h.split('\n')
       lines2.forEach((ln, li) => {
-        doc.text(ln, cx + 2, y + 4 + li * 4.5)
+        doc.text(ln, cx + 2, y + 4.5 + li * 4.5)
       })
       cx += colWidths[i]
     })
@@ -333,9 +340,12 @@ export async function GET(request: NextRequest) {
     // Data row
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8.5)
+    doc.setTextColor(0, 0, 0)
     cx = tableX
     values.forEach((v, i) => {
-      doc.rect(cx, y, colWidths[i], rowH, 'D')
+      doc.setFillColor(255, 255, 255)   // white fill for data cells
+      doc.setDrawColor(160, 160, 160)
+      doc.rect(cx, y, colWidths[i], rowH, 'FD')
       doc.text(String(v), cx + 2, y + 5)
       cx += colWidths[i]
     })
@@ -343,9 +353,12 @@ export async function GET(request: NextRequest) {
 
     // Totals row
     doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 0, 0)
     cx = tableX
     colWidths.forEach((w, i) => {
-      doc.rect(cx, y, w, rowH, 'D')
+      doc.setFillColor(255, 255, 255)
+      doc.setDrawColor(160, 160, 160)
+      doc.rect(cx, y, w, rowH, 'FD')
       if (i === 1) doc.text(String(grantedDays), cx + 2, y + 5)
       cx += w
     })
