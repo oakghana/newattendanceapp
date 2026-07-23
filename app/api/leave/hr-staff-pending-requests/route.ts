@@ -33,7 +33,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Only HR executives can view staff requests" }, { status: 403 })
     }
 
-    // Fetch pending leave requests from staff in the same department
+    // Fetch ALL pending leave requests in HR executive review stages
+    // HR executives should see requests that have been forwarded by the HR Leave Office
+    // or are awaiting HR approval (not just their department — they review org-wide)
+    const pendingStatuses = ["hr_office_forwarded", "manager_confirmed", "hod_approved"]
+    
     const { data: requests, error: requestsError } = await admin
       .from("leave_plan_requests")
       .select(`
@@ -41,6 +45,8 @@ export async function GET(request: NextRequest) {
         user_id,
         preferred_start_date,
         preferred_end_date,
+        adjusted_start_date,
+        adjusted_end_date,
         reason,
         leave_type_key,
         status,
@@ -56,9 +62,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .eq("user_profiles.department_id", profile.department_id)
-      .neq("user_id", user.id)
-      .in("status", ["submitted", "pending_hod_review", "pending_hr_decision"])
+      .in("status", pendingStatuses)
       .order("created_at", { ascending: false })
 
     if (requestsError) {

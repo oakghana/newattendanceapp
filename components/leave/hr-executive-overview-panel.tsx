@@ -15,7 +15,11 @@ interface Stats {
   hodPending: number
 }
 
-export function HrExecutiveOverviewPanel() {
+interface HrExecutiveOverviewPanelProps {
+  onNavigateToTab?: (tab: 'overview' | 'leave-approvals' | 'analytics' | 'balance-calendar') => void
+}
+
+export function HrExecutiveOverviewPanel({ onNavigateToTab }: HrExecutiveOverviewPanelProps) {
   const [stats, setStats] = useState<Stats>({
     pendingApprovals: 0,
     approvedLeave: 0,
@@ -33,6 +37,15 @@ export function HrExecutiveOverviewPanel() {
     setModalFilter(filter)
     setModalTitle(title)
     setModalOpen(true)
+  }
+
+  const handleCardClick = (filter: typeof modalFilter, title: string) => {
+    // If we have a navigation callback, go to the Leave Approvals tab
+    if (onNavigateToTab && filter === 'pending') {
+      onNavigateToTab('leave-approvals')
+    } else {
+      openModal(filter, title)
+    }
   }
 
   useEffect(() => {
@@ -123,7 +136,7 @@ export function HrExecutiveOverviewPanel() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Pending Approvals */}
         <button
-          onClick={() => openModal('pending', 'Pending Leave Approvals')}
+          onClick={() => handleCardClick('pending', 'Pending Leave Approvals')}
           className="text-left hover:shadow-md transition-shadow"
         >
           <Card className="cursor-pointer h-full hover:border-primary/50">
