@@ -286,15 +286,38 @@ export async function POST(request: NextRequest) {
       .join(" ")
       .trim() || "HR Approver"
 
-    const { data: approverSignatureRows } = await admin
-      .from("approval_signature_registry")
-      .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
-      .eq("workflow_domain", "leave")
-      .eq("approval_stage", "hr_approver")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false })
+    // Priority 1: use signature stored directly on user_profiles.signature_data_url
+    const { data: signerProfile } = await admin
+      .from("user_profiles")
+      .select("signature_data_url, signature_text, signature_mode")
+      .eq("id", user.id)
+      .single()
 
-    const approverSignature = pickBestSignature(approverSignatureRows || [])
+    let resolvedSigMode = String((signerProfile as any)?.signature_mode || "draw").toLowerCase()
+    let resolvedSigText = String((signerProfile as any)?.signature_text || "").trim()
+    let resolvedSigDataUrl = String((signerProfile as any)?.signature_data_url || "").trim()
+
+    const hasProfileSignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
+
+    if (!hasProfileSignature) {
+      // Priority 2: fall back to approval_signature_registry
+      const { data: approverSignatureRows } = await admin
+        .from("approval_signature_registry")
+        .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
+        .eq("workflow_domain", "leave")
+        .eq("approval_stage", "hr_approver")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+
+      const approverSignature = pickBestSignature(approverSignatureRows || [])
+      resolvedSigMode = String((approverSignature as any)?.signature_mode || "").trim().toLowerCase()
+      resolvedSigText = String((approverSignature as any)?.signature_text || "").trim()
+      resolvedSigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
+    }
+
+    const hasAnySignature =
+      (resolvedSigMode === "typed" && resolvedSigText.length > 0)
+      || resolvedSigDataUrl.length > 0
 
     const now = new Date().toISOString()
     const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
@@ -430,27 +453,18 @@ export async function POST(request: NextRequest) {
     // Generate a secure memo token for PDF download
     const memoToken = crypto.randomBytes(32).toString("hex")
 
-    const registrySigMode = String((approverSignature as any)?.signature_mode || "").trim().toLowerCase()
-    const registrySigText = String((approverSignature as any)?.signature_text || "").trim()
-    const registrySigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
-
-    const hasRegistrySignature =
-      (registrySigMode === "typed" && registrySigText.length > 0)
-      || ((registrySigMode === "draw" || registrySigMode === "upload") && registrySigDataUrl.length > 0)
-
-    if (!hasRegistrySignature) {
+    if (!hasAnySignature) {
       return NextResponse.json(
         {
           error:
-            "No saved HR approval signature found for your account. Save your own signature in the signature section before approving leave requests.",
+            "No saved signature found for your account. Please upload your signature in Profile Settings > Signature before approving leave requests.",
         },
         { status: 400 },
       )
     }
 
-    const resolvedSigMode = registrySigMode
-    const resolvedSigText = resolvedSigMode === "typed" ? registrySigText : null
-    const resolvedSigDataUrl = resolvedSigMode === "draw" || resolvedSigMode === "upload" ? registrySigDataUrl : null
+    const finalSigText = resolvedSigMode === "typed" ? resolvedSigText : null
+    const finalSigDataUrl = resolvedSigMode !== "typed" && resolvedSigDataUrl.length > 0 ? resolvedSigDataUrl : null
 
     const { error: approveError } = await admin
       .from("leave_plan_requests")
@@ -467,9 +481,9 @@ export async function POST(request: NextRequest) {
         memo_token: memoToken,
         memo_generated_at: now,
         hr_signature_mode: resolvedSigMode,
-        hr_signature_text: resolvedSigText,
+        hr_signature_text: finalSigText,
         hr_signature_image_url: null,
-        hr_signature_data_url: resolvedSigDataUrl,
+        hr_signature_data_url: finalSigDataUrl,
         hr_signature_hologram_code: buildHologramCode("HR"),
         updated_at: now,
       })

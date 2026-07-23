@@ -215,13 +215,23 @@ export async function POST(request: NextRequest) {
               .eq("id", approverUserId)
               .single()
 
-            const { data: signerSigEarly } = await admin
-              .from("approval_signature_registry")
-              .select("signature_image_url")
-              .eq("user_id", approverUserId)
-              .order("updated_at", { ascending: false })
-              .limit(1)
+            // Priority 1: profile signature_data_url; Priority 2: approval_signature_registry
+            const { data: signerProfileFull } = await admin
+              .from("user_profiles")
+              .select("signature_data_url")
+              .eq("id", approverUserId)
               .single()
+            let earlySignatureUrl: string | null = signerProfileFull?.signature_data_url || null
+            if (!earlySignatureUrl) {
+              const { data: signerSigEarly } = await admin
+                .from("approval_signature_registry")
+                .select("signature_image_url, signature_data_url")
+                .eq("user_id", approverUserId)
+                .order("updated_at", { ascending: false })
+                .limit(1)
+                .single()
+              earlySignatureUrl = signerSigEarly?.signature_data_url || signerSigEarly?.signature_image_url || null
+            }
 
             const staffProfile = (fullDeferment.leave_plan_requests as any)?.user_profiles
             const memoData = await generateDefermentMemo({
@@ -239,7 +249,7 @@ export async function POST(request: NextRequest) {
               generatedDate: new Date().toLocaleDateString('en-GB'),
               signerName: `${signerProfileEarly?.first_name || ''} ${signerProfileEarly?.last_name || ''}`.trim() || 'HR Executive',
               signerPosition: signerProfileEarly?.position || 'HR EXECUTIVE',
-              signatureImageUrl: signerSigEarly?.signature_image_url,
+              signatureImageUrl: earlySignatureUrl,
             })
 
             // Get HR signer info and signature
@@ -249,13 +259,8 @@ export async function POST(request: NextRequest) {
               .eq("id", approverUserId)
               .single()
 
-            const { data: signerSignature } = await admin
-              .from("approval_signature_registry")
-              .select("signature_image_url, signature_data_url")
-              .eq("user_id", approverUserId)
-              .order("updated_at", { ascending: false })
-              .limit(1)
-              .single()
+            // Re-use earlySignatureUrl already resolved above (profile first, registry fallback)
+            const defermentSigUrl = earlySignatureUrl
 
             // Create deferment memo record
             const { data: createdMemo, error: memoErr } = await admin
@@ -267,7 +272,7 @@ export async function POST(request: NextRequest) {
                 memo_body: JSON.stringify(memoData),
                 signer_name: `${signerProfile?.first_name} ${signerProfile?.last_name}`,
                 signer_position: signerProfile?.position || "HR EXECUTIVE",
-                signature_image_url: signerSignature?.signature_image_url,
+                signature_image_url: defermentSigUrl,
                 status: "pending"
               })
               .select()
@@ -279,9 +284,9 @@ export async function POST(request: NextRequest) {
                 memoType: "deferment",
                 memoId: createdMemo.id,
                 staffId: fullDeferment.user_id,
-                hodId: updated.hod_reviewed_by, // HOD who reviewed it
+                hodId: updated.hod_reviewed_by,
                 memoData,
-                signatureImageUrl: signerSignature?.signature_image_url
+                signatureImageUrl: defermentSigUrl
               })
 
               console.log("[v0] Deferment memo generated and distributed successfully")
@@ -358,13 +363,23 @@ export async function POST(request: NextRequest) {
               .eq("id", approverUserId)
               .single()
 
-            const { data: signerSignature } = await admin
-              .from("approval_signature_registry")
-              .select("signature_image_url, signature_data_url")
-              .eq("user_id", approverUserId)
-              .order("updated_at", { ascending: false })
-              .limit(1)
+            // Priority 1: profile signature_data_url; Priority 2: approval_signature_registry
+            const { data: recallSignerProfile } = await admin
+              .from("user_profiles")
+              .select("signature_data_url")
+              .eq("id", approverUserId)
               .single()
+            let recallSigUrl: string | null = recallSignerProfile?.signature_data_url || null
+            if (!recallSigUrl) {
+              const { data: signerSignature } = await admin
+                .from("approval_signature_registry")
+                .select("signature_image_url, signature_data_url")
+                .eq("user_id", approverUserId)
+                .order("updated_at", { ascending: false })
+                .limit(1)
+                .single()
+              recallSigUrl = signerSignature?.signature_data_url || signerSignature?.signature_image_url || null
+            }
 
             const recallStaffProfile = (fullRecall.leave_plan_requests as any)?.user_profiles
             const memoData = await generateRecallMemo({
@@ -380,7 +395,7 @@ export async function POST(request: NextRequest) {
               generatedDate: new Date().toLocaleDateString('en-GB'),
               signerName: `${signerProfile?.first_name || ''} ${signerProfile?.last_name || ''}`.trim() || 'HR Executive',
               signerPosition: signerProfile?.position || 'HR EXECUTIVE',
-              signatureImageUrl: signerSignature?.signature_image_url,
+              signatureImageUrl: recallSigUrl,
             })
 
             // Create recall memo record
@@ -393,7 +408,7 @@ export async function POST(request: NextRequest) {
                 memo_body: JSON.stringify(memoData),
                 signer_name: `${signerProfile?.first_name} ${signerProfile?.last_name}`,
                 signer_position: signerProfile?.position || "HR EXECUTIVE",
-                signature_image_url: signerSignature?.signature_image_url,
+                signature_image_url: recallSigUrl,
                 status: "pending"
               })
               .select()
@@ -406,7 +421,7 @@ export async function POST(request: NextRequest) {
                 memoId: createdMemo.id,
                 staffId: fullRecall.staff_user_id,
                 memoData,
-                signatureImageUrl: signerSignature?.signature_image_url
+                signatureImageUrl: recallSigUrl
               })
 
               console.log("[v0] Recall memo generated and distributed successfully")
