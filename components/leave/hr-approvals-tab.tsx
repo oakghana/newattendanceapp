@@ -784,6 +784,7 @@ export function HrApprovalsTab() {
 
   const [deptFilter, setDeptFilter] = useState('all')
   const [locFilter, setLocFilter] = useState('all')
+  const [hrApproveSubTab, setHrApproveSubTab] = useState<'pending' | 'approved' | 'deferments' | 'recalls'>('pending')
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
@@ -904,7 +905,52 @@ export function HrApprovalsTab() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* Filters + count */}
+      {/* Sub-tab navigation for HR Approve */}
+      <div className="flex gap-2 border-b border-slate-200">
+        <button
+          onClick={() => setHrApproveSubTab('pending')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            hrApproveSubTab === 'pending'
+              ? 'border-orange-500 text-orange-600'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Pending Decisions ({requests.length})
+        </button>
+        <button
+          onClick={() => setHrApproveSubTab('approved')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            hrApproveSubTab === 'approved'
+              ? 'border-green-500 text-green-600'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Approved Payment Advice
+        </button>
+        <button
+          onClick={() => setHrApproveSubTab('deferments')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            hrApproveSubTab === 'deferments'
+              ? 'border-amber-500 text-amber-600'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Deferments
+        </button>
+        <button
+          onClick={() => setHrApproveSubTab('recalls')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            hrApproveSubTab === 'recalls'
+              ? 'border-red-500 text-red-600'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Recalls
+        </button>
+      </div>
+
+      {/* Filters + count (for pending tab only) */}
+      {hrApproveSubTab === 'pending' && (
       <div className="flex flex-wrap items-center gap-3">
         <Select value={locFilter} onValueChange={setLocFilter}>
           <SelectTrigger className="w-40 h-9 text-sm">
@@ -936,7 +982,11 @@ export function HrApprovalsTab() {
           {filtered.length} of {requests.length} shown
         </p>
       </div>
+      )}
 
+      {/* Content based on active sub-tab */}
+      {hrApproveSubTab === 'pending' && (
+      <>
       {/* Request list */}
       {loading ? (
         <Card>
@@ -978,6 +1028,35 @@ export function HrApprovalsTab() {
             />
           ))}
         </div>
+      )}
+      </>
+      )}
+
+      {/* Approved Payment Advice tab */}
+      {hrApproveSubTab === 'approved' && (
+        <Card>
+          <CardContent className="py-8 text-center text-slate-600">
+            <p>Approved payment advice memos will appear here</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Deferments tab */}
+      {hrApproveSubTab === 'deferments' && (
+        <Card>
+          <CardContent className="py-8 text-center text-slate-600">
+            <p>Deferment requests will appear here</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recalls tab */}
+      {hrApproveSubTab === 'recalls' && (
+        <Card>
+          <CardContent className="py-8 text-center text-slate-600">
+            <p>Recall requests will appear here</p>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
