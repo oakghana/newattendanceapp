@@ -1016,11 +1016,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   // Download an approved memo using server-side API for professional rendering with real signatures
   const downloadApprovedMemo = async (memo: any) => {
     try {
-      // Use the server-side memo[id] API route which provides:
-      // - Professional jsPDF rendering with proper formatting
-      // - Real signer information from leave_payment_memos
-      // - Actual signature images from approval registry
-      // - Consistent formatting with leave approval memos
+      // Payment advice letters use the dedicated payment-advice/download route
+      // (not the leave approval memo route which has a THRO field)
+      // This route provides:
+      // - TO: DEPUTY DIRECTOR, FINANCE
+      // - FROM: HR Executive
+      // - No THRO routing (payment advice goes direct)
+      // - Professional jsPDF rendering with proper signatures
       
       const memoId = memo.id || memo.leave_plan_request_id
       if (!memoId) {
@@ -1028,11 +1030,10 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
         return
       }
 
-      // Open the server-side generated PDF
-      // This route handles both leave approval and payment advice memos professionally
-      window.open(`/api/leave/planning/memo/${memoId}`, "_blank")
+      // Open the payment advice download route (no THRO, direct to Finance)
+      window.open(`/api/leave/payment-advice/download?memo_id=${memoId}`, "_blank")
       
-      toast({ title: "Success", description: "Memo downloading..." })
+      toast({ title: "Success", description: "Payment advice downloading..." })
     } catch (err) {
       console.error("[v0] Error downloading memo:", err)
       toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })

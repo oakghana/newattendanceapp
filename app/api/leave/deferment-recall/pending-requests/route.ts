@@ -40,18 +40,18 @@ export async function GET(request: NextRequest) {
         created_at,
         hod_approval_status,
         assigned_hr_executive_id,
-        staff:user_profiles!leave_deferment_requests_staff_user_id_fkey (
+        staff:user_profiles (
           id,
           first_name,
           last_name,
           employee_id,
           position
         ),
-        department:departments!leave_deferment_requests_department_id_fkey (
+        department:departments (
           id,
           name
         ),
-        leave:leave_balances!leave_deferment_requests_leave_id_fkey (
+        leave:leave_balances (
           id,
           leave_type,
           balance_period_start,
@@ -79,18 +79,18 @@ export async function GET(request: NextRequest) {
         created_at,
         hod_approval_status,
         assigned_hr_executive_id,
-        staff:user_profiles!leave_recall_requests_staff_user_id_fkey (
+        staff:user_profiles (
           id,
           first_name,
           last_name,
           employee_id,
           position
         ),
-        department:departments!leave_recall_requests_department_id_fkey (
+        department:departments (
           id,
           name
         ),
-        leave:leave_balances!leave_recall_requests_leave_id_fkey (
+        leave:leave_balances (
           id,
           leave_type,
           balance_period_start,
