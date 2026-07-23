@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     if (userIds.length > 0) {
       const { data: users, error: usersError } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, email, department_id, departments(id, name, code)")
+        .select("id, first_name, last_name, employee_id, position, email, department_id, hire_date, date_of_appointment, years_of_service, departments(id, name, code)")
         .in("id", userIds)
       
       if (!usersError && users) {
@@ -111,11 +111,22 @@ export async function GET(request: NextRequest) {
       user: usersMap[req.user_id] || null,
     }))
 
+    // Include whether the current HR executive has a stored signature
+    const { data: hrProfile } = await admin
+      .from("user_profiles")
+      .select("signature_data_url, signature_text")
+      .eq("id", user.id)
+      .single()
+    const hasStoredSignature =
+      String((hrProfile as any)?.signature_data_url || "").trim().length > 0 ||
+      String((hrProfile as any)?.signature_text || "").trim().length > 0
+
     return NextResponse.json({
       requests: enrichedRequests || [],
       count: (enrichedRequests || []).length,
       user_id: user.id,
       role,
+      has_stored_signature: hasStoredSignature,
     })
   } catch (error) {
     console.error("[v0] GET /api/leave/planning/hr-approve error:", error)
@@ -286,16 +297,22 @@ export async function POST(request: NextRequest) {
       .join(" ")
       .trim() || "HR Approver"
 
-    // Priority 1: use signature stored directly on user_profiles.signature_data_url
+    // Priority 0: inline signature supplied in this request body
+    const inlineSigMode = hr_signature_mode ? String(hr_signature_mode).toLowerCase().trim() : ""
+    const inlineSigText = hr_signature_text ? String(hr_signature_text).trim() : ""
+    const inlineSigDataUrl = hr_signature_data_url ? String(hr_signature_data_url).trim() : ""
+    const hasInlineSignature = inlineSigDataUrl.length > 0 || inlineSigText.length > 0
+
+    // Priority 1: user_profiles.signature_data_url (set via Profile Settings > Signature)
     const { data: signerProfile } = await admin
       .from("user_profiles")
       .select("signature_data_url, signature_text, signature_mode")
       .eq("id", user.id)
       .single()
 
-    let resolvedSigMode = String((signerProfile as any)?.signature_mode || "draw").toLowerCase()
-    let resolvedSigText = String((signerProfile as any)?.signature_text || "").trim()
-    let resolvedSigDataUrl = String((signerProfile as any)?.signature_data_url || "").trim()
+    let resolvedSigMode = inlineSigMode || String((signerProfile as any)?.signature_mode || "draw").toLowerCase()
+    let resolvedSigText = hasInlineSignature ? inlineSigText : String((signerProfile as any)?.signature_text || "").trim()
+    let resolvedSigDataUrl = hasInlineSignature ? inlineSigDataUrl : String((signerProfile as any)?.signature_data_url || "").trim()
 
     const hasProfileSignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
 
@@ -310,14 +327,13 @@ export async function POST(request: NextRequest) {
         .order("updated_at", { ascending: false })
 
       const approverSignature = pickBestSignature(approverSignatureRows || [])
-      resolvedSigMode = String((approverSignature as any)?.signature_mode || "").trim().toLowerCase()
+      resolvedSigMode = String((approverSignature as any)?.signature_mode || "typed").trim().toLowerCase()
       resolvedSigText = String((approverSignature as any)?.signature_text || "").trim()
       resolvedSigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
     }
 
-    const hasAnySignature =
-      (resolvedSigMode === "typed" && resolvedSigText.length > 0)
-      || resolvedSigDataUrl.length > 0
+    // Valid if there is either a data URL (draw/upload) or typed text
+    const hasAnySignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
 
     const now = new Date().toISOString()
     const effectiveStart = String((leaveRequest as any).adjusted_start_date || (leaveRequest as any).preferred_start_date || "")
@@ -463,8 +479,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const finalSigText = resolvedSigMode === "typed" ? resolvedSigText : null
-    const finalSigDataUrl = resolvedSigMode !== "typed" && resolvedSigDataUrl.length > 0 ? resolvedSigDataUrl : null
+    const finalSigText = resolvedSigText.length > 0 ? resolvedSigText : null
+    const finalSigDataUrl = resolvedSigDataUrl.length > 0 ? resolvedSigDataUrl : null
 
     const { error: approveError } = await admin
       .from("leave_plan_requests")
