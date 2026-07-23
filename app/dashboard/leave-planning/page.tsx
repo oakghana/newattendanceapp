@@ -31,6 +31,7 @@ export default async function LeavePlanningPage() {
     <div className="leave-theme">
       <LeavePlanningClient
         profile={{
+          id: profile.id,
           role: profile.role,
           firstName: (profile as any)?.first_name || "",
           lastName: (profile as any)?.last_name || "",

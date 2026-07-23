@@ -118,6 +118,7 @@ interface LeaveTypeOption {
 
 interface LeavePlanningClientProps {
   profile: {
+    id?: string
     role: string
     firstName?: string
     lastName?: string
@@ -978,6 +979,39 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
   )
 }
 
+function HrExecRejectForm({
+  requestId, requestType, submitting, onSubmit, onCancel,
+}: {
+  requestId: string
+  requestType: "deferment" | "recall"
+  submitting: boolean
+  onSubmit: (reason: string) => void
+  onCancel: () => void
+}) {
+  const [reason, setReason] = useState("")
+  return (
+    <div className="mt-2 space-y-2 border-t pt-2">
+      <Label className="text-xs font-semibold">Rejection Reason (required)</Label>
+      <Textarea
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder={`Reason for rejecting this ${requestType} request…`}
+        rows={2}
+        className="resize-none text-sm"
+      />
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline"
+          className="border-red-300 text-red-700 hover:bg-red-50 h-7 text-xs"
+          disabled={submitting || !reason.trim()}
+          onClick={() => onSubmit(reason)}>
+          {submitting ? "Processing…" : "Confirm Reject"}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
@@ -1034,6 +1068,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // ── HR Approver Data ─────────────────────────────────────────────────
   const [hrApproverData, setHrApproverData] = useState<any>(null)
   const [hrApproverLoading, setHrApproverLoading] = useState(false)
+
+  // ── HR Executive Deferment / Recall ──────────────────────────────────
+  const [hrExecDeferRecallData, setHrExecDeferRecallData] = useState<{ deferments: any[]; recalls: any[] }>({ deferments: [], recalls: [] })
+  const [hrExecDeferRecallLoading, setHrExecDeferRecallLoading] = useState(false)
+  const [hrExecDeferRecallTab, setHrExecDeferRecallTab] = useState<"pending" | "deferments" | "recalls">("pending")
+  const [hrExecDeferExpandedId, setHrExecDeferExpandedId] = useState<string | null>(null)
+  const [hrExecDeferSubmitting, setHrExecDeferSubmitting] = useState<string | null>(null)
 
   // ── Submit form ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -1116,7 +1157,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────���────────────────────────────────────────────────����������������─
+  // ── Computed ────���────────────────────────────────────────────────�����������������─
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1302,6 +1343,55 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       setHrApproverLoading(false)
     }
   }, [isHrApprover])
+
+  const loadHrExecDeferRecallData = useCallback(async () => {
+    if (!isHrApprover || !profile.id) return
+    setHrExecDeferRecallLoading(true)
+    try {
+      const params = new URLSearchParams({ hr_executive_id: profile.id, user_role: profile.role, type: "all", status: "all" })
+      const res = await fetch(`/api/leave/deferment-recall/hr-executive-requests?${params}`, { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load deferment/recall requests")
+      setHrExecDeferRecallData({ deferments: json.deferments || [], recalls: json.recalls || [] })
+    } catch (e) {
+      console.error("[v0] Load HR exec defer/recall error:", e)
+    } finally {
+      setHrExecDeferRecallLoading(false)
+    }
+  }, [isHrApprover, profile.id, profile.role])
+
+  const submitHrExecDecision = useCallback(async (
+    requestId: string,
+    requestType: "deferment" | "recall",
+    decision: "approved" | "rejected",
+    rejectionReason?: string
+  ) => {
+    if (!profile.id) return
+    setHrExecDeferSubmitting(requestId)
+    try {
+      const res = await fetch("/api/leave/deferment-recall/hr-executive-decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          request_id: requestId,
+          request_type: requestType,
+          decision,
+          rejection_reason: rejectionReason,
+          hr_executive_id: profile.id,
+          hr_executive_role: profile.role,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Decision failed")
+      toast({ title: decision === "approved" ? "Approved" : "Rejected", description: json.message || "Decision recorded." })
+      setHrExecDeferExpandedId(null)
+      void loadHrExecDeferRecallData()
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" })
+    } finally {
+      setHrExecDeferSubmitting(null)
+    }
+  }, [profile.id, profile.role, loadHrExecDeferRecallData, toast])
 
   const loadPolicy = useCallback(async () => {
     try {
@@ -1683,6 +1773,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     // Load HR approver data for HR approvers
     if (isHrApprover) {
       void loadHrApproverData()
+      void loadHrExecDeferRecallData()
     }
     // For HOD/manager/admin users: backfill any missing leave_plan_reviews rows
     // that were created before the user was linked as an HOD, then reload data
@@ -1697,7 +1788,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
         })
         .catch(() => {/* non-fatal */})
     }
-  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives, isHod, isAdmin, isHrApprover, loadHodReview, loadHrApproverData])
+  }, [loadData, loadPolicy, loadTemplateOptions, isHrOffice, loadHrExecutives, isHod, isAdmin, isHrApprover, loadHodReview, loadHrApproverData, loadHrExecDeferRecallData])
 
   useEffect(() => {
     if (!isHrApprover && !isAdmin) return
@@ -2269,7 +2360,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
     if (isHrOffice && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
     if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
-    if (isHrApprover || isAdmin) t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length })
+    if (isHrApprover || isAdmin) {
+      const deferRecallPending = [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
+        .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
+      t.push({ value: "hr-approve", label: "HR Approvals", Icon: ShieldCheck, count: hrApproverQueue.length + deferRecallPending })
+    }
     if (isHrApprover || isAdmin) t.push({ value: "hr-approval-queue", label: "Approval Queue", Icon: ClipboardList, count: (hrApproverData?.requests || []).length })
     if (canSeeAllRequests) t.push({ value: "all-requests", label: "All Requests", Icon: LayoutList, count: (data?.requests || []).length })
     return t
@@ -3852,9 +3947,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Tabs>
           </div>}
 
-          {/* HR Final Approval ─────────────────────────────────────── */}
+          {/* HR Final Approval */}
           {activeTab === "hr-approve" && <div>
-            {hrApproverQueue.length === 0 ? (
+            {hrApproverQueue.length === 0 && hrExecDeferRecallData.deferments.length === 0 && hrExecDeferRecallData.recalls.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
                 <p className="font-medium">No requests awaiting HR Approval</p>
@@ -3952,6 +4047,137 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   <span className="w-full text-xs text-slate-500 sm:ml-auto sm:w-auto">{hrApproverQueueFiltered.length} of {hrApproverQueue.length} shown</span>
                 </div>
 
+                {/* Deferment & Recall section */}
+                {(hrExecDeferRecallData.deferments.length > 0 || hrExecDeferRecallData.recalls.length > 0) && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-slate-700">Deferments & Recalls</p>
+                      {hrExecDeferRecallLoading && <span className="text-xs text-slate-400">Refreshing…</span>}
+                      <div className="flex gap-1.5 ml-auto">
+                        {(["pending", "deferments", "recalls"] as const).map((t) => (
+                          <button key={t} type="button"
+                            onClick={() => setHrExecDeferRecallTab(t)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                              hrExecDeferRecallTab === t
+                                ? "bg-amber-600 text-white border-amber-600"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}>
+                            {t === "pending" ? (
+                              <>Pending Decisions ({
+                                [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
+                                  .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
+                              })</>
+                            ) : t === "deferments" ? (
+                              <>Deferments ({hrExecDeferRecallData.deferments.length})</>
+                            ) : (
+                              <>Recalls ({hrExecDeferRecallData.recalls.length})</>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const allItems = [
+                        ...hrExecDeferRecallData.deferments.map((d: any) => ({ ...d, _type: "deferment" as const })),
+                        ...hrExecDeferRecallData.recalls.map((r: any) => ({ ...r, _type: "recall" as const })),
+                      ]
+                      const filtered = hrExecDeferRecallTab === "pending"
+                        ? allItems.filter((r) => !r.hr_office_decision && !r.hr_decision)
+                        : hrExecDeferRecallTab === "deferments"
+                        ? hrExecDeferRecallData.deferments.map((d: any) => ({ ...d, _type: "deferment" as const }))
+                        : hrExecDeferRecallData.recalls.map((r: any) => ({ ...r, _type: "recall" as const }))
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-slate-400 bg-white rounded-lg border border-slate-100 text-sm">
+                            No {hrExecDeferRecallTab === "pending" ? "pending" : hrExecDeferRecallTab} items
+                          </div>
+                        )
+                      }
+
+                      return filtered.map((item: any) => {
+                        const isDefer = item._type === "deferment"
+                        const staffUser = isDefer ? item.user_profiles : item.user_profiles
+                        const staffName = staffUser
+                          ? `${staffUser.first_name || ""} ${staffUser.last_name || ""}`.trim()
+                          : "—"
+                        const dept = staffUser?.departments?.name || "—"
+                        const isPending = !item.hr_office_decision && !item.hr_decision
+                        const decision = isDefer ? item.hr_office_decision : item.hr_decision
+                        const isItemExpanded = hrExecDeferExpandedId === item.id
+                        const [deferRejectReason, setDeferRejectReason] = [
+                          // We store rejection reason per-item in a local variable inside the map
+                          "", () => {}
+                        ]
+
+                        return (
+                          <Card key={item.id} className={`border shadow-sm ${isDefer ? "border-amber-100" : "border-red-100"}`}>
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <p className="font-semibold text-slate-800 text-sm">{staffName}</p>
+                                  <p className="text-xs text-slate-500">{dept}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge className={`text-xs border ${isDefer ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                                    {isDefer ? "Deferment" : "Recall"}
+                                  </Badge>
+                                  {isPending ? (
+                                    <Badge className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200">Pending</Badge>
+                                  ) : (
+                                    <Badge className={`text-xs border ${decision === "approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                                      {decision === "approved" ? "Approved" : "Rejected"}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              {isDefer ? (
+                                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-2">
+                                  <div><span className="text-slate-400">Defer Period:</span> {fmtDate(item.deferment_start_date)} – {fmtDate(item.deferment_end_date)}</div>
+                                  <div><span className="text-slate-400">Year:</span> {item.requested_deferment_year || "—"}</div>
+                                  {item.reason && <div className="col-span-2"><span className="text-slate-400">Reason:</span> {item.reason}</div>}
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-2">
+                                  <div><span className="text-slate-400">Recall Date:</span> {fmtDate(item.recall_date)}</div>
+                                  {item.recall_reason && <div><span className="text-slate-400">Reason:</span> {item.recall_reason}</div>}
+                                </div>
+                              )}
+                              {isPending && (
+                                <div className="mt-2 flex gap-2 flex-wrap">
+                                  <Button size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => void submitHrExecDecision(item.id, item._type, "approved")}>
+                                    {hrExecDeferSubmitting === item.id ? "Processing…" : "Approve"}
+                                  </Button>
+                                  <Button size="sm" variant="outline"
+                                    className="border-red-300 text-red-700 hover:bg-red-50 h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => setHrExecDeferExpandedId(isItemExpanded ? null : item.id)}>
+                                    {isItemExpanded ? "Cancel" : "Reject…"}
+                                  </Button>
+                                </div>
+                              )}
+                              {isItemExpanded && isPending && (
+                                <HrExecRejectForm
+                                  requestId={item.id}
+                                  requestType={item._type}
+                                  submitting={hrExecDeferSubmitting === item.id}
+                                  onSubmit={(reason) => void submitHrExecDecision(item.id, item._type, "rejected", reason)}
+                                  onCancel={() => setHrExecDeferExpandedId(null)}
+                                />
+                              )}
+                            </CardContent>
+                          </Card>
+                        )
+                      })
+                    })()}
+                  </div>
+                )}
+
+                {/* Leave requests */}
                 {hrApproverQueueFiltered.map((req: any) => {
                   const isExpanded = hrExpandedId === req.id
                   const effectiveStart = req.adjusted_start_date || req.preferred_start_date
