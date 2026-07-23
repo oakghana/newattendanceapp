@@ -289,6 +289,40 @@ export async function POST(request: NextRequest) {
     }
 
     const currentStatus = String((leaveRequest as any).status || "")
+    const TERMINAL_STATUSES = ["hr_approved", "hr_rejected", "cancelled"]
+    
+    // Block duplicate processing
+    if ((TERMINAL_STATUSES as readonly string[]).includes(currentStatus)) {
+      // Log duplicate attempt for audit
+      const auditEntry = {
+        action: "duplicate_approval_attempt",
+        table_name: "leave_plan_requests",
+        record_id: leave_plan_request_id,
+        user_id: user.id,
+        details: {
+          attempted_action: action,
+          current_status: currentStatus,
+          requested_at: new Date().toISOString(),
+          approver_name: approverName,
+          leave_year: (leaveRequest as any).leave_year_period,
+        },
+        created_at: new Date().toISOString(),
+      }
+      
+      await admin.from("audit_logs").insert(auditEntry).catch((e) => {
+        console.warn("[v0] Failed to log duplicate attempt:", e)
+      })
+      
+      return NextResponse.json(
+        {
+          error: "This leave request has already been processed and cannot be processed again.",
+          code: "ALREADY_PROCESSED",
+          current_status: currentStatus,
+        },
+        { status: 409 },
+      )
+    }
+    
     if (!(HR_APPROVE_ELIGIBLE as readonly string[]).includes(currentStatus)) {
       return NextResponse.json(
         {

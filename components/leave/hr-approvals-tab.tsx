@@ -303,6 +303,7 @@ function QccMemoPreviewModal({
   signerPosition,
   signatureDataUrl,
   signatureText,
+  storedSignatureDataUrl,
 }: {
   open: boolean
   onClose: () => void
@@ -311,7 +312,10 @@ function QccMemoPreviewModal({
   signerPosition: string
   signatureDataUrl?: string | null
   signatureText?: string | null
+  storedSignatureDataUrl?: string | null
 }) {
+  // Resolve the best available signature: inline drawn > stored profile
+  const resolvedSigDataUrl = signatureDataUrl || storedSignatureDataUrl || null
   const staffName = req.user
     ? `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim()
     : 'Unknown Staff'
@@ -325,7 +329,9 @@ function QccMemoPreviewModal({
   const endDate = req.adjusted_end_date || req.preferred_end_date
   const grantedDays = req.adjusted_days ?? req.requested_days
   const travelDays = req.travelling_days_added ?? 0
-  const entitledDays = req.original_requested_days ?? (grantedDays - travelDays)
+  const origDaysForModal = req.original_requested_days ?? (grantedDays - travelDays)
+  const wasAdjusted = travelDays > 0 || (req.adjusted_days != null && req.adjusted_days !== req.requested_days)
+  const entitledDays = origDaysForModal
   const entitledLabel = travelDays > 0
     ? `${entitledDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
     : String(entitledDays)
@@ -425,12 +431,11 @@ function QccMemoPreviewModal({
           {/* Body */}
           <div className="mt-4 space-y-3 text-[12.5px]">
             <p>
-              We acknowledge receipt of your letter dated {fmtDateOrdinal(req.submitted_at || req.created_at)} in
-              relation to the above-mentioned subject and wish to inform you that Management has given approval for
-              you to proceed on {grantedDays} working days{' '}
-              {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave with effect from{' '}
-              {fmtDateOrdinal(startDate)} to {fmtDateOrdinal(endDate)}.
+              In accordance with COCOBOD&apos;s vacation leave policy, we wish to inform you that approval has been
+              granted for you to proceed on your {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave in respect
+              of the year January to December {yearLabel}.
             </p>
+            <p>Your leave details are shown below.</p>
           </div>
 
           {/* Leave details table */}
@@ -468,7 +473,8 @@ function QccMemoPreviewModal({
 
           {/* Resume duty */}
           <div className="mt-4 text-[12.5px]">
-            <p>You are expected to resume duty on <span className="font-semibold">{resumeDate}</span>.</p>
+            <p>You are to resume duty on <span className="font-semibold">{resumeDate}</span>.</p>
+            <p className="mt-2">We wish you a pleasant and relaxing vacation.</p>
           </div>
 
           {/* Adjustment line if applicable */}
@@ -478,26 +484,23 @@ function QccMemoPreviewModal({
             </div>
           )}
 
-          {/* Closing */}
-          <div className="mt-3 text-[12.5px]">
-            <p>You can count on our co-operation.</p>
-          </div>
+
 
           {/* Signature block */}
           <div className="mt-10">
             {/* Signature image or typed name */}
             <div className="min-h-[48px] flex items-end mb-1">
-              {signatureDataUrl ? (
+              {resolvedSigDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={signatureDataUrl}
+                  src={resolvedSigDataUrl}
                   alt="HR Signature"
                   className="max-h-12 max-w-[180px] object-contain"
                 />
               ) : signatureText ? (
                 <p className="font-[cursive] text-2xl text-[#1a3c5e] leading-none italic">{signatureText}</p>
               ) : (
-                <span className="text-[11px] text-slate-400 italic">No signature stored — add one above</span>
+                <span className="text-[11px] text-slate-400 italic">Signature from profile will appear here</span>
               )}
             </div>
             {/* Underline */}
@@ -541,6 +544,7 @@ function HrApprovalCard({
   onReject,
   processing,
   hasStoredSignature,
+  storedSignatureDataUrl,
   inlineSig,
   onInlineSigSaved,
   signerName,
@@ -549,18 +553,17 @@ function HrApprovalCard({
   req: LeaveRequest
   expanded: boolean
   onToggle: () => void
-  onApprove: (note: string, subject: string, body: string) => void
+  onApprove: (note: string) => void
   onReject: (note: string) => void
   processing: boolean
   hasStoredSignature: boolean
+  storedSignatureDataUrl: string | null
   inlineSig: { dataUrl: string | null; text: string | null; mode: string } | null
   onInlineSigSaved: (dataUrl: string | null, text: string | null, mode: string) => void
   signerName: string
   signerPosition: string
 }) {
   const [note, setNote] = useState('')
-  const [subject, setSubject] = useState(req.memo_draft_subject || '')
-  const [body, setBody] = useState(req.memo_draft_body || '')
   const [previewOpen, setPreviewOpen] = useState(false)
 
   const staffName = req.user
@@ -579,9 +582,9 @@ function HrApprovalCard({
   const wasAdjusted = travelDays > 0 || (req.adjusted_days && req.adjusted_days !== origDays)
   const yearPeriod = req.leave_year_period || '—'
 
-  // Effective sig: stored profile sig OR inline sig for this session
+  // Effective sig: stored profile sig (auto-captured) OR inline sig drawn this session
   const sigReady = hasStoredSignature || (inlineSig && (inlineSig.dataUrl || inlineSig.text))
-  const previewSigDataUrl = inlineSig?.dataUrl || null
+  const previewSigDataUrl = storedSignatureDataUrl || inlineSig?.dataUrl || null
   const previewSigText = inlineSig?.text || null
 
   return (
@@ -625,27 +628,45 @@ function HrApprovalCard({
             ))}
           </div>
 
-          {/* HR Office adjustment banner */}
-          {wasAdjusted && (
-            <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold">HR Office adjustment: </span>
-                {travelDays > 0 && <span>{travelDays} travelling day(s) added ({origDays}d &rarr; {days}d)</span>}
-                {req.adjustment_reason && !travelDays && <span>{req.adjustment_reason}</span>}
-              </div>
-            </div>
-          )}
+
         </button>
+
+        {/* Already processed indicator */}
+        {["hr_approved", "hr_rejected", "cancelled"].includes(req.status) && (
+          <div className="px-5 py-3 bg-amber-50 border border-amber-200 rounded-b-lg">
+            <div className="flex items-center gap-2 text-xs text-amber-900">
+              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+              <span className="font-medium">This leave request has already been processed and cannot be modified.</span>
+            </div>
+            {req.status === "hr_approved" && req.hr_approved_at && (
+              <p className="text-xs text-amber-700 mt-1 pl-6">Approved on {fmtDate(req.hr_approved_at)}</p>
+            )}
+          </div>
+        )}
 
         {/* Expanded action panel */}
         {expanded && (
           <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 space-y-4">
-            {/* Inline signature if none stored */}
-            {!hasStoredSignature && !inlineSig && (
-              <InlineSignaturePanel onSaved={onInlineSigSaved} />
+
+            {/* Block processing for already-handled requests */}
+            {["hr_approved", "hr_rejected", "cancelled"].includes(req.status) && (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-center">
+                <p className="text-sm font-semibold text-red-800">Request Cannot Be Processed</p>
+                <p className="text-xs text-red-700 mt-1">
+                  This request is in a terminal state ({req.status.replace(/_/g, ' ')}) and cannot be approved or rejected again.
+                </p>
+              </div>
             )}
-            {!hasStoredSignature && inlineSig && (
+
+            {/* Signature status */}
+            {hasStoredSignature ? (
+              <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                <span>Signature auto-loaded from your profile &mdash; no re-signing required.</span>
+              </div>
+            ) : !inlineSig ? (
+              <InlineSignaturePanel onSaved={onInlineSigSaved} />
+            ) : (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                 Signature set for this session.
@@ -675,29 +696,6 @@ function HrApprovalCard({
               </div>
             </div>
 
-            {/* Memo subject */}
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Memo Subject</label>
-              <input
-                type="text"
-                value={subject}
-                onChange={e => setSubject(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Enter memo subject..."
-              />
-            </div>
-
-            {/* Memo body */}
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Memo Body</label>
-              <Textarea
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                placeholder="Memo body will be pre-filled from template..."
-                className="text-sm h-28 resize-none"
-              />
-            </div>
-
             {/* Approval note */}
             <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1">
@@ -712,7 +710,7 @@ function HrApprovalCard({
             </div>
 
             <div className="flex gap-2 justify-end">
-              {/* Preview button */}
+              {/* View Memo button */}
               <Button
                 size="sm"
                 variant="outline"
@@ -720,14 +718,15 @@ function HrApprovalCard({
                 onClick={() => setPreviewOpen(true)}
               >
                 <Eye className="h-3 w-3" />
-                Preview Memo
+                View Memo
               </Button>
 
               <Button
                 size="sm"
                 variant="outline"
                 className="border-red-300 text-red-600 hover:bg-red-50 gap-1"
-                disabled={processing}
+                disabled={processing || ["hr_approved", "hr_rejected", "cancelled"].includes(req.status)}
+                title={["hr_approved", "hr_rejected", "cancelled"].includes(req.status) ? 'This request has already been processed' : undefined}
                 onClick={() => onReject(note)}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
@@ -736,9 +735,14 @@ function HrApprovalCard({
               <Button
                 size="sm"
                 className="bg-orange-500 hover:bg-orange-600 text-white gap-1"
-                disabled={processing || !sigReady}
-                title={!sigReady ? 'Set a signature above before approving' : undefined}
-                onClick={() => onApprove(note, subject, body)}
+                disabled={processing || !sigReady || ["hr_approved", "hr_rejected", "cancelled"].includes(req.status)}
+                title={
+                  ["hr_approved", "hr_rejected", "cancelled"].includes(req.status)
+                    ? 'This request has already been processed'
+                    : !sigReady ? 'Set a signature above before approving' 
+                    : undefined
+                }
+                onClick={() => onApprove(note)}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                 Approve &amp; Issue Memo
@@ -757,6 +761,7 @@ function HrApprovalCard({
         signerPosition={signerPosition}
         signatureDataUrl={previewSigDataUrl}
         signatureText={previewSigText}
+        storedSignatureDataUrl={storedSignatureDataUrl}
       />
     </>
   )
@@ -772,6 +777,7 @@ export function HrApprovalsTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [hasStoredSignature, setHasStoredSignature] = useState(true)
+  const [storedSignatureDataUrl, setStoredSignatureDataUrl] = useState<string | null>(null)
   const [inlineSig, setInlineSig] = useState<{ dataUrl: string | null; text: string | null; mode: string } | null>(null)
   const [signerName, setSignerName] = useState('HR Executive')
   const [signerPosition, setSignerPosition] = useState('HR MANAGER')
@@ -795,6 +801,7 @@ export function HrApprovalsTab() {
       }
       if (data.signer_name) setSignerName(data.signer_name)
       if (data.signer_position) setSignerPosition(data.signer_position)
+      if (data.signer_signature_data_url) setStoredSignatureDataUrl(data.signer_signature_data_url)
     } catch (err) {
       console.error('[v0] HrApprovalsTab fetch error:', err)
       toast({ title: 'Error', description: 'Failed to load HR approval requests', variant: 'destructive' })
@@ -824,10 +831,22 @@ export function HrApprovalsTab() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Approval failed')
-      toast({ title: 'Leave Approved', description: data.message || 'Memo issued successfully.' })
-      setExpandedId(null)
-      fetchRequests()
+      if (!res.ok) {
+        // Check for duplicate processing error
+        if (data.code === 'ALREADY_PROCESSED' || res.status === 409) {
+          toast({
+            title: 'Request Already Processed',
+            description: 'This leave request has already been processed and cannot be modified again. If you believe this is an error, please contact your HR administrator.',
+            variant: 'destructive',
+          })
+        } else {
+          throw new Error(data.error || 'Approval failed')
+        }
+      } else {
+        toast({ title: 'Leave Approved', description: data.message || 'Memo issued successfully.' })
+        setExpandedId(null)
+        fetchRequests()
+      }
     } catch (err: any) {
       toast({ title: 'Error', description: String(err.message || err), variant: 'destructive' })
     } finally {
@@ -849,10 +868,22 @@ export function HrApprovalsTab() {
         body: JSON.stringify({ leave_plan_request_id: reqId, action: 'reject', note }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Rejection failed')
-      toast({ title: 'Leave Rejected', description: data.message || 'Request rejected.' })
-      setExpandedId(null)
-      fetchRequests()
+      if (!res.ok) {
+        // Check for duplicate processing error
+        if (data.code === 'ALREADY_PROCESSED' || res.status === 409) {
+          toast({
+            title: 'Request Already Processed',
+            description: 'This leave request has already been processed and cannot be modified again. If you believe this is an error, please contact your HR administrator.',
+            variant: 'destructive',
+          })
+        } else {
+          throw new Error(data.error || 'Rejection failed')
+        }
+      } else {
+        toast({ title: 'Leave Rejected', description: data.message || 'Request rejected.' })
+        setExpandedId(null)
+        fetchRequests()
+      }
     } catch (err: any) {
       toast({ title: 'Error', description: String(err.message || err), variant: 'destructive' })
     } finally {
@@ -932,10 +963,11 @@ export function HrApprovalsTab() {
               req={req}
               expanded={expandedId === req.id}
               onToggle={() => setExpandedId(expandedId === req.id ? null : req.id)}
-              onApprove={(note, subject, body) => handleApprove(req.id, note, subject, body)}
+              onApprove={(note) => handleApprove(req.id, note, '', '')}
               onReject={(note) => handleReject(req.id, note)}
               processing={processingId === req.id}
               hasStoredSignature={hasStoredSignature}
+              storedSignatureDataUrl={storedSignatureDataUrl}
               inlineSig={inlineSig}
               onInlineSigSaved={(dataUrl, text, mode) => {
                 if (!dataUrl && !text) { setInlineSig(null); return }
