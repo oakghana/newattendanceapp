@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select'
 import {
   Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp,
-  Download, Shield, PenLine, Upload, Info,
+  Download, Shield, Info,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -70,165 +70,6 @@ const leaveTypeLabel = (key: string) => {
     no_pay: 'No Pay', casual: 'Casual',
   }
   return map[key] || String(key).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
-
-// ── Signature Panel ───────────────────────────────────────────────────────────
-
-function SignaturePanel({
-  savedSignature, onSave,
-}: {
-  savedSignature: string | null
-  onSave: (mode: string, text: string, dataUrl: string | null) => void
-}) {
-  const [mode, setMode] = useState<'type' | 'draw' | 'upload'>('type')
-  const [typedText, setTypedText] = useState(savedSignature || '')
-  const [collapsed, setCollapsed] = useState(!!savedSignature)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const drawing = useRef(false)
-
-  // ── Native canvas drawing ──────────────────────────────────────────────────
-  const getCtx = () => canvasRef.current?.getContext('2d') ?? null
-  const getPos = (e: React.PointerEvent) => {
-    const r = canvasRef.current!.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top }
-  }
-  const onPointerDown = (e: React.PointerEvent) => {
-    drawing.current = true
-    const ctx = getCtx(); if (!ctx) return
-    const { x, y } = getPos(e)
-    ctx.beginPath(); ctx.moveTo(x, y)
-  }
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drawing.current) return
-    const ctx = getCtx(); if (!ctx) return
-    const { x, y } = getPos(e)
-    ctx.lineWidth = 2; ctx.strokeStyle = '#1e3a5f'; ctx.lineCap = 'round'
-    ctx.lineTo(x, y); ctx.stroke()
-  }
-  const onPointerUp = () => { drawing.current = false }
-
-  const handleSave = () => {
-    if (mode === 'type') {
-      if (!typedText.trim()) return
-      onSave('typed', typedText.trim(), null)
-    } else if (mode === 'draw') {
-      const dataUrl = canvasRef.current?.toDataURL() ?? null
-      onSave('draw', '', dataUrl)
-    }
-    setCollapsed(true)
-  }
-
-  return (
-    <div className="rounded-xl border border-green-200 bg-green-50 overflow-hidden">
-      <button
-        onClick={() => setCollapsed(c => !c)}
-        className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-green-100 transition-colors"
-      >
-        <div>
-          <p className="text-xs font-bold text-green-800 tracking-wide uppercase">
-            YOUR HR SIGNATURE (APPLIED TO ALL APPROVED MEMOS)
-          </p>
-          {collapsed && savedSignature && (
-            <p className="text-xs text-green-700 mt-0.5">
-              Saved &mdash; click to update
-            </p>
-          )}
-          {!collapsed && (
-            <p className="text-xs text-green-700 mt-0.5">
-              Save it once here and the leave module will reuse it until you replace it.
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {savedSignature && (
-            <Badge className="bg-green-600 text-white text-xs">Saved</Badge>
-          )}
-          {collapsed
-            ? <ChevronDown className="h-4 w-4 text-green-700" />
-            : <ChevronUp className="h-4 w-4 text-green-700" />}
-        </div>
-      </button>
-
-      {!collapsed && (
-        <div className="px-5 pb-5 space-y-3 border-t border-green-200">
-          {/* Mode tabs */}
-          <div className="flex gap-2 pt-3">
-            {(['type', 'draw', 'upload'] as const).map(m => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={[
-                  'px-4 py-1.5 rounded-full text-xs font-medium border transition-colors',
-                  mode === m
-                    ? 'bg-green-700 text-white border-green-700'
-                    : 'bg-white text-green-800 border-green-300 hover:bg-green-100',
-                ].join(' ')}
-              >
-                {m === 'type' ? <><PenLine className="h-3 w-3 inline mr-1" />Type</>
-                  : m === 'draw' ? <><PenLine className="h-3 w-3 inline mr-1" />Draw</>
-                  : <><Upload className="h-3 w-3 inline mr-1" />Upload</>}
-              </button>
-            ))}
-          </div>
-
-          {mode === 'type' && (
-            <input
-              type="text"
-              value={typedText}
-              onChange={e => setTypedText(e.target.value)}
-              placeholder="Type your full name as signature"
-              className="w-full border border-green-300 rounded-lg px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-400"
-            />
-          )}
-
-          {mode === 'draw' && (
-            <canvas
-              ref={canvasRef}
-              width={600}
-              height={120}
-              className="w-full border border-green-300 rounded-lg bg-white touch-none cursor-crosshair"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerLeave={onPointerUp}
-            />
-          )}
-
-          {mode === 'upload' && (
-            <div className="border-2 border-dashed border-green-300 rounded-lg p-6 text-center">
-              <Upload className="h-6 w-6 mx-auto text-green-500 mb-2" />
-              <p className="text-xs text-green-700">Click to upload signature image</p>
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={handleSave}
-              className="bg-green-700 hover:bg-green-800 text-white"
-            >
-              Save Signature
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => { setTypedText(savedSignature || ''); setCollapsed(true) }}
-            >
-              Reload Saved
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => { setTypedText(''); if (padRef.current) padRef.current.clear() }}
-              className="text-red-500 hover:text-red-700"
-            >
-              Clear Current
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Request Card ──────────────────────────────────────────────────────────────
@@ -404,7 +245,6 @@ export function HrApprovalsTab() {
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
-  const [savedSignature, setSavedSignature] = useState<string | null>(null)
 
   // Filters
   const [deptFilter, setDeptFilter] = useState('all')
@@ -430,38 +270,9 @@ export function HrApprovalsTab() {
     }
   }, [toast])
 
-  // ── Load saved signature from localStorage ─────────────────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem('hr_approver_signature_text')
-    if (stored) setSavedSignature(stored)
     fetchRequests()
   }, [fetchRequests])
-
-  // ── Save signature ────────────────────────────────────────────────────────
-  const handleSaveSignature = async (mode: string, text: string, dataUrl: string | null) => {
-    if (mode === 'typed' && text) {
-      localStorage.setItem('hr_approver_signature_text', text)
-      setSavedSignature(text)
-    }
-    // Also persist to backend
-    try {
-      await fetch('/api/leave/signature', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workflow_domain: 'leave',
-          approval_stage: 'hr_approver',
-          signature_mode: mode,
-          signature_text: text || null,
-          signature_data_url: dataUrl || null,
-        }),
-      })
-      toast({ title: 'Signature saved', description: 'Your signature will be applied to all approved memos.' })
-    } catch {
-      // Signature still stored locally; non-fatal
-      toast({ title: 'Signature saved locally', description: 'Backend save failed — you can still approve.' })
-    }
-  }
 
   // ── Approve ───────────────────────────────────────────────────────────────
   const handleApprove = async (reqId: string, note: string, subject: string, body: string) => {
@@ -533,9 +344,6 @@ export function HrApprovalsTab() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* Signature panel */}
-      <SignaturePanel savedSignature={savedSignature} onSave={handleSaveSignature} />
-
       {/* Filters + count */}
       <div className="flex flex-wrap items-center gap-3">
         <Select value={locFilter} onValueChange={setLocFilter}>
