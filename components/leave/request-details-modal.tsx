@@ -122,67 +122,72 @@ function QccMemoCard({ req }: { req: LeaveRequest }) {
   const sigText = req.hr_signature_text || null
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-5 font-sans text-[12.5px] text-slate-900 leading-[1.6]">
-      {/* ── Letterhead ─────────────────────────────────────────────── */}
-      <div className="px-8 pt-6 pb-2 flex items-start justify-between">
+    /* Paper-style card: no border, just a soft shadow so it looks like a printed page */
+    <div className="bg-white shadow-md rounded overflow-hidden mb-6 font-sans text-[12.5px] text-slate-900 leading-[1.65]">
+
+      {/* ── Letterhead ──────────────────────────────────────────────── */}
+      <div className="px-10 pt-7 pb-0 flex items-start gap-4">
         {/* Logo */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/logos/qcc-logo.png"
           alt="QCC Logo"
-          className="w-14 h-14 object-contain shrink-0"
+          className="w-[60px] h-[60px] object-contain shrink-0"
         />
         {/* Org name centred */}
-        <div className="flex-1 text-center px-4">
-          <p className="font-bold text-[14px] tracking-widest">QUALITY CONTROL COMPANY LTD.</p>
-          <p className="text-[11px] tracking-wider text-slate-600">(COCOBOD)</p>
+        <div className="flex-1 text-center pt-1">
+          <p className="font-bold text-[15px] tracking-widest">QUALITY CONTROL COMPANY LTD.</p>
+          <p className="text-[11px] tracking-wider text-slate-700">(COCOBOD)</p>
         </div>
         {/* Address right */}
-        <div className="text-right text-[10.5px] text-slate-500 shrink-0 pt-1">
+        <div className="text-right text-[10.5px] text-slate-600 shrink-0 pt-1 min-w-[90px]">
           <p>P.O. Box M54</p>
-          <p>Accra, Ghana</p>
+          <p>Accra</p>
+          <p>Ghana</p>
         </div>
       </div>
 
-      {/* Green accent bar */}
-      <div className="mx-8 h-[2.5px] bg-[#2d7a2d] rounded-full mb-3" />
+      {/* Solid green accent bar — full width, no margin */}
+      <div className="mx-10 mt-3 h-[4px] bg-[#1a6e1a]" />
 
-      {/* Ref + Date */}
-      <div className="px-8 flex justify-between text-[11px] text-[#2d7a2d] mb-1">
-        <div>
-          <span className="font-semibold">Our Ref No:&nbsp;</span>{refNo}
+      {/* Ref + Date — green text, matching PDF */}
+      <div className="px-10 mt-3 flex justify-between text-[11px] text-[#1a6e1a]">
+        <div className="space-y-[3px]">
+          <p><span className="font-medium">Our Ref No:&nbsp;</span>{refNo}</p>
+          <p><span className="font-medium">Your Ref No:&nbsp;</span><span className="border-b border-[#1a6e1a] inline-block w-36">&nbsp;</span></p>
         </div>
-        <div className="font-semibold">Date: {approvedDate}</div>
-      </div>
-      <div className="px-8 text-[11px] text-slate-500 mb-3">
-        <span className="font-semibold">Your Ref No:&nbsp;</span>____________________________
+        <p className="text-slate-700 text-[11px]">Date: {approvedDate}</p>
       </div>
 
-      <div className="mx-8 border-t border-slate-100 mb-3" />
+      {/* Thin rule */}
+      <div className="mx-10 mt-3 border-t border-slate-200" />
 
       {/* Addressee */}
-      <div className="px-8 space-y-[3px] mb-3">
-        <p className="font-bold uppercase">{staffName}&nbsp;&nbsp;(S/NO.:&nbsp;&nbsp;{serial})</p>
-        <p className="uppercase text-[11.5px] text-slate-600">{position}</p>
-        <p className="uppercase text-[11.5px] text-slate-600">{dept}</p>
+      <div className="px-10 mt-3 space-y-[2px]">
+        <p className="font-bold uppercase text-[13px]">{staffName}&nbsp;&nbsp;(S/NO.:&nbsp;&nbsp;{serial})</p>
+        <p className="uppercase text-[11.5px] text-[#1a6e1a]">{position}</p>
+        <p className="uppercase text-[11.5px] text-[#1a6e1a]">{dept}</p>
       </div>
 
       {/* THRO */}
-      <div className="px-8 text-[11.5px] mb-3">
-        <p><span className="font-bold">THRO:</span><span className="ml-2 font-semibold uppercase">{dept ? `${dept} HEAD` : 'DEPARTMENT HEAD'}</span></p>
-        <p className="ml-10 font-semibold">QUALITY CONTROL COMPANY LIMITED</p>
-        <p className="ml-10 text-slate-500 uppercase">{dept}</p>
+      <div className="px-10 mt-4 text-[11.5px]">
+        <p>
+          <span className="font-bold">THRO:&nbsp;&nbsp;</span>
+          <span className="text-[#1a6e1a] font-medium uppercase">{dept ? `THE ${dept} HEAD` : 'THE DEPARTMENT HEAD'}</span>
+        </p>
+        <p className="ml-[3.25rem] text-[#1a6e1a] font-medium uppercase">QUALITY CONTROL COMPANY LIMITED</p>
+        <p className="ml-[3.25rem] text-[#1a6e1a] uppercase">{dept}</p>
       </div>
 
-      {/* Subject */}
-      <div className="px-8 mb-3">
-        <p className="font-bold underline text-[13px] uppercase text-[#2d7a2d]">
-          {leaveType} LEAVE ADVICE FOR {yearLabel}
+      {/* Subject — bold underline, no colour (matches PDF black text) */}
+      <div className="px-10 mt-5">
+        <p className="font-bold underline text-[13px] uppercase">
+          {leaveType} LEAVE
         </p>
       </div>
 
       {/* Body */}
-      <div className="px-8 text-[12px] space-y-2 mb-3">
+      <div className="px-10 mt-4 text-[12px] leading-relaxed">
         <p>
           We acknowledge receipt of your letter dated {fmtOrdinal(req.submitted_at || req.created_at)}{' '}
           in relation to the above-mentioned subject and wish to inform you that Management has given
@@ -191,85 +196,79 @@ function QccMemoCard({ req }: { req: LeaveRequest }) {
         </p>
       </div>
 
-      {/* Leave details table */}
-      <div className="px-8 mb-3">
-        <div className="border border-slate-200 rounded overflow-hidden text-[11.5px]">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-semibold border-r border-slate-200 leading-tight">
-                  Days Entitled
-                </th>
-                <th className="px-3 py-2 text-left font-semibold border-r border-slate-200 leading-tight">
-                  Days Granted
-                </th>
-                <th className="px-3 py-2 text-left font-semibold border-r border-slate-200">From</th>
-                <th className="px-3 py-2 text-left font-semibold border-r border-slate-200">To</th>
-                <th className="px-3 py-2 text-left font-semibold">Remarks</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-100">
-                <td className="px-3 py-2 border-r border-slate-100">{entitledLabel}</td>
-                <td className="px-3 py-2 border-r border-slate-100 font-semibold">{grantedDays}</td>
-                <td className="px-3 py-2 border-r border-slate-100">{fmtOrdinal(startDate)}</td>
-                <td className="px-3 py-2 border-r border-slate-100">{fmtOrdinal(endDate)}</td>
-                <td className="px-3 py-2 text-slate-500">{remarks}</td>
-              </tr>
-              <tr className="bg-slate-50/60">
-                <td className="px-3 py-1.5 border-r border-slate-100 text-slate-400 text-[11px]" />
-                <td className="px-3 py-1.5 border-r border-slate-100 font-bold">{grantedDays}</td>
-                <td colSpan={3} />
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      {/* Leave details table — plain grid, no coloured header */}
+      <div className="px-10 mt-5">
+        <table className="w-full border-collapse text-[11.5px] border border-slate-300">
+          <thead>
+            <tr className="border-b border-slate-300">
+              <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 bg-slate-50 leading-tight w-[22%]">
+                Number of Days<br />Entitled
+              </th>
+              <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 bg-slate-50 leading-tight w-[18%]">
+                Number of Days<br />Granted
+              </th>
+              <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 bg-slate-50 w-[18%]">From</th>
+              <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 bg-slate-50 w-[18%]">To</th>
+              <th className="px-3 py-2 text-left font-semibold bg-slate-50">Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-slate-200">
+              <td className="px-3 py-2 border-r border-slate-200">{entitledLabel}</td>
+              <td className="px-3 py-2 border-r border-slate-200">{grantedDays}</td>
+              <td className="px-3 py-2 border-r border-slate-200">{fmtOrdinal(startDate)}</td>
+              <td className="px-3 py-2 border-r border-slate-200">{fmtOrdinal(endDate)}</td>
+              <td className="px-3 py-2 text-slate-500">{remarks}</td>
+            </tr>
+            <tr>
+              <td className="px-3 py-1.5 border-r border-slate-200" />
+              <td className="px-3 py-1.5 border-r border-slate-200 font-semibold">{grantedDays}</td>
+              <td colSpan={3} />
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       {/* Resume + closing */}
-      <div className="px-8 text-[12px] space-y-1.5 mb-4">
+      <div className="px-10 mt-5 text-[12px] space-y-2">
         <p>You are expected to resume duty on <span className="font-semibold">{resumeDate(endDate)}</span>.</p>
         <p>You can count on our co-operation.</p>
       </div>
 
       {/* Signature block */}
-      <div className="px-8 mb-4 mt-6">
-        <div className="min-h-[40px] flex items-end mb-1">
-          {sigDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={sigDataUrl} alt="Signature" className="max-h-10 max-w-[150px] object-contain" />
-          ) : sigText ? (
-            <p className="font-[cursive] text-xl italic text-[#1a3c5e] leading-none">{sigText}</p>
-          ) : null}
-        </div>
-        <div className="w-[220px] border-b border-slate-600 mb-1.5" />
-        <p className="font-bold uppercase text-[12px]">{signerName}</p>
-        <p className="text-[11.5px] uppercase text-[#2d7a2d] font-medium">{signerPosition}</p>
+      <div className="px-10 mt-10 mb-2">
+        {/* Signature image */}
+        {(sigDataUrl || sigText) && (
+          <div className="min-h-[44px] flex items-end mb-1">
+            {sigDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={sigDataUrl} alt="Signature" className="max-h-11 max-w-[160px] object-contain" />
+            ) : (
+              <p className="font-[cursive] text-2xl italic text-slate-700 leading-none">{sigText}</p>
+            )}
+          </div>
+        )}
+        {/* Underline */}
+        <div className="w-[240px] border-b border-slate-700 mb-2" />
+        <p className="font-bold uppercase text-[12.5px]">{signerName}</p>
+        <p className="text-[11.5px] uppercase text-[#1a6e1a] font-medium">{signerPosition}</p>
         <p className="text-[11.5px]">FOR: MANAGING DIRECTOR</p>
       </div>
 
-      {/* Approved by chip */}
-      {signerName !== '—' && (
-        <div className="px-8 mb-3">
-          <div className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-full px-3 py-1 text-[11px] text-green-800">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Approved by <span className="font-semibold">{signerName}</span>{signerPosition ? ` · ${signerPosition}` : ''}</span>
-            {req.hr_approved_at && (
-              <span className="text-green-600 ml-1">on {fmtOrdinal(req.hr_approved_at)}</span>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* CC */}
-      <div className="mx-8 border-t border-slate-100 pt-2 mb-2 text-[11px] text-slate-500">
-        <span className="font-bold text-slate-700">cc:&nbsp;</span>
-        Managing Director, Deputy Managing Director, HR Head, Accounts Manager
+      <div className="px-10 mt-7 border-t border-slate-200 pt-3 text-[11px] text-slate-600">
+        <p>
+          <span className="font-bold text-slate-800">cc:&nbsp;&nbsp;</span>
+          Managing Director
+        </p>
+        <p className="ml-[3.25rem]">Deputy Managing Director</p>
+        <p className="ml-[3.25rem]">HR Leave Office</p>
+        <p className="ml-[3.25rem]">File</p>
       </div>
 
-      {/* Footer */}
-      <div className="mx-8 border-t border-slate-100 py-2 text-[10px] text-slate-400 text-center">
-        Tel: +233-571-461-114&nbsp;|&nbsp;+233-571-461-113&nbsp;|&nbsp;Fax: GA-105-8378&nbsp;|&nbsp;Email: info@qccgh.com&nbsp;|&nbsp;www.qccgh.com
+      {/* Footer bar */}
+      <div className="mx-10 mt-5 mb-5 border-t border-slate-300 pt-2 text-[10px] text-slate-400 text-center">
+        Tel: +233-571-461-114&nbsp;&nbsp;|&nbsp;&nbsp;+233-571-461-113&nbsp;&nbsp;|&nbsp;&nbsp;Fax: GA-005-8378&nbsp;&nbsp;|&nbsp;&nbsp;Email: info@qccgh.com&nbsp;&nbsp;|&nbsp;&nbsp;www.qccgh.com
       </div>
     </div>
   )

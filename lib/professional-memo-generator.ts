@@ -119,38 +119,51 @@ async function generateMainMemo(
     // logo optional
   }
 
-  // ── Header: Org text LEFT, Logo RIGHT ─────────────────────────────────────
-  const logoSize = 28 // mm square
-  const logoX = pageWidth - margin - logoSize
-  const logoY = 12
-
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(12)
-  doc.text("QUALITY CONTROL COMPANY LTD.", margin, 18)
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
-  doc.text("(COCOBOD)", margin, 24)
-  doc.text("P.O. Box M54", margin, 29)
-  doc.text("Accra", margin, 34)
-  doc.text("Ghana", margin, 39)
+  // ── Header: Logo LEFT, Org name CENTRE, Address RIGHT ────────────────────
+  const logoSize = 24 // mm square
+  const logoX = margin
+  const logoY = 13
 
   if (logoDataUrl) {
     doc.addImage(logoDataUrl, "PNG", logoX, logoY, logoSize, logoSize)
   }
 
-  let yPos = Math.max(44, logoY + logoSize + 2)
+  // Org name centred
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(13)
+  doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, 19, { align: "center" })
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  doc.text("(COCOBOD)", pageWidth / 2, 25, { align: "center" })
 
-  // ── Ref + Date block ───────────────────────────────────────────────────────
+  // Address right
+  doc.setFontSize(8.5)
+  doc.text("P.O. Box M54", pageWidth - margin, 15, { align: "right" })
+  doc.text("Accra", pageWidth - margin, 20, { align: "right" })
+  doc.text("Ghana", pageWidth - margin, 25, { align: "right" })
+
+  let yPos = logoY + logoSize + 3
+
+  // ── Solid green accent bar ─────────────────────────────────────────────────
+  doc.setFillColor(26, 110, 26) // #1a6e1a
+  doc.rect(margin, yPos, contentWidth, 1.5, "F")
+  yPos += 6
+
+  // ── Ref + Date block — green text ─────────────────────────────────────────
   doc.setFontSize(9)
+  doc.setTextColor(26, 110, 26) // green
   const today = fmtDateOrdinal(new Date().toISOString())
   doc.text(`Our Ref No:  ${memoData.refNo || "QCC/HRD/AL/" + new Date().getFullYear() + "/"}`, margin, yPos)
+  doc.setTextColor(0)
   doc.text(`Date:  ${memoData.date || today}`, pageWidth - margin, yPos, { align: "right" })
   yPos += 5
+  doc.setTextColor(26, 110, 26)
   doc.text("Your Ref No:  ____________________________", margin, yPos)
+  doc.setTextColor(0)
 
   // Thin rule
   yPos += 5
-  doc.setDrawColor(150)
+  doc.setDrawColor(180)
   doc.setLineWidth(0.3)
   doc.line(margin, yPos, pageWidth - margin, yPos)
   yPos += 6
@@ -158,27 +171,32 @@ async function generateMainMemo(
   // ── Addressee block ────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
-  // "to" field should contain "STAFFNAME  (S/NO.:  SERIALNO)"
+  doc.setTextColor(0)
   doc.text(memoData.to.toUpperCase(), margin, yPos)
   yPos += 5
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
-  // "from" acts as position / department line in the QCC format
+  doc.setTextColor(26, 110, 26) // green for position + dept lines
   if (memoData.from) {
     const fromLines = doc.splitTextToSize(memoData.from.toUpperCase(), contentWidth)
     fromLines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 4.5 })
   }
+  doc.setTextColor(0)
   yPos += 3
 
-  // ── THRO block ─────────────────────────────────────────────────────────────
+  // ── THRO block — green text ────────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
   doc.setFontSize(9)
-  doc.text("THRO: ARCHIVE HEAD", margin, yPos)
+  doc.setTextColor(0)
+  doc.text("THRO:", margin, yPos)
+  doc.setTextColor(26, 110, 26)
+  doc.text("  THE DEPARTMENT HEAD", margin + 14, yPos)
   yPos += 4.5
-  doc.text("QUALITY CONTROL COMPANY LIMITED", margin + 12, yPos)
+  doc.text("QUALITY CONTROL COMPANY LIMITED", margin + 14, yPos)
   yPos += 4.5
   doc.setFont("helvetica", "normal")
-  doc.text((memoData.from || "").toUpperCase(), margin + 12, yPos)
+  doc.text((memoData.from || "").toUpperCase(), margin + 14, yPos)
+  doc.setTextColor(0)
   yPos += 8
 
   // ── Subject (bold + underline) ─────────────────────────────────────────────
