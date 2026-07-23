@@ -1116,7 +1116,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────���────────────────────────────────────────────────���������������─
+  // ── Computed ────���────────────────────────────────────────────────����������������─
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1832,8 +1832,6 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     // Also include dedicated HR approver data if available (for proper scoping)
     const dedicatedQueue = hrApproverData?.requests || []
     
-    // If we have dedicated HR approver data, use it (better scoping)
-    // Otherwise fall back to main queue filtered by status
     return dedicatedQueue.length > 0 ? dedicatedQueue : queue
   }, [data, hrApproverData])
 
@@ -4279,6 +4277,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           </TabsContent>
           )}
         </Tabs>
+
+
       )}
     </div>
   )
