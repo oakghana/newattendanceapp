@@ -1116,7 +1116,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExpandedId, setHrExpandedId] = useState<string | null>(null)
   const [templateOptions, setTemplateOptions] = useState<HrTemplateOption[]>([])
 
-  // ── Computed ────���────────────────────────────────────────────────�������������──
+  // ── Computed ────���────────────────────────────────────────────────���������������─
   const activeSig = useMemo(() => {
     if (signatureMode === "typed") return { text: (typedSignature || defaultStaffSignature) || null, dataUrl: null }
     if (signatureMode === "upload") return { text: null, dataUrl: uploadedSigUrl }
@@ -1824,14 +1824,18 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   }, [hodPendingReviews, hodLocationFilter, hodDeptFilter])
 
   const hrApproverQueue: any[] = useMemo(() => {
-    // Combine requests from main data and dedicated HR approver data
-    const mainQueue = (data?.requests || []).filter((r: any) =>
+    // Filter main data for HR approver eligible statuses
+    // HR approvers see requests that have passed HOD/Manager review and reached HR
+    const queue = (data?.requests || []).filter((r: any) =>
       ["hod_approved", "manager_confirmed", "hr_office_forwarded"].includes(String(r?.status || "")),
     )
-    const hrApproveQueue = hrApproverData?.requests || []
-    // Use HR approver data if available (it has the correct scoping), otherwise fall back to main data
-    return isHrApprover && hrApproveQueue.length > 0 ? hrApproveQueue : mainQueue
-  }, [data, hrApproverData, isHrApprover])
+    // Also include dedicated HR approver data if available (for proper scoping)
+    const dedicatedQueue = hrApproverData?.requests || []
+    
+    // If we have dedicated HR approver data, use it (better scoping)
+    // Otherwise fall back to main queue filtered by status
+    return dedicatedQueue.length > 0 ? dedicatedQueue : queue
+  }, [data, hrApproverData])
 
   const hrApproverQueueFiltered: any[] = useMemo(() => {
     let rows = [...hrApproverQueue]
