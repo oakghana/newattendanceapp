@@ -544,6 +544,7 @@ function HrApprovalCard({
   onReject,
   processing,
   hasStoredSignature,
+  storedSignatureDataUrl,
   inlineSig,
   onInlineSigSaved,
   signerName,
