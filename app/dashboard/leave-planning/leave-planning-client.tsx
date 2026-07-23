@@ -2325,24 +2325,35 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       )}
 
       {data && (
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-2 flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-xl border border-blue-100 bg-blue-50/60 p-1.5">
+        <div>
+          {/* Custom tab bar - replaces broken Radix UI Tabs */}
+          <div className="mb-2 flex h-auto w-full flex-nowrap gap-1.5 overflow-x-auto rounded-xl border border-blue-100 bg-blue-50/60 p-1.5">
             {tabs.map(({ value, label, Icon, count }) => (
-              <TabsTrigger key={value} value={value}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-800 transition-colors hover:bg-blue-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:font-semibold">
+              <button
+                key={value}
+                type="button"
+                onClick={() => setActiveTab(value)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors cursor-pointer ${
+                  activeTab === value
+                    ? "border-emerald-600 bg-emerald-600 text-white font-semibold"
+                    : "border-blue-200 bg-white text-blue-800 hover:bg-blue-50"
+                }`}
+              >
                 <Icon className="w-4 h-4" />
                 {label}
                 {count != null && count > 0 && (
-                  <span className="ml-1 rounded-full bg-blue-700 px-1.5 py-0.5 text-[10px] font-bold text-white min-w-[18px] text-center data-[state=active]:bg-white/20">
+                  <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold min-w-[18px] text-center ${
+                    activeTab === value ? "bg-white/20 text-white" : "bg-blue-700 text-white"
+                  }`}>
                     {count}
                   </span>
                 )}
-              </TabsTrigger>
+              </button>
             ))}
-          </TabsList>
+          </div>
 
-          {/* ── My Leaves ─────────────────────────────────────────────── */}
-          <TabsContent value="my-leaves">
+          {/* My Leaves */}
+          {activeTab === "my-leaves" && <div>
             {myRequests.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <CalendarDays className="w-10 h-10 mx-auto mb-3 text-slate-300" />
@@ -2369,10 +2380,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 ))}
               </div>
             )}
-          </TabsContent>
+          </div>}
 
-          {/* ── Apply for Leave ───────────────────────────────────────── */}
-          <TabsContent value="apply">
+          {/* Apply for Leave */}
+          {activeTab === "apply" && <div>
             <Card className="border-0 shadow-md">
               <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b pb-4">
                 <CardTitle className="text-base text-green-800">
@@ -2564,10 +2575,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>}
 
-          {/* ── HOD Review ���────────────────────────────────────────────���── */}
-          <TabsContent value="hod-review">
+          {/* HOD Review ���────────────────────────────────────────────���── */}
+          {activeTab === "hod-review" && <div>
             {/* 2-day approval notice for HOD/RM */}
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
               <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
@@ -2734,10 +2745,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 )}
               </div>
             )}
-          </TabsContent>
+          </div>}
 
-          {/* ── HR Executive HOD Review ──────────────────────────────────── */}
-          <TabsContent value="hr-exec-hod-review">
+          {/* HR Executive HOD Review ──────────────────────────────────── */}
+          {activeTab === "hr-exec-hod-review" && <div>
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
                 <span className="text-lg">📋</span> HOD Review for Your Linked Staff
@@ -2823,10 +2834,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 ))}
               </div>
             )}
-          </TabsContent>
+          </div>}
 
-          {/* ── HR Leave Office ───────────────────────────────────────── */}
-          <TabsContent value="hr-office">
+          {/* HR Leave Office ───────────────────────────────────────── */}
+          {activeTab === "hr-office" && <div>
             {/* Tabs moved to top for easy access */}
             <Tabs value={hrOfficeTab} onValueChange={setHrOfficeTab} className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -3839,10 +3850,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 )}
               </TabsContent>
             </Tabs>
-          </TabsContent>
+          </div>}
 
-          {/* ── HR Final Approval ─────────────────────────────────────── */}
-          <TabsContent value="hr-approve">
+          {/* HR Final Approval ─────────────────────────────────────── */}
+          {activeTab === "hr-approve" && <div>
             {hrApproverQueue.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
@@ -4079,11 +4090,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 })}
               </div>
             )}
-          </TabsContent>
+          </div>}
 
-          {/* ── HR Approval Queue Table ──────────────────────────────────── */}
-          {(isHrApprover || isAdmin) && (
-          <TabsContent value="hr-approval-queue">
+          {/* HR Approval Queue Table */}
+          {(isHrApprover || isAdmin) && activeTab === "hr-approval-queue" && <div>
             <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
                 <span className="text-lg">📋</span> HR Approval Queue
@@ -4153,11 +4163,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 </div>
               </div>
             )}
-          </TabsContent>
-          )}
+          </div>}
 
-          {canSeeAllRequests && (
-          <TabsContent value="all-requests">
+          {canSeeAllRequests && activeTab === "all-requests" && <div>
             <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-3">
@@ -4274,9 +4282,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 </div>
               )}
             </div>
-          </TabsContent>
-          )}
-        </Tabs>
+          </div>}
+        </div>
 
 
       )}
