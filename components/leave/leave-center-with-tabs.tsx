@@ -3,11 +3,10 @@
 import React, { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CheckCircle, Eye, UserCheck, FileText, Clock, RotateCcw, ClipboardCheck } from 'lucide-react'
+import { CheckCircle, Eye, UserCheck, FileText, ClipboardCheck } from 'lucide-react'
 import { HODReviewSection } from './hod-review-section'
 import { AllRequestsViewSection } from './all-requests-view-section'
 import { PaymentAdviceClient } from './payment-advice-client'
-import { HRDefermentRecallManagement } from './hr-deferment-recall-management'
 import { HrExecutiveApprovalDashboard } from './hr-executive-approval-dashboard'
 
 interface LeaveCenterWithTabsProps {
@@ -28,15 +27,13 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6 h-auto p-1 gap-1 rounded-xl shadow-sm [background:white] border border-slate-200">
+        <TabsList className="grid w-full grid-cols-4 h-auto p-1 gap-1 rounded-xl shadow-sm [background:white] border border-slate-200">
           {(
             [
-              { value: "hod-review",     icon: <UserCheck className="h-4 w-4 shrink-0" />,    label: "HOD" },
-              { value: "all-requests",   icon: <Eye className="h-4 w-4 shrink-0" />,           label: "All" },
-              { value: "payment-advice", icon: <FileText className="h-4 w-4 shrink-0" />,      label: "Payment" },
-              { value: "deferments",     icon: <Clock className="h-4 w-4 shrink-0" />,         label: "Defer" },
-              { value: "recalls",        icon: <RotateCcw className="h-4 w-4 shrink-0" />,     label: "Recall" },
-              { value: "hr-approve",     icon: <ClipboardCheck className="h-4 w-4 shrink-0" />,label: "HR Approve" },
+              { value: "hod-review",     icon: <UserCheck className="h-4 w-4 shrink-0" />,     label: "HOD" },
+              { value: "all-requests",   icon: <Eye className="h-4 w-4 shrink-0" />,            label: "All" },
+              { value: "payment-advice", icon: <FileText className="h-4 w-4 shrink-0" />,       label: "Payment" },
+              { value: "hr-approve",     icon: <ClipboardCheck className="h-4 w-4 shrink-0" />, label: "Defer/Recall" },
             ] as const
           ).map(({ value, icon, label }) => (
             <TabsTrigger
@@ -95,47 +92,15 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
           <PaymentAdviceClient userRole="hr_executive" />
         </TabsContent>
 
-        <TabsContent value="deferments" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Clock className="h-5 w-5 text-amber-600" />
-                Deferments & Recalls
-              </CardTitle>
-              <CardDescription>
-                Review and approve leave deferment and recall requests
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <HRDefermentRecallManagement />
-        </TabsContent>
-
-        <TabsContent value="recalls" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <RotateCcw className="h-5 w-5 text-purple-600" />
-                Recalls
-              </CardTitle>
-              <CardDescription>
-                Manage leave recall requests from the organization
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <HRDefermentRecallManagement />
-        </TabsContent>
-
         <TabsContent value="hr-approve" className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-orange-600" />
-                HR Executive Approvals
+                Defer / Recall
               </CardTitle>
               <CardDescription>
-                All leave requests submitted by the Leave Office for HR Executive approval — view, approve, and download approved memos
+                Review and act on leave deferment and recall requests, and approve HR-forwarded leave memos
               </CardDescription>
             </CardHeader>
           </Card>
