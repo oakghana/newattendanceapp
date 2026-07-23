@@ -3,11 +3,12 @@
 import React, { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CheckCircle, Eye, UserCheck, FileText, ClipboardCheck } from 'lucide-react'
+import { CheckCircle, Eye, UserCheck, FileText, ClipboardCheck, ShieldCheck } from 'lucide-react'
 import { HODReviewSection } from './hod-review-section'
 import { AllRequestsViewSection } from './all-requests-view-section'
 import { PaymentAdviceClient } from './payment-advice-client'
 import { HrExecutiveApprovalDashboard } from './hr-executive-approval-dashboard'
+import { HrApprovalsTab } from './hr-approvals-tab'
 
 interface LeaveCenterWithTabsProps {
   userDepartmentId: string
@@ -15,7 +16,7 @@ interface LeaveCenterWithTabsProps {
 }
 
 export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterWithTabsProps) {
-  const [activeTab, setActiveTab] = useState('hod-review')
+  const [activeTab, setActiveTab] = useState('hr-approvals')
 
   return (
     <div className="space-y-4">
@@ -27,9 +28,10 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-auto p-1 gap-1 rounded-xl shadow-sm [background:white] border border-slate-200">
+        <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1 rounded-xl shadow-sm [background:white] border border-slate-200">
           {(
             [
+              { value: "hr-approvals",   icon: <ShieldCheck className="h-4 w-4 shrink-0" />,   label: "HR Approvals" },
               { value: "hod-review",     icon: <UserCheck className="h-4 w-4 shrink-0" />,     label: "HOD" },
               { value: "all-requests",   icon: <Eye className="h-4 w-4 shrink-0" />,            label: "All" },
               { value: "payment-advice", icon: <FileText className="h-4 w-4 shrink-0" />,       label: "Payment" },
@@ -55,6 +57,10 @@ export function LeaveCenterWithTabs({ userDepartmentId, userName }: LeaveCenterW
             </TabsTrigger>
           ))}
         </TabsList>
+
+        <TabsContent value="hr-approvals" className="space-y-4">
+          <HrApprovalsTab />
+        </TabsContent>
 
         <TabsContent value="hod-review" className="space-y-4">
           <Card>
