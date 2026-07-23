@@ -42,8 +42,7 @@ export async function GET(request: NextRequest) {
       .from("leave_plan_requests")
       .select(
         `id, user_id, leave_type_key, preferred_start_date, preferred_end_date,
-         requested_days, reason, status, created_at, updated_at,
-         hod_status, hod_reviewed_at,
+         requested_days, reason, status, created_at, updated_at, hr_approved_at,
          user_profiles!user_id (id, first_name, last_name, email, department_id, employee_id, position)`,
         { count: "exact" }
       )
@@ -122,8 +121,7 @@ export async function GET(request: NextRequest) {
         requestedDays: req.requested_days,
         reason: req.reason,
         status: req.status,
-        hodStatus: req.hod_status,
-        hodReviewedAt: req.hod_reviewed_at,
+        hrApprovedAt: req.hr_approved_at,
         createdAt: req.created_at,
         updatedAt: req.updated_at,
         hodReviewers: hodReviewersMap[req.id] || [],
