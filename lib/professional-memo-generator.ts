@@ -218,30 +218,6 @@ async function generateMainMemo(
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9.5)
 
-  // Split body into paragraphs by double newline
-  const paragraphs = memoData.body
-    .split(/\n{2,}/)
-    .map(p => p.replace(/\n/g, " ").trim())
-    .filter(Boolean)
-
-  // Determine which paragraphs are "opening" (before table) vs "closing" (after)
-  // Convention: last paragraph is closing ("We wish you a pleasant...")
-  const closingMarkers = ["We wish you", "pleasant", "relaxing vacation", "resume duty"]
-  const closingIdx = paragraphs.findIndex(p => closingMarkers.some(m => p.includes(m)))
-  const openingParagraphs = closingIdx >= 0 ? paragraphs.slice(0, closingIdx) : paragraphs
-  const closingParagraphs = closingIdx >= 0 ? paragraphs.slice(closingIdx) : []
-
-  // Resume date paragraph
-  const resumeMarkers = ["resume duty", "resume on", "return to work"]
-  const resumeIdx = paragraphs.findIndex(p => resumeMarkers.some(m => p.toLowerCase().includes(m)))
-  const openingOnly = resumeIdx >= 0
-    ? paragraphs.slice(0, Math.min(closingIdx >= 0 ? closingIdx : Infinity, resumeIdx))
-    : openingParagraphs
-  const resumeParagraph = resumeIdx >= 0 ? paragraphs[resumeIdx] : null
-  const closingOnly = closingIdx >= 0 && closingIdx !== resumeIdx
-    ? paragraphs.filter((_, i) => i !== resumeIdx && i >= closingIdx)
-    : closingParagraphs.filter((_, i) => i !== resumeIdx - (closingIdx >= 0 ? closingIdx : 0))
-
   const renderParagraphs = (paras: string[]) => {
     paras.forEach(p => {
       if (yPos > pageHeight - margin - 50) { doc.addPage(); yPos = margin }
@@ -251,8 +227,35 @@ async function generateMainMemo(
     })
   }
 
-  renderParagraphs(openingOnly)
-  yPos += 2
+  // For individual leave memos (no staffList or staffList ≤6 and not hasAttachment),
+  // use the official QCC opening wording instead of regex-parsing the body blob.
+  const isIndividualLeaveMemo = !memoData.staffList || (memoData.staffList.length === 0)
+
+  if (isIndividualLeaveMemo) {
+    // Derive leave type and year from subject — subject is like "ANNUAL LEAVE ADVICE FOR 2025-2026"
+    const subjectUpper = (memoData.subject || "").toUpperCase()
+    const leaveTypeMatch = subjectUpper.match(/^(.+?)\s+LEAVE ADVICE/)
+    const yearMatch = subjectUpper.match(/FOR\s+(.+)$/)
+    const leaveTypeName = leaveTypeMatch ? leaveTypeMatch[1].toLowerCase() : "annual"
+    const yearLabel = yearMatch ? yearMatch[1] : new Date().getFullYear().toString()
+    const openingBody = `In accordance with COCOBOD's vacation leave policy, we wish to inform you that approval has been granted for you to proceed on your ${leaveTypeName} leave in respect of the year January to December ${yearLabel}.`
+    const lines = doc.splitTextToSize(openingBody, contentWidth)
+    lines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 5 })
+    yPos += 4
+    doc.text("Your leave details are shown below.", margin, yPos)
+    yPos += 8
+  } else {
+    // Group memo with staff list — use the provided body text
+    const paragraphs = memoData.body
+      .split(/\n{2,}/)
+      .map(p => p.replace(/\n/g, " ").trim())
+      .filter(Boolean)
+    const closingMarkers = ["We wish you", "pleasant", "relaxing vacation", "resume duty"]
+    const closingIdx = paragraphs.findIndex(p => closingMarkers.some(m => p.includes(m)))
+    const openingOnly = closingIdx >= 0 ? paragraphs.slice(0, closingIdx) : paragraphs
+    renderParagraphs(openingOnly)
+    yPos += 2
+  }
 
   // ── Leave details table ────────────────────────────────────────────────────
   if (memoData.staffList && memoData.staffList.length > 0 && !hasAttachment) {
@@ -324,18 +327,28 @@ async function generateMainMemo(
     yPos += 2
   }
 
-  // ── Resume date paragraph ──────────────────────────────────────────────────
-  if (resumeParagraph) {
-    if (yPos > pageHeight - margin - 50) { doc.addPage(); yPos = margin }
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9.5)
-    const rLines = doc.splitTextToSize(resumeParagraph, contentWidth)
-    rLines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 5 })
-    yPos += 2
+  // ── Resume date paragraph — official QCC wording ──────────────────────────
+  // Extract resume date from body text (e.g. "return to work on Monday, 25 August 2026")
+  if (isIndividualLeaveMemo) {
+    const resumeMatch = memoData.body.match(/resume(?:\s+duty)?(?:\s+on)?\s+([A-Za-z]+day,\s+[\w\s,]+\d{4})/i)
+      || memoData.body.match(/return to work on\s+([A-Za-z]+day,\s+[\w\s,]+\d{4})/i)
+    const resumeText = resumeMatch ? resumeMatch[1].trim() : null
+    if (resumeText) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5)
+      doc.text(`You are to resume duty on ${resumeText}.`, margin, yPos)
+      yPos += 8
+    }
+    // Closing — official QCC wording
+    doc.text("We wish you a pleasant and relaxing vacation.", margin, yPos)
+    yPos += 6
+  } else {
+    // Group memos — use parsed closing from body
+    const paragraphs = memoData.body.split(/\n{2,}/).map(p => p.replace(/\n/g, " ").trim()).filter(Boolean)
+    const closingMarkers = ["We wish you", "pleasant", "relaxing vacation", "resume duty"]
+    const closingIdx = paragraphs.findIndex(p => closingMarkers.some(m => p.includes(m)))
+    const closingOnly = closingIdx >= 0 ? paragraphs.slice(closingIdx) : []
+    renderParagraphs(closingOnly)
   }
-
-  // ── Closing paragraph ──────────────────────────────────────────────────────
-  renderParagraphs(closingOnly)
 
   // ── Signature block ────────────────────────────────────────────────────────
   if (yPos > pageHeight - margin - 44) { doc.addPage(); yPos = margin }
@@ -388,7 +401,7 @@ async function generateMainMemo(
   yPos += 5
   doc.text("FOR: MANAGING DIRECTOR", margin, yPos)
 
-  // ── CC list ────────────────────────────────────────────────────────────────
+  // ── CC list ────────────────────────────────────────────��───────────────────
   if (memoData.ccList && memoData.ccList.length > 0) {
     yPos += 10
     if (yPos > pageHeight - margin - 20) { doc.addPage(); yPos = margin }
