@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Download, FileText, Calendar, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { Download, FileText, Calendar, Clock, CheckCircle, AlertCircle, DollarSign } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -51,6 +51,23 @@ interface RecallRequest {
   }
 }
 
+interface PaymentAdviceMemo {
+  id: string
+  staffName: string
+  leaveType: string
+  leaveYear: string
+  staffCategory: string
+  approvedDays: number
+  paymentAmount: number | null
+  paymentCurrency: string
+  status: string
+  createdAt: string
+  forwardedAt: string | null
+  acknowledgedAt: string | null
+  leaveStartDate: string | null
+  leaveEndDate: string | null
+}
+
 interface Props {
   userId: string
   userProfile: any
@@ -69,6 +86,26 @@ export function StaffRequestsClient({
   const [memoRefNumber, setMemoRefNumber] = useState('')
   const [selectedRequest, setSelectedRequest] = useState<DefermentRequest | RecallRequest | null>(null)
   const [selectedType, setSelectedType] = useState<'deferment' | 'recall'>('deferment')
+  const [paymentAdviceMemos, setPaymentAdviceMemos] = useState<PaymentAdviceMemo[]>([])
+  const [paymentAdviceLoading, setPaymentAdviceLoading] = useState(true)
+
+  // Fetch payment advice memos on mount
+  useEffect(() => {
+    const fetchPaymentAdvice = async () => {
+      try {
+        const response = await fetch('/api/leave/payment-advice/my-status')
+        if (!response.ok) throw new Error('Failed to fetch payment advice')
+        const data = await response.json()
+        setPaymentAdviceMemos(data.memos || [])
+      } catch (err) {
+        console.error('[v0] Error fetching payment advice:', err)
+        setPaymentAdviceMemos([])
+      } finally {
+        setPaymentAdviceLoading(false)
+      }
+    }
+    fetchPaymentAdvice()
+  }, [])
 
   // Generate memo PDF for approved requests
   const generateAndDownloadMemo = () => {
@@ -229,6 +266,20 @@ export function StaffRequestsClient({
     return <Badge className="bg-gray-600">{status}</Badge>
   }
 
+  const getPaymentAdviceStatusBadge = (status: string) => {
+    const statusLower = status.toLowerCase()
+    if (statusLower.includes('acknowledged')) {
+      return <Badge className="bg-blue-600">Acknowledged by Finance</Badge>
+    }
+    if (statusLower.includes('forwarded')) {
+      return <Badge className="bg-green-600">Sent to Finance</Badge>
+    }
+    if (statusLower.includes('processing') || statusLower.includes('pending')) {
+      return <Badge className="bg-yellow-600">Processing</Badge>
+    }
+    return <Badge className="bg-gray-600">{status}</Badge>
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -362,12 +413,115 @@ export function StaffRequestsClient({
         </div>
       )}
 
+      {/* Payment Advice Status Section */}
+      {!paymentAdviceLoading && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <DollarSign className="h-5 w-5" />
+            Payment Advice Status
+          </h2>
+          
+          {paymentAdviceMemos.length > 0 ? (
+            <div className="grid gap-4">
+              {paymentAdviceMemos.map((memo) => (
+                <Card key={memo.id} className="overflow-hidden">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-lg">
+                          {memo.leaveType} Leave - {memo.leaveYear}
+                        </CardTitle>
+                        <CardDescription>
+                          Created on {format(new Date(memo.createdAt), 'd MMM yyyy')}
+                        </CardDescription>
+                      </div>
+                      {getPaymentAdviceStatusBadge(memo.status)}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-600">Approved Days</p>
+                        <p className="font-medium">{memo.approvedDays} days</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Category</p>
+                        <p className="font-medium">{memo.staffCategory}</p>
+                      </div>
+                      {memo.paymentAmount !== null && (
+                        <div>
+                          <p className="text-sm text-gray-600">Payment Amount</p>
+                          <p className="font-medium text-green-700">
+                            {memo.paymentAmount.toFixed(2)} {memo.paymentCurrency}
+                          </p>
+                        </div>
+                      )}
+                      {memo.forwardedAt && (
+                        <div>
+                          <p className="text-sm text-gray-600">Sent to Finance</p>
+                          <p className="font-medium">{format(new Date(memo.forwardedAt), 'd MMM yyyy')}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {memo.leaveStartDate && memo.leaveEndDate && (
+                      <div className="pt-2 border-t border-gray-200">
+                        <p className="text-sm text-gray-600">Leave Period</p>
+                        <p className="font-medium">
+                          {format(new Date(memo.leaveStartDate), 'd MMM yyyy')} - {format(new Date(memo.leaveEndDate), 'd MMM yyyy')}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Status timeline */}
+                    <div className="space-y-2 pt-2 border-t border-gray-200">
+                      <p className="text-sm font-medium text-gray-600">Timeline</p>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span>Processing by HR: {format(new Date(memo.createdAt), 'd MMM yyyy HH:mm')}</span>
+                        </div>
+                        {memo.forwardedAt && (
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <span>Sent to Finance: {format(new Date(memo.forwardedAt), 'd MMM yyyy HH:mm')}</span>
+                          </div>
+                        )}
+                        {memo.acknowledgedAt && (
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-blue-600" />
+                            <span>Acknowledged by Finance: {format(new Date(memo.acknowledgedAt), 'd MMM yyyy HH:mm')}</span>
+                          </div>
+                        )}
+                        {!memo.acknowledgedAt && memo.forwardedAt && (
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-yellow-600" />
+                            <span>Awaiting Finance Acknowledgement</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Alert>
+              <DollarSign className="h-4 w-4" />
+              <AlertDescription>
+                No payment advice memos yet. Your payment advice will appear here once HR processes your approved leave request.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+
       {/* Empty State */}
-      {initialDefermentRequests.length === 0 && initialRecallRequests.length === 0 && (
+      {initialDefermentRequests.length === 0 && initialRecallRequests.length === 0 && paymentAdviceMemos.length === 0 && (
         <Alert>
           <FileText className="h-4 w-4" />
           <AlertDescription>
-            You have no deferment or recall requests. Contact HR Leave Office if you need to submit a request.
+            You have no deferment, recall, or payment advice requests. Contact HR Leave Office if you need to submit a request.
           </AlertDescription>
         </Alert>
       )}
