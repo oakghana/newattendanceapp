@@ -484,10 +484,7 @@ function QccMemoPreviewModal({
             </div>
           )}
 
-          {/* Closing */}
-          <div className="mt-3 text-[12.5px]">
-            <p>You can count on our co-operation.</p>
-          </div>
+
 
           {/* Signature block */}
           <div className="mt-10">
@@ -630,47 +627,7 @@ function HrApprovalCard({
             ))}
           </div>
 
-          {/* HR Office adjustment banner — full breakdown */}
-          {wasAdjusted && (
-            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-900">
-              <div className="flex items-center gap-1.5 font-semibold mb-1.5">
-                <Info className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                HR Leave Office Adjustment
-              </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-5">
-                {origDays !== days && (
-                  <>
-                    <span className="text-amber-700">Days changed</span>
-                    <span className="font-medium">{origDays} &rarr; {days} days</span>
-                  </>
-                )}
-                {travelDays > 0 && (
-                  <>
-                    <span className="text-amber-700">Travelling days added</span>
-                    <span className="font-medium">+{travelDays} day{travelDays !== 1 ? 's' : ''}</span>
-                  </>
-                )}
-                {req.adjusted_start_date && req.adjusted_start_date !== req.preferred_start_date && (
-                  <>
-                    <span className="text-amber-700">Start date changed</span>
-                    <span className="font-medium">{fmtDate(req.preferred_start_date)} &rarr; {fmtDate(req.adjusted_start_date)}</span>
-                  </>
-                )}
-                {req.adjusted_end_date && req.adjusted_end_date !== req.preferred_end_date && (
-                  <>
-                    <span className="text-amber-700">End date changed</span>
-                    <span className="font-medium">{fmtDate(req.preferred_end_date)} &rarr; {fmtDate(req.adjusted_end_date)}</span>
-                  </>
-                )}
-                {req.adjustment_reason && (
-                  <>
-                    <span className="text-amber-700">Reason</span>
-                    <span className="font-medium">{req.adjustment_reason}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+
         </button>
 
         {/* Expanded action panel */}
