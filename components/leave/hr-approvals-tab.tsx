@@ -348,167 +348,182 @@ function QccMemoPreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 bg-white">
+      <DialogContent className="max-w-3xl max-h-[94vh] overflow-y-auto p-0 bg-white">
         {/* Chrome top bar */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
           <div>
             <p className="text-sm font-semibold text-slate-800">Memo Preview</p>
-            <p className="text-xs text-slate-500">Official QCC leave advice — review before approving</p>
+            <p className="text-xs text-slate-500">Official QCC/COCOBOD leave advice — review before approving</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none">&times;</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none font-light">&times;</button>
         </div>
 
-        {/* ── The Memo Document ─────────────────────────────────────────── */}
-        <div className="px-8 py-6 font-serif text-[13px] text-slate-900 leading-[1.55] bg-white">
+        {/* ── A4 Document ───────────────────────────────────────────────── */}
+        <div className="px-10 py-7 font-sans text-[12.5px] text-slate-900 leading-[1.6] bg-white">
 
-          {/* Header row: org text LEFT, logo RIGHT */}
-          <div className="flex items-start justify-between mb-1">
-            <div className="space-y-[2px]">
-              <p className="font-bold text-[15px] tracking-wide">QUALITY CONTROL COMPANY LTD.</p>
-              <p className="text-[12px]">(COCOBOD)</p>
-              <p className="text-[12px]">P.O. Box M54</p>
-              <p className="text-[12px]">Accra</p>
-              <p className="text-[12px]">Ghana</p>
-            </div>
-            {/* Logo */}
+          {/* ── Letterhead ─────────────────────────────────────────────── */}
+          <div className="flex items-start justify-between">
+            {/* Logo left */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logos/qcc-logo.png"
               alt="QCC Logo"
-              className="w-20 h-20 object-contain"
+              className="w-[68px] h-[68px] object-contain"
             />
+            {/* Org name centre */}
+            <div className="flex-1 text-center px-4 pt-1">
+              <p className="font-bold text-[15px] tracking-widest">QUALITY CONTROL COMPANY LTD.</p>
+              <p className="text-[12px] tracking-wider">(COCOBOD)</p>
+            </div>
+            {/* Address right */}
+            <div className="text-right text-[11px] text-slate-600 pt-1 min-w-[110px]">
+              <p>P.O. Box M54</p>
+              <p>Accra</p>
+              <p>Ghana</p>
+            </div>
           </div>
 
-          {/* Ref + Date row */}
-          <div className="mt-3 flex flex-wrap gap-x-8 gap-y-1 text-[12px]">
-            <p><span className="font-bold">Our Ref No: </span>{refNo}</p>
-            <p><span className="font-bold">Date: </span>{today}</p>
-          </div>
-          <div className="mt-1 text-[12px]">
-            <p><span className="font-bold">Your Ref No: </span>____________________________</p>
+          {/* Green accent bar */}
+          <div className="h-[3px] bg-[#2d7a2d] rounded-full mt-3 mb-3" />
+
+          {/* Ref + Date */}
+          <div className="flex justify-between text-[11.5px] text-[#2d7a2d]">
+            <div>
+              <p><span className="font-semibold">Our Ref No:</span> {refNo}</p>
+              <p><span className="font-semibold">Your Ref No:</span> ____________________________</p>
+            </div>
+            <p className="text-right font-semibold">Date: {today}</p>
           </div>
 
           {/* Thin rule */}
-          <div className="border-t border-slate-300 my-3" />
+          <div className="border-t border-slate-200 my-3" />
 
-          {/* Addressee */}
-          <div className="space-y-[2px] text-[13px]">
-            <p className="font-bold uppercase">{staffName}&nbsp;&nbsp;(S/NO.: &nbsp;{serial})</p>
-            <p className="uppercase">{position}</p>
-            <p className="uppercase">{dept}</p>
+          {/* Addressee block */}
+          <div className="space-y-[3px] text-[12.5px]">
+            <p className="font-bold uppercase">{staffName}&nbsp;&nbsp;(S/NO.:&nbsp;&nbsp;{serial})</p>
+            <p className="uppercase text-[12px] text-slate-700">{position}</p>
+            <p className="uppercase text-[12px] text-slate-700">{dept}</p>
           </div>
 
           {/* THRO */}
           <div className="mt-3 text-[12px]">
-            <p className="font-bold">THRO: {dept ? `${dept} HEAD` : 'DEPARTMENT HEAD'}</p>
-            <p className="ml-6 font-bold uppercase">QUALITY CONTROL COMPANY LIMITED</p>
-            <p className="ml-6 uppercase">{dept}</p>
+            <p>
+              <span className="font-bold">THRO:</span>
+              <span className="font-semibold ml-2 uppercase">{dept ? `${dept} HEAD` : 'DEPARTMENT HEAD'}</span>
+            </p>
+            <p className="ml-12 font-semibold uppercase">QUALITY CONTROL COMPANY LIMITED</p>
+            <p className="ml-12 uppercase text-slate-600">{dept}</p>
           </div>
 
-          {/* Subject */}
-          <div className="mt-4">
-            <p className="font-bold underline text-[13px] uppercase">
+          {/* Subject — bold + underline, green */}
+          <div className="mt-5">
+            <p className="font-bold underline text-[13px] uppercase text-[#2d7a2d]">
               {leaveType} LEAVE ADVICE FOR {yearLabel}
             </p>
           </div>
 
-          {/* Body paragraph */}
-          <div className="mt-4 text-[13px] space-y-3">
+          {/* Body */}
+          <div className="mt-4 space-y-3 text-[12.5px]">
             <p>
-              In accordance with COCOBOD&apos;s vacation leave policy, we wish to inform you that approval has been
-              granted for you to proceed on your {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave in respect of
-              the year January to December {yearLabel}.
+              We acknowledge receipt of your letter dated {fmtDateOrdinal(req.submitted_at || req.created_at)} in
+              relation to the above-mentioned subject and wish to inform you that Management has given approval for
+              you to proceed on {grantedDays} working days{' '}
+              {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave with effect from{' '}
+              {fmtDateOrdinal(startDate)} to {fmtDateOrdinal(endDate)}.
             </p>
-            <p>Your leave details are shown below.</p>
           </div>
 
           {/* Leave details table */}
-          <div className="mt-4 overflow-hidden rounded border border-slate-300 text-[12px]">
+          <div className="mt-4 border border-slate-300 rounded overflow-hidden text-[12px]">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-slate-100 border-b border-slate-300">
-                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[22%]">
+                <tr className="border-b border-slate-300 bg-slate-50">
+                  <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 w-[22%] leading-tight">
                     Number of Days<br />Entitled
                   </th>
-                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[18%]">
+                  <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 w-[18%] leading-tight">
                     Number of Days<br />Granted
                   </th>
-                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[18%]">From</th>
-                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[18%]">To</th>
-                  <th className="px-3 py-2 text-left font-bold w-[24%]">Remarks</th>
+                  <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 w-[18%]">From</th>
+                  <th className="px-3 py-2 text-left font-semibold border-r border-slate-300 w-[18%]">To</th>
+                  <th className="px-3 py-2 text-left font-semibold w-[24%]">Remarks</th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-b border-slate-200">
                   <td className="px-3 py-2 border-r border-slate-200">{entitledLabel}</td>
                   <td className="px-3 py-2 border-r border-slate-200 font-semibold">{grantedDays}</td>
-                  <td className="px-3 py-2 border-r border-slate-200">{fmtDateLong(startDate)}</td>
-                  <td className="px-3 py-2 border-r border-slate-200">{fmtDateLong(endDate)}</td>
-                  <td className="px-3 py-2">{remarks}</td>
+                  <td className="px-3 py-2 border-r border-slate-200">{fmtDateOrdinal(startDate)}</td>
+                  <td className="px-3 py-2 border-r border-slate-200">{fmtDateOrdinal(endDate)}</td>
+                  <td className="px-3 py-2 text-slate-600">{remarks}</td>
                 </tr>
-                {/* Totals row */}
-                <tr className="bg-slate-50">
-                  <td className="px-3 py-1.5 border-r border-slate-200 font-bold text-right" colSpan={1}>&nbsp;</td>
+                <tr className="bg-slate-50/60">
+                  <td className="px-3 py-1.5 border-r border-slate-200" />
                   <td className="px-3 py-1.5 border-r border-slate-200 font-bold">{grantedDays}</td>
-                  <td colSpan={3} className="px-3 py-1.5 text-slate-400 italic text-[11px]" />
+                  <td colSpan={3} className="px-3 py-1.5" />
                 </tr>
               </tbody>
             </table>
           </div>
 
           {/* Resume duty */}
-          <div className="mt-4 text-[13px]">
-            <p>You are to resume duty on <span className="font-bold">{resumeDate}</span>.</p>
+          <div className="mt-4 text-[12.5px]">
+            <p>You are expected to resume duty on <span className="font-semibold">{resumeDate}</span>.</p>
           </div>
 
+          {/* Adjustment line if applicable */}
+          {wasAdjusted && (
+            <div className="mt-1 text-[12px] text-slate-600">
+              <p>Adjustment Details: {grantedDays} working days approved</p>
+            </div>
+          )}
+
           {/* Closing */}
-          <div className="mt-3 text-[13px]">
-            <p>We wish you a pleasant and relaxing vacation.</p>
+          <div className="mt-3 text-[12.5px]">
+            <p>You can count on our co-operation.</p>
           </div>
 
           {/* Signature block */}
-          <div className="mt-8 space-y-1">
-            {/* Signature image or typed cursive */}
-            <div className="h-14 flex items-end">
+          <div className="mt-10">
+            {/* Signature image or typed name */}
+            <div className="min-h-[48px] flex items-end mb-1">
               {signatureDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={signatureDataUrl}
                   alt="HR Signature"
-                  className="max-h-12 max-w-[200px] object-contain"
+                  className="max-h-12 max-w-[180px] object-contain"
                 />
               ) : signatureText ? (
-                <p className="font-[cursive] text-2xl text-[#1a3c5e] leading-none">{signatureText}</p>
+                <p className="font-[cursive] text-2xl text-[#1a3c5e] leading-none italic">{signatureText}</p>
               ) : (
-                <div className="w-48 border-b-2 border-dashed border-slate-300 flex items-end pb-1">
-                  <span className="text-[11px] text-slate-400 italic">Signature pending</span>
-                </div>
+                <span className="text-[11px] text-slate-400 italic">No signature stored — add one above</span>
               )}
             </div>
-            {/* Signature line */}
-            <div className="w-64 border-b border-slate-700" />
-            <p className="font-bold uppercase text-[13px] mt-1">{signerName}</p>
-            <p className="text-[12px] uppercase">{signerPosition}</p>
+            {/* Underline */}
+            <div className="w-[260px] border-b border-slate-700 mb-2" />
+            <p className="font-bold uppercase text-[12.5px]">{signerName}</p>
+            <p className="text-[12px] uppercase text-[#2d7a2d] font-medium">{signerPosition}</p>
             <p className="text-[12px]">FOR: MANAGING DIRECTOR</p>
           </div>
 
           {/* CC */}
-          <div className="mt-6 border-t border-slate-300 pt-3 text-[12px]">
+          <div className="mt-8 border-t border-slate-200 pt-3 text-[11.5px]">
             <p>
-              <span className="font-bold">cc: </span>
-              Managing Director, Deputy Managing Director, HR Head, Accounts Manager
+              <span className="font-bold">cc:</span>
+              <span className="ml-2 text-slate-700">Managing Director, Deputy Managing Director, HR Head, Accounts Manager</span>
             </p>
           </div>
 
-          {/* Footer */}
-          <div className="mt-4 border-t border-slate-300 pt-2 text-[11px] text-slate-500 text-center">
+          {/* Footer bar */}
+          <div className="mt-4 border-t border-slate-300 pt-2 text-[10.5px] text-slate-500 text-center">
             Tel: +233-571-461-114&nbsp;&nbsp;|&nbsp;&nbsp;+233-571-461-113&nbsp;&nbsp;|&nbsp;&nbsp;
             Fax: GA-105-8378&nbsp;&nbsp;|&nbsp;&nbsp;Email: info@qccgh.com&nbsp;&nbsp;|&nbsp;&nbsp;www.qccgh.com
           </div>
         </div>
 
-        {/* Footer actions */}
-        <div className="px-6 pb-5 pt-2 flex justify-end border-t border-slate-100 bg-slate-50">
+        {/* Modal footer */}
+        <div className="px-6 pb-5 pt-3 flex justify-end border-t border-slate-100 bg-slate-50 sticky bottom-0">
           <Button size="sm" variant="outline" onClick={onClose} className="text-sm">Close Preview</Button>
         </div>
       </DialogContent>

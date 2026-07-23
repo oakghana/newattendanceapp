@@ -45,51 +45,68 @@ export function RequestDetailsModal({ open, onOpenChange, title, filter }: Reque
       setLoading(true)
       setError(null)
       try {
-        let endpoint = '/api/leave/requests?limit=1000'
+        // The overview counts approved using these statuses; we must match exactly
+        const APPROVED_STATUSES = ['approved', 'hr_approved', 'hod_approved', 'finalized', 'completed']
+        // The overview counts HOD pending using these statuses
+        const HOD_PENDING_STATUSES = ['pending_hod_review', 'hod_review', 'pending_hod', 'submitted']
 
-        if (filter === 'hod-pending') {
-          endpoint = '/api/leave/hod-pending-requests'
-        } else if (filter === 'pending') {
-          endpoint = '/api/leave/hr-staff-pending-requests'
-        } else if (filter === 'approved') {
-          endpoint = '/api/leave/requests?status=approved&limit=1000'
-        } else if (filter === 'payment-pending') {
-          endpoint = '/api/leave/payment-advice/pending-approval'
-        } else if (filter === 'payment-approved') {
-          endpoint = '/api/leave/payment-advice/approved-memos'
-        }
-
-        const res = await fetch(endpoint)
-        
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-        }
-
-        const responseData = await res.json()
-
-        if (!responseData) {
-          setRequests([])
-          return
-        }
-
-        // Extract requests from different response formats
         let results: LeaveRequest[] = []
-        
-        if (filter === 'hod-pending') {
-          results = Array.isArray(responseData.requests) ? responseData.requests : []
-        } else if (filter === 'payment-pending' || filter === 'payment-approved') {
-          results = Array.isArray(responseData.memos) ? responseData.memos : Array.isArray(responseData) ? responseData : []
-        } else if (filter === 'approved' || filter === 'pending') {
-          // For approved/pending: the endpoint returns { data: [...], total, success }
-          results = Array.isArray(responseData.data) ? responseData.data : 
-                    Array.isArray(responseData.records) ? responseData.records : 
-                    Array.isArray(responseData.requests) ? responseData.requests : 
-                    Array.isArray(responseData) ? responseData : []
+
+        if (filter === 'payment-pending') {
+          const res = await fetch('/api/leave/payment-advice/pending-approval')
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const d = await res.json()
+          results = Array.isArray(d.memos) ? d.memos : Array.isArray(d) ? d : []
+        } else if (filter === 'payment-approved') {
+          const res = await fetch('/api/leave/payment-advice/approved-memos')
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const d = await res.json()
+          results = Array.isArray(d.memos) ? d.memos : Array.isArray(d) ? d : []
+        } else if (filter === 'pending') {
+          const res = await fetch('/api/leave/hr-staff-pending-requests')
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const d = await res.json()
+          results = Array.isArray(d.requests) ? d.requests
+            : Array.isArray(d.data) ? d.data
+            : Array.isArray(d) ? d : []
+        } else if (filter === 'approved') {
+          // Fetch all requests and client-filter by approved statuses to match the metric
+          const res = await fetch('/api/leave/requests?limit=2000')
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const d = await res.json()
+          const all: any[] = Array.isArray(d.data) ? d.data
+            : Array.isArray(d.records) ? d.records
+            : Array.isArray(d.requests) ? d.requests
+            : Array.isArray(d) ? d : []
+          results = all.filter((r: any) => APPROVED_STATUSES.includes(r.status))
+        } else if (filter === 'hod-pending') {
+          // Fetch all requests and client-filter by HOD pending statuses to match the metric
+          const res = await fetch('/api/leave/requests?limit=2000')
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const d = await res.json()
+          const all: any[] = Array.isArray(d.data) ? d.data
+            : Array.isArray(d.records) ? d.records
+            : Array.isArray(d.requests) ? d.requests
+            : Array.isArray(d) ? d : []
+          // Also include hod-pending-requests results which use hod_decision filter
+          const hodRes = await fetch('/api/leave/hod-pending-requests')
+          const hodData = hodRes.ok ? await hodRes.json() : {}
+          const hodRequests: any[] = Array.isArray(hodData.requests) ? hodData.requests : []
+          // Merge both sources, deduplicate by id
+          const fromStatus = all.filter((r: any) => HOD_PENDING_STATUSES.includes(r.status))
+          const merged = [...fromStatus]
+          hodRequests.forEach((hr: any) => {
+            if (!merged.find(m => m.id === hr.id)) merged.push(hr)
+          })
+          results = merged
         } else {
-          results = Array.isArray(responseData.records) ? responseData.records : 
-                    Array.isArray(responseData.requests) ? responseData.requests : 
-                    Array.isArray(responseData.data) ? responseData.data : 
-                    Array.isArray(responseData) ? responseData : []
+          const res = await fetch('/api/leave/requests?limit=2000')
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const d = await res.json()
+          results = Array.isArray(d.data) ? d.data
+            : Array.isArray(d.records) ? d.records
+            : Array.isArray(d.requests) ? d.requests
+            : Array.isArray(d) ? d : []
         }
 
         // Map fields to match interface: ensure staff_name is populated
