@@ -303,6 +303,7 @@ function QccMemoPreviewModal({
   signerPosition,
   signatureDataUrl,
   signatureText,
+  storedSignatureDataUrl,
 }: {
   open: boolean
   onClose: () => void
@@ -311,7 +312,10 @@ function QccMemoPreviewModal({
   signerPosition: string
   signatureDataUrl?: string | null
   signatureText?: string | null
+  storedSignatureDataUrl?: string | null
 }) {
+  // Resolve the best available signature: inline drawn > stored profile
+  const resolvedSigDataUrl = signatureDataUrl || storedSignatureDataUrl || null
   const staffName = req.user
     ? `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim()
     : 'Unknown Staff'
@@ -489,17 +493,17 @@ function QccMemoPreviewModal({
           <div className="mt-10">
             {/* Signature image or typed name */}
             <div className="min-h-[48px] flex items-end mb-1">
-              {signatureDataUrl ? (
+              {resolvedSigDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={signatureDataUrl}
+                  src={resolvedSigDataUrl}
                   alt="HR Signature"
                   className="max-h-12 max-w-[180px] object-contain"
                 />
               ) : signatureText ? (
                 <p className="font-[cursive] text-2xl text-[#1a3c5e] leading-none italic">{signatureText}</p>
               ) : (
-                <span className="text-[11px] text-slate-400 italic">No signature stored — add one above</span>
+                <span className="text-[11px] text-slate-400 italic">Signature from profile will appear here</span>
               )}
             </div>
             {/* Underline */}
@@ -551,18 +555,17 @@ function HrApprovalCard({
   req: LeaveRequest
   expanded: boolean
   onToggle: () => void
-  onApprove: (note: string, subject: string, body: string) => void
+  onApprove: (note: string) => void
   onReject: (note: string) => void
   processing: boolean
   hasStoredSignature: boolean
+  storedSignatureDataUrl: string | null
   inlineSig: { dataUrl: string | null; text: string | null; mode: string } | null
   onInlineSigSaved: (dataUrl: string | null, text: string | null, mode: string) => void
   signerName: string
   signerPosition: string
 }) {
   const [note, setNote] = useState('')
-  const [subject, setSubject] = useState(req.memo_draft_subject || '')
-  const [body, setBody] = useState(req.memo_draft_body || '')
   const [previewOpen, setPreviewOpen] = useState(false)
 
   const staffName = req.user
@@ -581,9 +584,9 @@ function HrApprovalCard({
   const wasAdjusted = travelDays > 0 || (req.adjusted_days && req.adjusted_days !== origDays)
   const yearPeriod = req.leave_year_period || '—'
 
-  // Effective sig: stored profile sig OR inline sig for this session
+  // Effective sig: stored profile sig (auto-captured) OR inline sig drawn this session
   const sigReady = hasStoredSignature || (inlineSig && (inlineSig.dataUrl || inlineSig.text))
-  const previewSigDataUrl = inlineSig?.dataUrl || null
+  const previewSigDataUrl = storedSignatureDataUrl || inlineSig?.dataUrl || null
   const previewSigText = inlineSig?.text || null
 
   return (
@@ -627,14 +630,44 @@ function HrApprovalCard({
             ))}
           </div>
 
-          {/* HR Office adjustment banner */}
+          {/* HR Office adjustment banner — full breakdown */}
           {wasAdjusted && (
-            <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold">HR Office adjustment: </span>
-                {travelDays > 0 && <span>{travelDays} travelling day(s) added ({origDays}d &rarr; {days}d)</span>}
-                {req.adjustment_reason && !travelDays && <span>{req.adjustment_reason}</span>}
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-900">
+              <div className="flex items-center gap-1.5 font-semibold mb-1.5">
+                <Info className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                HR Leave Office Adjustment
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 pl-5">
+                {origDays !== days && (
+                  <>
+                    <span className="text-amber-700">Days changed</span>
+                    <span className="font-medium">{origDays} &rarr; {days} days</span>
+                  </>
+                )}
+                {travelDays > 0 && (
+                  <>
+                    <span className="text-amber-700">Travelling days added</span>
+                    <span className="font-medium">+{travelDays} day{travelDays !== 1 ? 's' : ''}</span>
+                  </>
+                )}
+                {req.adjusted_start_date && req.adjusted_start_date !== req.preferred_start_date && (
+                  <>
+                    <span className="text-amber-700">Start date changed</span>
+                    <span className="font-medium">{fmtDate(req.preferred_start_date)} &rarr; {fmtDate(req.adjusted_start_date)}</span>
+                  </>
+                )}
+                {req.adjusted_end_date && req.adjusted_end_date !== req.preferred_end_date && (
+                  <>
+                    <span className="text-amber-700">End date changed</span>
+                    <span className="font-medium">{fmtDate(req.preferred_end_date)} &rarr; {fmtDate(req.adjusted_end_date)}</span>
+                  </>
+                )}
+                {req.adjustment_reason && (
+                  <>
+                    <span className="text-amber-700">Reason</span>
+                    <span className="font-medium">{req.adjustment_reason}</span>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -643,11 +676,16 @@ function HrApprovalCard({
         {/* Expanded action panel */}
         {expanded && (
           <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 space-y-4">
-            {/* Inline signature if none stored */}
-            {!hasStoredSignature && !inlineSig && (
+
+            {/* Signature status */}
+            {hasStoredSignature ? (
+              <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                <span>Signature auto-loaded from your profile &mdash; no re-signing required.</span>
+              </div>
+            ) : !inlineSig ? (
               <InlineSignaturePanel onSaved={onInlineSigSaved} />
-            )}
-            {!hasStoredSignature && inlineSig && (
+            ) : (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                 Signature set for this session.
@@ -677,29 +715,6 @@ function HrApprovalCard({
               </div>
             </div>
 
-            {/* Memo subject */}
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Memo Subject</label>
-              <input
-                type="text"
-                value={subject}
-                onChange={e => setSubject(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Enter memo subject..."
-              />
-            </div>
-
-            {/* Memo body */}
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Memo Body</label>
-              <Textarea
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                placeholder="Memo body will be pre-filled from template..."
-                className="text-sm h-28 resize-none"
-              />
-            </div>
-
             {/* Approval note */}
             <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1">
@@ -714,7 +729,7 @@ function HrApprovalCard({
             </div>
 
             <div className="flex gap-2 justify-end">
-              {/* Preview button */}
+              {/* View Memo button */}
               <Button
                 size="sm"
                 variant="outline"
@@ -722,7 +737,7 @@ function HrApprovalCard({
                 onClick={() => setPreviewOpen(true)}
               >
                 <Eye className="h-3 w-3" />
-                Preview Memo
+                View Memo
               </Button>
 
               <Button
@@ -740,7 +755,7 @@ function HrApprovalCard({
                 className="bg-orange-500 hover:bg-orange-600 text-white gap-1"
                 disabled={processing || !sigReady}
                 title={!sigReady ? 'Set a signature above before approving' : undefined}
-                onClick={() => onApprove(note, subject, body)}
+                onClick={() => onApprove(note)}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                 Approve &amp; Issue Memo
@@ -759,6 +774,7 @@ function HrApprovalCard({
         signerPosition={signerPosition}
         signatureDataUrl={previewSigDataUrl}
         signatureText={previewSigText}
+        storedSignatureDataUrl={storedSignatureDataUrl}
       />
     </>
   )
@@ -774,6 +790,7 @@ export function HrApprovalsTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [hasStoredSignature, setHasStoredSignature] = useState(true)
+  const [storedSignatureDataUrl, setStoredSignatureDataUrl] = useState<string | null>(null)
   const [inlineSig, setInlineSig] = useState<{ dataUrl: string | null; text: string | null; mode: string } | null>(null)
   const [signerName, setSignerName] = useState('HR Executive')
   const [signerPosition, setSignerPosition] = useState('HR MANAGER')
@@ -797,6 +814,7 @@ export function HrApprovalsTab() {
       }
       if (data.signer_name) setSignerName(data.signer_name)
       if (data.signer_position) setSignerPosition(data.signer_position)
+      if (data.signer_signature_data_url) setStoredSignatureDataUrl(data.signer_signature_data_url)
     } catch (err) {
       console.error('[v0] HrApprovalsTab fetch error:', err)
       toast({ title: 'Error', description: 'Failed to load HR approval requests', variant: 'destructive' })
@@ -934,10 +952,11 @@ export function HrApprovalsTab() {
               req={req}
               expanded={expandedId === req.id}
               onToggle={() => setExpandedId(expandedId === req.id ? null : req.id)}
-              onApprove={(note, subject, body) => handleApprove(req.id, note, subject, body)}
+              onApprove={(note) => handleApprove(req.id, note, '', '')}
               onReject={(note) => handleReject(req.id, note)}
               processing={processingId === req.id}
               hasStoredSignature={hasStoredSignature}
+              storedSignatureDataUrl={storedSignatureDataUrl}
               inlineSig={inlineSig}
               onInlineSigSaved={(dataUrl, text, mode) => {
                 if (!dataUrl && !text) { setInlineSig(null); return }
