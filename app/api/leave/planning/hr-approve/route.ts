@@ -111,15 +111,21 @@ export async function GET(request: NextRequest) {
       user: usersMap[req.user_id] || null,
     }))
 
-    // Include whether the current HR executive has a stored signature
+    // Include HR executive profile for signature check and signer block
     const { data: hrProfile } = await admin
       .from("user_profiles")
-      .select("signature_data_url, signature_text")
+      .select("first_name, last_name, position, signature_data_url, signature_text")
       .eq("id", user.id)
       .single()
     const hasStoredSignature =
       String((hrProfile as any)?.signature_data_url || "").trim().length > 0 ||
       String((hrProfile as any)?.signature_text || "").trim().length > 0
+    const signerName = [
+      String((hrProfile as any)?.first_name || ""),
+      String((hrProfile as any)?.last_name || ""),
+    ].filter(Boolean).join(" ").trim() || "HR Executive"
+    const signerPosition = String((hrProfile as any)?.position || "HR MANAGER").toUpperCase()
+    const signerSignatureDataUrl = String((hrProfile as any)?.signature_data_url || "").trim() || null
 
     return NextResponse.json({
       requests: enrichedRequests || [],
@@ -127,6 +133,9 @@ export async function GET(request: NextRequest) {
       user_id: user.id,
       role,
       has_stored_signature: hasStoredSignature,
+      signer_name: signerName,
+      signer_position: signerPosition,
+      signer_signature_data_url: signerSignatureDataUrl,
     })
   } catch (error) {
     console.error("[v0] GET /api/leave/planning/hr-approve error:", error)

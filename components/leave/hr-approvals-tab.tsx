@@ -15,8 +15,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from '@/components/ui/dialog'
 import {
   Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp,
@@ -79,6 +77,19 @@ const fmtDateLong = (d?: string | null) => {
   return dt.toLocaleDateString('en-GH', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
+/** e.g. "23rd July, 2026" */
+const fmtDateOrdinal = (d?: string | null) => {
+  if (!d) return 'N/A'
+  const dt = new Date(d)
+  if (isNaN(dt.getTime())) return d
+  const day = dt.getDate()
+  const suffix = day === 1 || day === 21 || day === 31 ? 'st'
+    : day === 2 || day === 22 ? 'nd'
+    : day === 3 || day === 23 ? 'rd' : 'th'
+  const month = dt.toLocaleDateString('en-GH', { month: 'long' })
+  return `${day}${suffix} ${month}, ${dt.getFullYear()}`
+}
+
 const leaveTypeLabel = (key: string) => {
   const map: Record<string, string> = {
     annual: 'Annual', sick: 'Sick', maternity: 'Maternity', paternity: 'Paternity',
@@ -87,6 +98,8 @@ const leaveTypeLabel = (key: string) => {
   }
   return map[key] || String(key).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
+
+const leaveTypeUpper = (key: string) => leaveTypeLabel(key).toUpperCase()
 
 const calcYearsOfService = (user: LeaveRequest['user']): string => {
   if (!user) return '—'
@@ -105,9 +118,29 @@ const calcYearsOfService = (user: LeaveRequest['user']): string => {
   return m > 0 ? `${y} yr ${m} mo` : `${y} yr${y !== 1 ? 's' : ''}`
 }
 
+/** Build the "QCC/HRD/AL/2026/XXXX" ref number */
+const buildRefNo = (req: LeaveRequest) => {
+  const year = new Date().getFullYear()
+  const shortId = (req.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()
+  const typeCode = req.leave_type_key === 'annual' ? 'AL'
+    : req.leave_type_key === 'sick' ? 'SL'
+    : req.leave_type_key === 'maternity' ? 'ML'
+    : req.leave_type_key === 'paternity' ? 'PL'
+    : 'LL'
+  return `QCC/HRD/${typeCode}/${year}/${shortId}`
+}
+
+/** Year portion from leave_year_period, e.g. "2025/2026" → "2025" */
+const leaveYear = (period?: string | null) => {
+  if (!period) return String(new Date().getFullYear() - 1)
+  return period.split('/')[0] || period
+}
+
 // ── Inline Signature Panel ────────────────────────────────────────────────────
 
-function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, text: string | null, mode: string) => void }) {
+function InlineSignaturePanel({ onSaved }: {
+  onSaved: (dataUrl: string | null, text: string | null, mode: string) => void
+}) {
   const [mode, setMode] = useState<'type' | 'draw' | 'upload'>('type')
   const [typedText, setTypedText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -118,7 +151,10 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
   const getCtx = () => canvasRef.current?.getContext('2d') ?? null
   const getPos = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect()
-    return { x: (e.clientX - r.left) * (canvasRef.current!.width / r.width), y: (e.clientY - r.top) * (canvasRef.current!.height / r.height) }
+    return {
+      x: (e.clientX - r.left) * (canvasRef.current!.width / r.width),
+      y: (e.clientY - r.top) * (canvasRef.current!.height / r.height),
+    }
   }
   const onPointerDown = (e: React.PointerEvent) => {
     drawing.current = true
@@ -149,7 +185,6 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
   const handleSave = async () => {
     let dataUrl: string | null = null
     let text: string | null = null
-
     if (mode === 'type') {
       if (!typedText.trim()) { toast({ title: 'Enter your name', variant: 'destructive' }); return }
       text = typedText.trim()
@@ -157,10 +192,8 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
       dataUrl = canvasRef.current?.toDataURL() ?? null
       if (!dataUrl) { toast({ title: 'Draw your signature first', variant: 'destructive' }); return }
     }
-
     setSaving(true)
     try {
-      // Save to approval_signature_registry for future use
       await fetch('/api/leave/signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,7 +208,6 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
       toast({ title: 'Signature saved', description: 'Your signature will be used for this and future approvals.' })
       onSaved(dataUrl, text, mode)
     } catch {
-      // Non-fatal — still pass it through for this approval
       onSaved(dataUrl, text, mode)
     } finally {
       setSaving(false)
@@ -194,8 +226,6 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
           </p>
         </div>
       </div>
-
-      {/* Mode selector */}
       <div className="flex gap-2">
         {(['type', 'draw', 'upload'] as const).map(m => (
           <button
@@ -208,11 +238,12 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
                 : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100',
             ].join(' ')}
           >
-            {m === 'type' ? <><PenLine className="h-3 w-3" />Type</> : m === 'draw' ? <><PenLine className="h-3 w-3" />Draw</> : <><Upload className="h-3 w-3" />Upload</>}
+            {m === 'type' ? <><PenLine className="h-3 w-3" />Type</>
+              : m === 'draw' ? <><PenLine className="h-3 w-3" />Draw</>
+              : <><Upload className="h-3 w-3" />Upload</>}
           </button>
         ))}
       </div>
-
       {mode === 'type' && (
         <input
           type="text"
@@ -222,13 +253,11 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
           className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
       )}
-
       {mode === 'draw' && (
         <div className="space-y-1">
           <canvas
             ref={canvasRef}
-            width={800}
-            height={100}
+            width={800} height={100}
             className="w-full border border-amber-300 rounded-lg bg-white touch-none cursor-crosshair"
             style={{ height: 80 }}
             onPointerDown={onPointerDown}
@@ -236,10 +265,17 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
             onPointerUp={onPointerUp}
             onPointerLeave={onPointerUp}
           />
-          <button onClick={() => { const ctx = getCtx(); if (ctx && canvasRef.current) ctx.clearRect(0,0,canvasRef.current.width,canvasRef.current.height) }} className="text-xs text-amber-700 hover:underline">Clear</button>
+          <button
+            onClick={() => {
+              const ctx = getCtx()
+              if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+            }}
+            className="text-xs text-amber-700 hover:underline"
+          >
+            Clear
+          </button>
         </div>
       )}
-
       {mode === 'upload' && (
         <label className="flex items-center gap-2 border-2 border-dashed border-amber-300 rounded-lg p-3 cursor-pointer hover:bg-amber-100 transition-colors">
           <Upload className="h-4 w-4 text-amber-600" />
@@ -247,7 +283,6 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
           <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
         </label>
       )}
-
       {mode !== 'upload' && (
         <Button size="sm" onClick={handleSave} disabled={saving} className="bg-amber-700 hover:bg-amber-800 text-white h-8 text-xs">
           {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
@@ -258,14 +293,12 @@ function InlineSignaturePanel({ onSaved }: { onSaved: (dataUrl: string | null, t
   )
 }
 
-// ── Memo Preview Modal ────────────────────────────────────────────────────────
+// ── QCC Memo Preview Modal ────────────────────────────────────────────────────
 
-function MemoPreviewModal({
+function QccMemoPreviewModal({
   open,
   onClose,
   req,
-  subject,
-  body,
   signerName,
   signerPosition,
   signatureDataUrl,
@@ -274,109 +307,209 @@ function MemoPreviewModal({
   open: boolean
   onClose: () => void
   req: LeaveRequest
-  subject: string
-  body: string
   signerName: string
   signerPosition: string
   signatureDataUrl?: string | null
   signatureText?: string | null
 }) {
-  const staffName = req.user ? `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() : 'Unknown Staff'
-  const dept = req.user?.departments?.name || ''
+  const staffName = req.user
+    ? `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim()
+    : 'Unknown Staff'
+  const staffSerial = req.user?.employee_id || '—'
   const position = req.user?.position || ''
-  const empId = req.user?.employee_id || ''
+  const dept = req.user?.departments?.name || ''
+  const leaveType = leaveTypeUpper(req.leave_type_key)
+  const yearLabel = leaveYear(req.leave_year_period)
+
   const startDate = req.adjusted_start_date || req.preferred_start_date
   const endDate = req.adjusted_end_date || req.preferred_end_date
-  const days = req.adjusted_days ?? req.requested_days
-  const leaveType = leaveTypeLabel(req.leave_type_key)
-  const today = new Date().toLocaleDateString('en-GH', { day: '2-digit', month: 'long', year: 'numeric' })
+  const grantedDays = req.adjusted_days ?? req.requested_days
+  const travelDays = req.travelling_days_added ?? 0
+  const entitledDays = req.original_requested_days ?? (grantedDays - travelDays)
+  const entitledLabel = travelDays > 0
+    ? `${entitledDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
+    : String(entitledDays)
+
+  // Return to work = day after end date
+  const endDt = endDate ? new Date(endDate) : null
+  let resumeDate = 'N/A'
+  if (endDt && !isNaN(endDt.getTime())) {
+    endDt.setDate(endDt.getDate() + 1)
+    resumeDate = fmtDateOrdinal(endDt.toISOString())
+  }
+
+  const remarks = travelDays > 0
+    ? `${travelDays} travelling day(s) added`
+    : req.adjustment_reason || '—'
+
+  const refNo = buildRefNo(req)
+  const today = fmtDateOrdinal(new Date().toISOString())
+  const serial = `${staffSerial.replace(/\s/g, '')}`.toUpperCase() || 'S/N'
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
-        <DialogHeader className="px-6 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold">Memo Preview</DialogTitle>
-          <p className="text-xs text-slate-500 mt-0.5">This is how the memo will appear when issued.</p>
-        </DialogHeader>
+      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 bg-white">
+        {/* Chrome top bar */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Memo Preview</p>
+            <p className="text-xs text-slate-500">Official QCC leave advice — review before approving</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none">&times;</button>
+        </div>
 
-        {/* Memo document */}
-        <div className="mx-6 my-4 border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
-          {/* Header band */}
-          <div className="bg-[#1a3c5e] px-6 py-4 text-white">
-            <p className="text-xs font-bold tracking-widest uppercase opacity-70">QCC Attendance System</p>
-            <p className="text-lg font-bold mt-0.5">Leave Approval Memo</p>
-            <p className="text-xs opacity-60 mt-0.5">{today}</p>
+        {/* ── The Memo Document ─────────────────────────────────────────── */}
+        <div className="px-8 py-6 font-serif text-[13px] text-slate-900 leading-[1.55] bg-white">
+
+          {/* Header row: org text LEFT, logo RIGHT */}
+          <div className="flex items-start justify-between mb-1">
+            <div className="space-y-[2px]">
+              <p className="font-bold text-[15px] tracking-wide">QUALITY CONTROL COMPANY LTD.</p>
+              <p className="text-[12px]">(COCOBOD)</p>
+              <p className="text-[12px]">P.O. Box M54</p>
+              <p className="text-[12px]">Accra</p>
+              <p className="text-[12px]">Ghana</p>
+            </div>
+            {/* Logo */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logos/qcc-logo.png"
+              alt="QCC Logo"
+              className="w-20 h-20 object-contain"
+            />
           </div>
 
-          <div className="px-6 py-5 space-y-5 font-[Georgia,serif] text-sm text-slate-800">
-            {/* To / From / Subject block */}
-            <div className="space-y-1.5 border-b border-slate-100 pb-4">
-              <div className="grid grid-cols-[80px_1fr] gap-1">
-                <span className="font-semibold text-slate-500 text-xs uppercase tracking-wide pt-0.5">To:</span>
-                <div>
-                  <p className="font-semibold">{staffName}</p>
-                  <p className="text-xs text-slate-500">{position}{dept ? ` — ${dept}` : ''}{empId ? ` (ID: ${empId})` : ''}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-[80px_1fr] gap-1">
-                <span className="font-semibold text-slate-500 text-xs uppercase tracking-wide pt-0.5">From:</span>
-                <div>
-                  <p className="font-semibold">{signerName}</p>
-                  <p className="text-xs text-slate-500">{signerPosition}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-[80px_1fr] gap-1">
-                <span className="font-semibold text-slate-500 text-xs uppercase tracking-wide pt-0.5">Subject:</span>
-                <p className="font-semibold">{subject || '—'}</p>
-              </div>
-            </div>
+          {/* Ref + Date row */}
+          <div className="mt-3 flex flex-wrap gap-x-8 gap-y-1 text-[12px]">
+            <p><span className="font-bold">Our Ref No: </span>{refNo}</p>
+            <p><span className="font-bold">Date: </span>{today}</p>
+          </div>
+          <div className="mt-1 text-[12px]">
+            <p><span className="font-bold">Your Ref No: </span>____________________________</p>
+          </div>
 
-            {/* Leave summary tiles */}
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: 'Leave Type', value: leaveType },
-                { label: 'Start Date', value: fmtDateLong(startDate) },
-                { label: 'End Date', value: fmtDateLong(endDate) },
-                { label: 'Days', value: String(days) },
-              ].map(({ label, value }) => (
-                <div key={label} className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
-                  <p className="text-xs font-bold text-slate-700 mt-0.5">{value}</p>
+          {/* Thin rule */}
+          <div className="border-t border-slate-300 my-3" />
+
+          {/* Addressee */}
+          <div className="space-y-[2px] text-[13px]">
+            <p className="font-bold uppercase">{staffName}&nbsp;&nbsp;(S/NO.: &nbsp;{serial})</p>
+            <p className="uppercase">{position}</p>
+            <p className="uppercase">{dept}</p>
+          </div>
+
+          {/* THRO */}
+          <div className="mt-3 text-[12px]">
+            <p className="font-bold">THRO: {dept ? `${dept} HEAD` : 'DEPARTMENT HEAD'}</p>
+            <p className="ml-6 font-bold uppercase">QUALITY CONTROL COMPANY LIMITED</p>
+            <p className="ml-6 uppercase">{dept}</p>
+          </div>
+
+          {/* Subject */}
+          <div className="mt-4">
+            <p className="font-bold underline text-[13px] uppercase">
+              {leaveType} LEAVE ADVICE FOR {yearLabel}
+            </p>
+          </div>
+
+          {/* Body paragraph */}
+          <div className="mt-4 text-[13px] space-y-3">
+            <p>
+              In accordance with COCOBOD&apos;s vacation leave policy, we wish to inform you that approval has been
+              granted for you to proceed on your {leaveTypeLabel(req.leave_type_key).toLowerCase()} leave in respect of
+              the year January to December {yearLabel}.
+            </p>
+            <p>Your leave details are shown below.</p>
+          </div>
+
+          {/* Leave details table */}
+          <div className="mt-4 overflow-hidden rounded border border-slate-300 text-[12px]">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-300">
+                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[22%]">
+                    Number of Days<br />Entitled
+                  </th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[18%]">
+                    Number of Days<br />Granted
+                  </th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[18%]">From</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-slate-300 w-[18%]">To</th>
+                  <th className="px-3 py-2 text-left font-bold w-[24%]">Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <td className="px-3 py-2 border-r border-slate-200">{entitledLabel}</td>
+                  <td className="px-3 py-2 border-r border-slate-200 font-semibold">{grantedDays}</td>
+                  <td className="px-3 py-2 border-r border-slate-200">{fmtDateLong(startDate)}</td>
+                  <td className="px-3 py-2 border-r border-slate-200">{fmtDateLong(endDate)}</td>
+                  <td className="px-3 py-2">{remarks}</td>
+                </tr>
+                {/* Totals row */}
+                <tr className="bg-slate-50">
+                  <td className="px-3 py-1.5 border-r border-slate-200 font-bold text-right" colSpan={1}>&nbsp;</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200 font-bold">{grantedDays}</td>
+                  <td colSpan={3} className="px-3 py-1.5 text-slate-400 italic text-[11px]" />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Resume duty */}
+          <div className="mt-4 text-[13px]">
+            <p>You are to resume duty on <span className="font-bold">{resumeDate}</span>.</p>
+          </div>
+
+          {/* Closing */}
+          <div className="mt-3 text-[13px]">
+            <p>We wish you a pleasant and relaxing vacation.</p>
+          </div>
+
+          {/* Signature block */}
+          <div className="mt-8 space-y-1">
+            {/* Signature image or typed cursive */}
+            <div className="h-14 flex items-end">
+              {signatureDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={signatureDataUrl}
+                  alt="HR Signature"
+                  className="max-h-12 max-w-[200px] object-contain"
+                />
+              ) : signatureText ? (
+                <p className="font-[cursive] text-2xl text-[#1a3c5e] leading-none">{signatureText}</p>
+              ) : (
+                <div className="w-48 border-b-2 border-dashed border-slate-300 flex items-end pb-1">
+                  <span className="text-[11px] text-slate-400 italic">Signature pending</span>
                 </div>
-              ))}
+              )}
             </div>
+            {/* Signature line */}
+            <div className="w-64 border-b border-slate-700" />
+            <p className="font-bold uppercase text-[13px] mt-1">{signerName}</p>
+            <p className="text-[12px] uppercase">{signerPosition}</p>
+            <p className="text-[12px]">FOR: MANAGING DIRECTOR</p>
+          </div>
 
-            {/* Body text */}
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700 min-h-[80px]">
-              {body || <span className="text-slate-400 italic">No memo body provided.</span>}
-            </div>
+          {/* CC */}
+          <div className="mt-6 border-t border-slate-300 pt-3 text-[12px]">
+            <p>
+              <span className="font-bold">cc: </span>
+              Managing Director, Deputy Managing Director, HR Head, Accounts Manager
+            </p>
+          </div>
 
-            {/* Signature block */}
-            <div className="border-t border-slate-100 pt-4 space-y-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Authorised By</p>
-              <div className="h-14 flex items-end">
-                {signatureDataUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={signatureDataUrl} alt="HR Signature" className="max-h-12 max-w-[200px] object-contain" />
-                ) : signatureText ? (
-                  <p className="font-[cursive] text-2xl text-[#1a3c5e]">{signatureText}</p>
-                ) : (
-                  <div className="h-10 w-40 border-b-2 border-dashed border-slate-300 flex items-end pb-1">
-                    <span className="text-xs text-slate-400 italic">Signature pending</span>
-                  </div>
-                )}
-              </div>
-              <div>
-                <p className="font-semibold text-slate-800">{signerName}</p>
-                <p className="text-xs text-slate-500">{signerPosition}</p>
-                <p className="text-xs text-slate-400 mt-0.5">{today}</p>
-              </div>
-            </div>
+          {/* Footer */}
+          <div className="mt-4 border-t border-slate-300 pt-2 text-[11px] text-slate-500 text-center">
+            Tel: +233-571-461-114&nbsp;&nbsp;|&nbsp;&nbsp;+233-571-461-113&nbsp;&nbsp;|&nbsp;&nbsp;
+            Fax: GA-105-8378&nbsp;&nbsp;|&nbsp;&nbsp;Email: info@qccgh.com&nbsp;&nbsp;|&nbsp;&nbsp;www.qccgh.com
           </div>
         </div>
 
-        <div className="px-6 pb-5 flex justify-end">
-          <Button size="sm" variant="outline" onClick={onClose}>Close Preview</Button>
+        {/* Footer actions */}
+        <div className="px-6 pb-5 pt-2 flex justify-end border-t border-slate-100 bg-slate-50">
+          <Button size="sm" variant="outline" onClick={onClose} className="text-sm">Close Preview</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -395,6 +528,8 @@ function HrApprovalCard({
   hasStoredSignature,
   inlineSig,
   onInlineSigSaved,
+  signerName,
+  signerPosition,
 }: {
   req: LeaveRequest
   expanded: boolean
@@ -405,6 +540,8 @@ function HrApprovalCard({
   hasStoredSignature: boolean
   inlineSig: { dataUrl: string | null; text: string | null; mode: string } | null
   onInlineSigSaved: (dataUrl: string | null, text: string | null, mode: string) => void
+  signerName: string
+  signerPosition: string
 }) {
   const [note, setNote] = useState('')
   const [subject, setSubject] = useState(req.memo_draft_subject || '')
@@ -427,7 +564,10 @@ function HrApprovalCard({
   const wasAdjusted = travelDays > 0 || (req.adjusted_days && req.adjusted_days !== origDays)
   const yearPeriod = req.leave_year_period || '—'
 
+  // Effective sig: stored profile sig OR inline sig for this session
   const sigReady = hasStoredSignature || (inlineSig && (inlineSig.dataUrl || inlineSig.text))
+  const previewSigDataUrl = inlineSig?.dataUrl || null
+  const previewSigText = inlineSig?.text || null
 
   return (
     <>
@@ -502,15 +642,21 @@ function HrApprovalCard({
             <div className="grid grid-cols-3 gap-2 rounded-lg bg-white border border-slate-200 px-4 py-3">
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Department</p>
-                <p className="text-xs font-medium text-slate-700 flex items-center gap-1"><Building2 className="h-3 w-3 text-slate-400" />{dept || '—'}</p>
+                <p className="text-xs font-medium text-slate-700 flex items-center gap-1">
+                  <Building2 className="h-3 w-3 text-slate-400" />{dept || '—'}
+                </p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Submitted</p>
-                <p className="text-xs font-medium text-slate-700 flex items-center gap-1"><Calendar className="h-3 w-3 text-slate-400" />{fmtDate(req.submitted_at || req.created_at)}</p>
+                <p className="text-xs font-medium text-slate-700 flex items-center gap-1">
+                  <Calendar className="h-3 w-3 text-slate-400" />{fmtDate(req.submitted_at || req.created_at)}
+                </p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Years of Service</p>
-                <p className="text-xs font-medium text-indigo-700 flex items-center gap-1"><Clock className="h-3 w-3 text-indigo-400" />{yearsOfService}</p>
+                <p className="text-xs font-medium text-indigo-700 flex items-center gap-1">
+                  <Clock className="h-3 w-3 text-indigo-400" />{yearsOfService}
+                </p>
               </div>
             </div>
 
@@ -533,7 +679,7 @@ function HrApprovalCard({
                 value={body}
                 onChange={e => setBody(e.target.value)}
                 placeholder="Memo body will be pre-filled from template..."
-                className="text-sm h-32 resize-none"
+                className="text-sm h-28 resize-none"
               />
             </div>
 
@@ -555,31 +701,31 @@ function HrApprovalCard({
               <Button
                 size="sm"
                 variant="outline"
-                className="border-slate-300 text-slate-600 hover:bg-slate-100 mr-auto"
+                className="border-slate-300 text-slate-600 hover:bg-slate-100 mr-auto gap-1"
                 onClick={() => setPreviewOpen(true)}
               >
-                <Eye className="h-3 w-3 mr-1" />
+                <Eye className="h-3 w-3" />
                 Preview Memo
               </Button>
 
               <Button
                 size="sm"
                 variant="outline"
-                className="border-red-300 text-red-600 hover:bg-red-50"
+                className="border-red-300 text-red-600 hover:bg-red-50 gap-1"
                 disabled={processing}
                 onClick={() => onReject(note)}
               >
-                {processing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
                 Reject
               </Button>
               <Button
                 size="sm"
-                className="bg-orange-500 hover:bg-orange-600 text-white"
+                className="bg-orange-500 hover:bg-orange-600 text-white gap-1"
                 disabled={processing || !sigReady}
                 title={!sigReady ? 'Set a signature above before approving' : undefined}
                 onClick={() => onApprove(note, subject, body)}
               >
-                {processing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                 Approve &amp; Issue Memo
               </Button>
             </div>
@@ -587,17 +733,15 @@ function HrApprovalCard({
         )}
       </Card>
 
-      {/* Memo preview modal */}
-      <MemoPreviewModal
+      {/* QCC Memo preview modal */}
+      <QccMemoPreviewModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
         req={req}
-        subject={subject}
-        body={body}
-        signerName="HR Executive"
-        signerPosition="HR Manager / Director HR"
-        signatureDataUrl={inlineSig?.dataUrl}
-        signatureText={inlineSig?.text}
+        signerName={signerName}
+        signerPosition={signerPosition}
+        signatureDataUrl={previewSigDataUrl}
+        signatureText={previewSigText}
       />
     </>
   )
@@ -612,10 +756,11 @@ export function HrApprovalsTab() {
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
-  const [hasStoredSignature, setHasStoredSignature] = useState(true) // optimistic
+  const [hasStoredSignature, setHasStoredSignature] = useState(true)
   const [inlineSig, setInlineSig] = useState<{ dataUrl: string | null; text: string | null; mode: string } | null>(null)
+  const [signerName, setSignerName] = useState('HR Executive')
+  const [signerPosition, setSignerPosition] = useState('HR MANAGER')
 
-  // Filters
   const [deptFilter, setDeptFilter] = useState('all')
   const [locFilter, setLocFilter] = useState('all')
 
@@ -633,6 +778,8 @@ export function HrApprovalsTab() {
       if (typeof data.has_stored_signature === 'boolean') {
         setHasStoredSignature(data.has_stored_signature)
       }
+      if (data.signer_name) setSignerName(data.signer_name)
+      if (data.signer_position) setSignerPosition(data.signer_position)
     } catch (err) {
       console.error('[v0] HrApprovalsTab fetch error:', err)
       toast({ title: 'Error', description: 'Failed to load HR approval requests', variant: 'destructive' })
@@ -656,7 +803,6 @@ export function HrApprovalsTab() {
           note: note || undefined,
           memo_draft_subject: subject || undefined,
           memo_draft_body: body || undefined,
-          // Pass inline signature so the API can use it if no profile sig exists
           hr_signature_mode: inlineSig?.mode || undefined,
           hr_signature_text: inlineSig?.text || undefined,
           hr_signature_data_url: inlineSig?.dataUrl || undefined,
@@ -699,7 +845,7 @@ export function HrApprovalsTab() {
     }
   }
 
-  // ── Filtered requests ─────────────────────────────────────────────────────
+  // ── Filtered ──────────────────────────────────────────────────────────────
   const departments = Array.from(
     new Set(requests.map(r => r.user?.departments?.name).filter(Boolean) as string[])
   ).sort()
@@ -779,8 +925,9 @@ export function HrApprovalsTab() {
               onInlineSigSaved={(dataUrl, text, mode) => {
                 if (!dataUrl && !text) { setInlineSig(null); return }
                 setInlineSig({ dataUrl, text, mode })
-                setHasStoredSignature(false) // keep the "stored" flag false so panel stays gone
               }}
+              signerName={signerName}
+              signerPosition={signerPosition}
             />
           ))}
         </div>
