@@ -78,7 +78,10 @@ export async function GET(request: NextRequest) {
       )
     ] as string[]
     let hrApproverMap: Record<string, any> = {}
+    let hrSignatureRegistryMap: Record<string, string> = {}
+
     if (hrApproverIds.length > 0) {
+      // Primary: user_profiles for name, position, current signature
       const { data: hrUsers } = await supabase
         .from("user_profiles")
         .select("id, first_name, last_name, position, signature_data_url")
@@ -86,10 +89,35 @@ export async function GET(request: NextRequest) {
       if (hrUsers) {
         hrUsers.forEach((u: any) => { hrApproverMap[u.id] = u })
       }
+
+      // Fallback: approval_signature_registry — captures signature at time of signing
+      const { data: sigRegistry } = await supabase
+        .from("approval_signature_registry")
+        .select("user_id, signature_data_url")
+        .in("user_id", hrApproverIds)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+      if (sigRegistry) {
+        // Keep only the most recent entry per user (already sorted desc)
+        sigRegistry.forEach((s: any) => {
+          if (!hrSignatureRegistryMap[s.user_id] && s.signature_data_url) {
+            hrSignatureRegistryMap[s.user_id] = s.signature_data_url
+          }
+        })
+      }
     }
 
     const data = (planRequests || []).map((req: any) => {
       const hrApprover = hrApproverMap[req.hr_approver_id] || null
+      // Resolution order for signature:
+      // 1. Row-level hr_signature_data_url (captured at approval time — most accurate)
+      // 2. user_profiles.signature_data_url (current profile signature)
+      // 3. approval_signature_registry (registry fallback)
+      const resolvedSignature =
+        req.hr_signature_data_url ||
+        hrApprover?.signature_data_url ||
+        (req.hr_approver_id ? hrSignatureRegistryMap[req.hr_approver_id] : null) ||
+        null
       // hr_approver_name is already stored as text on the row — use it as fallback
       const resolvedHrName = hrApprover
         ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
@@ -111,9 +139,7 @@ export async function GET(request: NextRequest) {
         // Resolved HR approver fields for the approved-leave memo view
         hr_approver_name: resolvedHrName,
         hr_approver_position: hrApprover?.position || null,
-        hr_approver_signature_data_url: hrApprover?.signature_data_url
-          || req.hr_signature_data_url
-          || null,
+        hr_approver_signature_data_url: resolvedSignature,
       }
     })
 

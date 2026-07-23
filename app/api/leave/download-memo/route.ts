@@ -115,6 +115,10 @@ export async function GET(request: NextRequest) {
     // ── HR Approver ───────────────────────────────────────────────────────────
     let signerName = req.hr_approver_name || ''
     let signerPosition = ''
+    // Resolution order:
+    // 1. hr_signature_data_url on the request row (captured at approval time)
+    // 2. user_profiles.signature_data_url (current profile signature)
+    // 3. approval_signature_registry (registry fallback)
     let signerSigDataUrl: string | null = req.hr_signature_data_url || null
 
     if (req.hr_approver_id) {
@@ -126,7 +130,21 @@ export async function GET(request: NextRequest) {
       if (hrProfile) {
         signerName = `${hrProfile.first_name || ''} ${hrProfile.last_name || ''}`.trim() || signerName
         signerPosition = hrProfile.position || ''
-        signerSigDataUrl = hrProfile.signature_data_url || signerSigDataUrl
+        // Only use profile signature as fallback if row-level sig is absent
+        if (!signerSigDataUrl) signerSigDataUrl = hrProfile.signature_data_url || null
+      }
+
+      // Fallback: approval_signature_registry
+      if (!signerSigDataUrl) {
+        const { data: regSig } = await admin
+          .from('approval_signature_registry')
+          .select('signature_data_url')
+          .eq('user_id', req.hr_approver_id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        if (regSig?.signature_data_url) signerSigDataUrl = regSig.signature_data_url
       }
     }
     if (!signerName) signerName = 'HR EXECUTIVE'
@@ -135,13 +153,13 @@ export async function GET(request: NextRequest) {
     // ── Memo record (optional) ────────────────────────────────────────────────
     const { data: memo } = await admin
       .from('leave_payment_memos')
-      .select('signer_name, signer_position, signer_signature_data_url, leave_period_start, leave_period_end, approved_days, created_at')
+      .select('signer_name, signer_position, signature_data_url, leave_period_start, leave_period_end, approved_days, created_at')
       .eq('leave_plan_request_id', requestId)
       .single()
 
     if (memo?.signer_name && !req.hr_approver_id) signerName = memo.signer_name
     if (memo?.signer_position && !signerPosition) signerPosition = memo.signer_position
-    if (memo?.signer_signature_data_url && !signerSigDataUrl) signerSigDataUrl = memo.signer_signature_data_url
+    if (memo?.signature_data_url && !signerSigDataUrl) signerSigDataUrl = memo.signature_data_url
 
     // ── Computed values ───────────────────────────────────────────────────────
     const staffFullName = staffMgmt?.full_name ||
