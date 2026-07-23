@@ -1069,6 +1069,9 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrApproverData, setHrApproverData] = useState<any>(null)
   const [hrApproverLoading, setHrApproverLoading] = useState(false)
 
+  // ── HR Approve sub-tab ───────────────────────────────────────────────
+  const [hrApproveSubTab, setHrApproveSubTab] = useState<"pending" | "approved" | "deferments" | "recalls">("pending")
+
   // ── HR Executive Deferment / Recall ──────────────────────────────────
   const [hrExecDeferRecallData, setHrExecDeferRecallData] = useState<{ deferments: any[]; recalls: any[] }>({ deferments: [], recalls: [] })
   const [hrExecDeferRecallLoading, setHrExecDeferRecallLoading] = useState(false)
@@ -3947,209 +3950,317 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             </Tabs>
           </div>}
 
-          {/* HR Final Approval */}
-          {activeTab === "hr-approve" && <div>
-            {hrApproverQueue.length === 0 && hrExecDeferRecallData.deferments.length === 0 && hrExecDeferRecallData.recalls.length === 0 ? (
-              <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
-                <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                <p className="font-medium">No requests awaiting HR Approval</p>
+          {/* HR Executive Approvals — full redesign */}
+          {activeTab === "hr-approve" && <div className="space-y-4">
+
+            {/* Page header */}
+            <div className="rounded-xl border border-slate-200 bg-white px-5 py-4">
+              <div className="flex items-center gap-3 mb-1">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                <p className="font-semibold text-slate-800 text-base">HR Executive Approvals</p>
+                {(hrApproverLoading || hrExecDeferRecallLoading) && (
+                  <span className="text-xs text-slate-400 animate-pulse">Refreshing…</span>
+                )}
               </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Shared signature block */}
-                <Card className="border-green-200 bg-green-50">
-                  <CardContent className="p-4">
-                    <p className="text-xs font-semibold text-green-800 uppercase tracking-wide mb-3">
-                      Your HR Signature (applied to all approved memos)
-                    </p>
-                    <p className="mb-3 text-xs text-green-800/80">
-                      Save it once here and the leave module will reuse it until you replace it.
-                    </p>
-                    <div className="flex gap-2 mb-2 flex-wrap">
-                      {(["typed", "draw", "upload"] as SignatureMode[]).map((m) => (
-                        <Button key={m} size="sm"
-                          variant={hrSigMode === m ? "default" : "outline"}
-                          onClick={() => setHrSigMode(m)}
-                          className={`h-7 text-xs capitalize ${hrSigMode === m ? "bg-green-700" : "border-green-300"}`}>
-                          {m === "typed" ? "Type" : m === "draw" ? "Draw" : "Upload"}
-                        </Button>
-                      ))}
-                    </div>
-                    {hrSigMode === "typed" && (
-                      <Input
-                        placeholder="Type your full name as signature"
-                        value={hrSigTyped}
-                        onChange={(e) => setHrSigTyped(e.target.value)}
-                        className="italic font-serif text-base h-11 bg-white"
-                      />
-                    )}
-                    {hrSigMode === "draw" && (
-                      <SignaturePad value={hrSigDataUrl} onChange={setHrSigDataUrl} />
-                    )}
-                    {hrSigMode === "upload" && (
-                      <Input type="file" accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0]
-                          if (file) setHrSigDataUrl(await readAsDataUrl(file))
-                        }}
-                        className="bg-white"
-                      />
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        className="bg-green-700 hover:bg-green-800 text-white"
-                        disabled={hrSignatureRegistrySaving || hrSignatureRegistryLoading}
-                        onClick={() => void saveHrSignatureRegistry()}
-                      >
-                        {hrSignatureRegistrySaving ? "Saving..." : "Save Signature"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-green-300 bg-white"
-                        disabled={hrSignatureRegistryLoading || hrSignatureRegistrySaving}
-                        onClick={() => void loadHrSignatureRegistry()}
-                      >
-                        {hrSignatureRegistryLoading ? "Loading..." : "Reload Saved"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-green-900 hover:bg-green-100"
-                        disabled={hrSignatureRegistrySaving}
-                        onClick={clearHrSignatureSelection}
-                      >
-                        Clear Current
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+              <p className="text-xs text-slate-500 pl-8">
+                All leave requests submitted by the Leave Office for HR Executive approval — view, approve, and download approved memos
+              </p>
+            </div>
 
-                <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
-                  <Select value={hrApproverLocationFilter} onValueChange={setHrApproverLocationFilter}>
-                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All locations" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All locations</SelectItem>
-                      {allLeaveLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={hrApproverDeptFilter} onValueChange={setHrApproverDeptFilter}>
-                    <SelectTrigger className="h-8 w-44"><SelectValue placeholder="All departments" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All departments</SelectItem>
-                      {allLeaveDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Button size="sm" variant="outline" onClick={() => downloadLeaveRequestsCsv(hrApproverQueueFiltered, "hr-approvals-queue.csv")}>
-                    <Download className="w-3 h-3 mr-1" /> Export CSV
-                  </Button>
-                  <span className="w-full text-xs text-slate-500 sm:ml-auto sm:w-auto">{hrApproverQueueFiltered.length} of {hrApproverQueue.length} shown</span>
+            {/* Collapsible signature panel */}
+            <details className="group rounded-xl border border-green-200 bg-green-50 overflow-hidden">
+              <summary className="flex cursor-pointer items-center justify-between px-5 py-3 select-none">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-green-800 uppercase tracking-wide">Your HR Signature</span>
+                  {(hrSigMode === "typed" ? hrSigTyped.trim() : hrSigDataUrl) && (
+                    <span className="rounded-full bg-green-200 px-2 py-0.5 text-[10px] font-medium text-green-800">Saved</span>
+                  )}
                 </div>
+                <span className="text-xs text-green-700 group-open:hidden">Click to manage</span>
+                <span className="text-xs text-green-700 hidden group-open:inline">Click to collapse</span>
+              </summary>
+              <div className="px-5 pb-4 pt-1 space-y-3 border-t border-green-200">
+                <p className="text-xs text-green-800/80">
+                  Save it once here and the leave module will reuse it until you replace it.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {(["typed", "draw", "upload"] as SignatureMode[]).map((m) => (
+                    <Button key={m} size="sm"
+                      variant={hrSigMode === m ? "default" : "outline"}
+                      onClick={() => setHrSigMode(m)}
+                      className={`h-7 text-xs capitalize ${hrSigMode === m ? "bg-green-700 hover:bg-green-800" : "border-green-300 bg-white"}`}>
+                      {m === "typed" ? "Type" : m === "draw" ? "Draw" : "Upload"}
+                    </Button>
+                  ))}
+                </div>
+                {hrSigMode === "typed" && (
+                  <Input placeholder="Type your full name as signature"
+                    value={hrSigTyped}
+                    onChange={(e) => setHrSigTyped(e.target.value)}
+                    className="italic font-serif text-base h-11 bg-white" />
+                )}
+                {hrSigMode === "draw" && <SignaturePad value={hrSigDataUrl} onChange={setHrSigDataUrl} />}
+                {hrSigMode === "upload" && (
+                  <Input type="file" accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (file) setHrSigDataUrl(await readAsDataUrl(file))
+                    }}
+                    className="bg-white" />
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" className="bg-green-700 hover:bg-green-800 text-white"
+                    disabled={hrSignatureRegistrySaving || hrSignatureRegistryLoading}
+                    onClick={() => void saveHrSignatureRegistry()}>
+                    {hrSignatureRegistrySaving ? "Saving..." : "Save Signature"}
+                  </Button>
+                  <Button size="sm" variant="outline" className="border-green-300 bg-white"
+                    disabled={hrSignatureRegistryLoading || hrSignatureRegistrySaving}
+                    onClick={() => void loadHrSignatureRegistry()}>
+                    {hrSignatureRegistryLoading ? "Loading..." : "Reload Saved"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-green-900 hover:bg-green-100"
+                    disabled={hrSignatureRegistrySaving}
+                    onClick={clearHrSignatureSelection}>
+                    Clear Current
+                  </Button>
+                </div>
+              </div>
+            </details>
 
-                {/* Deferment & Recall section */}
-                {(hrExecDeferRecallData.deferments.length > 0 || hrExecDeferRecallData.recalls.length > 0) && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-slate-700">Deferments & Recalls</p>
-                      {hrExecDeferRecallLoading && <span className="text-xs text-slate-400">Refreshing…</span>}
-                      <div className="flex gap-1.5 ml-auto">
-                        {(["pending", "deferments", "recalls"] as const).map((t) => (
-                          <button key={t} type="button"
-                            onClick={() => setHrExecDeferRecallTab(t)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                              hrExecDeferRecallTab === t
-                                ? "bg-amber-600 text-white border-amber-600"
-                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                            }`}>
-                            {t === "pending" ? (
-                              <>Pending Decisions ({
-                                [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
-                                  .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
-                              })</>
-                            ) : t === "deferments" ? (
-                              <>Deferments ({hrExecDeferRecallData.deferments.length})</>
-                            ) : (
-                              <>Recalls ({hrExecDeferRecallData.recalls.length})</>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+            {/* Sub-tab navigation */}
+            {(() => {
+              const pendingLeave = hrApproverQueueFiltered.filter((r: any) =>
+                ["hr_office_forwarded", "hod_approved"].includes(String(r.status || ""))
+              )
+              const approvedLeave = hrApproverQueueFiltered.filter((r: any) =>
+                String(r.status || "") === "hr_approved"
+              )
+              const pendingDeferments = hrExecDeferRecallData.deferments.filter(
+                (r: any) => !r.hr_office_decision && !r.hr_decision
+              )
+              const pendingRecalls = hrExecDeferRecallData.recalls.filter(
+                (r: any) => !r.hr_office_decision && !r.hr_decision
+              )
 
-                    {(() => {
-                      const allItems = [
-                        ...hrExecDeferRecallData.deferments.map((d: any) => ({ ...d, _type: "deferment" as const })),
-                        ...hrExecDeferRecallData.recalls.map((r: any) => ({ ...r, _type: "recall" as const })),
-                      ]
-                      const filtered = hrExecDeferRecallTab === "pending"
-                        ? allItems.filter((r) => !r.hr_office_decision && !r.hr_decision)
-                        : hrExecDeferRecallTab === "deferments"
-                        ? hrExecDeferRecallData.deferments.map((d: any) => ({ ...d, _type: "deferment" as const }))
-                        : hrExecDeferRecallData.recalls.map((r: any) => ({ ...r, _type: "recall" as const }))
+              const subTabs = [
+                {
+                  key: "pending" as const,
+                  label: "Pending Decisions",
+                  count: pendingLeave.length + pendingDeferments.length + pendingRecalls.length,
+                  activeClass: "bg-orange-500 border-orange-500 text-white",
+                },
+                {
+                  key: "approved" as const,
+                  label: "Approved Payment Advice",
+                  count: approvedLeave.length,
+                  activeClass: "bg-emerald-600 border-emerald-600 text-white",
+                },
+                {
+                  key: "deferments" as const,
+                  label: "Deferments",
+                  count: hrExecDeferRecallData.deferments.length,
+                  activeClass: "bg-amber-600 border-amber-600 text-white",
+                },
+                {
+                  key: "recalls" as const,
+                  label: "Recalls",
+                  count: hrExecDeferRecallData.recalls.length,
+                  activeClass: "bg-red-600 border-red-600 text-white",
+                },
+              ]
 
-                      if (filtered.length === 0) {
-                        return (
-                          <div className="text-center py-8 text-slate-400 bg-white rounded-lg border border-slate-100 text-sm">
-                            No {hrExecDeferRecallTab === "pending" ? "pending" : hrExecDeferRecallTab} items
-                          </div>
-                        )
-                      }
+              return (
+                <>
+                  {/* Sub-tab bar */}
+                  <div className="flex flex-wrap gap-2">
+                    {subTabs.map(({ key, label, count, activeClass }) => (
+                      <button key={key} type="button"
+                        onClick={() => setHrApproveSubTab(key)}
+                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                          hrApproveSubTab === key
+                            ? activeClass
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}>
+                        {label}
+                        {count > 0 && (
+                          <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold min-w-[18px] text-center ${
+                            hrApproveSubTab === key ? "bg-white/25 text-white" : "bg-slate-200 text-slate-700"
+                          }`}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
 
-                      return filtered.map((item: any) => {
-                        const isDefer = item._type === "deferment"
-                        const staffUser = isDefer ? item.user_profiles : item.user_profiles
-                        const staffName = staffUser
-                          ? `${staffUser.first_name || ""} ${staffUser.last_name || ""}`.trim()
-                          : "—"
-                        const dept = staffUser?.departments?.name || "—"
-                        const isPending = !item.hr_office_decision && !item.hr_decision
-                        const decision = isDefer ? item.hr_office_decision : item.hr_decision
-                        const isItemExpanded = hrExecDeferExpandedId === item.id
-                        const [deferRejectReason, setDeferRejectReason] = [
-                          // We store rejection reason per-item in a local variable inside the map
-                          "", () => {}
-                        ]
-
-                        return (
-                          <Card key={item.id} className={`border shadow-sm ${isDefer ? "border-amber-100" : "border-red-100"}`}>
-                            <CardContent className="p-4">
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <p className="font-semibold text-slate-800 text-sm">{staffName}</p>
-                                  <p className="text-xs text-slate-500">{dept}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge className={`text-xs border ${isDefer ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-red-50 text-red-700 border-red-200"}`}>
-                                    {isDefer ? "Deferment" : "Recall"}
-                                  </Badge>
-                                  {isPending ? (
-                                    <Badge className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200">Pending</Badge>
-                                  ) : (
-                                    <Badge className={`text-xs border ${decision === "approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
-                                      {decision === "approved" ? "Approved" : "Rejected"}
+                  {/* ── PENDING DECISIONS ── */}
+                  {hrApproveSubTab === "pending" && (
+                    <div className="space-y-3">
+                      {pendingLeave.length === 0 && pendingDeferments.length === 0 && pendingRecalls.length === 0 ? (
+                        <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                          <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                          <p className="font-medium">No pending decisions</p>
+                          <p className="text-xs mt-1 text-slate-400">All assigned requests have been actioned.</p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Leave request cards */}
+                          {pendingLeave.map((req: any) => {
+                            const isExpanded = hrExpandedId === req.id
+                            const effectiveStart = req.adjusted_start_date || req.preferred_start_date
+                            const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
+                            const effectiveDays = req.adjusted_days || req.requested_days
+                            const assignedTo = req.assigned_hr_executive
+                              ? fmtName(req.assigned_hr_executive)
+                              : req.hr_executive_name || null
+                            return (
+                              <div key={req.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                                {/* Card header */}
+                                <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
+                                  <div>
+                                    <p className="font-semibold text-slate-900">{fmtName(req.user)}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                      {String(req.user?.departments?.name || "—")} — {String(req.user?.role || req.user?.designation || "").toUpperCase() || "STAFF"}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1.5">
+                                    <Badge className="text-xs border bg-orange-50 text-orange-700 border-orange-200">
+                                      Pending
                                     </Badge>
+                                    {assignedTo && (
+                                      <span className="text-[10px] text-slate-400">Assigned: {assignedTo}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Info row */}
+                                <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
+                                  <span><span className="text-slate-400">Leave Type:</span> {leaveTypeLabelShort(req.leave_type_key)}</span>
+                                  <span><span className="text-slate-400">Period:</span> {fmtDate(effectiveStart)} – {fmtDate(effectiveEnd)} ({effectiveDays}d)</span>
+                                  <span><span className="text-slate-400">Year:</span> {req.leave_year_period || "—"}</span>
+                                  <span><span className="text-slate-400">Submitted:</span> {fmtDate(req.submitted_at || req.created_at)}</span>
+                                </div>
+                                {/* Adjustment notice */}
+                                {req.adjustment_reason && (
+                                  <div className="mx-5 mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 flex gap-2 text-xs text-blue-800">
+                                    <AlertCircle className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                                    <span><strong>HR Office adjustment:</strong> {req.adjustment_reason}
+                                      {req.original_requested_days && req.adjusted_days !== req.original_requested_days && (
+                                        <span className="ml-1">({req.original_requested_days}d → {req.adjusted_days}d)</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                                {/* Staff history */}
+                                <div className="px-5 pt-2">
+                                  <StaffHistoryPanel
+                                    history={staffHistoryByUser[String(req.user?.id || "")] || []}
+                                    currentRequestId={req.id}
+                                  />
+                                </div>
+                                {/* Expand button */}
+                                <div className="px-5 pb-4 pt-2">
+                                  {req.status === "hod_approved" ? (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                      Being processed by HR Leave Office — awaiting forwarding.
+                                    </div>
+                                  ) : (
+                                    <button type="button"
+                                      onClick={() => {
+                                        if (isExpanded) { setHrExpandedId(null); return }
+                                        setHrExpandedId(req.id)
+                                        const tpl = buildMemoTemplate(req)
+                                        setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || tpl.subject }))
+                                        setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || tpl.body }))
+                                        setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || tpl.cc }))
+                                      }}
+                                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+                                      {isExpanded ? "▲ Collapse" : "▼ Review & Decide"}
+                                    </button>
                                   )}
                                 </div>
+                                {/* Expanded memo draft + action */}
+                                {isExpanded && (
+                                  <div className="mx-5 mb-5 space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+                                    <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Final Edit Before Issue)</p>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Memo Subject</Label>
+                                      <Input value={hrMemoSubject[req.id] || ""}
+                                        onChange={(e) => setHrMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
+                                        placeholder="Memo subject" className="h-9 bg-white" />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Memo Body</Label>
+                                      <Textarea value={hrMemoBody[req.id] || ""}
+                                        onChange={(e) => setHrMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
+                                        placeholder="Finalize memo body before issuing approval."
+                                        rows={4} className="resize-none text-sm bg-white" />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">CC List (one per line)</Label>
+                                      <Textarea value={hrMemoCc[req.id] || ""}
+                                        onChange={(e) => setHrMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
+                                        placeholder="CC recipients" rows={2} className="resize-none text-sm bg-white" />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs font-semibold">HR Note (optional)</Label>
+                                      <Textarea placeholder="Any additional notes to include in the memo"
+                                        value={hrNote[req.id] || ""}
+                                        onChange={(e) => setHrNote((p) => ({ ...p, [req.id]: e.target.value }))}
+                                        rows={2} className="resize-none text-sm bg-white" />
+                                    </div>
+                                    <div className="flex gap-2 flex-wrap pt-1">
+                                      <Button onClick={() => submitHrApproval(req.id, "approve")}
+                                        disabled={hrSubmitting === req.id}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                        {hrSubmitting === req.id ? "Processing…" : "Approve & Generate Memo"}
+                                      </Button>
+                                      <Button onClick={() => submitHrApproval(req.id, "reject")}
+                                        disabled={hrSubmitting === req.id}
+                                        variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              {isDefer ? (
-                                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-2">
-                                  <div><span className="text-slate-400">Defer Period:</span> {fmtDate(item.deferment_start_date)} – {fmtDate(item.deferment_end_date)}</div>
-                                  <div><span className="text-slate-400">Year:</span> {item.requested_deferment_year || "—"}</div>
-                                  {item.reason && <div className="col-span-2"><span className="text-slate-400">Reason:</span> {item.reason}</div>}
+                            )
+                          })}
+
+                          {/* Pending deferment cards */}
+                          {pendingDeferments.map((item: any) => {
+                            const staffName = item.user_profiles
+                              ? `${item.user_profiles.first_name || ""} ${item.user_profiles.last_name || ""}`.trim()
+                              : "—"
+                            const dept = item.user_profiles?.departments?.name || "—"
+                            const isItemExpanded = hrExecDeferExpandedId === item.id
+                            return (
+                              <div key={item.id} className="rounded-xl border border-amber-200 bg-white overflow-hidden">
+                                <div className="flex items-start justify-between px-5 py-4 border-b border-amber-100">
+                                  <div>
+                                    <p className="font-semibold text-slate-900">{staffName}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{dept}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge className="text-xs border bg-amber-50 text-amber-700 border-amber-200">Deferment</Badge>
+                                    <Badge className="text-xs border bg-orange-50 text-orange-700 border-orange-200">Pending</Badge>
+                                  </div>
                                 </div>
-                              ) : (
-                                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-2">
-                                  <div><span className="text-slate-400">Recall Date:</span> {fmtDate(item.recall_date)}</div>
-                                  {item.recall_reason && <div><span className="text-slate-400">Reason:</span> {item.recall_reason}</div>}
+                                <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
+                                  <span><span className="text-slate-400">Leave Type:</span> {item.user_profiles?.leave_type || "Annual Leave"}</span>
+                                  <span><span className="text-slate-400">Deferment Period:</span> {fmtDate(item.deferment_start_date)} – {fmtDate(item.deferment_end_date)}</span>
+                                  <span><span className="text-slate-400">Year:</span> {item.requested_deferment_year || "—"}</span>
+                                  <span><span className="text-slate-400">Submitted:</span> {fmtDate(item.created_at)}</span>
                                 </div>
-                              )}
-                              {isPending && (
-                                <div className="mt-2 flex gap-2 flex-wrap">
-                                  <Button size="sm"
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
+                                {item.reason && (
+                                  <p className="px-5 py-2 text-xs text-slate-600 border-t border-amber-100">
+                                    <span className="text-slate-400">Reason:</span> {item.reason}
+                                  </p>
+                                )}
+                                <div className="px-5 pb-4 pt-3 flex gap-2 flex-wrap">
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
                                     disabled={hrExecDeferSubmitting === item.id}
-                                    onClick={() => void submitHrExecDecision(item.id, item._type, "approved")}>
+                                    onClick={() => void submitHrExecDecision(item.id, "deferment", "approved")}>
                                     {hrExecDeferSubmitting === item.id ? "Processing…" : "Approve"}
                                   </Button>
                                   <Button size="sm" variant="outline"
@@ -4159,163 +4270,265 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                     {isItemExpanded ? "Cancel" : "Reject…"}
                                   </Button>
                                 </div>
-                              )}
-                              {isItemExpanded && isPending && (
-                                <HrExecRejectForm
-                                  requestId={item.id}
-                                  requestType={item._type}
-                                  submitting={hrExecDeferSubmitting === item.id}
-                                  onSubmit={(reason) => void submitHrExecDecision(item.id, item._type, "rejected", reason)}
-                                  onCancel={() => setHrExecDeferExpandedId(null)}
-                                />
-                              )}
-                            </CardContent>
-                          </Card>
-                        )
-                      })
-                    })()}
-                  </div>
-                )}
+                                {isItemExpanded && (
+                                  <div className="px-5 pb-4">
+                                    <HrExecRejectForm requestId={item.id} requestType="deferment"
+                                      submitting={hrExecDeferSubmitting === item.id}
+                                      onSubmit={(reason) => void submitHrExecDecision(item.id, "deferment", "rejected", reason)}
+                                      onCancel={() => setHrExecDeferExpandedId(null)} />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
 
-                {/* Leave requests */}
-                {hrApproverQueueFiltered.map((req: any) => {
-                  const isExpanded = hrExpandedId === req.id
-                  const effectiveStart = req.adjusted_start_date || req.preferred_start_date
-                  const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
-                  const effectiveDays = req.adjusted_days || req.requested_days
-                  return (
-                    <Card key={req.id} className="border shadow-sm">
-                      <CardContent className="p-5">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
-                            <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "—")} · {leaveTypeLabelShort(req.leave_type_key)}
-                            </p>
-                          </div>
-                          <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
-                            {getStatusLabel(req.status)}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-                          <InfoPill label="Start" value={fmtDate(effectiveStart)} />
-                          <InfoPill label="End" value={fmtDate(effectiveEnd)} />
-                          <InfoPill label="Days" value={String(effectiveDays)} highlight />
-                          <InfoPill label="Year" value={req.leave_year_period || "—"} />
-                        </div>
-                        {req.adjustment_reason && (
-                          <Alert className="mb-3 py-2 border-blue-200 bg-blue-50">
-                            <AlertCircle className="h-3 w-3 text-blue-600" />
-                            <AlertDescription className="text-xs text-blue-800 ml-1">
-                              <strong>HR Office adjustment:</strong> {req.adjustment_reason}
-                              {req.original_requested_days && req.adjusted_days !== req.original_requested_days && (
-                                <span className="ml-1">({req.original_requested_days}d → {req.adjusted_days}d)</span>
-                              )}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                        <StaffHistoryPanel
-                          history={staffHistoryByUser[String(req.user?.id || "")] || []}
-                          currentRequestId={req.id}
-                        />
-                        {req.status === "hod_approved" && (
-                          <Alert className="mb-3 py-2 border-amber-200 bg-amber-50">
-                            <AlertCircle className="h-3 w-3 text-amber-600" />
-                            <AlertDescription className="text-xs text-amber-800 ml-1">
-                              This request is currently being processed by the HR Leave Office. You can review it once they complete their adjustments and forward it to you.
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                        <Button size="sm" variant="outline"
-                          disabled={req.status === "hod_approved"}
-                          onClick={() => {
-                            if (isExpanded) {
-                              setHrExpandedId(null)
-                              return
-                            }
-                            setHrExpandedId(req.id)
-                            const hrMemoTpl = buildMemoTemplate(req)
-                            setHrMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || hrMemoTpl.subject }))
-                            setHrMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || hrMemoTpl.body }))
-                            setHrMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || hrMemoTpl.cc }))
-                          }}
-                          className="text-xs h-8">
-                          {isExpanded ? "▲ Collapse" : "▼ Review & Decide"}
-                        </Button>
-                        {isExpanded && (
-                          <div className="mt-4 space-y-3 border-t pt-4">
-                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2">
-                              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Final Edit Before Issue)</p>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Memo Subject</Label>
-                                <Input
-                                  value={hrMemoSubject[req.id] || ""}
-                                  onChange={(e) => setHrMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="Memo subject"
-                                  className="h-9 bg-white"
-                                />
+                          {/* Pending recall cards */}
+                          {pendingRecalls.map((item: any) => {
+                            const staffName = item.user_profiles
+                              ? `${item.user_profiles.first_name || ""} ${item.user_profiles.last_name || ""}`.trim()
+                              : "—"
+                            const dept = item.user_profiles?.departments?.name || "—"
+                            const isItemExpanded = hrExecDeferExpandedId === item.id
+                            return (
+                              <div key={item.id} className="rounded-xl border border-red-200 bg-white overflow-hidden">
+                                <div className="flex items-start justify-between px-5 py-4 border-b border-red-100">
+                                  <div>
+                                    <p className="font-semibold text-slate-900">{staffName}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{dept}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge className="text-xs border bg-red-50 text-red-700 border-red-200">Recall</Badge>
+                                    <Badge className="text-xs border bg-orange-50 text-orange-700 border-orange-200">Pending</Badge>
+                                  </div>
+                                </div>
+                                <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
+                                  <span><span className="text-slate-400">Recall Date:</span> {fmtDate(item.recall_date)}</span>
+                                  <span><span className="text-slate-400">Submitted:</span> {fmtDate(item.created_at)}</span>
+                                </div>
+                                {item.recall_reason && (
+                                  <p className="px-5 py-2 text-xs text-slate-600 border-t border-red-100">
+                                    <span className="text-slate-400">Reason:</span> {item.recall_reason}
+                                  </p>
+                                )}
+                                <div className="px-5 pb-4 pt-3 flex gap-2 flex-wrap">
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => void submitHrExecDecision(item.id, "recall", "approved")}>
+                                    {hrExecDeferSubmitting === item.id ? "Processing…" : "Approve"}
+                                  </Button>
+                                  <Button size="sm" variant="outline"
+                                    className="border-red-300 text-red-700 hover:bg-red-50 h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => setHrExecDeferExpandedId(isItemExpanded ? null : item.id)}>
+                                    {isItemExpanded ? "Cancel" : "Reject…"}
+                                  </Button>
+                                </div>
+                                {isItemExpanded && (
+                                  <div className="px-5 pb-4">
+                                    <HrExecRejectForm requestId={item.id} requestType="recall"
+                                      submitting={hrExecDeferSubmitting === item.id}
+                                      onSubmit={(reason) => void submitHrExecDecision(item.id, "recall", "rejected", reason)}
+                                      onCancel={() => setHrExecDeferExpandedId(null)} />
+                                  </div>
+                                )}
                               </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Memo Body</Label>
-                                <Textarea
-                                  value={hrMemoBody[req.id] || ""}
-                                  onChange={(e) => setHrMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="Finalize memo body before issuing approval."
-                                  rows={4}
-                                  className="resize-none text-sm bg-white"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">CC List (one per line)</Label>
-                                <Textarea
-                                  value={hrMemoCc[req.id] || ""}
-                                  onChange={(e) => setHrMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="CC recipients"
-                                  rows={3}
-                                  className="resize-none text-sm bg-white"
-                                />
-                              </div>
-                            </div>
+                            )
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
 
-                            <div className="space-y-1">
-                              <Label className="text-xs font-semibold">HR Note (optional)</Label>
-                              <Textarea
-                                placeholder="Any additional notes to include in the memo"
-                                value={hrNote[req.id] || ""}
-                                onChange={(e) => setHrNote((p) => ({ ...p, [req.id]: e.target.value }))}
-                                rows={2} className="resize-none text-sm"
-                              />
+                  {/* ── APPROVED PAYMENT ADVICE ── */}
+                  {hrApproveSubTab === "approved" && (
+                    <div className="space-y-3">
+                      {approvedLeave.length === 0 ? (
+                        <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                          <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                          <p className="font-medium">No approved requests yet</p>
+                        </div>
+                      ) : (
+                        approvedLeave.map((req: any) => {
+                          const effectiveStart = req.adjusted_start_date || req.preferred_start_date
+                          const effectiveEnd = req.adjusted_end_date || req.preferred_end_date
+                          const effectiveDays = req.adjusted_days || req.requested_days
+                          return (
+                            <div key={req.id} className="rounded-xl border border-emerald-200 bg-white overflow-hidden">
+                              <div className="flex items-start justify-between px-5 py-4 border-b border-emerald-100">
+                                <div>
+                                  <p className="font-semibold text-slate-900">{fmtName(req.user)}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    {String(req.user?.departments?.name || "—")} — {leaveTypeLabelShort(req.leave_type_key)}
+                                  </p>
+                                </div>
+                                <Badge className="text-xs border bg-emerald-50 text-emerald-700 border-emerald-200">
+                                  HR Approved
+                                </Badge>
+                              </div>
+                              <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
+                                <span><span className="text-slate-400">Period:</span> {fmtDate(effectiveStart)} – {fmtDate(effectiveEnd)} ({effectiveDays}d)</span>
+                                <span><span className="text-slate-400">Year:</span> {req.leave_year_period || "—"}</span>
+                                <span><span className="text-slate-400">Submitted:</span> {fmtDate(req.submitted_at || req.created_at)}</span>
+                              </div>
+                              {req.memo_token && (
+                                <div className="px-5 pb-4 pt-3">
+                                  <Button size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs"
+                                    onClick={() => openMemo(req.id, req.memo_token)}>
+                                    <Download className="w-3 h-3 mr-1" /> Download Memo
+                                  </Button>
+                                </div>
+                              )}
                             </div>
-                            <div className="flex gap-2 flex-wrap">
-                              <Button
-                                onClick={() => submitHrApproval(req.id, "approve")}
-                                disabled={hrSubmitting === req.id}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                                {hrSubmitting === req.id ? "Processing…" : "✓ Approve & Generate Memo"}
-                              </Button>
-                              <Button
-                                onClick={() => submitHrApproval(req.id, "reject")}
-                                disabled={hrSubmitting === req.id}
-                                variant="outline"
-                                className="border-red-300 text-red-700 hover:bg-red-50">
-                                ✗ Reject
-                              </Button>
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── DEFERMENTS ── */}
+                  {hrApproveSubTab === "deferments" && (
+                    <div className="space-y-3">
+                      {hrExecDeferRecallData.deferments.length === 0 ? (
+                        <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                          <p className="font-medium">No deferment requests</p>
+                        </div>
+                      ) : (
+                        hrExecDeferRecallData.deferments.map((item: any) => {
+                          const staffName = item.user_profiles
+                            ? `${item.user_profiles.first_name || ""} ${item.user_profiles.last_name || ""}`.trim()
+                            : "—"
+                          const dept = item.user_profiles?.departments?.name || "—"
+                          const decision = item.hr_office_decision || item.hr_decision
+                          const isPending = !decision
+                          const isItemExpanded = hrExecDeferExpandedId === item.id
+                          return (
+                            <div key={item.id} className={`rounded-xl border bg-white overflow-hidden ${isPending ? "border-amber-200" : "border-slate-200"}`}>
+                              <div className="flex items-start justify-between px-5 py-4 border-b border-inherit">
+                                <div>
+                                  <p className="font-semibold text-slate-900">{staffName}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">{dept}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge className="text-xs border bg-amber-50 text-amber-700 border-amber-200">Deferment</Badge>
+                                  {isPending
+                                    ? <Badge className="text-xs border bg-orange-50 text-orange-700 border-orange-200">Pending</Badge>
+                                    : <Badge className={`text-xs border ${decision === "approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                                        {decision === "approved" ? "Approved" : "Rejected"}
+                                      </Badge>
+                                  }
+                                </div>
+                              </div>
+                              <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
+                                <span><span className="text-slate-400">Deferment Period:</span> {fmtDate(item.deferment_start_date)} – {fmtDate(item.deferment_end_date)}</span>
+                                <span><span className="text-slate-400">Year:</span> {item.requested_deferment_year || "—"}</span>
+                                <span><span className="text-slate-400">Submitted:</span> {fmtDate(item.created_at)}</span>
+                              </div>
+                              {item.reason && (
+                                <p className="px-5 py-2 text-xs text-slate-600 border-t border-amber-100">
+                                  <span className="text-slate-400">Reason:</span> {item.reason}
+                                </p>
+                              )}
+                              {isPending && (
+                                <div className="px-5 pb-4 pt-3 flex gap-2 flex-wrap">
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => void submitHrExecDecision(item.id, "deferment", "approved")}>
+                                    {hrExecDeferSubmitting === item.id ? "Processing…" : "Approve"}
+                                  </Button>
+                                  <Button size="sm" variant="outline"
+                                    className="border-red-300 text-red-700 hover:bg-red-50 h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => setHrExecDeferExpandedId(isItemExpanded ? null : item.id)}>
+                                    {isItemExpanded ? "Cancel" : "Reject…"}
+                                  </Button>
+                                  {isItemExpanded && (
+                                    <HrExecRejectForm requestId={item.id} requestType="deferment"
+                                      submitting={hrExecDeferSubmitting === item.id}
+                                      onSubmit={(reason) => void submitHrExecDecision(item.id, "deferment", "rejected", reason)}
+                                      onCancel={() => setHrExecDeferExpandedId(null)} />
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        )}
-                        {req.status === "hr_approved" && req.memo_token && (
-                          <Button size="sm"
-                            className="mt-3 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs"
-                            onClick={() => openMemo(req.id, req.memo_token)}>
-                            <Download className="w-3 h-3 mr-1" /> Download Memo
-                          </Button>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            )}
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── RECALLS ── */}
+                  {hrApproveSubTab === "recalls" && (
+                    <div className="space-y-3">
+                      {hrExecDeferRecallData.recalls.length === 0 ? (
+                        <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
+                          <p className="font-medium">No recall requests</p>
+                        </div>
+                      ) : (
+                        hrExecDeferRecallData.recalls.map((item: any) => {
+                          const staffName = item.user_profiles
+                            ? `${item.user_profiles.first_name || ""} ${item.user_profiles.last_name || ""}`.trim()
+                            : "—"
+                          const dept = item.user_profiles?.departments?.name || "—"
+                          const decision = item.hr_office_decision || item.hr_decision
+                          const isPending = !decision
+                          const isItemExpanded = hrExecDeferExpandedId === item.id
+                          return (
+                            <div key={item.id} className={`rounded-xl border bg-white overflow-hidden ${isPending ? "border-red-200" : "border-slate-200"}`}>
+                              <div className="flex items-start justify-between px-5 py-4 border-b border-inherit">
+                                <div>
+                                  <p className="font-semibold text-slate-900">{staffName}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">{dept}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge className="text-xs border bg-red-50 text-red-700 border-red-200">Recall</Badge>
+                                  {isPending
+                                    ? <Badge className="text-xs border bg-orange-50 text-orange-700 border-orange-200">Pending</Badge>
+                                    : <Badge className={`text-xs border ${decision === "approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                                        {decision === "approved" ? "Approved" : "Rejected"}
+                                      </Badge>
+                                  }
+                                </div>
+                              </div>
+                              <div className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50/50">
+                                <span><span className="text-slate-400">Recall Date:</span> {fmtDate(item.recall_date)}</span>
+                                <span><span className="text-slate-400">Submitted:</span> {fmtDate(item.created_at)}</span>
+                              </div>
+                              {item.recall_reason && (
+                                <p className="px-5 py-2 text-xs text-slate-600 border-t border-red-100">
+                                  <span className="text-slate-400">Reason:</span> {item.recall_reason}
+                                </p>
+                              )}
+                              {isPending && (
+                                <div className="px-5 pb-4 pt-3 flex gap-2 flex-wrap">
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => void submitHrExecDecision(item.id, "recall", "approved")}>
+                                    {hrExecDeferSubmitting === item.id ? "Processing…" : "Approve"}
+                                  </Button>
+                                  <Button size="sm" variant="outline"
+                                    className="border-red-300 text-red-700 hover:bg-red-50 h-7 text-xs"
+                                    disabled={hrExecDeferSubmitting === item.id}
+                                    onClick={() => setHrExecDeferExpandedId(isItemExpanded ? null : item.id)}>
+                                    {isItemExpanded ? "Cancel" : "Reject…"}
+                                  </Button>
+                                  {isItemExpanded && (
+                                    <HrExecRejectForm requestId={item.id} requestType="recall"
+                                      submitting={hrExecDeferSubmitting === item.id}
+                                      onSubmit={(reason) => void submitHrExecDecision(item.id, "recall", "rejected", reason)}
+                                      onCancel={() => setHrExecDeferExpandedId(null)} />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>}
 
           {/* HR Approval Queue Table */}
