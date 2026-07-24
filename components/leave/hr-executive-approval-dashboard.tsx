@@ -106,10 +106,11 @@ export function HrExecutiveApprovalDashboard() {
   const [recalls, setRecalls]       = useState<RecallRequest[]>([])
   const [memos, setMemos]           = useState<PaymentMemo[]>([])
   const [loading, setLoading]     = useState(true)
-  const [activeSection, setActiveSection] = useState<'pending' | 'memos'>('pending')
+  const [activeSection, setActiveSection] = useState<'pending' | 'approved' | 'memos'>('pending')
   const [expandedId, setExpandedId]       = useState<string | null>(null)
   const [decisionNote, setDecisionNote]   = useState('')
   const [processingId, setProcessingId]   = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   // ── Fetch session user ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -214,10 +215,62 @@ export function HrExecutiveApprovalDashboard() {
     }
   }
 
+  // ── Download deferment approval letter ─────────────────────────────────────
+  const downloadDefermentLetter = async (id: string, staffName: string) => {
+    try {
+      setDownloadingId(id)
+      const res = await fetch(`/api/leave/deferment-recall/download-approved?memo_id=${id}`)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Download failed (${res.status})`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `deferment-approval-${staffName.replace(/\s+/g, '-').toLowerCase()}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Failed to download', variant: 'destructive' })
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  // ── Download recall approval letter ────────────────────────────────────────
+  const downloadRecallLetter = async (id: string, staffName: string) => {
+    try {
+      setDownloadingId(id)
+      const res = await fetch(`/api/leave/deferment-recall/generate-pdf?recall_id=${id}`)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Download failed (${res.status})`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `recall-approval-${staffName.replace(/\s+/g, '-').toLowerCase()}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Failed to download', variant: 'destructive' })
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
   // ── Pending deferments / recalls ────────────────────────────────────────────
-  const pendingDeferments = deferments.filter(d => !d.hr_office_decision || d.hr_office_decision === 'pending')
-  const pendingRecalls    = recalls.filter(r => !r.hr_decision || r.hr_decision === 'pending')
-  const approvedMemos     = memos.filter(m => ['approved', 'signed_by_hr_executive', 'reviewed_by_hr', 'finalized'].includes(m.status))
+  const pendingDeferments  = deferments.filter(d => !d.hr_office_decision || d.hr_office_decision === 'pending')
+  const pendingRecalls     = recalls.filter(r => !r.hr_decision || r.hr_decision === 'pending')
+  const approvedDeferments = deferments.filter(d => d.hr_office_decision === 'approved')
+  const approvedRecalls    = recalls.filter(r => r.hr_decision === 'approved')
+  const approvedMemos      = memos.filter(m => ['approved', 'signed_by_hr_executive', 'reviewed_by_hr', 'finalized'].includes(m.status))
 
   if (loading) {
     return (
@@ -242,6 +295,15 @@ export function HrExecutiveApprovalDashboard() {
         >
           <Clock className="h-4 w-4 mr-1" />
           Pending Decisions ({pendingDeferments.length + pendingRecalls.length})
+        </Button>
+        <Button
+          variant={activeSection === 'approved' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActiveSection('approved')}
+          className={activeSection === 'approved' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}
+        >
+          <CheckCircle className="h-4 w-4 mr-1" />
+          Approved Defer/Recall ({approvedDeferments.length + approvedRecalls.length})
         </Button>
         <Button
           variant={activeSection === 'memos' ? 'default' : 'outline'}
@@ -403,6 +465,115 @@ export function HrExecutiveApprovalDashboard() {
                       </div>
                     </CardContent>
                   )}
+                </Card>
+              )
+            })}
+          </TabsContent>
+        </Tabs>
+      )}
+
+      {/* ── APPROVED DEFERMENTS & RECALLS ── */}
+      {activeSection === 'approved' && (
+        <Tabs defaultValue="deferments">
+          <TabsList className="bg-white border border-slate-200 rounded-lg">
+            <TabsTrigger value="deferments" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white rounded-md text-sm">
+              <CalendarClock className="h-4 w-4 mr-1" />
+              Deferments ({approvedDeferments.length})
+            </TabsTrigger>
+            <TabsTrigger value="recalls" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white rounded-md text-sm">
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Recalls ({approvedRecalls.length})
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Approved Deferments */}
+          <TabsContent value="deferments" className="mt-3 space-y-3">
+            {approvedDeferments.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-slate-500">No approved deferment requests yet</CardContent></Card>
+            ) : approvedDeferments.map(d => {
+              const profile = d.user_profiles as UserProfile | undefined
+              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown'
+              const dept = profile?.departments?.name || ''
+              return (
+                <Card key={d.id} className="border-l-4 border-l-emerald-400">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-semibold text-sm">{staffName}</p>
+                          <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">
+                            <CheckCircle className="h-3 w-3 mr-1" />Approved
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500">{profile?.position || ''}{dept ? ` — ${dept}` : ''}</p>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
+                          <div><span className="font-medium">Leave Type:</span> {fmtLeaveType(d.leave_plan_requests?.leave_type_key)}</div>
+                          <div><span className="font-medium">Deferment Period:</span> {fmtDate(d.deferment_start_date)} – {fmtDate(d.deferment_end_date)}</div>
+                          <div><span className="font-medium">Approved On:</span> {fmtDate((d as any).hr_office_reviewed_at)}</div>
+                          {d.requested_deferment_year && <div><span className="font-medium">Deferred To Year:</span> {d.requested_deferment_year}</div>}
+                        </div>
+                        {d.reason && <p className="text-xs text-slate-500 mt-1 line-clamp-2"><span className="font-medium">Reason:</span> {d.reason}</p>}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        disabled={downloadingId === d.id}
+                        onClick={() => downloadDefermentLetter(d.id, staffName)}
+                      >
+                        {downloadingId === d.id
+                          ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          : <Download className="h-3 w-3 mr-1" />}
+                        Download Letter
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </TabsContent>
+
+          {/* Approved Recalls */}
+          <TabsContent value="recalls" className="mt-3 space-y-3">
+            {approvedRecalls.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-slate-500">No approved recall requests yet</CardContent></Card>
+            ) : approvedRecalls.map(r => {
+              const profile = r.user_profiles as UserProfile | undefined
+              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown'
+              const dept = profile?.departments?.name || ''
+              return (
+                <Card key={r.id} className="border-l-4 border-l-emerald-400">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-semibold text-sm">{staffName}</p>
+                          <Badge className="bg-emerald-100 text-emerald-700 border-0 text-xs">
+                            <CheckCircle className="h-3 w-3 mr-1" />Approved
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500">{profile?.position || ''}{dept ? ` — ${dept}` : ''}</p>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
+                          <div><span className="font-medium">Leave Type:</span> {fmtLeaveType(r.leave_plan_requests?.leave_type_key)}</div>
+                          <div><span className="font-medium">Recall Date:</span> {fmtDate(r.recall_date)}</div>
+                          <div><span className="font-medium">Submitted:</span> {fmtDate(r.created_at)}</div>
+                        </div>
+                        {r.recall_reason && <p className="text-xs text-slate-500 mt-1 line-clamp-2"><span className="font-medium">Reason:</span> {r.recall_reason}</p>}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        disabled={downloadingId === r.id}
+                        onClick={() => downloadRecallLetter(r.id, staffName)}
+                      >
+                        {downloadingId === r.id
+                          ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          : <Download className="h-3 w-3 mr-1" />}
+                        Download Letter
+                      </Button>
+                    </div>
+                  </CardContent>
                 </Card>
               )
             })}

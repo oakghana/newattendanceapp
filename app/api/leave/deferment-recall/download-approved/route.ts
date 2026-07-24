@@ -15,29 +15,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "memo_id parameter required" }, { status: 400 })
     }
 
-    // Get current user
-    const supabase = await createAdminClient()
+    // Get current user via session-aware client
+    const { createClient: createSessionClient } = await import("@/lib/supabase/server")
+    const sessionClient = await createSessionClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await sessionClient.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Fetch the deferment request with full details
+    // Fetch the deferment request — admin client so HR can download on behalf of staff
     const { data: defermentReq, error: reqErr } = await admin
       .from("leave_deferment_requests")
       .select(`
-        id, user_id, original_leave_period_start, original_leave_period_end,
-        requested_deferment_year, deferment_start_date, deferment_end_date,
-        reason, hr_office_decision, hr_office_reviewed_at, hr_executive_id,
+        id, user_id,
+        requested_deferment_year, requested_deferment_period,
+        deferment_start_date, deferment_end_date,
+        rescheduled_start_date, rescheduled_end_date,
+        reason, hr_office_decision, hr_office_reviewed_at,
         created_at
       `)
       .eq("id", memoId)
-      .eq("user_id", user.id)
       .eq("hr_office_decision", "approved")
-      .single()
+      .maybeSingle()
 
     if (reqErr || !defermentReq) {
       console.error("[v0] Error fetching deferment request:", reqErr)
@@ -141,7 +143,7 @@ export async function GET(request: NextRequest) {
     doc.setFont("helvetica", "bold")
     doc.text("SUBJECT:", margin, yPos)
     doc.setFont("helvetica", "normal")
-    const subject = `APPROVAL FOR RESCHEDULING OF ${new Date(defermentReq.original_leave_period_start).getFullYear()} LEAVE`
+    const subject = `APPROVAL FOR RESCHEDULING OF LEAVE${defermentReq.requested_deferment_year ? ` — ${defermentReq.requested_deferment_year}` : ""}`
     const subjectLines = doc.splitTextToSize(subject, contentWidth - 25)
     subjectLines.forEach((line: string, i: number) => {
       doc.text(line, margin + 20, yPos + i * 5)
@@ -152,8 +154,11 @@ export async function GET(request: NextRequest) {
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9.5)
 
-    const originalPeriod = `${new Date(defermentReq.original_leave_period_start).toLocaleDateString("en-GB")} to ${new Date(defermentReq.original_leave_period_end).toLocaleDateString("en-GB")}`
-    const deferredPeriod = `${new Date(defermentReq.deferment_start_date || 0).toLocaleDateString("en-GB")} to ${new Date(defermentReq.deferment_end_date || 0).toLocaleDateString("en-GB")}`
+    const safeDate = (d?: string | null) => d ? new Date(d).toLocaleDateString("en-GB") : "N/A"
+    const originalPeriod = `${safeDate(defermentReq.deferment_start_date)} to ${safeDate(defermentReq.deferment_end_date)}`
+    const deferredPeriod = defermentReq.rescheduled_start_date
+      ? `${safeDate(defermentReq.rescheduled_start_date)} to ${safeDate(defermentReq.rescheduled_end_date)}`
+      : defermentReq.requested_deferment_period || `Year ${defermentReq.requested_deferment_year}` || "N/A"
 
     const para1 = `We refer to your request dated ${new Date(defermentReq.created_at).toLocaleDateString("en-GB")} and wish to inform you that Management has granted approval for your leave to be rescheduled.`
     const lines1 = doc.splitTextToSize(para1, contentWidth)
@@ -171,9 +176,9 @@ export async function GET(request: NextRequest) {
     doc.setFont("helvetica", "normal")
     yPos += 5
 
-    doc.text(`Original Leave Period: ${originalPeriod}`, margin + 5, yPos)
+    doc.text(`Deferment Period: ${originalPeriod}`, margin + 5, yPos)
     yPos += 4.5
-    doc.text(`Deferment Year: ${defermentReq.requested_deferment_year}`, margin + 5, yPos)
+    doc.text(`Rescheduled To: ${deferredPeriod}`, margin + 5, yPos)
     yPos += 4.5
     if (defermentReq.reason) {
       const reasonText = `Reason: ${defermentReq.reason}`
