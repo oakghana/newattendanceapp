@@ -2999,10 +2999,10 @@ export function LeaveManagementClient({
                                   size="sm"
                                   className="bg-teal-600 hover:bg-teal-700 text-white"
                                   onClick={() => {
-                                    // Download memo using the memo[id] API route
-                                    const memoId = memo.id || memo.leave_plan_request_id
+                                    // Payment advice memos use the dedicated route (no THRO field)
+                                    const memoId = memo.id
                                     if (memoId) {
-                                      window.open(`/api/leave/planning/memo/${memoId}`, "_blank")
+                                      window.open(`/api/leave/payment-advice/download?memo_id=${memoId}`, "_blank")
                                     } else {
                                       console.error("[v0] No memo ID found for download")
                                     }
