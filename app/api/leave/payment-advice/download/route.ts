@@ -126,122 +126,70 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Parse memo body to extract staff list and approval metadata
+    // Parse memo body to extract approval metadata (signer name/position, approval date)
     let staffList: any[] = []
     let approvedAt: string | null = null
     let approverPosition: string | null = null
-    let memoBodyUserId: string | null = null
+    let storedLocationName: string = ""
+    let storedPosition: string = ""
+
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        const rawList: any[] = body.staffList || body.staff || []
-        // Enrich each staff record — position and location come from memo_body, not memo columns
-        staffList = rawList.map((s: any) => ({
-          ...s,
-          position: s.position || s.rank || "",
-          location_name: s.location_name || s.assigned_location_name || s.location || s.station || "",
-        }))
-        // Use the approval date stored at approval time — NOT today's date
-        approvedAt = body.approver?.approved_at || null
-        approverPosition = body.selectedSigner?.position || body.approver?.position || null
+        // memo_body stores individual staff fields — NOT a staffList array
+        storedLocationName = body.staff_location_name || body.assigned_location_name || ""
+        storedPosition     = body.staff_position || body.position || ""
+        approvedAt         = body.approver?.approved_at || null
+        approverPosition   = body.selectedSigner?.position || body.approver?.position || null
         if (approverPosition) {
-          // Override signerName with the stored approver name from memo_body
           const approverName = body.approver?.name || body.selectedSigner?.name
           if (approverName) signerName = approverName
         }
-        // Keep track of user_id stored in body for live location lookup
-        memoBodyUserId = body.staff_user_id || body.user_id || null
       } catch (e) {
         console.warn("[v0] Could not parse memo_body")
       }
     }
 
-    // ── Live-enrich staffList location from geofence_locations if missing ────
-    // Fetch assigned locations for ALL staff in the list from user_profiles and geofence_locations
-    if (staffList.length > 0) {
-      // For each staff item, try to fetch their location if missing
-      const enrichedList = await Promise.all(
-        staffList.map(async (s: any) => {
-          // Skip if location already populated
-          if (s.location_name) return s
+    // ── Always fetch live staff location via memo.staff_id (UUID primary key) ──
+    // memo.staff_id is stored reliably in leave_payment_memos and joins directly
+    // to user_profiles.id — this is the definitive source for station/location.
+    let liveLocationName = ""
+    let livePosition     = ""
 
-          // Try to find the staff by employee_id or name in user_profiles
-          let staffProfile = null
-          
-          if (s.employeeId) {
-            const { data: byEmpId } = await admin
-              .from("user_profiles")
-              .select("assigned_location_id, position")
-              .eq("employee_id", s.employeeId)
-              .maybeSingle()
-            staffProfile = byEmpId
-          }
+    if (memo.staff_id) {
+      const { data: staffProfile } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name, employee_id, position, assigned_location_id")
+        .eq("id", memo.staff_id)
+        .maybeSingle()
 
-          // If still not found and we have a name, try searching by name (fallback)
-          if (!staffProfile && s.name) {
-            const nameParts = s.name.trim().split(/\s+/)
-            if (nameParts.length >= 2) {
-              const firstName = nameParts[0]
-              const lastName = nameParts[nameParts.length - 1]
-              const { data: byName } = await admin
-                .from("user_profiles")
-                .select("assigned_location_id, position")
-                .eq("first_name", firstName)
-                .eq("last_name", lastName)
-                .maybeSingle()
-              staffProfile = byName
-            }
-          }
+      if (staffProfile) {
+        livePosition = staffProfile.position || ""
 
-          // If we found a profile with assigned_location_id, look up the location name
-          if (staffProfile?.assigned_location_id) {
-            const { data: location } = await admin
-              .from("geofence_locations")
-              .select("name")
-              .eq("id", staffProfile.assigned_location_id)
-              .maybeSingle()
-
-            return {
-              ...s,
-              location_name: location?.name || s.location_name || "",
-              position: s.position || staffProfile.position || "",
-            }
-          }
-
-          return s
-        })
-      )
-      staffList = enrichedList
-    } else if (memoBodyUserId || memo.user_id) {
-      // Single-staff memo fallback — fetch location for one user
-      const userIdForLocation = memoBodyUserId || memo.user_id || null
-      if (userIdForLocation) {
-        const { data: liveProfile } = await admin
-          .from("user_profiles")
-          .select("first_name, last_name, employee_id, position, assigned_location_id")
-          .eq("id", userIdForLocation)
-          .maybeSingle()
-
-        if (liveProfile?.assigned_location_id) {
-          const { data: liveLocation } = await admin
+        if (staffProfile.assigned_location_id) {
+          const { data: locationRow } = await admin
             .from("geofence_locations")
             .select("name")
-            .eq("id", liveProfile.assigned_location_id)
+            .eq("id", staffProfile.assigned_location_id)
             .maybeSingle()
 
-          const liveLoc = liveLocation?.name || ""
-          const livePos = liveProfile.position || ""
-
-          staffList = [{
-            name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
-            employeeId: liveProfile.employee_id || memo.staff_number || "",
-            position: livePos,
-            location_name: liveLoc,
-            leaveDate: "",
-          }]
+          liveLocationName = locationRow?.name || ""
         }
       }
     }
+
+    // Resolve final station — prefer live DB value, fall back to stored memo_body value
+    const stationName  = liveLocationName  || storedLocationName  || ""
+    const positionName = livePosition      || storedPosition       || ""
+
+    // Build the single-staff row for the PDF table
+    staffList = [{
+      name:          (memo.staff_name || "").toUpperCase(),
+      employeeId:    memo.staff_number || "",
+      position:      positionName,
+      location_name: stationName,
+      leaveDate:     fmtDate(memo.leave_period_start),
+    }]
 
     // The memo date is the approval date; fall back to created_at only if not yet approved
     const memoDateStr = approvedAt || memo.created_at
@@ -343,34 +291,8 @@ export async function GET(request: NextRequest) {
 
     // === STAFF TABLE ===
     // Build fallback single-staff row extracting position/location from memo_body if needed
-    const fallbackPosition = (() => { 
-      try { 
-        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // staff_position is stored at top level in memoBody (set during submit-memo)
-        return b?.staff_position || b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" 
-      } catch { 
-        return "" 
-      } 
-    })()
-    const fallbackLocation = (() => { 
-      try { 
-        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // staff_location_name is stored at top level in memoBody (set during submit-memo)
-        return b?.staff_location_name || b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" 
-      } catch { 
-        return "" 
-      } 
-    })()
-
-    const tableData = (staffList.length > 0 ? staffList : [
-      {
-        name: memo.staff_name,
-        employeeId: memo.staff_number,
-        position: fallbackPosition,
-        location_name: fallbackLocation,
-        leaveDate: fmtDate(memo.leave_period_start),
-      },
-    ]).map((s: any, idx: number) => [
+    // staffList is always populated by the live DB lookup above
+    const tableData = staffList.map((s: any, idx: number) => [
       String(idx + 1),
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",
