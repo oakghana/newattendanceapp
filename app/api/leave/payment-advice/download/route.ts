@@ -287,13 +287,11 @@ export async function GET(request: NextRequest) {
       String(idx + 1),
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",
-      s.position || s.rank || "",
-      s.location_name || s.assigned_location_name || s.location || s.station || s.workStation || "",
       s.leaveDate || fmtDate(memo.leave_period_start),
     ])
 
     autoTable(doc, {
-      head: [["NO", "NAME", "S/NO", "POSITION", "LOCATION", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "LEAVE DATE"]],
       body: tableData,
       startY: y,
       margin: margin,
@@ -312,11 +310,9 @@ export async function GET(request: NextRequest) {
       },
       columnStyles: {
         0: { cellWidth: 12, halign: "center" },
-        1: { cellWidth: 32, halign: "left" },
-        2: { cellWidth: 20, halign: "center" },
-        3: { cellWidth: 23, halign: "left" },
-        4: { cellWidth: 23, halign: "left" },
-        5: { cellWidth: 22, halign: "center" },
+        1: { cellWidth: 50, halign: "left" },
+        2: { cellWidth: 28, halign: "center" },
+        3: { cellWidth: 40, halign: "center" },
       },
       alternateRowStyles: { fillColor: [245, 245, 245] },
     })
