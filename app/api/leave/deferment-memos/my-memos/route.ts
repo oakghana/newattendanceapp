@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 /**
@@ -8,12 +8,14 @@ import { NextResponse } from "next/server"
  */
 export async function GET() {
   try {
+    // Use createClient for auth (session-aware), createAdminClient for DB queries
+    const supabaseAuth = await createClient()
     const supabase = await createAdminClient()
     
-    // Get current user
+    // Get current user — MUST use session-aware client
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseAuth.auth.getUser()
     
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

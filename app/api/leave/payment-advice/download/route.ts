@@ -77,9 +77,16 @@ export async function GET(request: NextRequest) {
       .eq("id", memoId)
       .maybeSingle()
 
+    if (error) {
+      console.error("[v0] Payment advice DB error:", error)
+      return NextResponse.json(
+        { error: "Failed to fetch memo", details: error.message },
+        { status: 500 }
+      )
+    }
+
     if (!memo) {
-      // Fallback: try matching by staff_id for memos created before staff_id was stored
-      console.error("[v0] Memo not found by id:", memoId, error)
+      console.error("[v0] Memo not found by id:", memoId)
       return NextResponse.json({ error: "Memo not found" }, { status: 404 })
     }
 
