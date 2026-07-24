@@ -7,14 +7,17 @@ import { FileText, Download, Calendar, AlertCircle, Loader2 } from "lucide-react
 
 interface ApprovedDeferment {
   id: string
-  user_id: string
-  original_leave_period_start: string
-  original_leave_period_end: string
-  requested_deferment_year: number
-  reason: string
+  staff_id: string
+  original_leave_period_start: string | null
+  original_leave_period_end: string | null
+  requested_deferment_year: number | null
+  deferment_start_date: string | null
+  deferment_end_date: string | null
+  reason: string | null
   hr_office_decision: string
-  hr_office_reviewed_at: string
+  hr_office_reviewed_at: string | null
   created_at: string
+  updated_at: string | null
 }
 
 export function StaffApprovedDeferments() {
@@ -128,9 +131,11 @@ export function StaffApprovedDeferments() {
       <CardContent className="py-4">
         <div className="grid gap-3">
           {deferments.map((deferment) => {
-            const origStart = new Date(deferment.original_leave_period_start).toLocaleDateString("en-GB")
-            const origEnd = new Date(deferment.original_leave_period_end).toLocaleDateString("en-GB")
-            const approvedDate = new Date(deferment.hr_office_reviewed_at).toLocaleDateString("en-GB")
+            const fmtD = (d: string | null) =>
+              d ? new Date(d).toLocaleDateString("en-GB") : "N/A"
+            const origStart = fmtD(deferment.original_leave_period_start)
+            const origEnd = fmtD(deferment.original_leave_period_end)
+            const approvedDate = fmtD(deferment.hr_office_reviewed_at)
 
             return (
               <div key={deferment.id} className="border border-teal-200 rounded-lg p-4 bg-white flex items-start justify-between gap-4">

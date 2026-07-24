@@ -19,13 +19,15 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Fetch approved deferment memos for this staff member
-    // These memos were auto-generated when HR approved the deferment request
+    // Fetch approved deferment requests for this staff member
     const { data: defermentMemos, error: deferErr } = await supabase
       .from("leave_deferment_requests")
       .select(`
         id,
         user_id,
+        original_leave_period_start,
+        original_leave_period_end,
+        requested_deferment_year,
         deferment_start_date,
         deferment_end_date,
         reason,
@@ -47,16 +49,19 @@ export async function GET() {
       )
     }
 
-    // Map to memo format for display
+    // Map to memo format for display — guard all date fields against null
     const memos = defermentMemos?.map((memo: any) => ({
       id: memo.id,
       type: "deferment",
       staff_id: memo.user_id,
-      title: "Deferment Approved",
-      description: `Your leave deferment from ${new Date(memo.deferment_start_date).toLocaleDateString()} to ${new Date(memo.deferment_end_date).toLocaleDateString()} has been approved`,
-      status: memo.status,
-      reason: memo.reason,
-      approved_at: memo.hr_office_reviewed_at,
+      original_leave_period_start: memo.original_leave_period_start || null,
+      original_leave_period_end: memo.original_leave_period_end || null,
+      requested_deferment_year: memo.requested_deferment_year || null,
+      deferment_start_date: memo.deferment_start_date || null,
+      deferment_end_date: memo.deferment_end_date || null,
+      reason: memo.reason || null,
+      hr_office_decision: memo.hr_office_decision,
+      hr_office_reviewed_at: memo.hr_office_reviewed_at || memo.updated_at,
       created_at: memo.created_at,
       updated_at: memo.updated_at,
     })) || []

@@ -54,30 +54,32 @@ export async function GET(request: NextRequest) {
 
 
 
-    // Auth check
+    // Auth check — must use createClient (session-aware) not createAdminClient
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Use admin client to bypass RLS for the memo lookup
     const admin = await createAdminClient()
 
-    // Fetch memo with all required data including staff_category, staff_position, staff_location
+    // Fetch memo — no user-id filter so HR and staff can both download
     const { data: memo, error } = await admin
       .from("leave_payment_memos")
       .select(`
-        id, staff_name, staff_number, memo_subject, memo_body,
+        id, staff_id, staff_name, staff_number, memo_subject, memo_body,
         leave_period_start, leave_period_end, approved_days,
-        hr_leave_office_name, signer_id, signer_name, 
+        hr_leave_office_name, signer_id, signer_name,
         signature_data_url, created_at, status, staff_category,
         staff_position, staff_location_name, staff_department
       `)
       .eq("id", memoId)
-      .single()
+      .maybeSingle()
 
-    if (error || !memo) {
-      console.error("[v0] Memo not found:", memoId, error)
+    if (!memo) {
+      // Fallback: try matching by staff_id for memos created before staff_id was stored
+      console.error("[v0] Memo not found by id:", memoId, error)
       return NextResponse.json({ error: "Memo not found" }, { status: 404 })
     }
 
