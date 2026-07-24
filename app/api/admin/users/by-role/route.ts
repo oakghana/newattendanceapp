@@ -12,18 +12,27 @@ interface UserProfile {
 
 export async function GET(request: NextRequest) {
   try {
-    const role = request.nextUrl.searchParams.get('role')
-    if (!role) {
-      return NextResponse.json({ error: 'role parameter required' }, { status: 400 })
+    // Support both ?role=X (single) and ?roles=X,Y,Z (multi)
+    const roleSingle = request.nextUrl.searchParams.get('role')
+    const rolesParam = request.nextUrl.searchParams.get('roles')
+
+    const rolesRaw = rolesParam
+      ? rolesParam.split(',').map((r) => r.trim()).filter(Boolean)
+      : roleSingle
+        ? [roleSingle.trim()]
+        : []
+
+    if (rolesRaw.length === 0) {
+      return NextResponse.json({ error: 'role or roles parameter required' }, { status: 400 })
     }
 
     const admin = await createAdminClient()
 
-    // Query user_profiles for users with the specified role (simple select without join)
+    // Query user_profiles for users with any of the specified roles
     const { data, error } = await admin
       .from('user_profiles')
       .select('id, email, first_name, last_name, role, department_id')
-      .eq('role', role)
+      .in('role', rolesRaw)
       .order('first_name', { ascending: true })
 
     if (error) {
@@ -31,9 +40,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
+    // Deduplicate by id in case a user somehow appears multiple times
+    const seen = new Set<string>()
+    const uniqueUsers = (data || []).filter((user: UserProfile) => {
+      if (seen.has(user.id)) return false
+      seen.add(user.id)
+      return true
+    })
+
     return NextResponse.json({
       success: true,
-      data: (data || []).map((user: UserProfile) => ({
+      data: uniqueUsers.map((user: UserProfile) => ({
         id: user.id,
         email: user.email,
         first_name: user.first_name || '',

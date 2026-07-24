@@ -103,121 +103,10 @@ async function generateMainMemo(
   const margin = 20
   const contentWidth = pageWidth - 2 * margin
 
-  // ── Load QCC Logo ──────────────────────────────────────────────────────────
-  let logoDataUrl: string | null = null
-  try {
-    const logoResponse = await fetch("/logos/qcc-logo.png")
-    if (logoResponse.ok) {
-      const logoBlob = await logoResponse.blob()
-      const arrayBuffer = await logoBlob.arrayBuffer()
-      const uint8Array = new Uint8Array(arrayBuffer)
-      let binary = ""
-      for (let i = 0; i < uint8Array.length; i++) binary += String.fromCharCode(uint8Array[i])
-      logoDataUrl = `data:image/png;base64,${btoa(binary)}`
-    }
-  } catch {
-    // logo optional
-  }
+  // ── Determine memo format ──────────────────────────────────────────────────
+  const isPaymentMemo = memoData.memoType === "payment"
 
-  // ── Header: Logo LEFT, Org name CENTRE, Address RIGHT ────────────────────
-  const logoSize = 24 // mm square
-  const logoX = margin
-  const logoY = 13
-
-  if (logoDataUrl) {
-    doc.addImage(logoDataUrl, "PNG", logoX, logoY, logoSize, logoSize)
-  }
-
-  // Org name centred
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(13)
-  doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, 19, { align: "center" })
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(10)
-  doc.text("(COCOBOD)", pageWidth / 2, 25, { align: "center" })
-
-  // Address right
-  doc.setFontSize(8.5)
-  doc.text("P.O. Box M54", pageWidth - margin, 15, { align: "right" })
-  doc.text("Accra", pageWidth - margin, 20, { align: "right" })
-  doc.text("Ghana", pageWidth - margin, 25, { align: "right" })
-
-  let yPos = logoY + logoSize + 3
-
-  // ── Solid green accent bar ─────────────────────────────────────────────────
-  doc.setFillColor(26, 110, 26) // #1a6e1a
-  doc.rect(margin, yPos, contentWidth, 1.5, "F")
-  yPos += 6
-
-  // ── Ref + Date block — green text ─────────────────────────────────────────
-  doc.setFontSize(9)
-  doc.setTextColor(26, 110, 26) // green
-  const today = fmtDateOrdinal(new Date().toISOString())
-  doc.text(`Our Ref No:  ${memoData.refNo || "QCC/HRD/AL/" + new Date().getFullYear() + "/"}`, margin, yPos)
-  doc.setTextColor(0)
-  doc.text(`Date:  ${memoData.date || today}`, pageWidth - margin, yPos, { align: "right" })
-  yPos += 5
-  doc.setTextColor(26, 110, 26)
-  doc.text("Your Ref No:  ____________________________", margin, yPos)
-  doc.setTextColor(0)
-
-  // Thin rule
-  yPos += 5
-  doc.setDrawColor(180)
-  doc.setLineWidth(0.3)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 6
-
-  // ── Addressee block ────────────────────────────────────────────────────────
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(10)
-  doc.setTextColor(0)
-  doc.text(memoData.to.toUpperCase(), margin, yPos)
-  yPos += 5
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
-  doc.setTextColor(26, 110, 26) // green for position + dept lines
-  if (memoData.from) {
-    const fromLines = doc.splitTextToSize(memoData.from.toUpperCase(), contentWidth)
-    fromLines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 4.5 })
-  }
-  doc.setTextColor(0)
-  yPos += 3
-
-  // ── THRO block — green text ────────────────────────────────────────────────
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(9)
-  doc.setTextColor(0)
-  doc.text("THRO:", margin, yPos)
-  doc.setTextColor(26, 110, 26)
-  doc.text("  THE DEPARTMENT HEAD", margin + 14, yPos)
-  yPos += 4.5
-  doc.text("QUALITY CONTROL COMPANY LIMITED", margin + 14, yPos)
-  yPos += 4.5
-  doc.setFont("helvetica", "normal")
-  doc.text((memoData.from || "").toUpperCase(), margin + 14, yPos)
-  doc.setTextColor(0)
-  yPos += 8
-
-  // ── Subject (bold + underline) ─────────────────────────────────────────────
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(10)
-  const subjectText = memoData.subject.toUpperCase()
-  const subjectLines = doc.splitTextToSize(subjectText, contentWidth)
-  subjectLines.forEach((line: string, i: number) => {
-    doc.text(line, margin, yPos)
-    // underline
-    const textW = doc.getTextWidth(line)
-    doc.setDrawColor(0)
-    doc.setLineWidth(0.3)
-    doc.line(margin, yPos + 1, margin + textW, yPos + 1)
-    yPos += i < subjectLines.length - 1 ? 6 : 8
-  })
-
-  // ── Body paragraphs ────────────────────────────────────────────────────────
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9.5)
-
+  // ── Body helpers ────────────────────────────────────────────────────────────
   const renderParagraphs = (paras: string[]) => {
     paras.forEach(p => {
       if (yPos > pageHeight - margin - 50) { doc.addPage(); yPos = margin }
@@ -227,56 +116,268 @@ async function generateMainMemo(
     })
   }
 
-  // For individual leave memos (no staffList or staffList ≤6 and not hasAttachment),
-  // use the official QCC opening wording instead of regex-parsing the body blob.
   const isIndividualLeaveMemo = !memoData.staffList || (memoData.staffList.length === 0)
 
-  if (isIndividualLeaveMemo) {
-    // Derive leave type and year from subject — subject is like "ANNUAL LEAVE ADVICE FOR 2025-2026"
-    const subjectUpper = (memoData.subject || "").toUpperCase()
-    const leaveTypeMatch = subjectUpper.match(/^(.+?)\s+LEAVE ADVICE/)
-    const yearMatch = subjectUpper.match(/FOR\s+(.+)$/)
-    const leaveTypeName = leaveTypeMatch ? leaveTypeMatch[1].toLowerCase() : "annual"
-    const yearLabel = yearMatch ? yearMatch[1] : new Date().getFullYear().toString()
-    const openingBody = `In accordance with COCOBOD's vacation leave policy, we wish to inform you that approval has been granted for you to proceed on your ${leaveTypeName} leave in respect of the year January to December ${yearLabel}.`
-    const lines = doc.splitTextToSize(openingBody, contentWidth)
-    lines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 5 })
-    yPos += 4
-    doc.text("Your leave details are shown below.", margin, yPos)
+  let yPos: number
+
+  if (isPaymentMemo) {
+    // ══════════════════════════════════════════════════════════════════════════
+    // PAYMENT ADVICE — MEMORANDUM FORMAT (Image 4 style)
+    // Left: Company block | Right: MEMORANDUM + DATE
+    // Then REF. NO, horizontal rule, TO/FROM/SUBJECT, body, TABLE, closing
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Company name block — top left
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(12)
+    doc.text("QUALITY CONTROL COMPANY LTD.", margin, 18)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9.5)
+    doc.text("(COCOBOD)", margin, 24)
+    doc.text("P. O. BOX M54", margin, 30)
+    doc.text("ACCRA", margin, 36)
+
+    // MEMORANDUM — top right with vertical left border bar
+    const memoLabelX = pageWidth / 2 + 5
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(18)
+    doc.text("MEMORANDUM", memoLabelX, 20)
+
+    // Vertical bar to left of MEMORANDUM label
+    doc.setDrawColor(0)
+    doc.setLineWidth(1.5)
+    doc.line(memoLabelX - 4, 12, memoLabelX - 4, 38)
+
+    // DATE below MEMORANDUM
+    const today = fmtDateOrdinal(new Date().toISOString())
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text(`DATE:  ${memoData.date || today}`, memoLabelX, 30)
+
+    yPos = 44
+
+    // REF. NO line
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.text(`REF. NO:  ${memoData.refNo || "QCC/HR/PA/" + new Date().getFullYear() + "/"}`, margin, yPos)
+    doc.setFont("helvetica", "normal")
+    yPos += 6
+
+    // Horizontal rule — thick black
+    doc.setDrawColor(0)
+    doc.setLineWidth(0.8)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
     yPos += 8
-  } else {
-    // Group memo with staff list — use the provided body text
-    const paragraphs = memoData.body
+
+    // TO: / FROM: / SUBJECT: — tabular, bold labels
+    const labelX = margin
+    const valueX = margin + 22
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.text("TO:", labelX, yPos)
+    doc.setFont("helvetica", "normal")
+    doc.text(memoData.to.toUpperCase(), valueX, yPos)
+    yPos += 7
+
+    doc.setFont("helvetica", "bold")
+    doc.text("FROM:", labelX, yPos)
+    doc.setFont("helvetica", "normal")
+    doc.text((memoData.from || "").toUpperCase(), valueX, yPos)
+    yPos += 7
+
+    doc.setFont("helvetica", "bold")
+    doc.text("SUBJECT:", labelX, yPos)
+    doc.setFont("helvetica", "normal")
+    const subjectVal = memoData.subject.toUpperCase()
+    const subjectLines2 = doc.splitTextToSize(subjectVal, contentWidth - 25)
+    subjectLines2.forEach((line: string, i: number) => {
+      doc.text(line, valueX, yPos + i * 5.5)
+    })
+    yPos += subjectLines2.length * 5.5 + 4
+
+    // Body paragraphs — strip "We count on your co-operation." to place it after the table
+    const allParas = memoData.body
       .split(/\n{2,}/)
-      .map(p => p.replace(/\n/g, " ").trim())
+      .map((p: string) => p.replace(/\n/g, " ").trim())
       .filter(Boolean)
-    const closingMarkers = ["We wish you", "pleasant", "relaxing vacation", "resume duty"]
-    const closingIdx = paragraphs.findIndex(p => closingMarkers.some(m => p.includes(m)))
-    const openingOnly = closingIdx >= 0 ? paragraphs.slice(0, closingIdx) : paragraphs
-    renderParagraphs(openingOnly)
+    // Exclude closing markers (they go after the table)
+    const closingKeywords = ["We count on your co-operation", "We, therefore, kindly request"]
+    const bodyParas = allParas.filter((p: string) => !closingKeywords.some(k => p.includes(k)))
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9.5)
+    renderParagraphs(bodyParas)
     yPos += 2
+
+  } else {
+    // ══════════════════════════════════════════════════════════════════════════
+    // LEAVE ADVICE / DEFERMENT — Original QCC letterhead format
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Load QCC Logo
+    let logoDataUrl: string | null = null
+    try {
+      const logoResponse = await fetch("/logos/qcc-logo.png")
+      if (logoResponse.ok) {
+        const logoBlob = await logoResponse.blob()
+        const arrayBuffer = await logoBlob.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+        let binary = ""
+        for (let i = 0; i < uint8Array.length; i++) binary += String.fromCharCode(uint8Array[i])
+        logoDataUrl = `data:image/png;base64,${btoa(binary)}`
+      }
+    } catch {
+      // logo optional
+    }
+
+    const logoSize = 24
+    const logoX = margin
+    const logoY = 13
+    if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", logoX, logoY, logoSize, logoSize)
+
+    // Org name centred
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(13)
+    doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, 19, { align: "center" })
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text("(COCOBOD)", pageWidth / 2, 25, { align: "center" })
+
+    // Address right
+    doc.setFontSize(8.5)
+    doc.text("P.O. Box M54", pageWidth - margin, 15, { align: "right" })
+    doc.text("Accra", pageWidth - margin, 20, { align: "right" })
+    doc.text("Ghana", pageWidth - margin, 25, { align: "right" })
+
+    yPos = logoY + logoSize + 3
+
+    // Green accent bar
+    doc.setFillColor(26, 110, 26)
+    doc.rect(margin, yPos, contentWidth, 1.5, "F")
+    yPos += 6
+
+    // Ref + Date block — green text
+    doc.setFontSize(9)
+    doc.setTextColor(26, 110, 26)
+    const todayStr = fmtDateOrdinal(new Date().toISOString())
+    doc.text(`Our Ref No:  ${memoData.refNo || "QCC/HRD/AL/" + new Date().getFullYear() + "/"}`, margin, yPos)
+    doc.setTextColor(0)
+    doc.text(`Date:  ${memoData.date || todayStr}`, pageWidth - margin, yPos, { align: "right" })
+    yPos += 5
+
+    // Thin rule
+    yPos += 5
+    doc.setDrawColor(180)
+    doc.setLineWidth(0.3)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 6
+
+    // TO: / FROM: labels
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(0)
+    doc.text("TO:", margin, yPos)
+    doc.setFont("helvetica", "normal")
+    doc.text(memoData.to.toUpperCase(), margin + 15, yPos)
+    yPos += 6
+
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(0)
+    doc.text("FROM:", margin, yPos)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(26, 110, 26)
+    if (memoData.from) {
+      const fromLines = doc.splitTextToSize(memoData.from.toUpperCase(), contentWidth - 20)
+      fromLines.forEach((line: string) => { doc.text(line, margin + 15, yPos); yPos += 4.5 })
+    }
+    doc.setTextColor(0)
+    yPos += 3
+
+    // THRO block — only for individual leave advice memos
+    if (memoData.memoType === "general" && isIndividualLeaveMemo) {
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.setTextColor(0)
+      doc.text("THRO:", margin, yPos)
+      doc.setTextColor(26, 110, 26)
+      doc.text("  THE DEPARTMENT HEAD", margin + 14, yPos)
+      yPos += 4.5
+      doc.text("QUALITY CONTROL COMPANY LIMITED", margin + 14, yPos)
+      yPos += 4.5
+      doc.setFont("helvetica", "normal")
+      doc.text((memoData.from || "").toUpperCase(), margin + 14, yPos)
+      doc.setTextColor(0)
+      yPos += 8
+    }
+
+    // Subject (bold + underline)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    const subjectText = memoData.subject.toUpperCase()
+    const subjectLines = doc.splitTextToSize(subjectText, contentWidth)
+    subjectLines.forEach((line: string, i: number) => {
+      doc.text(line, margin, yPos)
+      const textW = doc.getTextWidth(line)
+      doc.setDrawColor(0)
+      doc.setLineWidth(0.3)
+      doc.line(margin, yPos + 1, margin + textW, yPos + 1)
+      yPos += i < subjectLines.length - 1 ? 6 : 8
+    })
+
+    // Body paragraphs
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9.5)
+
+    if (isIndividualLeaveMemo) {
+      const subjectUpper = (memoData.subject || "").toUpperCase()
+      const leaveTypeMatch = subjectUpper.match(/^(.+?)\s+LEAVE ADVICE/)
+      const yearMatch = subjectUpper.match(/FOR\s+(.+)$/)
+      const leaveTypeName = leaveTypeMatch ? leaveTypeMatch[1].toLowerCase() : "annual"
+      const yearLabel = yearMatch ? yearMatch[1] : new Date().getFullYear().toString()
+      const openingBody = `In accordance with COCOBOD's vacation leave policy, we wish to inform you that approval has been granted for you to proceed on your ${leaveTypeName} leave in respect of the year January to December ${yearLabel}.`
+      const lines = doc.splitTextToSize(openingBody, contentWidth)
+      lines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 5 })
+      yPos += 4
+      doc.text("Your leave details are shown below.", margin, yPos)
+      yPos += 8
+    } else {
+      const paragraphs = memoData.body
+        .split(/\n{2,}/)
+        .map((p: string) => p.replace(/\n/g, " ").trim())
+        .filter(Boolean)
+      const closingMarkers = ["We wish you", "pleasant", "relaxing vacation", "resume duty"]
+      const closingIdx = paragraphs.findIndex((p: string) => closingMarkers.some(m => p.includes(m)))
+      const openingOnly = closingIdx >= 0 ? paragraphs.slice(0, closingIdx) : paragraphs
+      renderParagraphs(openingOnly)
+      yPos += 2
+    }
   }
 
   // ── Leave details table ────────────────────────────────────────────────────
   if (memoData.staffList && memoData.staffList.length > 0 && !hasAttachment) {
     // Individual staff leave table (payment/group memos)
+    // Columns: NO, NAME, S/NO, RANK, STATION, LEAVE DATE — matches official QCC payment advice format
     const tableData = memoData.staffList.map(staff => [
       String(staff.no),
       staff.name,
       staff.employeeId,
-      staff.position,
-      staff.department,
+      (staff as any).rank || (staff as any).position || staff.department || "",
+      (staff as any).station || (staff as any).location_name || (staff as any).assigned_location_name || (staff as any).location || "",
       staff.leaveDate,
     ])
     autoTable(doc, {
       startY: yPos,
-      head: [["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "RANK", "STATION", "LEAVE DATE"]],
       body: tableData,
       margin: { left: margin, right: margin },
       theme: "grid",
-      styles: { fontSize: 8.5, halign: "left", cellPadding: 2.5, lineColor: [180, 180, 180], lineWidth: 0.3 },
+      styles: { fontSize: 8, halign: "left", cellPadding: 2.5, lineColor: [180, 180, 180], lineWidth: 0.3 },
       headStyles: { fillColor: [60, 40, 10], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 8 },
-      columnStyles: { 0: { halign: "center" }, 2: { halign: "center" }, 5: { halign: "center" } },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 10 },
+        2: { halign: "center", cellWidth: 22 },
+        5: { halign: "center", cellWidth: 22 },
+      },
     })
     yPos = (doc as any).lastAutoTable.finalY + 6
   } else if (!hasAttachment) {
@@ -327,25 +428,37 @@ async function generateMainMemo(
     yPos += 2
   }
 
-  // ── Resume date paragraph — official QCC wording ──────────────────────────
-  // Extract resume date from body text (e.g. "return to work on Monday, 25 August 2026")
-  if (isIndividualLeaveMemo) {
+  // ── Post-table closing ────────────────────────────────────────────────────
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9.5)
+
+  if (isPaymentMemo) {
+    // Payment memos: request paragraph then closing — both come AFTER the table
+    const isSingleStaff = (memoData.staffList?.length ?? 0) === 1
+    const requestText = isSingleStaff
+      ? "We, therefore, kindly request you to process and pay the staff leave allowance accordingly."
+      : "We, therefore, kindly request you to process and pay their leave allowance accordingly."
+    const requestLines = doc.splitTextToSize(requestText, contentWidth)
+    requestLines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 5 })
+    yPos += 3
+    doc.text("We count on your co-operation.", margin, yPos)
+    yPos += 6
+  } else if (isIndividualLeaveMemo) {
+    // Individual leave advice — resume date + QCC closing wording
     const resumeMatch = memoData.body.match(/resume(?:\s+duty)?(?:\s+on)?\s+([A-Za-z]+day,\s+[\w\s,]+\d{4})/i)
       || memoData.body.match(/return to work on\s+([A-Za-z]+day,\s+[\w\s,]+\d{4})/i)
     const resumeText = resumeMatch ? resumeMatch[1].trim() : null
     if (resumeText) {
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5)
       doc.text(`You are to resume duty on ${resumeText}.`, margin, yPos)
       yPos += 8
     }
-    // Closing — official QCC wording
     doc.text("We wish you a pleasant and relaxing vacation.", margin, yPos)
     yPos += 6
   } else {
-    // Group memos — use parsed closing from body
-    const paragraphs = memoData.body.split(/\n{2,}/).map(p => p.replace(/\n/g, " ").trim()).filter(Boolean)
+    // Other group memos — use parsed closing from body
+    const paragraphs = memoData.body.split(/\n{2,}/).map((p: string) => p.replace(/\n/g, " ").trim()).filter(Boolean)
     const closingMarkers = ["We wish you", "pleasant", "relaxing vacation", "resume duty"]
-    const closingIdx = paragraphs.findIndex(p => closingMarkers.some(m => p.includes(m)))
+    const closingIdx = paragraphs.findIndex((p: string) => closingMarkers.some((m: string) => p.includes(m)))
     const closingOnly = closingIdx >= 0 ? paragraphs.slice(closingIdx) : []
     renderParagraphs(closingOnly)
   }

@@ -786,6 +786,12 @@ export function HrApprovalsTab() {
   const [locFilter, setLocFilter] = useState('all')
   const [hrApproveSubTab, setHrApproveSubTab] = useState<'pending' | 'approved' | 'deferments' | 'recalls'>('pending')
 
+  // Approved payment advice memos state
+  const [approvedPaymentMemos, setApprovedPaymentMemos] = useState<any[]>([])
+  const [loadingApprovedPayment, setLoadingApprovedPayment] = useState(false)
+  const [approvedPaymentMonth, setApprovedPaymentMonth] = useState('')
+  const [downloadingMemoId, setDownloadingMemoId] = useState<string | null>(null)
+
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
     setLoading(true)
@@ -812,6 +818,58 @@ export function HrApprovalsTab() {
   }, [toast])
 
   useEffect(() => { fetchRequests() }, [fetchRequests])
+
+  // ── Fetch approved payment advice memos ──────────────────────────────────
+  const fetchApprovedPaymentMemos = useCallback(async (month?: string) => {
+    setLoadingApprovedPayment(true)
+    try {
+      const url = month
+        ? `/api/leave/payment-advice/approved-memos?month=${month}`
+        : '/api/leave/payment-advice/approved-memos'
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setApprovedPaymentMemos(data.memos || [])
+    } catch (err) {
+      console.error('[v0] fetchApprovedPaymentMemos error:', err)
+      setApprovedPaymentMemos([])
+    } finally {
+      setLoadingApprovedPayment(false)
+    }
+  }, [])
+
+  // Fetch when switching to approved tab or month changes
+  useEffect(() => {
+    if (hrApproveSubTab === 'approved') {
+      fetchApprovedPaymentMemos(approvedPaymentMonth || undefined)
+    }
+  }, [hrApproveSubTab, approvedPaymentMonth, fetchApprovedPaymentMemos])
+
+  // ── Download approved payment memo ───────────────────────────────────────
+  const handleDownloadMemo = async (memoId: string, staffName: string) => {
+    setDownloadingMemoId(memoId)
+    try {
+      const res = await fetch(`/api/leave/payment-advice/download?memo_id=${memoId}`)
+      if (!res.ok) {
+        toast({ title: 'Download failed', description: 'Could not download memo', variant: 'destructive' })
+        return
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename="([^"]+)"/)
+      const filename = match?.[1] ?? `payment-advice-${staffName.replace(/\s+/g, '-')}.pdf`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast({ title: 'Download failed', description: 'Network error', variant: 'destructive' })
+    } finally {
+      setDownloadingMemoId(null)
+    }
+  }
 
   // ── Approve ───────────────────────────────────────────────────────────────
   const handleApprove = async (reqId: string, note: string, subject: string, body: string) => {
@@ -1034,11 +1092,130 @@ export function HrApprovalsTab() {
 
       {/* Approved Payment Advice tab */}
       {hrApproveSubTab === 'approved' && (
-        <Card>
-          <CardContent className="py-8 text-center text-slate-600">
-            <p>Approved payment advice memos will appear here</p>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          {/* Month filter */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <Calendar className="h-4 w-4 text-slate-500" />
+            <label className="text-sm font-medium text-slate-700">Filter by Month:</label>
+            <input
+              type="month"
+              value={approvedPaymentMonth}
+              onChange={e => {
+                setApprovedPaymentMonth(e.target.value)
+              }}
+              className="text-sm border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+            {approvedPaymentMonth && (
+              <button
+                onClick={() => setApprovedPaymentMonth('')}
+                className="text-xs text-slate-500 hover:text-slate-700 underline"
+              >
+                Clear
+              </button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto gap-1.5"
+              onClick={() => fetchApprovedPaymentMemos(approvedPaymentMonth || undefined)}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          </div>
+
+          {loadingApprovedPayment ? (
+            <Card>
+              <CardContent className="py-12 flex items-center justify-center gap-2 text-slate-500">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Loading approved payment advice memos...
+              </CardContent>
+            </Card>
+          ) : approvedPaymentMemos.length === 0 ? (
+            <Card>
+              <CardContent className="py-14 text-center space-y-2">
+                <CheckCircle2 className="h-10 w-10 mx-auto text-green-400" />
+                <p className="text-sm text-slate-500">No approved payment advice memos found</p>
+                <p className="text-xs text-slate-400">
+                  {approvedPaymentMonth
+                    ? `No approved memos for ${approvedPaymentMonth}.`
+                    : 'Approved payment advice memos will appear here once memos are approved.'}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="pt-4 px-0 pb-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Staff Name</th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Staff No.</th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Subject</th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Signer</th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Status</th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Date</th>
+                        <th className="text-center py-3 px-4 font-semibold text-slate-700">Download</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {approvedPaymentMemos.map((memo: any) => (
+                        <tr key={memo.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 font-medium text-slate-900">{memo.staff_name}</td>
+                          <td className="py-3 px-4 text-slate-600 text-xs">{memo.staff_number}</td>
+                          <td className="py-3 px-4 text-slate-600 text-xs max-w-[200px] truncate" title={memo.memo_subject}>
+                            {memo.memo_subject}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 text-xs">
+                            {memo.signer_name || <span className="text-slate-400 italic">Pending</span>}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              memo.status === 'forwarded_to_accounts' || memo.status === 'acknowledged_by_accounts'
+                                ? 'bg-blue-100 text-blue-800'
+                                : memo.status === 'reviewed_by_hr' || memo.status === 'signed_by_hr_executive'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {memo.status === 'reviewed_by_hr' ? 'Approved by HR'
+                                : memo.status === 'signed_by_hr_executive' ? 'Signed'
+                                : memo.status === 'forwarded_to_accounts' ? 'Forwarded to Accounts'
+                                : memo.status === 'acknowledged_by_accounts' ? 'Acknowledged'
+                                : memo.status?.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-500 text-xs">
+                            {memo.updated_at
+                              ? new Date(memo.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                              : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              disabled={downloadingMemoId === memo.id}
+                              onClick={() => handleDownloadMemo(memo.id, memo.staff_name)}
+                            >
+                              {downloadingMemoId === memo.id
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <Download className="h-3 w-3" />}
+                              PDF
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-4 py-2 text-xs text-slate-500 border-t border-slate-100">
+                  Showing {approvedPaymentMemos.length} approved memo{approvedPaymentMemos.length !== 1 ? 's' : ''}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Deferments tab */}

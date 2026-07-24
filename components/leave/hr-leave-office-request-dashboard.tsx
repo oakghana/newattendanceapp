@@ -100,8 +100,8 @@ export function HRLeaveOfficeRequestDashboard() {
       setDefermentRequests(requestsData.defermentRequests || [])
       setRecallRequests(requestsData.recallRequests || [])
 
-      // Fetch HR executives — query the user_profiles table directly for hr_executive role
-      const execRes = await fetch('/api/admin/users/by-role?role=hr_executive')
+      // Fetch HR executives — query across all HR executive role variants using multi-role support
+      const execRes = await fetch('/api/admin/users/by-role?roles=hr_executive,manager_hr,director_hr')
       if (execRes.ok) {
         const execData = await execRes.json()
         const executives = (execData.data || execData.users || []).map((user: any) => ({
@@ -221,14 +221,8 @@ export function HRLeaveOfficeRequestDashboard() {
                 <p className="font-medium text-slate-700 truncate">{request.staff?.position}</p>
               </div>
               <div>
-                <p className="text-slate-500">Leave Type</p>
-                <p className="font-medium text-slate-700">{request.leave?.leave_type || 'Annual'}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Period</p>
-                <p className="font-medium text-slate-700 text-xs">
-                  {request.leave?.balance_period_start ? format(new Date(request.leave.balance_period_start), 'MMM yy') : 'N/A'}
-                </p>
+                <p className="text-slate-500">Submitted</p>
+                <p className="font-medium text-slate-700">{request.created_at ? format(new Date(request.created_at), 'dd MMM yyyy') : 'N/A'}</p>
               </div>
             </div>
 
@@ -448,29 +442,37 @@ export function HRLeaveOfficeRequestDashboard() {
                   {selectedRequest.data.staff?.employee_id} • {selectedRequest.data.department?.name}
                 </div>
                 <div className="text-slate-600">
-                  {selectedRequest.type === 'deferment' ? 'Deferment' : 'Recall'} •{' '}
-                  {selectedRequest.data.leave?.leave_type || 'Annual'} Leave
+                  {selectedRequest.type === 'deferment' ? 'Deferment Request' : 'Recall Request'}
+                  {selectedRequest.type === 'deferment' && selectedRequest.data.deferment_to_year
+                    ? ` — defer to ${selectedRequest.data.deferment_to_year}`
+                    : ''}
                 </div>
               </div>
 
               {/* Executive Selector */}
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-2 block">Select HR Executive *</label>
-                <Select value={selectedExecutive} onValueChange={setSelectedExecutive}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose an HR executive..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hrExecutives.map(exec => (
-                      <SelectItem key={exec.id} value={exec.id}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{exec.name}</span>
-                          <span className="text-xs text-slate-500">{exec.position}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {hrExecutives.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic py-2">
+                    No HR executives found. Ensure users with roles <span className="font-medium">hr_executive</span>, <span className="font-medium">manager_hr</span>, or <span className="font-medium">director_hr</span> are registered in the system.
+                  </p>
+                ) : (
+                  <Select value={selectedExecutive} onValueChange={setSelectedExecutive}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose an HR executive..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hrExecutives.map(exec => (
+                        <SelectItem key={exec.id} value={exec.id}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{exec.name}</span>
+                            <span className="text-xs text-slate-500">{exec.position}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Notes */}

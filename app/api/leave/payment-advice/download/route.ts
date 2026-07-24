@@ -54,29 +54,38 @@ export async function GET(request: NextRequest) {
 
 
 
-    // Auth check
+    // Auth check — must use createClient (session-aware) not createAdminClient
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Use admin client to bypass RLS for the memo lookup
     const admin = await createAdminClient()
 
-    // Fetch memo with all required data including staff_category
+    // Fetch memo — no user-id filter so HR and staff can both download
     const { data: memo, error } = await admin
       .from("leave_payment_memos")
       .select(`
-        id, staff_name, staff_number, memo_subject, memo_body,
+        id, staff_id, staff_name, staff_number, memo_subject, memo_body,
         leave_period_start, leave_period_end, approved_days,
-        hr_leave_office_name, signer_id, signer_name, 
+        hr_leave_office_name, signer_id, signer_name,
         signature_data_url, created_at, status, staff_category
       `)
       .eq("id", memoId)
-      .single()
+      .maybeSingle()
 
-    if (error || !memo) {
-      console.error("[v0] Memo not found:", memoId, error)
+    if (error) {
+      console.error("[v0] Payment advice DB error:", error)
+      return NextResponse.json(
+        { error: "Failed to fetch memo", details: error.message },
+        { status: 500 }
+      )
+    }
+
+    if (!memo) {
+      console.error("[v0] Memo not found by id:", memoId)
       return NextResponse.json({ error: "Memo not found" }, { status: 404 })
     }
 
@@ -121,10 +130,17 @@ export async function GET(request: NextRequest) {
     let staffList: any[] = []
     let approvedAt: string | null = null
     let approverPosition: string | null = null
+    let memoBodyUserId: string | null = null
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        staffList = body.staffList || body.staff || []
+        const rawList: any[] = body.staffList || body.staff || []
+        // Enrich each staff record — position and location come from memo_body, not memo columns
+        staffList = rawList.map((s: any) => ({
+          ...s,
+          position: s.position || s.rank || "",
+          location_name: s.location_name || s.assigned_location_name || s.location || s.station || "",
+        }))
         // Use the approval date stored at approval time — NOT today's date
         approvedAt = body.approver?.approved_at || null
         approverPosition = body.selectedSigner?.position || body.approver?.position || null
@@ -133,8 +149,50 @@ export async function GET(request: NextRequest) {
           const approverName = body.approver?.name || body.selectedSigner?.name
           if (approverName) signerName = approverName
         }
+        // Keep track of user_id stored in body for live location lookup
+        memoBodyUserId = body.staff_user_id || body.user_id || null
       } catch (e) {
         console.warn("[v0] Could not parse memo_body")
+      }
+    }
+
+    // ── Live-enrich staffList location from geofence_locations if missing ────
+    // This handles both single-staff memos and older memos that didn't store location_name
+    const userIdForLocation = memoBodyUserId || memo.user_id || memo.staff_id || null
+    if (userIdForLocation) {
+      const { data: liveProfile } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name, employee_id, position, assigned_location_id")
+        .eq("id", userIdForLocation)
+        .maybeSingle()
+
+      if (liveProfile?.assigned_location_id) {
+        const { data: liveLocation } = await admin
+          .from("geofence_locations")
+          .select("name")
+          .eq("id", liveProfile.assigned_location_id)
+          .maybeSingle()
+
+        const liveLoc = liveLocation?.name || ""
+        const livePos = liveProfile.position || ""
+
+        if (staffList.length === 0) {
+          // Single-staff memo — build the row from live data
+          staffList = [{
+            name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
+            employeeId: liveProfile.employee_id || memo.staff_number || "",
+            position: livePos,
+            location_name: liveLoc,
+            leaveDate: "",
+          }]
+        } else {
+          // Patch any rows that are missing location or position
+          staffList = staffList.map((s: any) => ({
+            ...s,
+            position: s.position || livePos,
+            location_name: s.location_name || liveLoc,
+          }))
+        }
       }
     }
 
@@ -236,21 +294,33 @@ export async function GET(request: NextRequest) {
     doc.text(bodyLines1, margin, y)
     y += bodyLines1.length * 4 + 4
 
-    const bodyText2 = "We, therefore, kindly request you to process and pay their leave allowances accordingly."
-    const bodyLines2 = doc.splitTextToSize(bodyText2, contentWidth)
-    doc.text(bodyLines2, margin, y)
-    y += bodyLines2.length * 4 + 4
-
-    doc.text("We count on your co-operation.", margin, y)
-    y += 8
-
     // === STAFF TABLE ===
+    // Build fallback single-staff row extracting position/location from memo_body if needed
+    const fallbackPosition = (() => { 
+      try { 
+        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+        // staff_position is stored at top level in memoBody (set during submit-memo)
+        return b?.staff_position || b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" 
+      } catch { 
+        return "" 
+      } 
+    })()
+    const fallbackLocation = (() => { 
+      try { 
+        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+        // staff_location_name is stored at top level in memoBody (set during submit-memo)
+        return b?.staff_location_name || b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" 
+      } catch { 
+        return "" 
+      } 
+    })()
+
     const tableData = (staffList.length > 0 ? staffList : [
       {
         name: memo.staff_name,
         employeeId: memo.staff_number,
-        position: memo.memo_body ? (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b.staffList?.[0]?.position || b.staffList?.[0]?.rank || "" } catch { return "" } })() : "",
-        location_name: memo.memo_body ? (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b.staffList?.[0]?.location_name || b.staffList?.[0]?.assigned_location_name || b.staffList?.[0]?.location || "" } catch { return "" } })() : "",
+        position: fallbackPosition,
+        location_name: fallbackLocation,
         leaveDate: fmtDate(memo.leave_period_start),
       },
     ]).map((s: any, idx: number) => [
@@ -258,12 +328,14 @@ export async function GET(request: NextRequest) {
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",
       s.position || s.rank || "",
-      s.location_name || s.assigned_location_name || s.location || s.station || s.workStation || "",
+      s.location_name || s.assigned_location_name || s.station || s.location || "",
       s.leaveDate || fmtDate(memo.leave_period_start),
     ])
 
+    const isSingleStaff = tableData.length === 1
+
     autoTable(doc, {
-      head: [["NO", "NAME", "S/NO", "POSITION", "LOCATION", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "RANK", "STATION", "LEAVE DATE"]],
       body: tableData,
       startY: y,
       margin: margin,
@@ -281,17 +353,27 @@ export async function GET(request: NextRequest) {
         lineWidth: 0.3,
       },
       columnStyles: {
-        0: { cellWidth: 12, halign: "center" },
-        1: { cellWidth: 32, halign: "left" },
-        2: { cellWidth: 20, halign: "center" },
-        3: { cellWidth: 23, halign: "left" },
-        4: { cellWidth: 23, halign: "left" },
+        0: { cellWidth: 10, halign: "center" },
+        1: { cellWidth: 42, halign: "left" },
+        2: { cellWidth: 22, halign: "center" },
+        3: { cellWidth: 32, halign: "left" },
+        4: { cellWidth: 32, halign: "left" },
         5: { cellWidth: 22, halign: "center" },
       },
       alternateRowStyles: { fillColor: [245, 245, 245] },
     })
 
     y = (doc as any).lastAutoTable.finalY + 8
+
+    // === SECOND BODY PARAGRAPH ===
+    const bodyText2 = isSingleStaff
+      ? "We, therefore, kindly request you to process and pay the staff leave allowance accordingly."
+      : "We, therefore, kindly request you to process and pay their leave allowance accordingly."
+    const bodyLines2 = doc.splitTextToSize(bodyText2, contentWidth)
+    doc.setFontSize(9)
+    doc.setFont("helvetica", "normal")
+    doc.text(bodyLines2, margin, y)
+    y += bodyLines2.length * 4 + 4
 
     // === CLOSING TEXT ===
     doc.setFontSize(9)

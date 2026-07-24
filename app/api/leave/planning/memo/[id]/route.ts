@@ -125,9 +125,12 @@ function pickBestSignature(rows: any[]): any | null {
   return [...pool].sort((a, b) => score(b) - score(a))[0] || null
 }
 
-/** Returns the official subject heading per leave type (no "RE:" prefix). */
+/** Returns the official subject heading per leave type (no "RE:" prefix).
+ *  NOTE: draftSubject is intentionally ignored — stale database values from old
+ *  records contain wrong leave-type text (e.g. casual leave stored with an
+ *  annual leave subject). The generated subject is always authoritative.
+ */
 function getMemoSubject(leaveTypeKey: string, leavePeriod: string, draftSubject?: string | null): string {
-  if (draftSubject && draftSubject.trim()) return draftSubject.trim()
   // Use current year (2026) for annual leave memos instead of the leave period start year
   const currentYear = new Date().getFullYear()
   const yearPart = String(currentYear)
@@ -595,16 +598,15 @@ export async function GET(
     let tableEntitlement = 0
     let tableTravellingDays = 0
 
-    if (draftBody) {
-      const blocks = draftBody.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean)
-      paragraphs  = blocks.slice(0, -1).length > 0 ? blocks.slice(0, -1) : blocks
-      closingLine = blocks.length > 1 ? blocks[blocks.length - 1] : "You can count on our co-operation."
-    } else {
+    // Always use the authoritative builtin body for every leave type.
+    // Stored draftBody values are stale and may contain wrong leave-type content
+    // (e.g. a casual leave record with annual leave body text from old data entry).
+    {
       const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso)
-      paragraphs        = built.paragraphs
-      closingLine       = built.closing
-      useTable          = built.useTable
-      tableEntitlement  = built.tableEntitlement  ?? 0
+      paragraphs          = built.paragraphs
+      closingLine         = built.closing
+      useTable            = built.useTable
+      tableEntitlement    = built.tableEntitlement    ?? 0
       tableTravellingDays = built.tableTravellingDays ?? 0
     }
 
@@ -659,8 +661,6 @@ export async function GET(
     const refNum   = `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
     doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
-    y += 5.5
-    doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10
 
     // ── Recipient block (modern styling) ──────────────────────────────────────────────
@@ -732,7 +732,7 @@ export async function GET(
       y += lines.length * 5.5 + 5
     }
 
-    // ── Annual leave table ───────────────────────────────────────────
+    // ── Annual leave table ─────────────────────────────���─────────────
     if (useTable) {
       const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
