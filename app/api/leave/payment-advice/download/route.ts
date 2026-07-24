@@ -126,75 +126,57 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Parse memo body to extract staff list and approval metadata
+    // Parse memo body to extract position and approval metadata
     let staffList: any[] = []
     let approvedAt: string | null = null
     let approverPosition: string | null = null
-    let memoBodyUserId: string | null = null
+    let storedPosition: string = ""
+
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        const rawList: any[] = body.staffList || body.staff || []
-        // Enrich each staff record — position and location come from memo_body, not memo columns
-        staffList = rawList.map((s: any) => ({
-          ...s,
-          position: s.position || s.rank || "",
-          location_name: s.location_name || s.assigned_location_name || s.location || s.station || "",
-        }))
-        // Use the approval date stored at approval time — NOT today's date
-        approvedAt = body.approver?.approved_at || null
-        approverPosition = body.selectedSigner?.position || body.approver?.position || null
+        storedPosition     = body.staff_position || ""
+        approvedAt         = body.approver?.approved_at || null
+        approverPosition   = body.selectedSigner?.position || body.approver?.position || null
         if (approverPosition) {
-          // Override signerName with the stored approver name from memo_body
           const approverName = body.approver?.name || body.selectedSigner?.name
           if (approverName) signerName = approverName
         }
-        // Keep track of user_id stored in body for live location lookup
-        memoBodyUserId = body.staff_user_id || body.user_id || null
       } catch (e) {
         console.warn("[v0] Could not parse memo_body")
       }
     }
 
-    // ── Live-enrich staffList location from geofence_locations if missing ────
-    // This handles both single-staff memos and older memos that didn't store location_name
-    const userIdForLocation = memoBodyUserId || memo.user_id || memo.staff_id || null
-    if (userIdForLocation) {
-      const { data: liveProfile } = await admin
+    // ── Live-fetch staff location from database (same pattern as defer/recall) ──
+    // This ensures we always get current assigned location, matching defer/recall memos
+    let liveLocationName = ""
+    
+    if (memo.staff_id) {
+      const { data: staffProfile } = await admin
         .from("user_profiles")
-        .select("first_name, last_name, employee_id, position, assigned_location_id")
-        .eq("id", userIdForLocation)
+        .select("assigned_location_id")
+        .eq("id", memo.staff_id)
         .maybeSingle()
 
-      if (liveProfile?.assigned_location_id) {
-        const { data: liveLocation } = await admin
+      if (staffProfile?.assigned_location_id) {
+        const { data: locationRow } = await admin
           .from("geofence_locations")
           .select("name")
-          .eq("id", liveProfile.assigned_location_id)
+          .eq("id", staffProfile.assigned_location_id)
           .maybeSingle()
 
-        const liveLoc = liveLocation?.name || ""
-        const livePos = liveProfile.position || ""
-
-        if (staffList.length === 0) {
-          // Single-staff memo — build the row from live data
-          staffList = [{
-            name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
-            employeeId: liveProfile.employee_id || memo.staff_number || "",
-            position: livePos,
-            location_name: liveLoc,
-            leaveDate: "",
-          }]
-        } else {
-          // Patch any rows that are missing location or position
-          staffList = staffList.map((s: any) => ({
-            ...s,
-            position: s.position || livePos,
-            location_name: s.location_name || liveLoc,
-          }))
-        }
+        liveLocationName = locationRow?.name || ""
       }
     }
+
+    // Build the PDF table row using live-fetched location
+    staffList = [{
+      name:          (memo.staff_name || "").toUpperCase(),
+      employeeId:    memo.staff_number || "",
+      position:      storedPosition,
+      location_name: liveLocationName,
+      leaveDate:     fmtDate(memo.leave_period_start),
+    }]
 
     // The memo date is the approval date; fall back to created_at only if not yet approved
     const memoDateStr = approvedAt || memo.created_at
@@ -296,34 +278,8 @@ export async function GET(request: NextRequest) {
 
     // === STAFF TABLE ===
     // Build fallback single-staff row extracting position/location from memo_body if needed
-    const fallbackPosition = (() => { 
-      try { 
-        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // staff_position is stored at top level in memoBody (set during submit-memo)
-        return b?.staff_position || b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" 
-      } catch { 
-        return "" 
-      } 
-    })()
-    const fallbackLocation = (() => { 
-      try { 
-        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // staff_location_name is stored at top level in memoBody (set during submit-memo)
-        return b?.staff_location_name || b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" 
-      } catch { 
-        return "" 
-      } 
-    })()
-
-    const tableData = (staffList.length > 0 ? staffList : [
-      {
-        name: memo.staff_name,
-        employeeId: memo.staff_number,
-        position: fallbackPosition,
-        location_name: fallbackLocation,
-        leaveDate: fmtDate(memo.leave_period_start),
-      },
-    ]).map((s: any, idx: number) => [
+    // staffList is always populated by the live DB lookup above
+    const tableData = staffList.map((s: any, idx: number) => [
       String(idx + 1),
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",

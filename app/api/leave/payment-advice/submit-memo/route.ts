@@ -180,6 +180,30 @@ export async function POST(request: NextRequest) {
         continue
       }
 
+      // Fetch staff's real assigned location from database to ensure accurate memo data
+      let staffLocationName = staff.location_name || staff.assigned_location_name || ""
+      
+      if (!staffLocationName && staff.user_id) {
+        // Query user_profiles for assigned_location_id, then resolve location name
+        const { data: staffProfile } = await admin
+          .from("user_profiles")
+          .select("assigned_location_id")
+          .eq("id", staff.user_id)
+          .maybeSingle()
+
+        if (staffProfile?.assigned_location_id) {
+          const { data: locationRow } = await admin
+            .from("geofence_locations")
+            .select("name")
+            .eq("id", staffProfile.assigned_location_id)
+            .maybeSingle()
+
+          if (locationRow?.name) {
+            staffLocationName = locationRow.name
+          }
+        }
+      }
+
       // Get the reference number for this staff's category
       const category = staff.category || staff.staff_category || "Junior"
       const refNumber = referenceNumbers[category] || ""
@@ -192,7 +216,7 @@ export async function POST(request: NextRequest) {
         staff_position: staff.position || staff.rank || "",
         staff_department: staff.department_name || staff.department || "",
         staff_rank_label: staff.staff_category || category,
-        staff_location_name: staff.location_name || staff.assigned_location_name || "HQ", // Beneficiary location name
+        staff_location_name: staffLocationName, // Real location from database
         staff_location_id: staff.location_id || staff.assigned_location_id || null,
         selectedSigner: {
           id: selectedSigner.id || "",
