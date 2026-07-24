@@ -27,6 +27,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
+import StaffPaymentAdviceStatus from "@/components/leave/staff-payment-advice-status"
 import { PaymentAdviceErrorBoundary } from "@/components/leave/payment-advice-error-boundary"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
 import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
@@ -1948,6 +1949,24 @@ export function LeaveManagementClient({
                       ))}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              {/* My Payment Advice Section */}
+              <Card className="border-0 shadow-sm bg-white/80 backdrop-blur">
+                <CardHeader className="border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <FileText className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg font-semibold text-slate-800">My Payment Advice</CardTitle>
+                      <p className="text-sm text-slate-500">Track your leave payment advice processing status</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <StaffPaymentAdviceStatus />
                 </CardContent>
               </Card>
 

@@ -2,7 +2,8 @@ import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
 // GET /api/leave/deferment-recall/pending-requests
-// Get all pending deferment and recall requests for HR Leave Office processing
+// Get all pending deferment and recall requests for HR Leave Office processing.
+// Avoids FK-hint joins that may not exist; instead does a separate batch profile lookup.
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const admin = await createAdminClient()
 
-    // Verify the user is hr_leave_office
+    // Verify the user is hr_leave_office or a related HR role
     const { data: profile } = await admin
       .from("user_profiles")
       .select("role")
@@ -28,8 +29,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden - only HR Leave Office can view pending requests" }, { status: 403 })
     }
 
-    // Get pending deferment requests (not yet assigned to HR executive)
-    const { data: defermentRequests, error: defError } = await admin
+    // Fetch deferment requests WITHOUT the problematic FK join
+    const { data: rawDeferments, error: defError } = await admin
       .from("leave_deferment_requests")
       .select(
         `
@@ -40,13 +41,6 @@ export async function GET(request: NextRequest) {
         created_at,
         hod_approval_status,
         assigned_hr_executive_id,
-        staff:user_profiles!fk_user (
-          id,
-          first_name,
-          last_name,
-          employee_id,
-          position
-        ),
         department:departments (
           id,
           name
@@ -68,8 +62,8 @@ export async function GET(request: NextRequest) {
       throw defError
     }
 
-    // Get pending recall requests (not yet assigned to HR executive)
-    const { data: recallRequests, error: recError } = await admin
+    // Fetch recall requests WITHOUT the problematic FK join
+    const { data: rawRecalls, error: recError } = await admin
       .from("leave_recall_requests")
       .select(
         `
@@ -79,13 +73,6 @@ export async function GET(request: NextRequest) {
         created_at,
         hod_approval_status,
         assigned_hr_executive_id,
-        staff:user_profiles!fk_user (
-          id,
-          first_name,
-          last_name,
-          employee_id,
-          position
-        ),
         department:departments (
           id,
           name
@@ -107,10 +94,45 @@ export async function GET(request: NextRequest) {
       throw recError
     }
 
+    // Collect all unique staff user IDs from both request types
+    const allStaffIds = Array.from(
+      new Set([
+        ...(rawDeferments || []).map((r: any) => r.staff_user_id as string).filter(Boolean),
+        ...(rawRecalls || []).map((r: any) => r.staff_user_id as string).filter(Boolean),
+      ])
+    )
+
+    // Batch fetch user profiles for all staff members
+    let profilesMap: Record<string, { id: string; first_name: string; last_name: string; employee_id: string; position: string }> = {}
+    if (allStaffIds.length > 0) {
+      const { data: profiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, position")
+        .in("id", allStaffIds)
+
+      if (profiles) {
+        for (const p of profiles) {
+          profilesMap[p.id] = p
+        }
+      }
+    }
+
+    // Merge staff info into deferment requests
+    const defermentRequests = (rawDeferments || []).map((r: any) => ({
+      ...r,
+      staff: profilesMap[r.staff_user_id] ?? null,
+    }))
+
+    // Merge staff info into recall requests
+    const recallRequests = (rawRecalls || []).map((r: any) => ({
+      ...r,
+      staff: profilesMap[r.staff_user_id] ?? null,
+    }))
+
     return NextResponse.json({
-      defermentRequests: defermentRequests || [],
-      recallRequests: recallRequests || [],
-      total: (defermentRequests?.length || 0) + (recallRequests?.length || 0),
+      defermentRequests,
+      recallRequests,
+      total: defermentRequests.length + recallRequests.length,
     })
   } catch (error) {
     console.error("[v0] Pending requests error:", error)
