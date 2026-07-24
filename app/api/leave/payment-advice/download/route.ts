@@ -251,11 +251,6 @@ export async function GET(request: NextRequest) {
     doc.text(bodyLines1, margin, y)
     y += bodyLines1.length * 4 + 4
 
-    const bodyText2 = "We, therefore, kindly request you to process and pay their leave allowances accordingly."
-    const bodyLines2 = doc.splitTextToSize(bodyText2, contentWidth)
-    doc.text(bodyLines2, margin, y)
-    y += bodyLines2.length * 4 + 4
-
     // === STAFF TABLE ===
     // Build fallback single-staff row extracting position/location from memo_body if needed
     const fallbackPosition = (() => { 
@@ -318,6 +313,14 @@ export async function GET(request: NextRequest) {
     })
 
     y = (doc as any).lastAutoTable.finalY + 8
+
+    // === SECOND BODY PARAGRAPH ===
+    const bodyText2 = "We, therefore, kindly request you to process and pay their leave allowance accordingly."
+    const bodyLines2 = doc.splitTextToSize(bodyText2, contentWidth)
+    doc.setFontSize(9)
+    doc.setFont("helvetica", "normal")
+    doc.text(bodyLines2, margin, y)
+    y += bodyLines2.length * 4 + 4
 
     // === CLOSING TEXT ===
     doc.setFontSize(9)
