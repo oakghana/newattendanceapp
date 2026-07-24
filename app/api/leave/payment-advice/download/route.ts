@@ -126,18 +126,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Parse memo body to extract stored location, position, and approval metadata
+    // Parse memo body to extract position and approval metadata
     let staffList: any[] = []
     let approvedAt: string | null = null
     let approverPosition: string | null = null
-    let storedLocationName: string = ""
     let storedPosition: string = ""
 
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // memo_body.staff_location_name is now enriched at submission time with real database location
-        storedLocationName = body.staff_location_name || ""
         storedPosition     = body.staff_position || ""
         approvedAt         = body.approver?.approved_at || null
         approverPosition   = body.selectedSigner?.position || body.approver?.position || null
@@ -150,12 +147,34 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Build the PDF table row using location populated at memo submission time
+    // ── Live-fetch staff location from database (same pattern as defer/recall) ──
+    // This ensures we always get current assigned location, matching defer/recall memos
+    let liveLocationName = ""
+    
+    if (memo.staff_id) {
+      const { data: staffProfile } = await admin
+        .from("user_profiles")
+        .select("assigned_location_id")
+        .eq("id", memo.staff_id)
+        .maybeSingle()
+
+      if (staffProfile?.assigned_location_id) {
+        const { data: locationRow } = await admin
+          .from("geofence_locations")
+          .select("name")
+          .eq("id", staffProfile.assigned_location_id)
+          .maybeSingle()
+
+        liveLocationName = locationRow?.name || ""
+      }
+    }
+
+    // Build the PDF table row using live-fetched location
     staffList = [{
       name:          (memo.staff_name || "").toUpperCase(),
       employeeId:    memo.staff_number || "",
       position:      storedPosition,
-      location_name: storedLocationName,
+      location_name: liveLocationName,
       leaveDate:     fmtDate(memo.leave_period_start),
     }]
 
