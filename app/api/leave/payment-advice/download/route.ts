@@ -157,27 +157,81 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Live-enrich staffList location from geofence_locations if missing ────
-    // This handles both single-staff memos and older memos that didn't store location_name
-    const userIdForLocation = memoBodyUserId || memo.user_id || memo.staff_id || null
-    if (userIdForLocation) {
-      const { data: liveProfile } = await admin
-        .from("user_profiles")
-        .select("first_name, last_name, employee_id, position, assigned_location_id")
-        .eq("id", userIdForLocation)
-        .maybeSingle()
+    // Fetch assigned locations for ALL staff in the list from user_profiles and geofence_locations
+    if (staffList.length > 0) {
+      // For each staff item, try to fetch their location if missing
+      const enrichedList = await Promise.all(
+        staffList.map(async (s: any) => {
+          // Skip if location already populated
+          if (s.location_name) return s
 
-      if (liveProfile?.assigned_location_id) {
-        const { data: liveLocation } = await admin
-          .from("geofence_locations")
-          .select("name")
-          .eq("id", liveProfile.assigned_location_id)
+          // Try to find the staff by employee_id or name in user_profiles
+          let staffProfile = null
+          
+          if (s.employeeId) {
+            const { data: byEmpId } = await admin
+              .from("user_profiles")
+              .select("assigned_location_id, position")
+              .eq("employee_id", s.employeeId)
+              .maybeSingle()
+            staffProfile = byEmpId
+          }
+
+          // If still not found and we have a name, try searching by name (fallback)
+          if (!staffProfile && s.name) {
+            const nameParts = s.name.trim().split(/\s+/)
+            if (nameParts.length >= 2) {
+              const firstName = nameParts[0]
+              const lastName = nameParts[nameParts.length - 1]
+              const { data: byName } = await admin
+                .from("user_profiles")
+                .select("assigned_location_id, position")
+                .eq("first_name", firstName)
+                .eq("last_name", lastName)
+                .maybeSingle()
+              staffProfile = byName
+            }
+          }
+
+          // If we found a profile with assigned_location_id, look up the location name
+          if (staffProfile?.assigned_location_id) {
+            const { data: location } = await admin
+              .from("geofence_locations")
+              .select("name")
+              .eq("id", staffProfile.assigned_location_id)
+              .maybeSingle()
+
+            return {
+              ...s,
+              location_name: location?.name || s.location_name || "",
+              position: s.position || staffProfile.position || "",
+            }
+          }
+
+          return s
+        })
+      )
+      staffList = enrichedList
+    } else if (memoBodyUserId || memo.user_id) {
+      // Single-staff memo fallback — fetch location for one user
+      const userIdForLocation = memoBodyUserId || memo.user_id || null
+      if (userIdForLocation) {
+        const { data: liveProfile } = await admin
+          .from("user_profiles")
+          .select("first_name, last_name, employee_id, position, assigned_location_id")
+          .eq("id", userIdForLocation)
           .maybeSingle()
 
-        const liveLoc = liveLocation?.name || ""
-        const livePos = liveProfile.position || ""
+        if (liveProfile?.assigned_location_id) {
+          const { data: liveLocation } = await admin
+            .from("geofence_locations")
+            .select("name")
+            .eq("id", liveProfile.assigned_location_id)
+            .maybeSingle()
 
-        if (staffList.length === 0) {
-          // Single-staff memo — build the row from live data
+          const liveLoc = liveLocation?.name || ""
+          const livePos = liveProfile.position || ""
+
           staffList = [{
             name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
             employeeId: liveProfile.employee_id || memo.staff_number || "",
@@ -185,13 +239,6 @@ export async function GET(request: NextRequest) {
             location_name: liveLoc,
             leaveDate: "",
           }]
-        } else {
-          // Patch any rows that are missing location or position
-          staffList = staffList.map((s: any) => ({
-            ...s,
-            position: s.position || livePos,
-            location_name: s.location_name || liveLoc,
-          }))
         }
       }
     }
