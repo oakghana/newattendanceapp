@@ -257,10 +257,22 @@ export function AllLeaveRequestsDashboard() {
                     <TableCell className="text-sm text-slate-700">
                       {request.createdAt ? formatDate(request.createdAt) : "—"}
                     </TableCell>
-                    <TableCell className="text-sm text-slate-700">
-                      {Array.isArray(request.hodReviewers) && request.hodReviewers.length > 0
-                        ? request.hodReviewers.join(", ")
-                        : "—"}
+                    <TableCell className="text-sm text-slate-700 max-w-[180px]">
+                      {Array.isArray(request.hodReviewers) && request.hodReviewers.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {request.hodReviewers.slice(0, 2).map((name, i) => (
+                            <span key={i} className="block truncate text-xs">{name}</span>
+                          ))}
+                          {request.hodReviewers.length > 2 && (
+                            <span
+                              className="text-xs text-slate-400 italic cursor-default"
+                              title={request.hodReviewers.slice(2).join(", ")}
+                            >
+                              +{request.hodReviewers.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      ) : "—"}
                     </TableCell>
                     <TableCell className="text-sm text-slate-700 max-w-xs truncate">
                       {request.reason || "—"}

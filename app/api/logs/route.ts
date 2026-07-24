@@ -35,6 +35,10 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.from("application_logs").insert(logEntries)
 
     if (error) {
+      // Silently succeed if the table doesn't exist yet — logging is non-critical
+      if (error.code === "PGRST200" || error.code === "PGRST205" || error.message?.includes("application_logs")) {
+        return NextResponse.json({ success: true, note: "logs table not ready" }, { headers })
+      }
       console.error("Failed to insert logs:", error)
       return NextResponse.json({ error: "Failed to save logs" }, { status: 500, headers })
     }

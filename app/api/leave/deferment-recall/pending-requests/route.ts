@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         created_at,
         hod_approval_status,
         assigned_hr_executive_id,
-        staff:user_profiles (
+        staff:user_profiles!fk_user (
           id,
           first_name,
           last_name,
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
         created_at,
         hod_approval_status,
         assigned_hr_executive_id,
-        staff:user_profiles (
+        staff:user_profiles!fk_user (
           id,
           first_name,
           last_name,
