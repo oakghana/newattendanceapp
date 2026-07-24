@@ -190,7 +190,19 @@ async function generateRecallPDF(recallId: string): Promise<NextResponse> {
   doc.setFillColor(26, 110, 26)
   doc.rect(marginL, ruleY, contentW, 1.2, "F")
 
-  let y = ruleY + 10
+  let y = ruleY + 5
+
+  // ── REF. NO and DATE line ────────────────────────────────────────────────
+  const reviewDateFormatted = recall.hr_reviewed_at
+    ? new Date(recall.hr_reviewed_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+    : new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
+  doc.setTextColor(0, 0, 0)
+  doc.text(`REF. NO: ${refNo}`, marginL, y)
+  doc.text(`DATE: ${reviewDateFormatted}`, pageW - marginR, y, { align: "right" })
+  y += 8
 
   // ── Staff address block ──────────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
