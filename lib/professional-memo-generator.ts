@@ -356,23 +356,28 @@ async function generateMainMemo(
   // ── Leave details table ────────────────────────────────────────────────────
   if (memoData.staffList && memoData.staffList.length > 0 && !hasAttachment) {
     // Individual staff leave table (payment/group memos)
-    // Removed POSITION column as it's consistently empty — table now shows: NO, NAME, S/NO, DEPARTMENT, LEAVE DATE
+    // Columns: NO, NAME, S/NO, RANK, STATION, LEAVE DATE — matches official QCC payment advice format
     const tableData = memoData.staffList.map(staff => [
       String(staff.no),
       staff.name,
       staff.employeeId,
-      staff.department,
+      (staff as any).rank || (staff as any).position || staff.department || "",
+      (staff as any).station || (staff as any).location_name || (staff as any).assigned_location_name || (staff as any).location || "",
       staff.leaveDate,
     ])
     autoTable(doc, {
       startY: yPos,
-      head: [["NO", "NAME", "S/NO", "DEPARTMENT", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "RANK", "STATION", "LEAVE DATE"]],
       body: tableData,
       margin: { left: margin, right: margin },
       theme: "grid",
-      styles: { fontSize: 8.5, halign: "left", cellPadding: 2.5, lineColor: [180, 180, 180], lineWidth: 0.3 },
+      styles: { fontSize: 8, halign: "left", cellPadding: 2.5, lineColor: [180, 180, 180], lineWidth: 0.3 },
       headStyles: { fillColor: [60, 40, 10], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 8 },
-      columnStyles: { 0: { halign: "center" }, 2: { halign: "center" }, 4: { halign: "center" } },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 10 },
+        2: { halign: "center", cellWidth: 22 },
+        5: { halign: "center", cellWidth: 22 },
+      },
     })
     yPos = (doc as any).lastAutoTable.finalY + 6
   } else if (!hasAttachment) {
@@ -429,7 +434,10 @@ async function generateMainMemo(
 
   if (isPaymentMemo) {
     // Payment memos: request paragraph then closing — both come AFTER the table
-    const requestText = "We, therefore, kindly request you to process and pay their leave allowance accordingly."
+    const isSingleStaff = (memoData.staffList?.length ?? 0) === 1
+    const requestText = isSingleStaff
+      ? "We, therefore, kindly request you to process and pay the staff leave allowance accordingly."
+      : "We, therefore, kindly request you to process and pay their leave allowance accordingly."
     const requestLines = doc.splitTextToSize(requestText, contentWidth)
     requestLines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 5 })
     yPos += 3

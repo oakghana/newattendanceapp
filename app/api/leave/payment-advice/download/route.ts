@@ -256,7 +256,8 @@ export async function GET(request: NextRequest) {
     const fallbackPosition = (() => { 
       try { 
         const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        return b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" 
+        // staff_position is stored at top level in memoBody (set during submit-memo)
+        return b?.staff_position || b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" 
       } catch { 
         return "" 
       } 
@@ -264,7 +265,8 @@ export async function GET(request: NextRequest) {
     const fallbackLocation = (() => { 
       try { 
         const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        return b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" 
+        // staff_location_name is stored at top level in memoBody (set during submit-memo)
+        return b?.staff_location_name || b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" 
       } catch { 
         return "" 
       } 
@@ -282,11 +284,15 @@ export async function GET(request: NextRequest) {
       String(idx + 1),
       s.name || s.staff_name || "",
       s.employeeId || s.staff_number || s.sno || "",
+      s.position || s.rank || "",
+      s.location_name || s.assigned_location_name || s.station || s.location || "",
       s.leaveDate || fmtDate(memo.leave_period_start),
     ])
 
+    const isSingleStaff = tableData.length === 1
+
     autoTable(doc, {
-      head: [["NO", "NAME", "S/NO", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "RANK", "STATION", "LEAVE DATE"]],
       body: tableData,
       startY: y,
       margin: margin,
@@ -304,10 +310,12 @@ export async function GET(request: NextRequest) {
         lineWidth: 0.3,
       },
       columnStyles: {
-        0: { cellWidth: 12, halign: "center" },
-        1: { cellWidth: 50, halign: "left" },
-        2: { cellWidth: 28, halign: "center" },
-        3: { cellWidth: 40, halign: "center" },
+        0: { cellWidth: 10, halign: "center" },
+        1: { cellWidth: 42, halign: "left" },
+        2: { cellWidth: 22, halign: "center" },
+        3: { cellWidth: 32, halign: "left" },
+        4: { cellWidth: 32, halign: "left" },
+        5: { cellWidth: 22, halign: "center" },
       },
       alternateRowStyles: { fillColor: [245, 245, 245] },
     })
@@ -315,7 +323,9 @@ export async function GET(request: NextRequest) {
     y = (doc as any).lastAutoTable.finalY + 8
 
     // === SECOND BODY PARAGRAPH ===
-    const bodyText2 = "We, therefore, kindly request you to process and pay their leave allowance accordingly."
+    const bodyText2 = isSingleStaff
+      ? "We, therefore, kindly request you to process and pay the staff leave allowance accordingly."
+      : "We, therefore, kindly request you to process and pay their leave allowance accordingly."
     const bodyLines2 = doc.splitTextToSize(bodyText2, contentWidth)
     doc.setFontSize(9)
     doc.setFont("helvetica", "normal")
