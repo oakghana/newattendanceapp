@@ -184,20 +184,23 @@ async function generateMainMemo(
   doc.setTextColor(0)
   yPos += 3
 
-  // ── THRO block — green text ────────────────────────────────────────────────
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(9)
-  doc.setTextColor(0)
-  doc.text("THRO:", margin, yPos)
-  doc.setTextColor(26, 110, 26)
-  doc.text("  THE DEPARTMENT HEAD", margin + 14, yPos)
-  yPos += 4.5
-  doc.text("QUALITY CONTROL COMPANY LIMITED", margin + 14, yPos)
-  yPos += 4.5
-  doc.setFont("helvetica", "normal")
-  doc.text((memoData.from || "").toUpperCase(), margin + 14, yPos)
-  doc.setTextColor(0)
-  yPos += 8
+  // ── THRO block — green text (ONLY for leave advice memos, not payment/deferment) ────────
+  // THRO block should only appear on individual leave advice memos, not on payment advice or deferment memos
+  if (memoData.memoType === "general" && isIndividualLeaveMemo) {
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.setTextColor(0)
+    doc.text("THRO:", margin, yPos)
+    doc.setTextColor(26, 110, 26)
+    doc.text("  THE DEPARTMENT HEAD", margin + 14, yPos)
+    yPos += 4.5
+    doc.text("QUALITY CONTROL COMPANY LIMITED", margin + 14, yPos)
+    yPos += 4.5
+    doc.setFont("helvetica", "normal")
+    doc.text((memoData.from || "").toUpperCase(), margin + 14, yPos)
+    doc.setTextColor(0)
+    yPos += 8
+  }
 
   // ── Subject (bold + underline) ─────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
