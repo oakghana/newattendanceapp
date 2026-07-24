@@ -68,15 +68,20 @@ async function generateRecallPDF(recallId: string): Promise<NextResponse> {
     return NextResponse.json({ error: "Recall request not found" }, { status: 404 })
   }
 
-  // ── Fetch staff profile ──────────────────────────────────────────────────
+  // ── Fetch staff profile (including assigned location) ───────────────────
   const { data: staff } = await admin
     .from("user_profiles")
-    .select("first_name, last_name, employee_id, position, department_id")
+    .select("first_name, last_name, employee_id, position, department_id, assigned_location_id")
     .eq("id", recall.staff_user_id)
     .maybeSingle()
 
   const { data: staffDept } = staff?.department_id
     ? await admin.from("departments").select("name").eq("id", staff.department_id).maybeSingle()
+    : { data: null }
+
+  // ── Fetch staff assigned location from geofence_locations ───────────────
+  const { data: staffLocation } = staff?.assigned_location_id
+    ? await admin.from("geofence_locations").select("name").eq("id", staff.assigned_location_id).maybeSingle()
     : { data: null }
 
   // ── Fetch leave plan (for days info) ────────────────────────────────────
@@ -145,7 +150,47 @@ async function generateRecallPDF(recallId: string): Promise<NextResponse> {
   const marginL  = 25
   const marginR  = 25
   const contentW = pageW - marginL - marginR
-  let y          = 30
+
+  // ── Letterhead with QCC logo ─────────────────────────────────────────────
+  let logoDataUrl: string | null = null
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    const logoResp = await fetch(`${baseUrl}/logos/qcc-logo.png`)
+    if (logoResp.ok) {
+      const buf = await logoResp.arrayBuffer()
+      const u8  = new Uint8Array(buf)
+      let bin   = ""
+      for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i])
+      logoDataUrl = `data:image/png;base64,${btoa(bin)}`
+    }
+  } catch { /* logo optional */ }
+
+  const logoSize = 26
+  const logoX    = marginL
+  const logoY    = 10
+  if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", logoX, logoY, logoSize, logoSize)
+
+  // Company name centred
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(13)
+  doc.setTextColor(0, 0, 0)
+  doc.text("QUALITY CONTROL COMPANY LTD.", pageW / 2, 17, { align: "center" })
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  doc.text("(COCOBOD)", pageW / 2, 23, { align: "center" })
+
+  // Address top-right
+  doc.setFontSize(8.5)
+  doc.text("P.O. Box M54", pageW - marginR, 13, { align: "right" })
+  doc.text("Accra", pageW - marginR, 18, { align: "right" })
+  doc.text("Ghana", pageW - marginR, 23, { align: "right" })
+
+  // Green accent rule
+  const ruleY = logoY + logoSize + 2
+  doc.setFillColor(26, 110, 26)
+  doc.rect(marginL, ruleY, contentW, 1.2, "F")
+
+  let y = ruleY + 10
 
   // ── Staff address block ──────────────────────────────────────────────────
   doc.setFont("helvetica", "bold")
@@ -173,7 +218,7 @@ async function generateRecallPDF(recallId: string): Promise<NextResponse> {
   doc.line(marginL, y + 1, marginL + subjW, y + 1)
   y += 10
 
-  // ── Body ─────────────────────────────────────────────────────────────────
+  // ── Body ───────────────────────────────────────────���─────────────────────
   doc.setFont("helvetica", "normal")
   doc.setFontSize(10)
 

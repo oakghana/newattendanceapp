@@ -130,6 +130,7 @@ export async function GET(request: NextRequest) {
     let staffList: any[] = []
     let approvedAt: string | null = null
     let approverPosition: string | null = null
+    let memoBodyUserId: string | null = null
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
@@ -148,8 +149,50 @@ export async function GET(request: NextRequest) {
           const approverName = body.approver?.name || body.selectedSigner?.name
           if (approverName) signerName = approverName
         }
+        // Keep track of user_id stored in body for live location lookup
+        memoBodyUserId = body.staff_user_id || body.user_id || null
       } catch (e) {
         console.warn("[v0] Could not parse memo_body")
+      }
+    }
+
+    // ── Live-enrich staffList location from geofence_locations if missing ────
+    // This handles both single-staff memos and older memos that didn't store location_name
+    const userIdForLocation = memoBodyUserId || memo.user_id || memo.staff_id || null
+    if (userIdForLocation) {
+      const { data: liveProfile } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name, employee_id, position, assigned_location_id")
+        .eq("id", userIdForLocation)
+        .maybeSingle()
+
+      if (liveProfile?.assigned_location_id) {
+        const { data: liveLocation } = await admin
+          .from("geofence_locations")
+          .select("name")
+          .eq("id", liveProfile.assigned_location_id)
+          .maybeSingle()
+
+        const liveLoc = liveLocation?.name || ""
+        const livePos = liveProfile.position || ""
+
+        if (staffList.length === 0) {
+          // Single-staff memo — build the row from live data
+          staffList = [{
+            name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
+            employeeId: liveProfile.employee_id || memo.staff_number || "",
+            position: livePos,
+            location_name: liveLoc,
+            leaveDate: "",
+          }]
+        } else {
+          // Patch any rows that are missing location or position
+          staffList = staffList.map((s: any) => ({
+            ...s,
+            position: s.position || livePos,
+            location_name: s.location_name || liveLoc,
+          }))
+        }
       }
     }
 
