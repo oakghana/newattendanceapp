@@ -428,7 +428,11 @@ async function generateMainMemo(
   doc.setFontSize(9.5)
 
   if (isPaymentMemo) {
-    // Payment memos: "We count on your co-operation." comes AFTER the table
+    // Payment memos: request paragraph then closing — both come AFTER the table
+    const requestText = "We, therefore, kindly request you to process and pay their leave allowance accordingly."
+    const requestLines = doc.splitTextToSize(requestText, contentWidth)
+    requestLines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 5 })
+    yPos += 3
     doc.text("We count on your co-operation.", margin, yPos)
     yPos += 6
   } else if (isIndividualLeaveMemo) {
