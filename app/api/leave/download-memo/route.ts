@@ -267,10 +267,6 @@ export async function GET(request: NextRequest) {
     doc.setTextColor(0)
     doc.text(`Date:  ${fmtLong(letterDate)}`, mR, y, { align: 'right' })
     y += 5
-    doc.setTextColor(26, 110, 26)
-    doc.text('Your Ref No:  ____________________________', mL, y)
-    doc.setTextColor(0)
-    y += 5
 
     // Thin rule
     doc.setDrawColor(200)

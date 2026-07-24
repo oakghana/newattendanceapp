@@ -115,11 +115,6 @@ export async function GET(request: NextRequest) {
     })
     doc.text(`Date: ${dateStr}`, pageWidth - margin - 50, yPos)
     yPos += 6
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(26, 110, 26)
-    doc.text("Your Ref No: ____________________________", margin, yPos)
-    doc.setTextColor(0)
-    yPos += 5
 
     // ─── Thin divider ───
     doc.setDrawColor(180)

@@ -665,8 +665,6 @@ export async function GET(
     const refNum   = `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
     doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
-    y += 5.5
-    doc.text("Your Ref No:  ____________________________", marginLeft, y)
     y += 10
 
     // ── Recipient block (modern styling) ──────────────────────────────────────────────

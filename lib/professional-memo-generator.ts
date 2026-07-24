@@ -264,9 +264,6 @@ async function generateMainMemo(
     doc.setTextColor(0)
     doc.text(`Date:  ${memoData.date || todayStr}`, pageWidth - margin, yPos, { align: "right" })
     yPos += 5
-    doc.setTextColor(26, 110, 26)
-    doc.text("Your Ref No:  ____________________________", margin, yPos)
-    doc.setTextColor(0)
 
     // Thin rule
     yPos += 5
