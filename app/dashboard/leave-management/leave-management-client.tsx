@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { PaymentAdviceClient } from "@/components/leave/payment-advice-client"
 import StaffPaymentAdviceStatus from "@/components/leave/staff-payment-advice-status"
+import { StaffApprovedDeferments } from "@/components/leave/staff-approved-deferments"
 import { PaymentAdviceErrorBoundary } from "@/components/leave/payment-advice-error-boundary"
 import { DefermentRecallTracker } from "@/components/leave/deferment-recall-tracker"
 import { HRExecutiveApprovalDashboard } from "@/components/leave/hr-executive-approval-dashboard"
@@ -1969,6 +1970,9 @@ export function LeaveManagementClient({
                   <StaffPaymentAdviceStatus />
                 </CardContent>
               </Card>
+
+              {/* Approved Deferments Section */}
+              <StaffApprovedDeferments />
 
               {/* Recall Requests Section */}
               <Card className="border-0 shadow-sm bg-white/80 backdrop-blur">
