@@ -63,14 +63,15 @@ export async function GET(request: NextRequest) {
 
     const admin = await createAdminClient()
 
-    // Fetch memo with all required data including staff_category
+    // Fetch memo with all required data including staff_category, staff_position, staff_location
     const { data: memo, error } = await admin
       .from("leave_payment_memos")
       .select(`
         id, staff_name, staff_number, memo_subject, memo_body,
         leave_period_start, leave_period_end, approved_days,
         hr_leave_office_name, signer_id, signer_name, 
-        signature_data_url, created_at, status, staff_category
+        signature_data_url, created_at, status, staff_category,
+        staff_position, staff_location_name, staff_department
       `)
       .eq("id", memoId)
       .single()
@@ -124,7 +125,13 @@ export async function GET(request: NextRequest) {
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        staffList = body.staffList || body.staff || []
+        const rawList: any[] = body.staffList || body.staff || []
+        // Enrich each staff record — if position or location_name is blank, try memo-level columns
+        staffList = rawList.map((s: any) => ({
+          ...s,
+          position: s.position || s.rank || memo.staff_position || "",
+          location_name: s.location_name || s.assigned_location_name || s.location || s.station || memo.staff_location_name || "",
+        }))
         // Use the approval date stored at approval time — NOT today's date
         approvedAt = body.approver?.approved_at || null
         approverPosition = body.selectedSigner?.position || body.approver?.position || null
@@ -241,16 +248,19 @@ export async function GET(request: NextRequest) {
     doc.text(bodyLines2, margin, y)
     y += bodyLines2.length * 4 + 4
 
-    doc.text("We count on your co-operation.", margin, y)
-    y += 8
-
     // === STAFF TABLE ===
+    // Build fallback single-staff row using directly stored columns first, then memo_body as fallback
+    const fallbackPosition = memo.staff_position
+      || (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" } catch { return "" } })()
+    const fallbackLocation = memo.staff_location_name
+      || (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" } catch { return "" } })()
+
     const tableData = (staffList.length > 0 ? staffList : [
       {
         name: memo.staff_name,
         employeeId: memo.staff_number,
-        position: memo.memo_body ? (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b.staffList?.[0]?.position || b.staffList?.[0]?.rank || "" } catch { return "" } })() : "",
-        location_name: memo.memo_body ? (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b.staffList?.[0]?.location_name || b.staffList?.[0]?.assigned_location_name || b.staffList?.[0]?.location || "" } catch { return "" } })() : "",
+        position: fallbackPosition,
+        location_name: fallbackLocation,
         leaveDate: fmtDate(memo.leave_period_start),
       },
     ]).map((s: any, idx: number) => [

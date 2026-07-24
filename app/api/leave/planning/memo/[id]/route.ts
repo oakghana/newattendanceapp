@@ -595,11 +595,16 @@ export async function GET(
     let tableEntitlement = 0
     let tableTravellingDays = 0
 
-    if (draftBody) {
+    // Annual leave ALWAYS uses the official QCC table format regardless of draftBody.
+    // Other leave types may use draftBody paragraphs if present.
+    const isAnnualLeave = leaveTypeKey === "annual"
+
+    if (draftBody && !isAnnualLeave) {
       const blocks = draftBody.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean)
       paragraphs  = blocks.slice(0, -1).length > 0 ? blocks.slice(0, -1) : blocks
       closingLine = blocks.length > 1 ? blocks[blocks.length - 1] : "You can count on our co-operation."
     } else {
+      // Always use builtin for annual leave; also use it for other types with no draftBody
       const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso)
       paragraphs        = built.paragraphs
       closingLine       = built.closing
@@ -732,7 +737,7 @@ export async function GET(
       y += lines.length * 5.5 + 5
     }
 
-    // ── Annual leave table ───────────────────────────────────────────
+    // ── Annual leave table ─────────────────────────────���─────────────
     if (useTable) {
       const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
