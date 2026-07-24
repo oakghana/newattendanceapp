@@ -4054,7 +4054,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                 },
                 {
                   key: "approved" as const,
-                  label: "Approved Payment Advice",
+                  label: "Approved Request",
                   count: approvedLeave.length,
                   activeClass: "bg-emerald-600 border-emerald-600 text-white",
                 },
