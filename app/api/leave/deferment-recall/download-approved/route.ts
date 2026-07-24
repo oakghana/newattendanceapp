@@ -1,11 +1,30 @@
-import { createAdminClient } from "@/lib/supabase/server"
+import { createAdminClient, createClient as createSessionClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
 
-/**
- * GET: Download an approved deferment approval letter in professional QCC memo format
- */
+// Ordinal suffix helper: 1st, 2nd, 3rd, 4th …
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"]
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
+// Format a date as "Monday, 2nd March, 2026"
+function fmtFormal(d: string | null | undefined): string {
+  if (!d) return "N/A"
+  const dt = new Date(d)
+  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+  return `${days[dt.getDay()]}, ${ordinal(dt.getDate())} ${months[dt.getMonth()]}, ${dt.getFullYear()}`
+}
+
+// Add one day to a date string
+function addDay(d: string): string {
+  const dt = new Date(d)
+  dt.setDate(dt.getDate() + 1)
+  return dt.toISOString().split("T")[0]
+}
+
 export async function GET(request: NextRequest) {
   try {
     const admin = await createAdminClient()
@@ -16,14 +35,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify caller is authenticated
-    const { createClient: createSessionClient } = await import("@/lib/supabase/server")
     const sessionClient = await createSessionClient()
     const { data: { user } } = await sessionClient.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    // Fetch the approved deferment record plus the leave plan it references
+    // ── Fetch the approved deferment record ──────────────────────────────────
     const { data: req, error: reqErr } = await admin
       .from("leave_deferment_requests")
       .select(`
@@ -32,7 +48,7 @@ export async function GET(request: NextRequest) {
         deferment_start_date, deferment_end_date,
         rescheduled_start_date, rescheduled_end_date,
         reason, hr_office_decision, hr_office_reviewed_at,
-        hr_office_reviewed_by, created_at
+        hr_office_reviewed_by, hod_reviewed_by, created_at
       `)
       .eq("id", memoId)
       .eq("hr_office_decision", "approved")
@@ -42,281 +58,259 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Deferment approval not found" }, { status: 404 })
     }
 
-    // Fetch staff profile (the person whose leave is deferred)
-    const { data: staffProfile } = await admin
+    // ── Fetch staff profile ──────────────────────────────────────────────────
+    const { data: staff } = await admin
       .from("user_profiles")
       .select("first_name, last_name, employee_id, position, department_id")
       .eq("id", req.user_id)
       .maybeSingle()
 
-    // Fetch staff department
-    const { data: deptData } = staffProfile?.department_id
-      ? await admin.from("departments").select("name").eq("id", staffProfile.department_id).maybeSingle()
+    const { data: staffDept } = staff?.department_id
+      ? await admin.from("departments").select("name").eq("id", staff.department_id).maybeSingle()
       : { data: null }
 
-    // Fetch HR reviewer (signer) profile
-    const { data: signerProfile } = req.hr_office_reviewed_by
+    // ── Fetch leave plan for days/travel info ───────────────────────────────
+    const { data: plan } = req.leave_plan_request_id
+      ? await admin
+          .from("leave_plan_requests")
+          .select("adjusted_days, travelling_days_added, adjusted_start_date, adjusted_end_date, preferred_start_date, preferred_end_date")
+          .eq("id", req.leave_plan_request_id)
+          .maybeSingle()
+      : { data: null }
+
+    // ── Fetch HR reviewer (signer) ──────────────────────────────────────────
+    const { data: signer } = req.hr_office_reviewed_by
       ? await admin
           .from("user_profiles")
-          .select("first_name, last_name, position, signature_data_url, signature_mode, signature_text")
+          .select("first_name, last_name, position, signature_data_url")
           .eq("id", req.hr_office_reviewed_by)
           .maybeSingle()
       : { data: null }
 
-    // Fetch HOD profile (for routing reference)
-    const { data: hodProfile } = req.hod_reviewed_by
+    // ── Fetch HOD for THRO' block ────────────────────────────────────────────
+    const { data: hod } = req.hod_reviewed_by
       ? await admin
           .from("user_profiles")
-          .select("first_name, last_name, position")
+          .select("first_name, last_name, position, department_id")
           .eq("id", req.hod_reviewed_by)
           .maybeSingle()
       : { data: null }
 
-    const hodName = hodProfile
-      ? `${hodProfile.first_name || ""} ${hodProfile.last_name || ""}`.trim().toUpperCase()
-      : null
+    // If no HOD on record, try to find the dept head of staff's department
+    let hodFallback: { first_name: string; last_name: string; position: string } | null = null
+    if (!hod && staff?.department_id) {
+      const { data: deptHead } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name, position")
+        .eq("department_id", staff.department_id)
+        .ilike("position", "%head%")
+        .maybeSingle()
+      hodFallback = deptHead
+    }
 
-    // Helpers
-    const safeDate = (d?: string | null) =>
-      d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "N/A"
-    const safeDateShort = (d?: string | null) =>
-      d ? new Date(d).toLocaleDateString("en-GB") : "N/A"
-
-    const staffName = staffProfile
-      ? `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim().toUpperCase()
+    // ── Build display strings ────────────────────────────────────────────────
+    const staffName = staff
+      ? `${staff.first_name || ""} ${staff.last_name || ""}`.trim().toUpperCase()
       : "STAFF MEMBER"
-    const staffEmployeeId = staffProfile?.employee_id || "N/A"
-    const staffDept = deptData?.name || "N/A"
-    const staffPosition = staffProfile?.position || "N/A"
+    const staffSNo     = staff?.employee_id || "N/A"
+    const staffPos     = (staff?.position || "STAFF").toUpperCase()
+    const deptName     = (staffDept?.name || "").toUpperCase()
 
-    const signerName = signerProfile
-      ? `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim().toUpperCase()
+    const hodData      = hod || hodFallback
+    const hodTitle     = hodData
+      ? `THE ${(hodData.position || "HEAD OF DEPARTMENT").toUpperCase()}`
+      : `THE HEAD OF ${deptName || "DEPARTMENT"}`
+
+    const signerName   = signer
+      ? `${signer.first_name || ""} ${signer.last_name || ""}`.trim().toUpperCase()
       : "HR MANAGER"
-    const signerPosition = (signerProfile?.position || "HR MANAGER").toUpperCase()
+    const signerPos    = (signer?.position || "HR MANAGER").toUpperCase()
 
-    const approvalDate = safeDate(req.hr_office_reviewed_at)
-    const requestDate  = safeDateShort(req.created_at)
-
-    // Deferment period (original leave that was deferred)
-    const deferStart = safeDateShort(req.deferment_start_date)
-    const deferEnd   = safeDateShort(req.deferment_end_date)
-    const deferPeriodText =
-      req.deferment_start_date && req.deferment_end_date
-        ? `${deferStart} to ${deferEnd}`
-        : "As approved by HR"
-
-    // Rescheduled period (new dates)
-    const reschedText = req.rescheduled_start_date
-      ? `${safeDateShort(req.rescheduled_start_date)} to ${safeDateShort(req.rescheduled_end_date)}`
-      : req.requested_deferment_period
-      ? req.requested_deferment_period
-      : req.requested_deferment_year
-      ? `Year ${req.requested_deferment_year}`
-      : "As mutually agreed"
-
-    // Build deterministic ref no from record id
-    const shortId = memoId.replace(/-/g, "").substring(0, 6).toUpperCase()
     const approvalYear = req.hr_office_reviewed_at
       ? new Date(req.hr_office_reviewed_at).getFullYear()
       : new Date().getFullYear()
-    const refNo = `QCC/HR/DEF/${approvalYear}/${shortId}`
 
-    // ─── PDF Setup ───────────────────────────────────────────────────────────
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-    const pageWidth  = doc.internal.pageSize.getWidth()
-    const margin     = 20
-    const contentWidth = pageWidth - 2 * margin
-    let y = 18
+    // Rescheduled dates
+    const newStart = req.rescheduled_start_date || req.deferment_start_date
+    const newEnd   = req.rescheduled_end_date   || req.deferment_end_date
 
-    // ─── Letterhead ──────────────────────────────────────────────────────────
+    // Working days and travel days
+    const workDays   = plan?.adjusted_days || 0
+    const travelDays = plan?.travelling_days_added || 0
+
+    // Resume date = day after new end
+    const resumeDate = newEnd ? addDay(newEnd) : null
+
+    // Deterministic ref
+    const shortId = memoId.replace(/-/g, "").substring(0, 4).toUpperCase()
+    const refNo   = `QCC/HR/DEF/${approvalYear}/${shortId}`
+
+    const requestDate = req.created_at
+      ? new Date(req.created_at).toLocaleDateString("en-GB")
+      : "N/A"
+
+    // ── PDF Setup ────────────────────────────────────────────────────────────
+    const doc        = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const pageW      = doc.internal.pageSize.getWidth()
+    const pageH      = doc.internal.pageSize.getHeight()
+    const marginL    = 25
+    const marginR    = 25
+    const contentW   = pageW - marginL - marginR
+    let y            = 30
+
+    // ── Staff address block (top-left) ───────────────────────────────────────
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(13)
+    doc.setFontSize(10)
     doc.setTextColor(0, 0, 0)
-    doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, y, { align: "center" })
-    y += 5
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9.5)
-    doc.text("(COCOBOD)", pageWidth / 2, y, { align: "center" })
-    y += 4.5
-    doc.text("P. O. BOX M54, ACCRA", pageWidth / 2, y, { align: "center" })
-    y += 8
+    doc.text(`${staffName} (S/NO. ${staffSNo})`, marginL, y)
+    y += 5.5
+    doc.text(staffPos, marginL, y)
+    y += 10
 
-    // Green rule
-    doc.setFillColor(20, 100, 30)
-    doc.rect(margin, y, contentWidth, 1.2, "F")
-    y += 6
+    // THRO' block
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.text("THRO':", marginL, y)
+    const throcol = marginL + 16
+    doc.text(hodTitle, throcol, y)
+    y += 5.5
+    doc.text("QUALITY CONTROL COMPANY LTD.", throcol, y)
+    y += 5.5
+    doc.text("HEAD OFFICE, ACCRA", throcol, y)
+    y += 12
 
-    // Ref + Date row
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9)
-    doc.setTextColor(0, 0, 0)
-    doc.text(`REF. NO: ${refNo}`, margin, y)
-    doc.text(`DATE: ${approvalDate}`, pageWidth - margin, y, { align: "right" })
-    y += 6
-
-    // Thin rule
-    doc.setDrawColor(180, 180, 180)
+    // ── Subject (bold, underlined) ────────────────────────────────────────────
+    const subject = `APPROVAL FOR DEFERMENT / RESCHEDULING OF ${approvalYear} ANNUAL VACATION LEAVE`
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    // Underline manually
+    const subjW = doc.getTextWidth(subject)
+    doc.text(subject, marginL, y)
     doc.setLineWidth(0.3)
-    doc.line(margin, y, pageWidth - margin, y)
-    y += 7
+    doc.setDrawColor(0, 0, 0)
+    doc.line(marginL, y + 1, marginL + subjW, y + 1)
+    y += 10
 
-    // ─── TO / FROM / SUBJECT ────────────────────────────────────────────────
-    const labelW = 22
-    const valueX = margin + labelW
-
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(9.5)
-    doc.text("TO:", margin, y)
+    // ── Body paragraph 1 ─────────────────────────────────────────────────────
     doc.setFont("helvetica", "normal")
-    doc.text(staffName, valueX, y)
-    y += 6
+    doc.setFontSize(10)
 
-    doc.setFont("helvetica", "bold")
-    doc.text("FROM:", margin, y)
-    doc.setFont("helvetica", "normal")
-    doc.text("HR MANAGER", valueX, y)
-    y += 6
+    const p1 = `We refer to our letter no. ${refNo} dated ${requestDate} and wish to inform you that Management has granted approval for your ${approvalYear} annual vacation leave to be rescheduled to ${newStart ? fmtFormal(newStart) : "the approved date"}.`
+    const p1lines = doc.splitTextToSize(p1, contentW)
+    p1lines.forEach((l: string) => { doc.text(l, marginL, y); y += 5.5 })
+    y += 4
 
-    doc.setFont("helvetica", "bold")
-    doc.text("SUBJECT:", margin, y)
-    doc.setFont("helvetica", "bold")
-    const subjectText = `APPROVAL FOR DEFERMENT / RESCHEDULING OF LEAVE — ${approvalYear}`
-    const subjectLines = doc.splitTextToSize(subjectText, contentWidth - labelW)
-    subjectLines.forEach((line: string, idx: number) => {
-      doc.text(line, valueX, y + idx * 5)
-    })
-    y += subjectLines.length * 5 + 6
+    // ── Body paragraph 2 — days + bold dates ─────────────────────────────────
+    if (newStart && newEnd) {
+      const daysText = workDays > 0
+        ? `annual vacation leave of ${numWords(workDays)} (${workDays}) working days${travelDays > 0 ? ` plus ${numWords(travelDays)} (${travelDays}) travelling days` : ""}`
+        : "annual vacation leave"
 
-    // Thin rule under header block
-    doc.setDrawColor(200, 200, 200)
-    doc.line(margin, y - 2, pageWidth - margin, y - 2)
+      // "Accordingly, your [days] shall take effect from " (normal) BOLD dates (normal) .
+      const pre  = `Accordingly, your ${daysText} shall take effect from `
+      const bold = `${fmtFormal(newStart)} to ${fmtFormal(newEnd)}.`
 
-    // ─── Body text ──────────────────────────────────────────────────────────
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9.5)
-    doc.setTextColor(0, 0, 0)
+      // Render pre-text then bold dates on same line
+      doc.setFont("helvetica", "normal")
+      const preLines = doc.splitTextToSize(pre + bold, contentW)
+      // Simple approach: render the combined text, then bold the last segment
+      // Use two-pass: measure pre then bold
+      const preTrimmed = pre.trimEnd()
+      doc.text(preTrimmed, marginL, y)
+      const preW = doc.getTextWidth(preTrimmed + " ")
+      doc.setFont("helvetica", "bold")
+      doc.text(bold, marginL + preW, y)
+      doc.setFont("helvetica", "normal")
+      y += 5.5
 
-    const para1 = `We refer to your request for deferment of leave dated ${requestDate} and are pleased to inform you that Management has given approval for your leave to be rescheduled accordingly.`
-    const lines1 = doc.splitTextToSize(para1, contentWidth)
-    lines1.forEach((line: string) => { doc.text(line, margin, y); y += 5 })
-    y += 3
+      // Check if text wrapped (crude: if bold block is wide enough to need second line, add spacing)
+      if (doc.getTextWidth(pre + bold) > contentW) y += 5.5
+      y += 4
 
-    const para2 = "The approval is subject to the details set out below. Kindly take note and plan accordingly."
-    const lines2 = doc.splitTextToSize(para2, contentWidth)
-    lines2.forEach((line: string) => { doc.text(line, margin, y); y += 5 })
-    y += 5
-
-    // ─── Details table ───────────────────────────────────────────────────────
-    autoTable(doc, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      theme: "grid",
-      head: [["DETAILS", ""]],
-      body: [
-        ["Name of Staff", staffName],
-        ["Employee ID", staffEmployeeId],
-        ["Position", staffPosition],
-        ["Department", staffDept],
-        ["Original Leave Period", deferPeriodText],
-        ["Rescheduled To", reschedText],
-        ...(req.reason ? [["Reason for Deferment", req.reason]] : []),
-        ["Date of Approval", approvalDate],
-      ],
-      headStyles: {
-        fillColor: [20, 100, 30],
-        textColor: [255, 255, 255],
-        fontStyle: "bold",
-        fontSize: 8.5,
-        halign: "left",
-      },
-      bodyStyles: { fontSize: 8.5, cellPadding: 2.5 },
-      columnStyles: {
-        0: { cellWidth: 50, fontStyle: "bold", fillColor: [245, 248, 245] },
-        1: { cellWidth: contentWidth - 50 },
-      },
-      alternateRowStyles: { fillColor: [255, 255, 255] },
-    })
-
-    y = (doc as any).lastAutoTable.finalY + 8
-
-    // ─── Closing paragraph ──────────────────────────────────────────────────
-    const closingPara = "We wish you a pleasant continuation of service and look forward to your return from leave at the rescheduled time."
-    const closingLines = doc.splitTextToSize(closingPara, contentWidth)
-    closingLines.forEach((line: string) => { doc.text(line, margin, y); y += 5 })
-    y += 8
-
-    // ─── Signature block ────────────────────────────────────────────────────
-    if (signerProfile?.signature_data_url) {
-      try {
-        doc.addImage(signerProfile.signature_data_url, "PNG", margin, y, 38, 15)
-        y += 17
-      } catch {
+      // Resume line
+      if (resumeDate) {
+        const resumePre  = "You are expected to resume duty on "
+        const resumeBold = `${fmtFormal(resumeDate)}.`
+        doc.setFont("helvetica", "normal")
+        doc.text(resumePre, marginL, y)
+        const rPreW = doc.getTextWidth(resumePre)
+        doc.setFont("helvetica", "bold")
+        doc.text(resumeBold, marginL + rPreW, y)
+        doc.setFont("helvetica", "normal")
+        y += 5.5
         y += 4
       }
     }
 
-    // Signature line
-    doc.setDrawColor(0, 0, 0)
-    doc.setLineWidth(0.4)
-    doc.line(margin, y, margin + 60, y)
-    y += 4
+    // ── Closing ───────────────────────────────────────────────────────────────
+    doc.setFont("helvetica", "normal")
+    doc.text("We wish you a pleasant and relaxing vacation.", marginL, y)
+    y += 16
+
+    // ── Signature ─────────────────────────────────────────────────────────────
+    if (signer?.signature_data_url) {
+      try {
+        doc.addImage(signer.signature_data_url, "PNG", marginL, y, 40, 16)
+        y += 18
+      } catch { /* skip */ }
+    }
 
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(9)
-    doc.text(signerName, margin, y)
-    y += 4.5
-    doc.setFont("helvetica", "normal")
-    doc.text(signerPosition, margin, y)
-    y += 4.5
-    doc.text("FOR: MANAGING DIRECTOR", margin, y)
-    y += 8
+    doc.setFontSize(10)
+    doc.text(signerName, marginL, y);      y += 5.5
+    doc.text(signerPos, marginL, y);       y += 5.5
+    doc.text("FOR: MANAGING DIRECTOR", marginL, y); y += 12
 
-    // ─── CC line ────────────────────────────────────────────────────────────
-    doc.setDrawColor(180, 180, 180)
-    doc.setLineWidth(0.3)
-    doc.line(margin, y, pageWidth - margin, y)
-    y += 5
-
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(8.5)
-    doc.text("cc:", margin, y)
+    // ── CC block ─────────────────────────────────────────────────────────────
+    doc.setFontSize(9.5)
     doc.setFont("helvetica", "normal")
-    // Build CC list: include HOD name if available
-    const ccRecipients = [
+    doc.text("cc:", marginL, y)
+    const ccItems = [
       "Managing Director",
-      "Deputy Director HR",
-      hodName ? `${hodName}, Head of Department (${staffDept})` : `HOD — ${staffDept}`,
-      "Staff File"
+      "Dep. Director, HR",
+      "Deputy Director, Finance",
+      "Audit Manager",
     ]
-    const ccText = ccRecipients.join(", ")
-    const ccLines = doc.splitTextToSize(ccText, contentWidth - 12)
-    ccLines.forEach((line: string, i: number) => {
-      doc.text(line, margin + 10, y + i * 4)
-    })
+    const ccX = marginL + 14
+    ccItems.forEach(item => { doc.text(item, ccX, y); y += 5 })
 
-    // ─── Footer ─────────────────────────────────────────────────────────────
-    const pageHeight = doc.internal.pageSize.getHeight()
+    // ── Footer ────────────────────────────────────────────────────────────────
     doc.setFontSize(7)
-    doc.setTextColor(130, 130, 130)
-    doc.text(`Document Ref: ${refNo}  |  Generated: ${new Date().toLocaleDateString("en-GB")}`, pageWidth / 2, pageHeight - 8, { align: "center" })
+    doc.setTextColor(160, 160, 160)
+    doc.text(
+      `Ref: ${refNo}  |  Generated: ${new Date().toLocaleDateString("en-GB")}`,
+      pageW / 2, pageH - 8, { align: "center" }
+    )
 
-    // Generate and return
-    const pdfBuffer = Buffer.from(doc.output("arraybuffer"))
-    const fileStaffName = staffName.replace(/\s+/g, "-").toLowerCase()
-    const filename = `deferment-approval-${fileStaffName}-${approvalYear}.pdf`
+    // ── Output ────────────────────────────────────────────────────────────────
+    const pdfBuf  = Buffer.from(doc.output("arraybuffer"))
+    const fnStaff = staffName.replace(/\s+/g, "-").toLowerCase()
+    const filename = `deferment-approval-${fnStaff}-${approvalYear}.pdf`
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuf, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length": String(pdfBuffer.length),
+        "Content-Length": String(pdfBuf.length),
       },
     })
-  } catch (error) {
-    console.error("[v0] Deferment download error:", error)
+  } catch (err) {
+    console.error("[v0] Deferment PDF error:", err)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate PDF" },
+      { error: err instanceof Error ? err.message : "Failed to generate PDF" },
       { status: 500 }
     )
   }
+}
+
+// Convert small integers to words for "twenty-eight (28) working days"
+function numWords(n: number): string {
+  const ones = ["","one","two","three","four","five","six","seven","eight","nine",
+                 "ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen",
+                 "seventeen","eighteen","nineteen"]
+  const tens = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"]
+  if (n < 20) return ones[n]
+  const t = Math.floor(n / 10)
+  const o = n % 10
+  return o ? `${tens[t]}-${ones[o]}` : tens[t]
 }

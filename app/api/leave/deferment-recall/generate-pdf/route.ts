@@ -1,21 +1,29 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
 
-/**
- * POST: Generate a formal QCC memo PDF for an approved deferment or recall request.
- * Body: { memo_id: string, memo_type: "deferment" | "recall" }
- * Also supports GET with ?recall_id=<id> for direct recall download.
- */
+// Ordinal suffix helper: 1st, 2nd, 3rd …
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"]
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
+// Format "Monday, 3rd July, 2026"
+function fmtFormal(d: string | null | undefined): string {
+  if (!d) return "N/A"
+  const dt = new Date(d)
+  const days   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+  const months = ["January","February","March","April","May","June","July",
+                  "August","September","October","November","December"]
+  return `${days[dt.getDay()]}, ${ordinal(dt.getDate())} ${months[dt.getMonth()]}, ${dt.getFullYear()}`
+}
+
 export async function GET(request: NextRequest) {
   try {
-    // Support direct recall download via GET ?recall_id=<id>
     const recallId = request.nextUrl.searchParams.get("recall_id")
-    if (recallId) {
-      return await generateRecallPDF(recallId)
-    }
-    return NextResponse.json({ error: "recall_id parameter required" }, { status: 400 })
+    if (!recallId) return NextResponse.json({ error: "recall_id parameter required" }, { status: 400 })
+    return await generateRecallPDF(recallId)
   } catch (error) {
     console.error("[v0] generate-pdf GET error:", error)
     return NextResponse.json(
@@ -29,25 +37,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { memo_id, memo_type } = body
-
-    if (!memo_id || !memo_type) {
-      return NextResponse.json({ error: "Missing required fields: memo_id, memo_type" }, { status: 400 })
-    }
-
-    if (memo_type === "deferment") {
-      // Delegate to the download-approved handler pattern
-      const { NextRequest: NR } = await import("next/server")
-      const url = new URL(`/api/leave/deferment-recall/download-approved?memo_id=${memo_id}`, "http://localhost")
-      return NextResponse.redirect(url)
-    }
-
-    if (memo_type === "recall") {
-      return generateRecallPDF(memo_id)
-    }
-
-    return NextResponse.json({ error: "Invalid memo_type. Must be 'deferment' or 'recall'" }, { status: 400 })
+    if (!memo_id || !memo_type) return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (memo_type === "recall") return await generateRecallPDF(memo_id)
+    return NextResponse.json({ error: "Invalid memo_type" }, { status: 400 })
   } catch (error) {
-    console.error("[v0] generate-pdf error:", error)
+    console.error("[v0] generate-pdf POST error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to generate PDF" },
       { status: 500 }
@@ -58,8 +52,8 @@ export async function POST(request: NextRequest) {
 async function generateRecallPDF(recallId: string): Promise<NextResponse> {
   const admin = await createAdminClient()
 
-  // Fetch the recall request
-  const { data: recall, error: recallErr } = await admin
+  // ── Fetch recall ─────────────────────────────────────────────────────────
+  const { data: recall, error } = await admin
     .from("leave_recall_requests")
     .select(`
       id, staff_user_id, leave_plan_request_id,
@@ -70,23 +64,32 @@ async function generateRecallPDF(recallId: string): Promise<NextResponse> {
     .eq("id", recallId)
     .maybeSingle()
 
-  if (recallErr || !recall) {
+  if (error || !recall) {
     return NextResponse.json({ error: "Recall request not found" }, { status: 404 })
   }
 
-  // Fetch staff profile
-  const { data: staffProfile } = await admin
+  // ── Fetch staff profile ──────────────────────────────────────────────────
+  const { data: staff } = await admin
     .from("user_profiles")
     .select("first_name, last_name, employee_id, position, department_id")
     .eq("id", recall.staff_user_id)
     .maybeSingle()
 
-  const { data: deptData } = staffProfile?.department_id
-    ? await admin.from("departments").select("name").eq("id", staffProfile.department_id).maybeSingle()
+  const { data: staffDept } = staff?.department_id
+    ? await admin.from("departments").select("name").eq("id", staff.department_id).maybeSingle()
     : { data: null }
 
-  // Fetch HR reviewer (signer)
-  const { data: signerProfile } = recall.hr_reviewed_by
+  // ── Fetch leave plan (for days info) ────────────────────────────────────
+  const { data: plan } = recall.leave_plan_request_id
+    ? await admin
+        .from("leave_plan_requests")
+        .select("adjusted_days, travelling_days_added, adjusted_start_date, adjusted_end_date, preferred_start_date, preferred_end_date")
+        .eq("id", recall.leave_plan_request_id)
+        .maybeSingle()
+    : { data: null }
+
+  // ── Fetch HR reviewer (signer) ──────────────────────────────────────────
+  const { data: signer } = recall.hr_reviewed_by
     ? await admin
         .from("user_profiles")
         .select("first_name, last_name, position, signature_data_url")
@@ -94,211 +97,201 @@ async function generateRecallPDF(recallId: string): Promise<NextResponse> {
         .maybeSingle()
     : { data: null }
 
-  // Fetch original leave plan for context
-  const { data: leavePlan } = recall.leave_plan_request_id
-    ? await admin
-        .from("leave_plan_requests")
-        .select("preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, leave_type_key")
-        .eq("id", recall.leave_plan_request_id)
-        .maybeSingle()
-    : { data: null }
-
-  // Helpers
-  const safeDate = (d?: string | null) =>
-    d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "N/A"
-  const safeDateShort = (d?: string | null) =>
-    d ? new Date(d).toLocaleDateString("en-GB") : "N/A"
-
-  const staffName      = staffProfile ? `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim().toUpperCase() : "STAFF MEMBER"
-  const staffEmployeeId = staffProfile?.employee_id || "N/A"
-  const staffDept      = deptData?.name || "N/A"
-  const staffPosition  = staffProfile?.position || "N/A"
-
-  const signerName     = signerProfile ? `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim().toUpperCase() : "HR MANAGER"
-  const signerPosition = (signerProfile?.position || "HR MANAGER").toUpperCase()
-
-  const reviewYear = recall.hr_reviewed_at ? new Date(recall.hr_reviewed_at).getFullYear() : new Date().getFullYear()
-  const shortId    = recallId.replace(/-/g, "").substring(0, 6).toUpperCase()
-  const refNo      = `QCC/HR/RCL/${reviewYear}/${shortId}`
-
-  const leaveStart = leavePlan?.adjusted_start_date || leavePlan?.preferred_start_date
-  const leaveEnd   = leavePlan?.adjusted_end_date   || leavePlan?.preferred_end_date
-  const leavePeriodText = leaveStart ? `${safeDateShort(leaveStart)} to ${safeDateShort(leaveEnd)}` : "As approved"
-
-  const leaveTypeLabel = recall.leave_plan_request_id && leavePlan?.leave_type_key
-    ? leavePlan.leave_type_key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
-    : "Annual Leave"
-
-  // ─── PDF Setup ─────────────────────────────────────────────────────────────
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-  const pageWidth    = doc.internal.pageSize.getWidth()
-  const pageHeight   = doc.internal.pageSize.getHeight()
-  const margin       = 20
-  const contentWidth = pageWidth - 2 * margin
-  let y = 18
-
-  // ─── Letterhead ────────────────────────────────────────────────────────────
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(13)
-  doc.setTextColor(0, 0, 0)
-  doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, y, { align: "center" })
-  y += 5
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9.5)
-  doc.text("(COCOBOD)", pageWidth / 2, y, { align: "center" })
-  y += 4.5
-  doc.text("P. O. BOX M54, ACCRA", pageWidth / 2, y, { align: "center" })
-  y += 8
-
-  // Green rule
-  doc.setFillColor(20, 100, 30)
-  doc.rect(margin, y, contentWidth, 1.2, "F")
-  y += 6
-
-  // Ref + Date row
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
-  doc.setTextColor(0, 0, 0)
-  doc.text(`REF. NO: ${refNo}`, margin, y)
-  doc.text(`DATE: ${safeDate(recall.hr_reviewed_at)}`, pageWidth - margin, y, { align: "right" })
-  y += 6
-
-  doc.setDrawColor(180, 180, 180)
-  doc.setLineWidth(0.3)
-  doc.line(margin, y, pageWidth - margin, y)
-  y += 7
-
-  // ─── TO / FROM / SUBJECT ───────────────────────────────────────────────────
-  const labelW = 22
-  const valueX = margin + labelW
-
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(9.5)
-  doc.text("TO:", margin, y)
-  doc.setFont("helvetica", "normal")
-  doc.text(staffName, valueX, y)
-  y += 6
-
-  doc.setFont("helvetica", "bold")
-  doc.text("FROM:", margin, y)
-  doc.setFont("helvetica", "normal")
-  doc.text("HR MANAGER", valueX, y)
-  y += 6
-
-  doc.setFont("helvetica", "bold")
-  doc.text("SUBJECT:", margin, y)
-  doc.setFont("helvetica", "bold")
-  const subjectText = `NOTICE OF RECALL FROM LEAVE — ${reviewYear}`
-  const subjectLines = doc.splitTextToSize(subjectText, contentWidth - labelW)
-  subjectLines.forEach((line: string, i: number) => doc.text(line, valueX, y + i * 5))
-  y += subjectLines.length * 5 + 6
-
-  doc.setDrawColor(200, 200, 200)
-  doc.line(margin, y - 2, pageWidth - margin, y - 2)
-
-  // ─── Body ──────────────────────────────────────────────────────────────────
-  doc.setFont("helvetica", "normal")
-  doc.setFontSize(9.5)
-  doc.setTextColor(0, 0, 0)
-
-  const para1 = `We refer to your current leave and wish to inform you that Management has found it necessary to recall you from leave effective ${safeDate(recall.recall_date)}.`
-  doc.splitTextToSize(para1, contentWidth).forEach((line: string) => { doc.text(line, margin, y); y += 5 })
-  y += 3
-
-  const para2 = "We regret any inconvenience this may cause and wish to assure you that the outstanding leave days will be credited back to your leave balance for scheduling at a mutually convenient time."
-  doc.splitTextToSize(para2, contentWidth).forEach((line: string) => { doc.text(line, margin, y); y += 5 })
-  y += 5
-
-  // ─── Details table ─────────────────────────────────────────────────────────
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    theme: "grid",
-    head: [["DETAILS", ""]],
-    body: [
-      ["Name of Staff",     staffName],
-      ["Employee ID",       staffEmployeeId],
-      ["Position",          staffPosition],
-      ["Department",        staffDept],
-      ["Leave Type",        leaveTypeLabel],
-      ["Leave Period",      leavePeriodText],
-      ["Recall Date",       safeDate(recall.recall_date)],
-      ["Reason for Recall", recall.recall_reason || recall.recall_notes || "Exigencies of service"],
-    ],
-    headStyles: {
-      fillColor: [20, 100, 30],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize: 8.5,
-      halign: "left",
-    },
-    bodyStyles: { fontSize: 8.5, cellPadding: 2.5 },
-    columnStyles: {
-      0: { cellWidth: 50, fontStyle: "bold", fillColor: [245, 248, 245] },
-      1: { cellWidth: contentWidth - 50 },
-    },
-    alternateRowStyles: { fillColor: [255, 255, 255] },
-  })
-
-  y = (doc as any).lastAutoTable.finalY + 8
-
-  // ─── Closing ───────────────────────────────────────────────────────────────
-  const closing = "Kindly acknowledge receipt of this letter and report to your duty post on the date indicated above. We count on your understanding and co-operation."
-  doc.splitTextToSize(closing, contentWidth).forEach((line: string) => { doc.text(line, margin, y); y += 5 })
-  y += 8
-
-  // ─── Signature ─────────────────────────────────────────────────────────────
-  if (signerProfile?.signature_data_url) {
-    try {
-      doc.addImage(signerProfile.signature_data_url, "PNG", margin, y, 38, 15)
-      y += 17
-    } catch { y += 4 }
+  // ── Find HOD for THRO' block ─────────────────────────────────────────────
+  let hodTitle = `THE HEAD OF ${(staffDept?.name || "DEPARTMENT").toUpperCase()}`
+  if (staff?.department_id) {
+    const { data: deptHead } = await admin
+      .from("user_profiles")
+      .select("position")
+      .eq("department_id", staff.department_id)
+      .ilike("position", "%head%")
+      .maybeSingle()
+    if (deptHead?.position) {
+      hodTitle = `THE ${deptHead.position.toUpperCase()}`
+    }
   }
 
+  // ── Build display strings ────────────────────────────────────────────────
+  const staffName  = staff
+    ? `${staff.first_name || ""} ${staff.last_name || ""}`.trim().toUpperCase()
+    : "STAFF MEMBER"
+  const staffSNo   = staff?.employee_id || "N/A"
+  const staffPos   = (staff?.position || "STAFF").toUpperCase()
+
+  const signerName = signer
+    ? `${signer.first_name || ""} ${signer.last_name || ""}`.trim().toUpperCase()
+    : "HR MANAGER"
+  const signerPos  = (signer?.position || "HR MANAGER").toUpperCase()
+
+  const reviewYear = recall.hr_reviewed_at
+    ? new Date(recall.hr_reviewed_at).getFullYear()
+    : new Date().getFullYear()
+
+  const shortId  = recallId.replace(/-/g, "").substring(0, 4).toUpperCase()
+  const refNo    = `QCC/HR/RCL/${reviewYear}/${shortId}`
+
+  const recallDateFormal = fmtFormal(recall.recall_date)
+
+  // Leave period from plan
+  const leaveStart = plan?.adjusted_start_date || plan?.preferred_start_date
+  const leaveEnd   = plan?.adjusted_end_date   || plan?.preferred_end_date
+  const workDays   = plan?.adjusted_days || 0
+  const travelDays = plan?.travelling_days_added || 0
+
+  // ── PDF Setup ────────────────────────────────────────────────────────────
+  const doc      = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+  const pageW    = doc.internal.pageSize.getWidth()
+  const pageH    = doc.internal.pageSize.getHeight()
+  const marginL  = 25
+  const marginR  = 25
+  const contentW = pageW - marginL - marginR
+  let y          = 30
+
+  // ── Staff address block ──────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
+  doc.setTextColor(0, 0, 0)
+  doc.text(`${staffName} (S/NO. ${staffSNo})`, marginL, y);  y += 5.5
+  doc.text(staffPos, marginL, y);                             y += 10
+
+  // THRO' block
+  doc.setFont("helvetica", "bold")
+  doc.text("THRO':", marginL, y)
+  const throcol = marginL + 16
+  doc.text(hodTitle, throcol, y);                                   y += 5.5
+  doc.text("QUALITY CONTROL COMPANY LTD.", throcol, y);             y += 5.5
+  doc.text("HEAD OFFICE, ACCRA", throcol, y);                       y += 12
+
+  // ── Subject (bold, underlined) ───────────────────────────────────────────
+  const subject = `RECALL FROM LEAVE — ${reviewYear}`
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
+  const subjW = doc.getTextWidth(subject)
+  doc.text(subject, marginL, y)
+  doc.setLineWidth(0.3)
   doc.setDrawColor(0, 0, 0)
-  doc.setLineWidth(0.4)
-  doc.line(margin, y, margin + 60, y)
+  doc.line(marginL, y + 1, marginL + subjW, y + 1)
+  y += 10
+
+  // ── Body ─────────────────────────────────────────────────────────────────
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+
+  // Paragraph 1
+  const p1 = `We refer to our letter no. ${refNo} and wish to inform you that Management has found it necessary to recall you from your ${reviewYear} annual vacation leave effective ${recallDateFormal}.`
+  doc.splitTextToSize(p1, contentW).forEach((l: string) => { doc.text(l, marginL, y); y += 5.5 })
   y += 4
 
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(9)
-  doc.text(signerName, margin, y); y += 4.5
+  // Paragraph 2 — days + bold dates if available
+  if (leaveStart && leaveEnd) {
+    const daysText = workDays > 0
+      ? `${numWords(workDays)} (${workDays}) working days${travelDays > 0 ? ` plus ${numWords(travelDays)} (${travelDays}) travelling days` : ""}`
+      : "outstanding leave days"
+
+    const pre  = `Accordingly, your outstanding annual vacation leave of ${daysText} shall be credited back to your leave balance with effect from `
+    const bold = `${fmtFormal(leaveStart)} to ${fmtFormal(leaveEnd)}.`
+
+    const preFull = pre.trimEnd()
+    doc.setFont("helvetica", "normal")
+    doc.text(preFull, marginL, y)
+    const preW = doc.getTextWidth(preFull + " ")
+
+    // Check if bold dates fit on same line; if not, go to next line
+    const boldW = doc.getTextWidth(bold)
+    if (preW + boldW > contentW + 2) {
+      y += 5.5
+      doc.setFont("helvetica", "bold")
+      doc.text(bold, marginL, y)
+    } else {
+      doc.setFont("helvetica", "bold")
+      doc.text(bold, marginL + preW, y)
+    }
+    doc.setFont("helvetica", "normal")
+    y += 5.5
+
+    if (doc.getTextWidth(pre + bold) > contentW) y += 5.5
+    y += 4
+  }
+
+  // Paragraph 3 — resume duty
+  const p3pre  = "You are expected to resume duty on "
+  const p3bold = `${recallDateFormal}.`
   doc.setFont("helvetica", "normal")
-  doc.text(signerPosition, margin, y); y += 4.5
-  doc.text("FOR: MANAGING DIRECTOR", margin, y); y += 8
+  doc.text(p3pre, marginL, y)
+  doc.setFont("helvetica", "bold")
+  doc.text(p3bold, marginL + doc.getTextWidth(p3pre), y)
+  doc.setFont("helvetica", "normal")
+  y += 5.5
+  y += 4
 
-  // ─── CC ────────────────────────────────────────────────────────────────────
-  doc.setDrawColor(180, 180, 180)
-  doc.setLineWidth(0.3)
-  doc.line(margin, y, pageWidth - margin, y)
-  y += 5
+  // Reason paragraph
+  if (recall.recall_reason || recall.recall_notes) {
+    const reason = recall.recall_reason || recall.recall_notes || "exigencies of service"
+    const p4 = `The reason for this recall is due to ${reason.toLowerCase()}.`
+    doc.splitTextToSize(p4, contentW).forEach((l: string) => { doc.text(l, marginL, y); y += 5.5 })
+    y += 4
+  }
+
+  // Closing
+  doc.text("We regret any inconvenience this may cause and count on your understanding and co-operation.", marginL, y)
+  y += 16
+
+  // ── Signature ─────────────────────────────────────────────────────────────
+  if (signer?.signature_data_url) {
+    try {
+      doc.addImage(signer.signature_data_url, "PNG", marginL, y, 40, 16)
+      y += 18
+    } catch { /* skip */ }
+  }
 
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(8.5)
-  doc.text("cc:", margin, y)
-  doc.setFont("helvetica", "normal")
-  const ccText = `Managing Director, Deputy Director HR, HOD — ${staffDept}, Staff File`
-  doc.splitTextToSize(ccText, contentWidth - 12).forEach((line: string, i: number) => {
-    doc.text(line, margin + 10, y + i * 4)
-  })
+  doc.setFontSize(10)
+  doc.text(signerName, marginL, y);               y += 5.5
+  doc.text(signerPos, marginL, y);                y += 5.5
+  doc.text("FOR: MANAGING DIRECTOR", marginL, y); y += 12
 
-  // ─── Footer ────────────────────────────────────────────────────────────────
+  // ── CC block ──────────────────────────────────────────────────────────────
+  doc.setFontSize(9.5)
+  doc.setFont("helvetica", "normal")
+  doc.text("cc:", marginL, y)
+  const ccX     = marginL + 14
+  const ccItems = [
+    "Managing Director",
+    "Dep. Director, HR",
+    "Deputy Director, Finance",
+    "Audit Manager",
+  ]
+  ccItems.forEach(item => { doc.text(item, ccX, y); y += 5 })
+
+  // ── Footer ────────────────────────────────────────────────────────────────
   doc.setFontSize(7)
-  doc.setTextColor(130, 130, 130)
+  doc.setTextColor(160, 160, 160)
   doc.text(
-    `Document Ref: ${refNo}  |  Generated: ${new Date().toLocaleDateString("en-GB")}`,
-    pageWidth / 2, pageHeight - 8, { align: "center" }
+    `Ref: ${refNo}  |  Generated: ${new Date().toLocaleDateString("en-GB")}`,
+    pageW / 2, pageH - 8, { align: "center" }
   )
 
-  const pdfBuffer  = Buffer.from(doc.output("arraybuffer"))
-  const fileStaffName = staffName.replace(/\s+/g, "-").toLowerCase()
-  const filename   = `recall-notice-${fileStaffName}-${reviewYear}.pdf`
+  // ── Output ────────────────────────────────────────────────────────────────
+  const pdfBuf   = Buffer.from(doc.output("arraybuffer"))
+  const fnStaff  = staffName.replace(/\s+/g, "-").toLowerCase()
+  const filename = `recall-approval-${fnStaff}-${reviewYear}.pdf`
 
-  return new NextResponse(pdfBuffer, {
+  return new NextResponse(pdfBuf, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${filename}"`,
-      "Content-Length": String(pdfBuffer.length),
+      "Content-Length": String(pdfBuf.length),
     },
   })
+}
+
+function numWords(n: number): string {
+  const ones = ["","one","two","three","four","five","six","seven","eight","nine",
+                 "ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen",
+                 "seventeen","eighteen","nineteen"]
+  const tens = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"]
+  if (n < 20) return ones[n]
+  const t = Math.floor(n / 10)
+  const o = n % 10
+  return o ? `${tens[t]}-${ones[o]}` : tens[t]
 }
