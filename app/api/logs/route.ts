@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 export async function POST(request: NextRequest) {
   try {
     const { logs } = await request.json()
-    const supabase = createClient()
+    const supabase = await createClient()
 
     const headers = {
       "Cache-Control": "no-cache, no-store, must-revalidate, private",

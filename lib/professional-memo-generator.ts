@@ -168,18 +168,26 @@ async function generateMainMemo(
   doc.line(margin, yPos, pageWidth - margin, yPos)
   yPos += 6
 
-  // ── Addressee block ────────────────────────────────────────────────────────
+  // ── Addressee block — TO / FROM with labels ────────────────────────────────
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   doc.setTextColor(0)
-  doc.text(memoData.to.toUpperCase(), margin, yPos)
-  yPos += 5
+
+  // TO: label (bold black) + value (bold black)
+  doc.text("TO:", margin, yPos)
   doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
-  doc.setTextColor(26, 110, 26) // green for position + dept lines
+  doc.text(memoData.to.toUpperCase(), margin + 15, yPos)
+  yPos += 6
+
+  // FROM: label (bold black) + value (green)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(0)
+  doc.text("FROM:", margin, yPos)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(26, 110, 26) // green for FROM value
   if (memoData.from) {
-    const fromLines = doc.splitTextToSize(memoData.from.toUpperCase(), contentWidth)
-    fromLines.forEach((line: string) => { doc.text(line, margin, yPos); yPos += 4.5 })
+    const fromLines = doc.splitTextToSize(memoData.from.toUpperCase(), contentWidth - 20)
+    fromLines.forEach((line: string) => { doc.text(line, margin + 15, yPos); yPos += 4.5 })
   }
   doc.setTextColor(0)
   yPos += 3
