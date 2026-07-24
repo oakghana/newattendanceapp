@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Parse memo body to extract approval metadata (signer name/position, approval date)
+    // Parse memo body to extract stored location, position, and approval metadata
     let staffList: any[] = []
     let approvedAt: string | null = null
     let approverPosition: string | null = null
@@ -136,9 +136,9 @@ export async function GET(request: NextRequest) {
     if (memo.memo_body) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-        // memo_body stores individual staff fields — NOT a staffList array
-        storedLocationName = body.staff_location_name || body.assigned_location_name || ""
-        storedPosition     = body.staff_position || body.position || ""
+        // memo_body.staff_location_name is now enriched at submission time with real database location
+        storedLocationName = body.staff_location_name || ""
+        storedPosition     = body.staff_position || ""
         approvedAt         = body.approver?.approved_at || null
         approverPosition   = body.selectedSigner?.position || body.approver?.position || null
         if (approverPosition) {
@@ -150,46 +150,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Fetch live station from user_profiles + geofence_locations ──────────
-    // This mirrors the exact proven pattern used in approved-memos/route.ts
-    // which successfully displays location in the UI view page.
-    let liveLocationName = ""
-    let livePosition     = ""
-
-    if (memo.staff_id) {
-      // Step 1: get assigned_location_id and position from user_profiles
-      const { data: staffProfile } = await admin
-        .from("user_profiles")
-        .select("position, assigned_location_id")
-        .eq("id", memo.staff_id)
-        .maybeSingle()
-
-      if (staffProfile) {
-        livePosition = staffProfile.position || ""
-
-        // Step 2: resolve location name from geofence_locations
-        if (staffProfile.assigned_location_id) {
-          const { data: locationRow } = await admin
-            .from("geofence_locations")
-            .select("name")
-            .eq("id", staffProfile.assigned_location_id)
-            .maybeSingle()
-
-          liveLocationName = locationRow?.name || ""
-        }
-      }
-    }
-
-    // Prefer live DB value; fall back to what was stored at memo creation time
-    const stationName  = liveLocationName  || storedLocationName  || ""
-    const positionName = livePosition      || storedPosition       || ""
-
-    // Build the PDF table row
+    // Build the PDF table row using location populated at memo submission time
     staffList = [{
       name:          (memo.staff_name || "").toUpperCase(),
       employeeId:    memo.staff_number || "",
-      position:      positionName,
-      location_name: stationName,
+      position:      storedPosition,
+      location_name: storedLocationName,
       leaveDate:     fmtDate(memo.leave_period_start),
     }]
 
