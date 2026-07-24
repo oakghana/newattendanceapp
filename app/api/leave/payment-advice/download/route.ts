@@ -150,22 +150,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Always fetch live staff location via memo.staff_id (UUID primary key) ──
-    // memo.staff_id is stored reliably in leave_payment_memos and joins directly
-    // to user_profiles.id — this is the definitive source for station/location.
+    // ── Fetch live station from user_profiles + geofence_locations ──────────
+    // This mirrors the exact proven pattern used in approved-memos/route.ts
+    // which successfully displays location in the UI view page.
     let liveLocationName = ""
     let livePosition     = ""
 
     if (memo.staff_id) {
+      // Step 1: get assigned_location_id and position from user_profiles
       const { data: staffProfile } = await admin
         .from("user_profiles")
-        .select("first_name, last_name, employee_id, position, assigned_location_id")
+        .select("position, assigned_location_id")
         .eq("id", memo.staff_id)
         .maybeSingle()
 
       if (staffProfile) {
         livePosition = staffProfile.position || ""
 
+        // Step 2: resolve location name from geofence_locations
         if (staffProfile.assigned_location_id) {
           const { data: locationRow } = await admin
             .from("geofence_locations")
@@ -178,11 +180,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Resolve final station — prefer live DB value, fall back to stored memo_body value
+    // Prefer live DB value; fall back to what was stored at memo creation time
     const stationName  = liveLocationName  || storedLocationName  || ""
     const positionName = livePosition      || storedPosition       || ""
 
-    // Build the single-staff row for the PDF table
+    // Build the PDF table row
     staffList = [{
       name:          (memo.staff_name || "").toUpperCase(),
       employeeId:    memo.staff_number || "",
