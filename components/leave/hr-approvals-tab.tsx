@@ -983,7 +983,7 @@ export function HrApprovalsTab() {
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
-          Approved Payment Advice
+          Approved Request
         </button>
         <button
           onClick={() => setHrApproveSubTab('deferments')}

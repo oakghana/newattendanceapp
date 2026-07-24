@@ -312,7 +312,7 @@ export function HrExecutiveApprovalDashboard() {
           className={activeSection === 'memos' ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''}
         >
           <FileText className="h-4 w-4 mr-1" />
-          Approved Payment Advice ({approvedMemos.length})
+          Approved Request ({approvedMemos.length})
         </Button>
       </div>
 
