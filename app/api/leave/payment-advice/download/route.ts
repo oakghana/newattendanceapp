@@ -71,8 +71,7 @@ export async function GET(request: NextRequest) {
         id, staff_id, staff_name, staff_number, memo_subject, memo_body,
         leave_period_start, leave_period_end, approved_days,
         hr_leave_office_name, signer_id, signer_name,
-        signature_data_url, created_at, status, staff_category,
-        staff_position, staff_location_name, staff_department
+        signature_data_url, created_at, status, staff_category
       `)
       .eq("id", memoId)
       .maybeSingle()
@@ -258,11 +257,23 @@ export async function GET(request: NextRequest) {
     y += bodyLines2.length * 4 + 4
 
     // === STAFF TABLE ===
-    // Build fallback single-staff row using directly stored columns first, then memo_body as fallback
-    const fallbackPosition = memo.staff_position
-      || (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" } catch { return "" } })()
-    const fallbackLocation = memo.staff_location_name
-      || (() => { try { const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body; return b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" } catch { return "" } })()
+    // Build fallback single-staff row extracting position/location from memo_body if needed
+    const fallbackPosition = (() => { 
+      try { 
+        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+        return b?.staffList?.[0]?.position || b?.staffList?.[0]?.rank || "" 
+      } catch { 
+        return "" 
+      } 
+    })()
+    const fallbackLocation = (() => { 
+      try { 
+        const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+        return b?.staffList?.[0]?.location_name || b?.staffList?.[0]?.assigned_location_name || b?.staffList?.[0]?.location || "" 
+      } catch { 
+        return "" 
+      } 
+    })()
 
     const tableData = (staffList.length > 0 ? staffList : [
       {
