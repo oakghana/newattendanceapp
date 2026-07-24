@@ -491,9 +491,10 @@ export function HrExecutiveApprovalDashboard() {
             {approvedDeferments.length === 0 ? (
               <Card><CardContent className="py-8 text-center text-slate-500">No approved deferment requests yet</CardContent></Card>
             ) : approvedDeferments.map(d => {
-              const profile = d.user_profiles as UserProfile | undefined
-              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown'
-              const dept = profile?.departments?.name || ''
+              // Profile is nested under leave_plan_requests, not directly on the deferment record
+              const profile = ((d.leave_plan_requests as any)?.user_profiles || d.user_profiles) as UserProfile | undefined
+              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : d.reason ? 'Staff Member' : 'Unknown'
+              const dept = (profile?.departments as any)?.name || (profile?.departments as any)?.[0]?.name || ''
               return (
                 <Card key={d.id} className="border-l-4 border-l-emerald-400">
                   <CardContent className="pt-4">
@@ -538,9 +539,10 @@ export function HrExecutiveApprovalDashboard() {
             {approvedRecalls.length === 0 ? (
               <Card><CardContent className="py-8 text-center text-slate-500">No approved recall requests yet</CardContent></Card>
             ) : approvedRecalls.map(r => {
-              const profile = r.user_profiles as UserProfile | undefined
-              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown'
-              const dept = profile?.departments?.name || ''
+              // Profile is nested under leave_plan_requests, not directly on the recall record
+              const profile = ((r.leave_plan_requests as any)?.user_profiles || r.user_profiles) as UserProfile | undefined
+              const staffName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Staff Member'
+              const dept = (profile?.departments as any)?.name || (profile?.departments as any)?.[0]?.name || ''
               return (
                 <Card key={r.id} className="border-l-4 border-l-emerald-400">
                   <CardContent className="pt-4">
