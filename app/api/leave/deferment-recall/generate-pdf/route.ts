@@ -1,261 +1,296 @@
-import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import jsPDF from "jspdf"
-import autoTable from 'jspdf-autotable'
+import autoTable from "jspdf-autotable"
+
+/**
+ * POST: Generate a formal QCC memo PDF for an approved deferment or recall request.
+ * Body: { memo_id: string, memo_type: "deferment" | "recall" }
+ * Also supports GET with ?recall_id=<id> for direct recall download.
+ */
+export async function GET(request: NextRequest) {
+  // Support direct recall download via GET ?recall_id=<id>
+  const recallId = request.nextUrl.searchParams.get("recall_id")
+  if (recallId) {
+    return generateRecallPDF(recallId)
+  }
+  return NextResponse.json({ error: "recall_id parameter required" }, { status: 400 })
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const admin = await createAdminClient()
-
     const body = await request.json()
-    const { memo_id, memo_type } = body // 'deferment' or 'recall'
+    const { memo_id, memo_type } = body
 
     if (!memo_id || !memo_type) {
-      return NextResponse.json(
-        { error: "Missing required fields: memo_id, memo_type" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Missing required fields: memo_id, memo_type" }, { status: 400 })
     }
 
-    let memoData: any = null
-    let requestData: any = null
-    let staffData: any = null
-
-    if (memo_type === 'deferment') {
-      const { data: memo } = await admin
-        .from("deferment_memos")
-        .select(`
-          *,
-          staff:user_profiles!deferment_memos_staff_id_fkey(
-            first_name, last_name, employee_id, position, department_id,
-            departments(name)
-          ),
-          deferment_request:leave_deferment_requests(
-            id, reason, requested_deferment_year, requested_deferment_period
-          )
-        `)
-        .eq("id", memo_id)
-        .single()
-
-      memoData = memo
-    } else if (memo_type === 'recall') {
-      const { data: memo } = await admin
-        .from("recall_memos")
-        .select(`
-          *,
-          staff:user_profiles!recall_memos_staff_id_fkey(
-            first_name, last_name, employee_id, position, department_id,
-            departments(name)
-          ),
-          recall_request:leave_recall_requests(
-            id, recall_reason, recall_date
-          )
-        `)
-        .eq("id", memo_id)
-        .single()
-
-      memoData = memo
-    } else {
-      return NextResponse.json(
-        { error: "Invalid memo_type. Must be 'deferment' or 'recall'" },
-        { status: 400 }
-      )
+    if (memo_type === "deferment") {
+      // Delegate to the download-approved handler pattern
+      const { NextRequest: NR } = await import("next/server")
+      const url = new URL(`/api/leave/deferment-recall/download-approved?memo_id=${memo_id}`, "http://localhost")
+      return NextResponse.redirect(url)
     }
 
-    if (!memoData) {
-      return NextResponse.json({ error: "Memo not found" }, { status: 404 })
+    if (memo_type === "recall") {
+      return generateRecallPDF(memo_id)
     }
 
-    // Create PDF
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const pageHeight = doc.internal.pageSize.getHeight()
-    let yPosition = 20
-
-    // Header
-    doc.setFontSize(16)
-    doc.setFont(undefined, 'bold')
-    doc.text(memo_type === 'deferment' ? 'LEAVE DEFERMENT MEMO' : 'LEAVE RECALL MEMO', pageWidth / 2, yPosition, { align: 'center' })
-
-    yPosition += 15
-
-    // Organization details
-    doc.setFontSize(10)
-    doc.setFont(undefined, 'normal')
-    doc.text('MINISTRY/OFFICE OF HUMAN RESOURCES', pageWidth / 2, yPosition, { align: 'center' })
-    yPosition += 5
-    doc.text('REPUBLIC OF GHANA', pageWidth / 2, yPosition, { align: 'center' })
-
-    yPosition += 15
-
-    // Memo details table
-    const memoDetails: string[][] = [
-      ['MEMO ID:', memoData.id.substring(0, 8).toUpperCase()],
-      ['DATE:', new Date().toLocaleDateString('en-GB')],
-      ['TO:', memoData.staff?.first_name && memoData.staff?.last_name 
-        ? `${memoData.staff.first_name} ${memoData.staff.last_name}`
-        : 'Staff Member']
-    ]
-
-    doc.setFontSize(9)
-    let leftX = 20
-    let rightX = 110
-    let detailY = yPosition
-    memoDetails.forEach((row, idx) => {
-      doc.text(row[0], leftX, detailY)
-      doc.text(row[1], rightX, detailY)
-      detailY += 6
-    })
-
-    yPosition = detailY + 10
-
-    // Staff Information Section
-    doc.setFont(undefined, 'bold')
-    doc.text('STAFF INFORMATION', 20, yPosition)
-    yPosition += 8
-
-    doc.setFont(undefined, 'normal')
-    const staffInfo = [
-      ['Staff Name:', `${memoData.staff?.first_name} ${memoData.staff?.last_name}`],
-      ['Employee ID:', memoData.staff?.employee_id || 'N/A'],
-      ['Position:', memoData.staff?.position || 'N/A'],
-      ['Department:', memoData.staff?.departments?.name || 'N/A']
-    ]
-
-    staffInfo.forEach(([label, value]) => {
-      doc.setFont(undefined, 'bold')
-      doc.text(label, 20, yPosition)
-      doc.setFont(undefined, 'normal')
-      doc.text(value, 60, yPosition)
-      yPosition += 6
-    })
-
-    yPosition += 5
-
-    // Leave Information
-    doc.setFont(undefined, 'bold')
-    doc.text('LEAVE INFORMATION', 20, yPosition)
-    yPosition += 8
-
-    doc.setFont(undefined, 'normal')
-    const leaveInfo = memo_type === 'deferment' 
-      ? [
-          ['Leave Type:', memoData.memo_body?.leave_type || 'Annual Leave'],
-          ['Original Period:', `${new Date(memoData.memo_body?.original_start_date).toLocaleDateString('en-GB')} to ${new Date(memoData.memo_body?.original_end_date).toLocaleDateString('en-GB')}`],
-          ['Requested Days:', memoData.memo_body?.requested_days || 'N/A'],
-          ['Defer To Year:', memoData.deferment_request?.requested_deferment_year || 'N/A'],
-          ['Reason:', memoData.deferment_request?.reason || 'Not provided']
-        ]
-      : [
-          ['Leave Type:', memoData.memo_body?.leave_type || 'Annual Leave'],
-          ['Leave Period:', `${new Date(memoData.memo_body?.original_start_date).toLocaleDateString('en-GB')} to ${new Date(memoData.memo_body?.original_end_date).toLocaleDateString('en-GB')}`],
-          ['Recall Date:', new Date(memoData.recall_request?.recall_date).toLocaleDateString('en-GB')],
-          ['Reason:', memoData.recall_request?.recall_reason || 'Not provided']
-        ]
-
-    leaveInfo.forEach(([label, value]) => {
-      if (yPosition > pageHeight - 40) {
-        doc.addPage()
-        yPosition = 20
-      }
-      doc.setFont(undefined, 'bold')
-      doc.text(label, 20, yPosition)
-      doc.setFont(undefined, 'normal')
-      
-      // Word wrap for long values
-      const wrapped = doc.splitTextToSize(value, 100)
-      doc.text(wrapped, 60, yPosition)
-      yPosition += 6 * wrapped.length
-    })
-
-    yPosition += 10
-
-    // Decision Section
-    doc.setFont(undefined, 'bold')
-    doc.text('APPROVAL DECISION', 20, yPosition)
-    yPosition += 8
-
-    doc.setFont(undefined, 'normal')
-    const statusText = memoData.status === 'approved' 
-      ? 'This leave request has been APPROVED.'
-      : memoData.status === 'rejected'
-      ? 'This leave request has been REJECTED.'
-      : 'This leave request is PENDING approval.'
-
-    const statusColor = memoData.status === 'approved' 
-      ? [34, 139, 34]  // Green
-      : memoData.status === 'rejected'
-      ? [220, 20, 60]  // Red
-      : [255, 165, 0]  // Orange
-
-    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2])
-    doc.setFont(undefined, 'bold')
-    doc.text(statusText, 20, yPosition)
-    doc.setTextColor(0, 0, 0)
-
-    yPosition += 10
-
-    // Approval Notes
-    if (memoData.memo_body?.approval_notes) {
-      doc.setFont(undefined, 'bold')
-      doc.text('APPROVAL NOTES:', 20, yPosition)
-      yPosition += 6
-      doc.setFont(undefined, 'normal')
-      const notesWrapped = doc.splitTextToSize(memoData.memo_body.approval_notes, 170)
-      doc.text(notesWrapped, 20, yPosition)
-      yPosition += 6 * notesWrapped.length + 5
-    }
-
-    // Signature Section
-    if (yPosition > pageHeight - 40) {
-      doc.addPage()
-      yPosition = 20
-    }
-
-    yPosition += 10
-    doc.setFont(undefined, 'bold')
-    doc.text('SIGNED BY:', 20, yPosition)
-    yPosition += 8
-
-    doc.setFont(undefined, 'normal')
-    doc.text(`Name: ${memoData.signer_name || 'HR Executive'}`, 20, yPosition)
-    yPosition += 6
-    doc.text(`Position: ${memoData.signer_position || 'N/A'}`, 20, yPosition)
-    yPosition += 6
-    doc.text(`Date: ${new Date(memoData.generated_at).toLocaleDateString('en-GB')}`, 20, yPosition)
-
-    // Signature line
-    yPosition += 15
-    doc.setDrawColor(0, 0, 0)
-    doc.line(20, yPosition, 60, yPosition)
-    yPosition += 3
-    doc.setFontSize(8)
-    doc.text('Signature', 20, yPosition)
-
-    // Footer
-    yPosition = pageHeight - 15
-    doc.setFontSize(8)
-    doc.setFont(undefined, 'normal')
-    doc.text(`Document ID: ${memoData.id}`, pageWidth / 2, yPosition, { align: 'center' })
-    yPosition += 4
-    doc.text(`Generated on: ${new Date().toLocaleString('en-GB')}`, pageWidth / 2, yPosition, { align: 'center' })
-
-    // Generate PDF buffer
-    const pdfBuffer = Buffer.from(doc.output('arraybuffer'))
-    const filename = `${memo_type}-memo-${memoData.id.substring(0, 8)}.pdf`
-
-    return new NextResponse(pdfBuffer, {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': pdfBuffer.length
-      }
-    })
+    return NextResponse.json({ error: "Invalid memo_type. Must be 'deferment' or 'recall'" }, { status: 400 })
   } catch (error) {
-    console.error("[v0] Error generating PDF:", error)
+    console.error("[v0] generate-pdf error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to generate PDF" },
       { status: 500 }
     )
   }
+}
+
+async function generateRecallPDF(recallId: string): Promise<NextResponse> {
+  const admin = await createAdminClient()
+
+  // Fetch the recall request
+  const { data: recall, error: recallErr } = await admin
+    .from("leave_recall_requests")
+    .select(`
+      id, staff_user_id, leave_plan_request_id,
+      recall_date, recall_reason, recall_notes,
+      hr_decision, hr_reviewed_at, hr_reviewed_by,
+      status, created_at
+    `)
+    .eq("id", recallId)
+    .maybeSingle()
+
+  if (recallErr || !recall) {
+    return NextResponse.json({ error: "Recall request not found" }, { status: 404 })
+  }
+
+  // Fetch staff profile
+  const { data: staffProfile } = await admin
+    .from("user_profiles")
+    .select("first_name, last_name, employee_id, position, department_id")
+    .eq("id", recall.staff_user_id)
+    .maybeSingle()
+
+  const { data: deptData } = staffProfile?.department_id
+    ? await admin.from("departments").select("name").eq("id", staffProfile.department_id).maybeSingle()
+    : { data: null }
+
+  // Fetch HR reviewer (signer)
+  const { data: signerProfile } = recall.hr_reviewed_by
+    ? await admin
+        .from("user_profiles")
+        .select("first_name, last_name, position, signature_data_url")
+        .eq("id", recall.hr_reviewed_by)
+        .maybeSingle()
+    : { data: null }
+
+  // Fetch original leave plan for context
+  const { data: leavePlan } = recall.leave_plan_request_id
+    ? await admin
+        .from("leave_plan_requests")
+        .select("preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date, leave_type_key")
+        .eq("id", recall.leave_plan_request_id)
+        .maybeSingle()
+    : { data: null }
+
+  // Helpers
+  const safeDate = (d?: string | null) =>
+    d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "N/A"
+  const safeDateShort = (d?: string | null) =>
+    d ? new Date(d).toLocaleDateString("en-GB") : "N/A"
+
+  const staffName      = staffProfile ? `${staffProfile.first_name || ""} ${staffProfile.last_name || ""}`.trim().toUpperCase() : "STAFF MEMBER"
+  const staffEmployeeId = staffProfile?.employee_id || "N/A"
+  const staffDept      = deptData?.name || "N/A"
+  const staffPosition  = staffProfile?.position || "N/A"
+
+  const signerName     = signerProfile ? `${signerProfile.first_name || ""} ${signerProfile.last_name || ""}`.trim().toUpperCase() : "HR MANAGER"
+  const signerPosition = (signerProfile?.position || "HR MANAGER").toUpperCase()
+
+  const reviewYear = recall.hr_reviewed_at ? new Date(recall.hr_reviewed_at).getFullYear() : new Date().getFullYear()
+  const shortId    = recallId.replace(/-/g, "").substring(0, 6).toUpperCase()
+  const refNo      = `QCC/HR/RCL/${reviewYear}/${shortId}`
+
+  const leaveStart = leavePlan?.adjusted_start_date || leavePlan?.preferred_start_date
+  const leaveEnd   = leavePlan?.adjusted_end_date   || leavePlan?.preferred_end_date
+  const leavePeriodText = leaveStart ? `${safeDateShort(leaveStart)} to ${safeDateShort(leaveEnd)}` : "As approved"
+
+  const leaveTypeLabel = recall.leave_plan_request_id && leavePlan?.leave_type_key
+    ? leavePlan.leave_type_key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : "Annual Leave"
+
+  // ─── PDF Setup ─────────────────────────────────────────────────────────────
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+  const pageWidth    = doc.internal.pageSize.getWidth()
+  const pageHeight   = doc.internal.pageSize.getHeight()
+  const margin       = 20
+  const contentWidth = pageWidth - 2 * margin
+  let y = 18
+
+  // ─── Letterhead ────────────────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(13)
+  doc.setTextColor(0, 0, 0)
+  doc.text("QUALITY CONTROL COMPANY LTD.", pageWidth / 2, y, { align: "center" })
+  y += 5
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9.5)
+  doc.text("(COCOBOD)", pageWidth / 2, y, { align: "center" })
+  y += 4.5
+  doc.text("P. O. BOX M54, ACCRA", pageWidth / 2, y, { align: "center" })
+  y += 8
+
+  // Green rule
+  doc.setFillColor(20, 100, 30)
+  doc.rect(margin, y, contentWidth, 1.2, "F")
+  y += 6
+
+  // Ref + Date row
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
+  doc.setTextColor(0, 0, 0)
+  doc.text(`REF. NO: ${refNo}`, margin, y)
+  doc.text(`DATE: ${safeDate(recall.hr_reviewed_at)}`, pageWidth - margin, y, { align: "right" })
+  y += 6
+
+  doc.setDrawColor(180, 180, 180)
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, pageWidth - margin, y)
+  y += 7
+
+  // ─── TO / FROM / SUBJECT ───────────────────────────────────────────────────
+  const labelW = 22
+  const valueX = margin + labelW
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(9.5)
+  doc.text("TO:", margin, y)
+  doc.setFont("helvetica", "normal")
+  doc.text(staffName, valueX, y)
+  y += 6
+
+  doc.setFont("helvetica", "bold")
+  doc.text("FROM:", margin, y)
+  doc.setFont("helvetica", "normal")
+  doc.text("HR MANAGER", valueX, y)
+  y += 6
+
+  doc.setFont("helvetica", "bold")
+  doc.text("SUBJECT:", margin, y)
+  doc.setFont("helvetica", "bold")
+  const subjectText = `NOTICE OF RECALL FROM LEAVE — ${reviewYear}`
+  const subjectLines = doc.splitTextToSize(subjectText, contentWidth - labelW)
+  subjectLines.forEach((line: string, i: number) => doc.text(line, valueX, y + i * 5))
+  y += subjectLines.length * 5 + 6
+
+  doc.setDrawColor(200, 200, 200)
+  doc.line(margin, y - 2, pageWidth - margin, y - 2)
+
+  // ─── Body ──────────────────────────────────────────────────────────────────
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9.5)
+  doc.setTextColor(0, 0, 0)
+
+  const para1 = `We refer to your current leave and wish to inform you that Management has found it necessary to recall you from leave effective ${safeDate(recall.recall_date)}.`
+  doc.splitTextToSize(para1, contentWidth).forEach((line: string) => { doc.text(line, margin, y); y += 5 })
+  y += 3
+
+  const para2 = "We regret any inconvenience this may cause and wish to assure you that the outstanding leave days will be credited back to your leave balance for scheduling at a mutually convenient time."
+  doc.splitTextToSize(para2, contentWidth).forEach((line: string) => { doc.text(line, margin, y); y += 5 })
+  y += 5
+
+  // ─── Details table ─────────────────────────────────────────────────────────
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    theme: "grid",
+    head: [["DETAILS", ""]],
+    body: [
+      ["Name of Staff",     staffName],
+      ["Employee ID",       staffEmployeeId],
+      ["Position",          staffPosition],
+      ["Department",        staffDept],
+      ["Leave Type",        leaveTypeLabel],
+      ["Leave Period",      leavePeriodText],
+      ["Recall Date",       safeDate(recall.recall_date)],
+      ["Reason for Recall", recall.recall_reason || recall.recall_notes || "Exigencies of service"],
+    ],
+    headStyles: {
+      fillColor: [20, 100, 30],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 8.5,
+      halign: "left",
+    },
+    bodyStyles: { fontSize: 8.5, cellPadding: 2.5 },
+    columnStyles: {
+      0: { cellWidth: 50, fontStyle: "bold", fillColor: [245, 248, 245] },
+      1: { cellWidth: contentWidth - 50 },
+    },
+    alternateRowStyles: { fillColor: [255, 255, 255] },
+  })
+
+  y = (doc as any).lastAutoTable.finalY + 8
+
+  // ─── Closing ───────────────────────────────────────────────────────────────
+  const closing = "Kindly acknowledge receipt of this letter and report to your duty post on the date indicated above. We count on your understanding and co-operation."
+  doc.splitTextToSize(closing, contentWidth).forEach((line: string) => { doc.text(line, margin, y); y += 5 })
+  y += 8
+
+  // ─── Signature ─────────────────────────────────────────────────────────────
+  if (signerProfile?.signature_data_url) {
+    try {
+      doc.addImage(signerProfile.signature_data_url, "PNG", margin, y, 38, 15)
+      y += 17
+    } catch { y += 4 }
+  }
+
+  doc.setDrawColor(0, 0, 0)
+  doc.setLineWidth(0.4)
+  doc.line(margin, y, margin + 60, y)
+  y += 4
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(9)
+  doc.text(signerName, margin, y); y += 4.5
+  doc.setFont("helvetica", "normal")
+  doc.text(signerPosition, margin, y); y += 4.5
+  doc.text("FOR: MANAGING DIRECTOR", margin, y); y += 8
+
+  // ─── CC ────────────────────────────────────────────────────────────────────
+  doc.setDrawColor(180, 180, 180)
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, pageWidth - margin, y)
+  y += 5
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(8.5)
+  doc.text("cc:", margin, y)
+  doc.setFont("helvetica", "normal")
+  const ccText = `Managing Director, Deputy Director HR, HOD — ${staffDept}, Staff File`
+  doc.splitTextToSize(ccText, contentWidth - 12).forEach((line: string, i: number) => {
+    doc.text(line, margin + 10, y + i * 4)
+  })
+
+  // ─── Footer ────────────────────────────────────────────────────────────────
+  doc.setFontSize(7)
+  doc.setTextColor(130, 130, 130)
+  doc.text(
+    `Document Ref: ${refNo}  |  Generated: ${new Date().toLocaleDateString("en-GB")}`,
+    pageWidth / 2, pageHeight - 8, { align: "center" }
+  )
+
+  const pdfBuffer  = Buffer.from(doc.output("arraybuffer"))
+  const fileStaffName = staffName.replace(/\s+/g, "-").toLowerCase()
+  const filename   = `recall-notice-${fileStaffName}-${reviewYear}.pdf`
+
+  return new NextResponse(pdfBuffer, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(pdfBuffer.length),
+    },
+  })
 }
