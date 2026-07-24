@@ -9,12 +9,20 @@ import autoTable from "jspdf-autotable"
  * Also supports GET with ?recall_id=<id> for direct recall download.
  */
 export async function GET(request: NextRequest) {
-  // Support direct recall download via GET ?recall_id=<id>
-  const recallId = request.nextUrl.searchParams.get("recall_id")
-  if (recallId) {
-    return generateRecallPDF(recallId)
+  try {
+    // Support direct recall download via GET ?recall_id=<id>
+    const recallId = request.nextUrl.searchParams.get("recall_id")
+    if (recallId) {
+      return await generateRecallPDF(recallId)
+    }
+    return NextResponse.json({ error: "recall_id parameter required" }, { status: 400 })
+  } catch (error) {
+    console.error("[v0] generate-pdf GET error:", error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to generate PDF" },
+      { status: 500 }
+    )
   }
-  return NextResponse.json({ error: "recall_id parameter required" }, { status: 400 })
 }
 
 export async function POST(request: NextRequest) {
