@@ -63,6 +63,19 @@ export async function GET(request: NextRequest) {
           .maybeSingle()
       : { data: null }
 
+    // Fetch HOD profile (for routing reference)
+    const { data: hodProfile } = req.hod_reviewed_by
+      ? await admin
+          .from("user_profiles")
+          .select("first_name, last_name, position")
+          .eq("id", req.hod_reviewed_by)
+          .maybeSingle()
+      : { data: null }
+
+    const hodName = hodProfile
+      ? `${hodProfile.first_name || ""} ${hodProfile.last_name || ""}`.trim().toUpperCase()
+      : null
+
     // Helpers
     const safeDate = (d?: string | null) =>
       d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "N/A"
@@ -268,7 +281,14 @@ export async function GET(request: NextRequest) {
     doc.setFontSize(8.5)
     doc.text("cc:", margin, y)
     doc.setFont("helvetica", "normal")
-    const ccText = "Managing Director, Deputy Director HR, HOD — " + staffDept + ", Staff File"
+    // Build CC list: include HOD name if available
+    const ccRecipients = [
+      "Managing Director",
+      "Deputy Director HR",
+      hodName ? `${hodName}, Head of Department (${staffDept})` : `HOD — ${staffDept}`,
+      "Staff File"
+    ]
+    const ccText = ccRecipients.join(", ")
     const ccLines = doc.splitTextToSize(ccText, contentWidth - 12)
     ccLines.forEach((line: string, i: number) => {
       doc.text(line, margin + 10, y + i * 4)
