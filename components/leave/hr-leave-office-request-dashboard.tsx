@@ -221,14 +221,8 @@ export function HRLeaveOfficeRequestDashboard() {
                 <p className="font-medium text-slate-700 truncate">{request.staff?.position}</p>
               </div>
               <div>
-                <p className="text-slate-500">Leave Type</p>
-                <p className="font-medium text-slate-700">{request.leave?.leave_type || 'Annual'}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Period</p>
-                <p className="font-medium text-slate-700 text-xs">
-                  {request.leave?.balance_period_start ? format(new Date(request.leave.balance_period_start), 'MMM yy') : 'N/A'}
-                </p>
+                <p className="text-slate-500">Submitted</p>
+                <p className="font-medium text-slate-700">{request.created_at ? format(new Date(request.created_at), 'dd MMM yyyy') : 'N/A'}</p>
               </div>
             </div>
 
@@ -448,8 +442,10 @@ export function HRLeaveOfficeRequestDashboard() {
                   {selectedRequest.data.staff?.employee_id} • {selectedRequest.data.department?.name}
                 </div>
                 <div className="text-slate-600">
-                  {selectedRequest.type === 'deferment' ? 'Deferment' : 'Recall'} •{' '}
-                  {selectedRequest.data.leave?.leave_type || 'Annual'} Leave
+                  {selectedRequest.type === 'deferment' ? 'Deferment Request' : 'Recall Request'}
+                  {selectedRequest.type === 'deferment' && selectedRequest.data.deferment_to_year
+                    ? ` — defer to ${selectedRequest.data.deferment_to_year}`
+                    : ''}
                 </div>
               </div>
 

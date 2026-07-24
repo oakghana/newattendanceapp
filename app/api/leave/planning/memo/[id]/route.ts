@@ -127,7 +127,8 @@ function pickBestSignature(rows: any[]): any | null {
 
 /** Returns the official subject heading per leave type (no "RE:" prefix). */
 function getMemoSubject(leaveTypeKey: string, leavePeriod: string, draftSubject?: string | null): string {
-  if (draftSubject && draftSubject.trim()) return draftSubject.trim()
+  // Annual leave always uses the official generated subject — never the stored draft subject
+  if (draftSubject && draftSubject.trim() && String(leaveTypeKey || "").toLowerCase() !== "annual") return draftSubject.trim()
   // Use current year (2026) for annual leave memos instead of the leave period start year
   const currentYear = new Date().getFullYear()
   const yearPart = String(currentYear)
