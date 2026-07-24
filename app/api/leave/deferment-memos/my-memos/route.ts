@@ -22,16 +22,18 @@ export async function GET() {
     }
 
     // Fetch approved deferment requests for this staff member
+    // Only select columns that actually exist in leave_deferment_requests
     const { data: defermentMemos, error: deferErr } = await supabase
       .from("leave_deferment_requests")
       .select(`
         id,
         user_id,
-        original_leave_period_start,
-        original_leave_period_end,
         requested_deferment_year,
+        requested_deferment_period,
         deferment_start_date,
         deferment_end_date,
+        rescheduled_start_date,
+        rescheduled_end_date,
         reason,
         status,
         hr_office_decision,
@@ -56,11 +58,12 @@ export async function GET() {
       id: memo.id,
       type: "deferment",
       staff_id: memo.user_id,
-      original_leave_period_start: memo.original_leave_period_start || null,
-      original_leave_period_end: memo.original_leave_period_end || null,
       requested_deferment_year: memo.requested_deferment_year || null,
+      requested_deferment_period: memo.requested_deferment_period || null,
       deferment_start_date: memo.deferment_start_date || null,
       deferment_end_date: memo.deferment_end_date || null,
+      rescheduled_start_date: memo.rescheduled_start_date || null,
+      rescheduled_end_date: memo.rescheduled_end_date || null,
       reason: memo.reason || null,
       hr_office_decision: memo.hr_office_decision,
       hr_office_reviewed_at: memo.hr_office_reviewed_at || memo.updated_at,

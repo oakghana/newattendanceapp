@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js"
+import { createClient as createSessionClient, createAdminClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
 // HR Executive roles that can approve deferment/recall requests
-const HR_EXECUTIVE_ROLES = ["hr_executive", "hr_director", "hr_head", "admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_leave_office"]
+const HR_EXECUTIVE_ROLES = ["hr", "hr_executive", "hr_director", "hr_head", "admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_leave_office", "hr_office"]
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,15 +18,22 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Always resolve the user ID from the server session — never trust the client-supplied value
+    const sessionClient = await createSessionClient()
+    const { data: { user: sessionUser } } = await sessionClient.auth.getUser()
+
     const body = await request.json()
     const { 
       request_id, 
       request_type, // 'deferment' or 'recall'
       decision, // 'approved' or 'rejected'
       rejection_reason,
-      hr_executive_id,
       hr_executive_role 
     } = body
+
+    // Use authenticated user ID; fall back to client-supplied value only as last resort
+    const hr_executive_id = sessionUser?.id || body.hr_executive_id || null
 
     // Validate required fields
     if (!request_id || !request_type || !decision || !hr_executive_id) {

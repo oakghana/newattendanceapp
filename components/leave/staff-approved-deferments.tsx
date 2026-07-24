@@ -8,11 +8,12 @@ import { FileText, Download, Calendar, AlertCircle, Loader2 } from "lucide-react
 interface ApprovedDeferment {
   id: string
   staff_id: string
-  original_leave_period_start: string | null
-  original_leave_period_end: string | null
   requested_deferment_year: number | null
+  requested_deferment_period: string | null
   deferment_start_date: string | null
   deferment_end_date: string | null
+  rescheduled_start_date: string | null
+  rescheduled_end_date: string | null
   reason: string | null
   hr_office_decision: string
   hr_office_reviewed_at: string | null
@@ -138,8 +139,10 @@ export function StaffApprovedDeferments() {
           {deferments.map((deferment) => {
             const fmtD = (d: string | null) =>
               d ? new Date(d).toLocaleDateString("en-GB") : "N/A"
-            const origStart = fmtD(deferment.original_leave_period_start)
-            const origEnd = fmtD(deferment.original_leave_period_end)
+            const deferStart = fmtD(deferment.deferment_start_date)
+            const deferEnd   = fmtD(deferment.deferment_end_date)
+            const reschedStart = fmtD(deferment.rescheduled_start_date)
+            const reschedEnd   = fmtD(deferment.rescheduled_end_date)
             const approvedDate = fmtD(deferment.hr_office_reviewed_at)
 
             return (
@@ -151,12 +154,16 @@ export function StaffApprovedDeferments() {
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm text-slate-600">
                     <div>
-                      <p className="text-xs text-slate-500">Original Leave Period</p>
-                      <p className="font-medium text-slate-800">{origStart} to {origEnd}</p>
+                      <p className="text-xs text-slate-500">Deferment Period</p>
+                      <p className="font-medium text-slate-800">{deferStart} to {deferEnd}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Defer To Year</p>
-                      <p className="font-medium text-slate-800">{deferment.requested_deferment_year}</p>
+                      <p className="text-xs text-slate-500">Rescheduled To</p>
+                      <p className="font-medium text-slate-800">
+                        {deferment.rescheduled_start_date
+                          ? `${reschedStart} to ${reschedEnd}`
+                          : deferment.requested_deferment_period || `Year ${deferment.requested_deferment_year}` || "N/A"}
+                      </p>
                     </div>
                     {deferment.reason && (
                       <div className="col-span-2">
