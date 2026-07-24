@@ -134,11 +134,11 @@ export async function GET(request: NextRequest) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
         const rawList: any[] = body.staffList || body.staff || []
-        // Enrich each staff record — if position or location_name is blank, try memo-level columns
+        // Enrich each staff record — position and location come from memo_body, not memo columns
         staffList = rawList.map((s: any) => ({
           ...s,
-          position: s.position || s.rank || memo.staff_position || "",
-          location_name: s.location_name || s.assigned_location_name || s.location || s.station || memo.staff_location_name || "",
+          position: s.position || s.rank || "",
+          location_name: s.location_name || s.assigned_location_name || s.location || s.station || "",
         }))
         // Use the approval date stored at approval time — NOT today's date
         approvedAt = body.approver?.approved_at || null

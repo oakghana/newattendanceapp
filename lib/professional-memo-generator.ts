@@ -356,23 +356,23 @@ async function generateMainMemo(
   // ── Leave details table ────────────────────────────────────────────────────
   if (memoData.staffList && memoData.staffList.length > 0 && !hasAttachment) {
     // Individual staff leave table (payment/group memos)
+    // Removed POSITION column as it's consistently empty — table now shows: NO, NAME, S/NO, DEPARTMENT, LEAVE DATE
     const tableData = memoData.staffList.map(staff => [
       String(staff.no),
       staff.name,
       staff.employeeId,
-      staff.position,
       staff.department,
       staff.leaveDate,
     ])
     autoTable(doc, {
       startY: yPos,
-      head: [["NO", "NAME", "S/NO", "POSITION", "DEPARTMENT", "LEAVE DATE"]],
+      head: [["NO", "NAME", "S/NO", "DEPARTMENT", "LEAVE DATE"]],
       body: tableData,
       margin: { left: margin, right: margin },
       theme: "grid",
       styles: { fontSize: 8.5, halign: "left", cellPadding: 2.5, lineColor: [180, 180, 180], lineWidth: 0.3 },
       headStyles: { fillColor: [60, 40, 10], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 8 },
-      columnStyles: { 0: { halign: "center" }, 2: { halign: "center" }, 5: { halign: "center" } },
+      columnStyles: { 0: { halign: "center" }, 2: { halign: "center" }, 4: { halign: "center" } },
     })
     yPos = (doc as any).lastAutoTable.finalY + 6
   } else if (!hasAttachment) {

@@ -35,14 +35,19 @@ export function StaffApprovedDeferments() {
       setIsLoading(true)
       setError(null)
       const res = await fetch("/api/leave/deferment-memos/my-memos")
-      if (!res.ok) throw new Error("Failed to fetch deferments")
       const data = await res.json()
+      
+      if (!res.ok) {
+        console.error("[v0] Deferment API error:", res.status, data)
+        throw new Error(data?.error || "Failed to fetch deferments")
+      }
+      
       // Filter for deferment type only
       const defermentMemos = data.memos?.filter((m: any) => m.type === "deferment") || []
       setDeferments(defermentMemos)
     } catch (err) {
       console.error("[v0] Error fetching deferments:", err)
-      setError("Failed to load approved deferments")
+      setError(err instanceof Error ? err.message : "Failed to load approved deferments")
     } finally {
       setIsLoading(false)
     }
