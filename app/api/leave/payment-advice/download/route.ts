@@ -370,8 +370,7 @@ export async function GET(request: NextRequest) {
     doc.setFontSize(9)
     doc.setFont("helvetica", "normal")
     
-    const staffCount = staffList.length > 0 ? staffList.length : 1
-    const bodyText1 = `We wish to inform you that the attached list of ${staffCount} ${memo.staff_category ? memo.staff_category + " " : ""}staff are scheduled to proceed on their annual vacation leave in ${monthYear}.`
+    const bodyText1 = `We wish to inform you that the staff member listed in the attached document is scheduled to proceed on annual vacation leave in ${monthYear}.`
     const bodyLines1 = doc.splitTextToSize(bodyText1, contentWidth)
     doc.text(bodyLines1, margin, y)
     y += bodyLines1.length * 4 + 4

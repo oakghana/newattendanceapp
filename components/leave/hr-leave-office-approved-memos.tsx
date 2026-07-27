@@ -65,6 +65,7 @@ export function HrLeaveOfficeApprovedMemos() {
   const [downloadingGroup, setDownloadingGroup] = useState<string | null>(null)
   const [downloadingAll, setDownloadingAll] = useState<string | null>(null)
   const [downloadingAllGroups, setDownloadingAllGroups] = useState(false)
+  const [downloadingCombined, setDownloadingCombined] = useState<string | null>(null)
 
   const fetchApprovedMemos = useCallback(async () => {
     setLoading(true)
@@ -242,6 +243,77 @@ export function HrLeaveOfficeApprovedMemos() {
     }
   }
 
+  const downloadCombinedGroupMemo = async (monthGroups: ApprovedMemoGroup[], monthLabel: string, month: string) => {
+    setDownloadingCombined(month)
+    try {
+      // Collect all staff from all categories in this month
+      const staffList: any[] = []
+      for (const group of monthGroups) {
+        for (const memo of group.memos) {
+          // Extract staff data from memo details
+          staffList.push({
+            full_name: memo.staff_name,
+            employee_id: memo.staff_id || "N/A",
+            position: memo.position || "N/A",
+            department_name: memo.department_name || "N/A",
+            start_date: memo.start_date,
+            category: group.category,
+          })
+        }
+      }
+
+      if (staffList.length === 0) {
+        toast({
+          title: "No staff found",
+          description: "Cannot generate combined memo with no staff data",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Call generate-memo API to create combined memo
+      const res = await fetch("/api/leave/payment-advice/generate-memo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month,
+          staffList,
+          combined: true, // Flag to generate combined memo
+        }),
+      })
+
+      if (!res.ok) throw new Error("Failed to generate combined memo")
+      const { memos } = await res.json()
+
+      // Download the combined memo (should have a "combined" key)
+      const memoText = memos.combined || Object.values(memos)[0]
+      if (!memoText) throw new Error("No memo content generated")
+
+      // Convert text to PDF-like format and download
+      const element = document.createElement("a")
+      element.setAttribute("href", `data:text/plain;charset=utf-8,${encodeURIComponent(memoText)}`)
+      element.setAttribute("download", `payment-advice-${monthLabel.replace(/\s+/g, "-")}-combined.txt`)
+      element.style.display = "none"
+      document.body.appendChild(element)
+      element.click()
+      document.body.removeChild(element)
+
+      toast({
+        title: "Download complete",
+        description: `Downloaded combined memo for ${monthLabel} with ${staffList.length} staff member(s)`,
+      })
+    } catch (err: any) {
+      console.error("[v0] Combined memo download failed:", err)
+      toast({
+        title: "Download failed",
+        description: err.message || "Failed to generate combined memo",
+        variant: "destructive",
+      })
+    } finally {
+      setDownloadingCombined(null)
+    }
+  }
+
   // Group groups by month for the month-level view
   const byMonth: Record<string, ApprovedMemoGroup[]> = {}
   for (const g of groups) {
@@ -361,17 +433,31 @@ export function HrLeaveOfficeApprovedMemos() {
                   {monthTotal} staff member{monthTotal !== 1 ? "s" : ""}
                 </Badge>
               </div>
-              <Button
-                size="sm"
-                onClick={() => downloadMonthAll(monthGroups, monthLabel)}
-                disabled={isDownloadingThisMonth}
-                className="h-7 gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs border-0"
-              >
-                {isDownloadingThisMonth
-                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Downloading...</>
-                  : <><Download className="h-3 w-3" /> Download All ({monthTotal})</>
-                }
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => downloadMonthAll(monthGroups, monthLabel)}
+                  disabled={isDownloadingThisMonth}
+                  className="h-7 gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs border-0"
+                >
+                  {isDownloadingThisMonth
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Downloading...</>
+                    : <><Download className="h-3 w-3" /> Download All ({monthTotal})</>
+                  }
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => downloadCombinedGroupMemo(monthGroups, monthLabel, month)}
+                  disabled={downloadingCombined === month}
+                  className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs border-0"
+                  title="Download all staff categories as a single combined memo"
+                >
+                  {downloadingCombined === month
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Combining...</>
+                    : <><FileText className="h-3 w-3" /> Combined Memo</>
+                  }
+                </Button>
+              </div>
             </div>
 
             <CardContent className="p-0 divide-y divide-slate-100">

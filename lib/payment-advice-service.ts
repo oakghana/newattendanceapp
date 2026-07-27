@@ -189,6 +189,87 @@ Date: ${monthName}`
 }
 
 /**
+ * Generate a single combined memo with all staff categories (Manager, Senior, Junior)
+ * Useful for group downloads where all staff from all categories in a month go into one memo
+ */
+export function generateCombinedMemo(
+  staffList: StaffOnLeave[],
+  month: string,
+  signer?: { name?: string; position?: string; signature_image_url?: string }
+): string {
+  const monthDate = new Date(`${month}-01`)
+  const monthName = monthDate.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  })
+
+  const signerName = signer?.name?.toUpperCase() || "HUMAN RESOURCE MANAGER"
+  const signerPosition = signer?.position?.toUpperCase() || "HUMAN RESOURCE MANAGER"
+
+  const categories = groupStaffByCategory(staffList)
+  const today = new Date()
+  const dateStr = today.toLocaleDateString("en-GB", { 
+    day: "2-digit", 
+    month: "long", 
+    year: "numeric" 
+  })
+  
+  const year = monthDate.getFullYear()
+  const monthNum = String(monthDate.getMonth() + 1).padStart(2, "0")
+  const totalStaff = String(staffList.length).padStart(3, "0")
+  const refNo = `QCC/HR/PA/${year}/${monthNum}/CMB/${totalStaff}`
+
+  let memo = `QUALITY CONTROL COMPANY LTD.
+(COCOBOD)
+P. O. BOX M54
+ACCRA                                                    MEMORANDUM
+
+REF. NO: ${refNo}                         DATE: ${dateStr}
+
+TO:      DEPUTY DIRECTOR, FINANCE
+
+FROM:    ${signerPosition}
+
+SUBJECT: PAYMENT OF LEAVE ALLOWANCE (ALL STAFF CATEGORIES) – ${monthName.toUpperCase()}
+
+We wish to inform you that the staff members listed in the attached document are scheduled to proceed on annual vacation leave in ${monthName}.
+
+NO    NAME                          S/NO        POSITION                      DEPARTMENT              CATEGORY             LEAVE DATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+
+  let rowNum = 1
+  Object.entries(categories).forEach(([category, staff]) => {
+    ;(staff as StaffOnLeave[]).forEach((s) => {
+      const startDate = new Date(s.start_date)
+      const dateFormatted = `${startDate.getDate()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${startDate.getFullYear().toString().slice(2)}`
+      const catLabel = category === "Manager" ? "MGT" : category === "Senior" ? "SNR" : "JNR"
+      memo += `\n${String(rowNum).padEnd(3)} ${s.full_name.padEnd(30)} ${s.employee_id.padEnd(11)} ${s.position.substring(0, 28).padEnd(30)} ${(s.department_name || "N/A").padEnd(23)} ${catLabel.padEnd(19)} ${dateFormatted}`
+      rowNum++
+    })
+  })
+
+  memo += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+We count on your co-operation.
+
+We, therefore, kindly request you to process and pay their leave allowance accordingly.
+
+
+${signerName}
+${signerPosition}
+FOR: MANAGING DIRECTOR
+
+cc:    Managing Director
+       Deputy Director, HR
+       Audit Manager
+
+Prepared by: Human Resource Department
+Date: ${monthName}`
+
+  return memo
+}
+
+/**
  * Group staff by category
  */
 export function groupStaffByCategory(
