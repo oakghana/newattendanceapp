@@ -77,11 +77,28 @@ function getColour(key: string) {
   return TYPE_COLOURS[key] ?? DEFAULT_COLOUR
 }
 
+interface AnnualEntitlementInfo {
+  annualLeaveDays: number
+  travelDays: number
+  totalEntitlement: number
+  tierLabel: string
+  yearsOfService: number
+}
+
 export function LeaveBalanceWidget() {
   const [data, setData] = useState<LeaveBalanceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedType, setSelectedType] = useState<string | null>(null)
+  const [annualEntitlement, setAnnualEntitlement] = useState<AnnualEntitlementInfo | null>(null)
+
+  // Load the user's annual leave entitlement separately
+  useEffect(() => {
+    fetch("/api/leave/annual-entitlement", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.entitlement) setAnnualEntitlement(d.entitlement) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -183,6 +200,30 @@ export function LeaveBalanceWidget() {
           />
         </div>
       </div>
+
+      {/* Annual leave entitlement breakdown — staff-specific based on category and service */}
+      {annualEntitlement && !data.showLeadershipMetrics && (
+        <div className="mx-3 mb-0 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+          <p className="text-xs font-semibold text-cyan-800 mb-2">Your Annual Leave Entitlement</p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="text-xs text-cyan-700">
+              <span className="text-cyan-500">Category: </span>{annualEntitlement.tierLabel}
+            </div>
+            <div className="text-xs text-cyan-700">
+              <span className="text-cyan-500">Service: </span>{annualEntitlement.yearsOfService} yr{annualEntitlement.yearsOfService !== 1 ? "s" : ""}
+            </div>
+            <div className="text-xs text-cyan-700">
+              <span className="text-cyan-500">Leave: </span>{annualEntitlement.annualLeaveDays}d
+            </div>
+            <div className="text-xs text-cyan-700">
+              <span className="text-cyan-500">Travel: </span>{annualEntitlement.travelDays}d
+            </div>
+            <div className="ml-auto text-xs font-bold text-cyan-900">
+              Total: {annualEntitlement.totalEntitlement} days
+            </div>
+          </div>
+        </div>
+      )}
 
       <CardContent className="p-3 sm:p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

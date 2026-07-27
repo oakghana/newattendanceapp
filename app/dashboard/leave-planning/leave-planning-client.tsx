@@ -3553,6 +3553,50 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
                           <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
                         </div>
+
+                        {/* Annual Leave Entitlement Summary — shown only for annual leave requests */}
+                        {String(req.leave_type_key || "").toLowerCase() === "annual" && (
+                          req.annual_leave_days != null || req.staff_category != null
+                        ) && (
+                          <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200">
+                              <span className="text-xs font-semibold text-slate-700 tracking-wide uppercase">Annual Leave Entitlement</span>
+                              {req.entitlement_validation_status && (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                  req.entitlement_validation_status === "Approved Entitlement"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-red-100 text-red-700"
+                                }`}>
+                                  {req.entitlement_validation_status}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 divide-x divide-y divide-slate-200">
+                              {[
+                                { label: "Staff Category", value: req.staff_category
+                                    ? String(req.staff_category).charAt(0).toUpperCase() + String(req.staff_category).slice(1)
+                                    : "—" },
+                                { label: "Years of Service", value: req.years_of_service_at_submission != null
+                                    ? `${req.years_of_service_at_submission} yr${req.years_of_service_at_submission !== 1 ? "s" : ""}`
+                                    : "—" },
+                                { label: "Leave Days", value: req.annual_leave_days != null ? `${req.annual_leave_days} days` : "—" },
+                                { label: "Travel Days", value: req.travel_days != null ? `${req.travel_days} days` : "2 days" },
+                              ].map(({ label, value }) => (
+                                <div key={label} className="px-3 py-2">
+                                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
+                                  <p className="text-xs font-semibold text-slate-800">{value}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="px-3 py-2 border-t border-slate-200 bg-white flex items-center justify-between">
+                              <span className="text-xs text-slate-500">Total entitlement (leave + travel)</span>
+                              <span className="text-sm font-bold text-slate-800">
+                                {req.entitlement_days != null ? `${req.entitlement_days} days` : "—"}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Entitlement Exceeded Warning */}
                         {req.adjustment_reason?.includes("ENTITLEMENT EXCEEDED") && (
                           <div className="flex items-start gap-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-300 mb-3">

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
+import {
+  resolveEntitlementFromProfile,
+  buildAnnualLeaveEntitlementSummary,
+} from "@/lib/annual-leave-entitlement"
 
 export async function POST(request: NextRequest) {
   try {
@@ -198,7 +202,7 @@ export async function POST(request: NextRequest) {
 
     const { data: staffProfile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name, employee_id")
+      .select("first_name, last_name, employee_id, staff_category, date_of_appointment, years_of_service")
       .eq("id", (leaveRequest as any).user_id)
       .maybeSingle()
 
@@ -206,6 +210,24 @@ export async function POST(request: NextRequest) {
       String((staffProfile as any)?.first_name || "").trim(),
       String((staffProfile as any)?.last_name || "").trim(),
     ].filter(Boolean).join(" ") || String((staffProfile as any)?.employee_id || "Staff")
+    const employeeId = String((staffProfile as any)?.employee_id || "N/A")
+
+    // Build annual leave entitlement summary for notification (only for annual leave)
+    const isAnnualLeave = String((leaveRequest as any).leave_type_key || "").toLowerCase() === "annual"
+    let entitlementBlock = ""
+    if (isAnnualLeave && staffProfile) {
+      const entitlement = resolveEntitlementFromProfile(staffProfile as any)
+      const { summary } = buildAnnualLeaveEntitlementSummary(
+        staffName,
+        employeeId,
+        entitlement,
+        computedAdjustedDays,
+      )
+      entitlementBlock = "\n\nAnnual Leave Entitlement Summary:\n" +
+        Object.entries(summary)
+          .map(([k, v]) => `  ${k}: ${v}`)
+          .join("\n")
+    }
 
     // Email HR Approvers that a request is ready for final approval
     notifyLeaveHrOfficeForwarded(admin, {
@@ -216,6 +238,7 @@ export async function POST(request: NextRequest) {
       adjustedEndDate: adjusted_end_date,
       adjustedDays: computedAdjustedDays,
       reviewerName,
+      extraNote: entitlementBlock || undefined,
     }).catch(() => {})
 
     return NextResponse.json({

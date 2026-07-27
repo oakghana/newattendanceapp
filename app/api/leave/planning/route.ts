@@ -14,6 +14,10 @@ import {
   HR_OFFICE_PENDING_STATUSES,
 } from "@/lib/leave-planning"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
+import {
+  resolveEntitlementFromProfile,
+  buildAnnualLeaveEntitlementSummary,
+} from "@/lib/annual-leave-entitlement"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -1112,7 +1116,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, department_id")
+      .select("id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id")
       .eq("id", user.id)
       .single()
 
@@ -1120,7 +1124,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    const role = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+    const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
     const canSelfApply =
       isStaffRole(role) ||
       [
@@ -1168,13 +1172,64 @@ export async function POST(request: NextRequest) {
 
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
-    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
-    if (entitlementResult.error) {
-      return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
-    }
-    const entitlementDays = entitlementResult.entitlementDays
 
-    // Track if entitlement is exceeded - still allow save but flag for HR review
+    // ── Annual leave: use per-staff entitlement engine ─────────────────────
+    // For all other leave types, fall back to policy catalog as before.
+    let annualLeaveSnapshot: {
+      annualLeaveDays: number | null
+      travelDays: number | null
+      staffCategory: string | null
+      yearsOfServiceAtSubmission: number | null
+      totalEntitlement: number | null
+      tierLabel: string | null
+      validationStatus: "Approved Entitlement" | "Exceeds Entitlement" | null
+    } = {
+      annualLeaveDays: null,
+      travelDays: null,
+      staffCategory: null,
+      yearsOfServiceAtSubmission: null,
+      totalEntitlement: null,
+      tierLabel: null,
+      validationStatus: null,
+    }
+
+    let entitlementDays: number | null
+
+    if (leaveTypeKey === "annual") {
+      const perStaffEntitlement = resolveEntitlementFromProfile(profile as any)
+      entitlementDays = perStaffEntitlement.totalEntitlement
+
+      const staffName = [
+        String((profile as any).first_name || ""),
+        String((profile as any).last_name || ""),
+      ].filter(Boolean).join(" ").trim() || "Staff"
+      const employeeId = String((profile as any).employee_id || "N/A")
+
+      const { validationStatus } = buildAnnualLeaveEntitlementSummary(
+        staffName,
+        employeeId,
+        perStaffEntitlement,
+        requestedDays,
+      )
+
+      annualLeaveSnapshot = {
+        annualLeaveDays: perStaffEntitlement.annualLeaveDays,
+        travelDays: perStaffEntitlement.travelDays,
+        staffCategory: perStaffEntitlement.staffCategory,
+        yearsOfServiceAtSubmission: perStaffEntitlement.yearsOfService,
+        totalEntitlement: perStaffEntitlement.totalEntitlement,
+        tierLabel: perStaffEntitlement.tierLabel,
+        validationStatus,
+      }
+    } else {
+      const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
+      if (entitlementResult.error) {
+        return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+      }
+      entitlementDays = entitlementResult.entitlementDays
+    }
+
+    // Track if entitlement is exceeded — still allow save but flag for HR review
     const entitlementExceeded = entitlementDays !== null && requestedDays > entitlementDays
     const entitlementWarning = entitlementExceeded
       ? `ENTITLEMENT EXCEEDED: Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s). HR Leave Office must adjust.`
@@ -1285,6 +1340,12 @@ export async function POST(request: NextRequest) {
         requested_days: requestedDays,
         reason: reason || null,
         status: "pending_hod_review",
+        // Annual leave entitlement snapshot (null for non-annual leave types)
+        annual_leave_days: annualLeaveSnapshot.annualLeaveDays,
+        travel_days: annualLeaveSnapshot.travelDays,
+        staff_category: annualLeaveSnapshot.staffCategory,
+        years_of_service_at_submission: annualLeaveSnapshot.yearsOfServiceAtSubmission,
+        entitlement_validation_status: annualLeaveSnapshot.validationStatus,
         user_signature_mode: user_signature_mode || "typed",
         user_signature_text: user_signature_text || null,
         user_signature_image_url: user_signature_image_url || null,
