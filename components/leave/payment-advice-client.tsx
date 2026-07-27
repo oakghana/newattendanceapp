@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
-import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter, Eye, Info } from "lucide-react"
+import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter, Eye, Info, AlertCircle } from "lucide-react"
 import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { MonthlySummaryTab } from "@/components/leave/monthly-summary-tab"
 import { PaymentAdviceViewAllTab } from "@/components/leave/payment-advice-view-all-tab"
@@ -1942,22 +1942,36 @@ We count on your co-operation.`,
             </div>
           </div>
 
-          {/* Dynamic Reference Number Fields - show only for categories with staff */}
+          {/* Dynamic Reference Number Fields - REQUIRED before HR Executive approval */}
           {staffList.length > 0 && (
-            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <Label className="mb-3 block font-medium text-gray-700">
-                Reference Numbers (by Staff Category)
-              </Label>
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-300">
+              <div className="mb-4">
+                <Label className="mb-2 block font-semibold text-blue-900 text-base">
+                  📋 Reference Numbers - REQUIRED Before Submission
+                </Label>
+                <p className="text-sm text-blue-800 mb-3">
+                  Provide reference numbers for each staff category. These will be included in all payment advice memos sent to HR Executive for approval.
+                </p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {["Manager", "Senior", "Junior"].map((category) => {
                   const count = staffByCategory[category as keyof typeof staffByCategory]?.length || 0
                   if (count === 0) return null
                   
+                  const hasRefNumber = referenceNumbers[category]?.trim().length > 0
+                  
                   return (
                     <div key={category}>
-                      <Label htmlFor={`ref-${category}`} className="mb-2 block text-sm font-medium">
-                        {category} Staff ({count})
-                      </Label>
+                      <div className="flex items-center justify-between mb-2">
+                        <Label htmlFor={`ref-${category}`} className="text-sm font-medium">
+                          {category} Staff ({count})
+                        </Label>
+                        {hasRefNumber ? (
+                          <span className="text-xs text-green-700 font-semibold">✓ Complete</span>
+                        ) : (
+                          <span className="text-xs text-red-600 font-semibold">Required</span>
+                        )}
+                      </div>
                       <Input
                         id={`ref-${category}`}
                         type="text"
@@ -1969,8 +1983,15 @@ We count on your co-operation.`,
                             [category]: e.target.value,
                           }))
                         }
-                        className="text-sm"
+                        className={`text-sm border-2 transition-colors ${
+                          hasRefNumber 
+                            ? "border-green-400 bg-green-50" 
+                            : "border-red-300 bg-red-50"
+                        }`}
                       />
+                      <p className="text-xs text-gray-600 mt-1">
+                        Applied to {count} {category.toLowerCase()} staff member{count > 1 ? 's' : ''}
+                      </p>
                     </div>
                   )
                 })}
@@ -2014,6 +2035,50 @@ We count on your co-operation.`,
           </div>
         </CardContent>
       </Card>
+
+      {/* Reference Number Confirmation Before HR Executive Submission */}
+      {staffList.length > 0 && (
+        <Card className="border-2 border-amber-300 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="text-amber-900 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              Confirm Reference Numbers Before Submission
+            </CardTitle>
+            <CardDescription className="text-amber-800">
+              Review the reference numbers that will be included in all memos sent to HR Executive for approval
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {["Manager", "Senior", "Junior"].map((category) => {
+                const count = staffByCategory[category as keyof typeof staffByCategory]?.length || 0
+                if (count === 0) return null
+                const refNumber = referenceNumbers[category]?.trim()
+                
+                return (
+                  <div key={category} className="flex items-center justify-between p-3 bg-white rounded border border-amber-200">
+                    <div>
+                      <p className="font-medium text-gray-900">{category} Staff ({count})</p>
+                      <p className="text-sm text-gray-600">Reference Number:</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-mono font-semibold text-lg ${refNumber ? 'text-green-700' : 'text-red-600'}`}>
+                        {refNumber || "NOT PROVIDED"}
+                      </p>
+                      {refNumber && (
+                        <p className="text-xs text-green-600 mt-1">✓ Will be included in memos</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="text-sm text-amber-700 mt-4 p-3 bg-amber-100 rounded">
+              💡 These reference numbers will appear in all payment advice memos and will help HR Executive track approvals by category.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Staff Preview */}
       {staffList.length > 0 && (
@@ -2157,10 +2222,20 @@ We count on your co-operation.`,
               <Button 
                 onClick={handleSubmitMemos}
                 disabled={isSubmitting}
-                className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+                className="gap-2 bg-green-600 hover:bg-green-700 text-white text-base px-6 py-2 h-auto"
+                title="Submit all memos to HR Executive for approval. Reference numbers from each category will be included."
               >
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                Submit All Memos
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting to HR Executive...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Submit All Memos to HR Executive
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>
