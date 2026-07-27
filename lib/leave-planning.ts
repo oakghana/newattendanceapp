@@ -86,7 +86,7 @@ export function isRegionalHrOfficerRole(role: string | null | undefined): boolea
 
 export function isHrLeaveOfficeRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return ["hr_leave_office", "hr_office", "loan_office"].includes(normalized)
+  return ["hr_leave_office", "hr_office"].includes(normalized)
 }
 
 /** HR Approver role — issues final approval and PDF memo */

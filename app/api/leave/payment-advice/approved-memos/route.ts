@@ -123,17 +123,58 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Merge location into memo_body where missing
+    // Fetch signer signature_data_url for memos that have a signer_id but missing signature in memo_body
+    const signerIds = [...new Set(memoList.map((m: any) => m.signer_id).filter(Boolean))]
+    let signerMap: Record<string, { name: string; position: string; signature_data_url: string }> = {}
+    if (signerIds.length > 0) {
+      const { data: signers } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, signature_data_url")
+        .in("id", signerIds)
+      if (signers) {
+        signers.forEach((s: any) => {
+          signerMap[s.id] = {
+            name: `${s.first_name || ""} ${s.last_name || ""}`.trim(),
+            position: s.position || "",
+            signature_data_url: s.signature_data_url || "",
+          }
+        })
+      }
+    }
+
+    // Merge location + signer into memo_body where missing
     const enrichedMemos = memoList.map((memo: any) => {
       let memoBody: any = {}
       try {
         memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
       } catch { memoBody = {} }
 
+      let changed = false
+
+      // Enrich location
       if (!memoBody.staff_location_name && locationMap[memo.staff_id]) {
         memoBody.staff_location_name = locationMap[memo.staff_id]
-        return { ...memo, memo_body: JSON.stringify(memoBody) }
+        changed = true
       }
+
+      // Enrich selectedSigner with live signature_data_url if missing or empty
+      if (memo.signer_id && signerMap[memo.signer_id]) {
+        const signer = signerMap[memo.signer_id]
+        if (!memoBody.selectedSigner) {
+          memoBody.selectedSigner = {
+            id: memo.signer_id,
+            name: memo.signer_name || signer.name,
+            position: signer.position,
+            signature_data_url: signer.signature_data_url,
+          }
+          changed = true
+        } else if (!memoBody.selectedSigner.signature_data_url && signer.signature_data_url) {
+          memoBody.selectedSigner.signature_data_url = signer.signature_data_url
+          changed = true
+        }
+      }
+
+      if (changed) return { ...memo, memo_body: JSON.stringify(memoBody) }
       return memo
     })
 

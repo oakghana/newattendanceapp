@@ -185,13 +185,16 @@ export async function POST(request: NextRequest) {
       const refNumber = referenceNumbers[category] || ""
       
       // Build memo body with all relevant info including staff details for PDF generation
+      // Use actual rank/position name, not category (e.g., "Senior Officer" not "junior")
+      const staffRankLabel = staff.rank || staff.position || staff.staff_category || category
+      
       const memoBody = {
         month,
         referenceNumber: refNumber,
         category,
         staff_position: staff.position || staff.rank || "",
         staff_department: staff.department_name || staff.department || "",
-        staff_rank_label: staff.staff_category || category,
+        staff_rank_label: staffRankLabel, // Actual rank name (e.g., "Senior Officer", "Manager", "Accounts Officer")
         staff_location_name: staff.location_name || staff.assigned_location_name || "HQ", // Beneficiary location name
         staff_location_id: staff.location_id || staff.assigned_location_id || null,
         selectedSigner: {

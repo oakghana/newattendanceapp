@@ -81,16 +81,70 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log(`[v0] Successfully fetched ${memos?.length || 0} submitted payment memos`, {
+    // Enrich memos with signatures and location data
+    let enrichedMemos = memos || []
+    
+    if (enrichedMemos.length > 0) {
+      // Extract unique signer IDs from memos
+      const signerIds = [...new Set(
+        enrichedMemos
+          .map((m: any) => {
+            try {
+              const b = typeof m.memo_body === "string" ? JSON.parse(m.memo_body) : m.memo_body
+              return b?.selectedSigner?.id
+            } catch { return null }
+          })
+          .filter(Boolean)
+      )]
+
+      // Fetch signer profiles with signatures
+      let signerMap: Record<string, { name: string; position: string; signature_data_url: string }> = {}
+      if (signerIds.length > 0) {
+        const { data: signers } = await admin
+          .from("user_profiles")
+          .select("id, first_name, last_name, position, signature_data_url")
+          .in("id", signerIds)
+        
+        if (signers) {
+          signers.forEach((s: any) => {
+            signerMap[s.id] = {
+              name: `${s.first_name || ""} ${s.last_name || ""}`.trim(),
+              position: s.position || "",
+              signature_data_url: s.signature_data_url || "",
+            }
+          })
+        }
+      }
+
+      // Enrich each memo with signer signature if missing
+      enrichedMemos = enrichedMemos.map((memo: any) => {
+        let memoBody: any = {}
+        try {
+          memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+        } catch { memoBody = {} }
+
+        // Enrich selectedSigner with live signature_data_url if missing
+        if (memoBody.selectedSigner?.id && signerMap[memoBody.selectedSigner.id]) {
+          const signer = signerMap[memoBody.selectedSigner.id]
+          if (!memoBody.selectedSigner.signature_data_url && signer.signature_data_url) {
+            memoBody.selectedSigner.signature_data_url = signer.signature_data_url
+            return { ...memo, memo_body: JSON.stringify(memoBody) }
+          }
+        }
+        return memo
+      })
+    }
+
+    console.log(`[v0] Successfully fetched ${enrichedMemos?.length || 0} submitted payment memos`, {
       userId: user.id,
       month,
-      memoCount: memos?.length || 0,
+      memoCount: enrichedMemos?.length || 0,
     })
 
     return NextResponse.json({
       success: true,
-      memos: memos || [],
-      count: memos?.length || 0,
+      memos: enrichedMemos || [],
+      count: enrichedMemos?.length || 0,
       month,
     })
   } catch (err) {
