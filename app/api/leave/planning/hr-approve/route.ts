@@ -131,7 +131,8 @@ export async function GET(request: NextRequest) {
       String((hrProfile as any)?.signature_text || "").trim().length > 0
 
     if (!hasStoredSignature) {
-      // Fall back to approval_signature_registry (where Profile Settings > Signature saves to)
+      // Fall back to approval_signature_registry — no domain/stage filter so signatures
+      // saved via Profile Settings (any domain) are also matched.
       const { data: registryRows } = await admin
         .from("approval_signature_registry")
         .select("signature_mode, signature_text, signature_data_url, is_active, approval_stage, updated_at")
@@ -380,19 +381,20 @@ export async function POST(request: NextRequest) {
     const hasProfileSignature = resolvedSigDataUrl.length > 0 || resolvedSigText.length > 0
 
     if (!hasProfileSignature) {
-      // Priority 2: fall back to approval_signature_registry
+      // Priority 2: fall back to approval_signature_registry — no workflow_domain or
+      // approval_stage filter so signatures saved via Profile Settings are also found.
       const { data: approverSignatureRows } = await admin
         .from("approval_signature_registry")
         .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
-        .eq("workflow_domain", "leave")
-        .eq("approval_stage", "hr_approver")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false })
 
       const approverSignature = pickBestSignature(approverSignatureRows || [])
-      resolvedSigMode = String((approverSignature as any)?.signature_mode || "typed").trim().toLowerCase()
-      resolvedSigText = String((approverSignature as any)?.signature_text || "").trim()
-      resolvedSigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
+      if (approverSignature) {
+        resolvedSigMode = String((approverSignature as any)?.signature_mode || "typed").trim().toLowerCase()
+        resolvedSigText = String((approverSignature as any)?.signature_text || "").trim()
+        resolvedSigDataUrl = String((approverSignature as any)?.signature_data_url || "").trim()
+      }
     }
 
     // Valid if there is either a data URL (draw/upload) or typed text
