@@ -83,12 +83,11 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
           signerTitle = memoBody.selectedSigner.position || signerTitle
           signerSignatureUrl = memoBody.selectedSigner.signature_data_url || ""
         }
-        if (memoBody.staffList?.[0]) {
-          staffPosition = memoBody.staffList[0].position || staffPosition
-          staffDepartment = memoBody.staffList[0].department || staffDepartment
-          staffRank = memoBody.staffList[0].rank || ""
-          staffLocation = memoBody.staffList[0].assigned_location_name || memoBody.staffList[0].location_name || ""
-        }
+        // Top-level fields stored by submit-memo API
+        staffPosition = memoBody.staff_position || memoBody.staffList?.[0]?.position || staffPosition
+        staffDepartment = memoBody.staff_department || memoBody.staffList?.[0]?.department || staffDepartment
+        staffRank = memoBody.staff_rank_label || memoBody.staffList?.[0]?.rank || ""
+        staffLocation = memoBody.staff_location_name || memoBody.staffList?.[0]?.assigned_location_name || memoBody.staffList?.[0]?.location_name || ""
         if (memoBody.referenceNumber) {
           referenceNumber = memoBody.referenceNumber
         }
@@ -165,12 +164,10 @@ async function downloadCombinedMemo(
       if (memo.memo_body) {
         try {
           const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-          if (b.staffList?.[0]) {
-            staffPosition = b.staffList[0].position || staffPosition
-            staffDepartment = b.staffList[0].department || staffDepartment
-            staffRank = b.staffList[0].rank || "N/A"
-            staffLocation = b.staffList[0].assigned_location_name || b.staffList[0].location_name || "N/A"
-          }
+          staffPosition = b.staff_position || b.staffList?.[0]?.position || staffPosition
+          staffDepartment = b.staff_department || b.staffList?.[0]?.department || staffDepartment
+          staffRank = b.staff_rank_label || b.staffList?.[0]?.rank || "N/A"
+          staffLocation = b.staff_location_name || b.staffList?.[0]?.assigned_location_name || b.staffList?.[0]?.location_name || "N/A"
         } catch {}
       }
       return {

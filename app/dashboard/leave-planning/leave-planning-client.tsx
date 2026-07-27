@@ -1026,7 +1026,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
-  const canSelfApply = isStaff || isHod || isAdmin ||
+  const isLoanOffice = normalizedRole === "loan_office"
+  const canSelfApply = isStaff || isHod || isAdmin || isLoanOffice ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "accounts"].includes(normalizedRole)
 
   // ── Data ────────────────────────────────────────────────────────────
@@ -2407,12 +2408,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           </Button>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          {[
-            { label: "Staff Applies", step: 1 },
-            { label: "HOD Reviews", step: 2 },
-            { label: "HR Leave Office Adjusts", step: 3 },
-            { label: "HR Issues Memo", step: 4 },
-          ].map((s) => (
+          {(isLoanOffice
+            ? [{ label: "Apply for Leave", step: 1 }, { label: "HR Approves", step: 2 }]
+            : [
+                { label: "Staff Applies", step: 1 },
+                { label: "HOD Reviews", step: 2 },
+                { label: "HR Leave Office Adjusts", step: 3 },
+                { label: "HR Issues Memo", step: 4 },
+              ]
+          ).map((s) => (
             <div key={s.step} className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1 text-xs font-medium">
               <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">{s.step}</span>
               {s.label}
