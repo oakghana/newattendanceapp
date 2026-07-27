@@ -179,9 +179,19 @@ export async function GET(request: NextRequest) {
       ? `${travelDays} travelling day${travelDays !== 1 ? 's' : ''} added`
       : ''
 
-    const leaveTypeName = leaveTypeLabel(req.leave_type_key || 'annual')
+    const leaveTypeKey = String(req.leave_type_key || 'annual').toLowerCase()
+    const leaveTypeName = leaveTypeLabel(leaveTypeKey)
     const yearLabel = req.leave_year_period || String(new Date(startRaw || req.created_at).getFullYear())
-    const subjectLine = `${leaveTypeName.toUpperCase()} LEAVE ADVICE FOR ${yearLabel}`
+    
+    // Generate subject line: Annual leave uses "ADVICE FOR YYYY/YYYY", non-annual uses "RE: APPLICATION FOR..."
+    let subjectLine: string
+    if (leaveTypeKey === 'annual') {
+      subjectLine = `${leaveTypeName.toUpperCase()} LEAVE ADVICE FOR ${yearLabel}`
+    } else {
+      // Non-annual leave: "RE: APPLICATION FOR [X DAYS] [LEAVE TYPE] LEAVE"
+      const daysText = grantedDays > 0 ? `${grantedDays.toLocaleString()} DAY${grantedDays !== 1 ? 'S' : ''} ` : ''
+      subjectLine = `RE: APPLICATION FOR ${daysText}${leaveTypeName.toUpperCase()} LEAVE`
+    }
 
     const letterDate = req.hr_approved_at || memo?.created_at || new Date().toISOString()
     const refSuffix = requestId.split('-').pop()?.toUpperCase().slice(0, 6) || 'MEMO'
@@ -318,7 +328,15 @@ export async function GET(request: NextRequest) {
     doc.setFontSize(9)
     doc.setTextColor(0)
 
-    const openingText = `In accordance with COCOBOD's vacation leave policy, we wish to inform you that approval has been granted for you to proceed on your ${leaveTypeLabel(req.leave_type_key || 'annual').toLowerCase()} leave in respect of the year January to December ${yearLabel}.`
+    // Different opening for annual vs non-annual leave
+    let openingText: string
+    if (leaveTypeKey === 'annual') {
+      openingText = `In accordance with COCOBOD's vacation leave policy, we wish to inform you that approval has been granted for you to proceed on your ${leaveTypeName.toLowerCase()} leave in respect of the year January to December ${yearLabel}.`
+    } else {
+      // Non-annual: standard format like the sample memos
+      const submitDate = new Date(req.created_at || new Date()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      openingText = `We acknowledge receipt of your letter dated ${submitDate} in relation to the above-mentioned subject and wish to inform you that approval has been granted for you to proceed on ${grantedDays} working day(s) ${leaveTypeName.toLowerCase()} leave with effect from ${fmtOrdinal(startRaw)} to ${fmtOrdinal(endRaw)}.`
+    }
     const openingLines = doc.splitTextToSize(openingText, contentW)
     doc.text(openingLines, mL, y)
     y += openingLines.length * 5 + 4
@@ -327,7 +345,6 @@ export async function GET(request: NextRequest) {
     y += 8
 
     // ── Leave details: TABLE FORMAT FOR ANNUAL ONLY, SIMPLE FOR OTHERS ────────
-    const leaveTypeKey = String(req.leave_type_key || "annual").toLowerCase()
     const showTable = leaveTypeKey === "annual"  // ONLY annual leave gets table
 
     if (showTable) {
@@ -408,15 +425,7 @@ export async function GET(request: NextRequest) {
     })
     y += rowH + 6
     } else {
-      // ── Simple format for NON-ANNUAL LEAVE (no table) ────────────────────────
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      doc.setTextColor(0)
-      
-      const detailsText = `You have been approved for ${grantedDays} day(s) of ${leaveTypeLabel(leaveTypeKey).toLowerCase()} leave from ${fmtShort(startRaw)} to ${fmtShort(endRaw)}.${remarks ? ` ${remarks}.` : ''}`
-      const detailsLines = doc.splitTextToSize(detailsText, contentW)
-      doc.text(detailsLines, mL, y)
-      y += detailsLines.length * 5 + 6
+      // ── Non-annual leave: no table, details already in opening paragraph ───
     }
 
     // ── Resume duty — official QCC wording ───────────────────────────────────
