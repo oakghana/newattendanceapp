@@ -2107,10 +2107,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
     // End date is now auto-calculated, no manual validation needed
     // part_leave_days is auto-derived from computedDays, no manual input required
-    if (!activeSig.text && !activeSig.dataUrl) {
-      toast({ title: "Signature required", description: "Please provide your signature.", variant: "destructive" })
-      return
-    }
+    // Staff signature is optional
     setSubmitting(true)
     setError(null)
     try {
@@ -2666,7 +2663,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                    Staff Signature <span className="text-red-500">*</span>
+                    Staff Signature
                   </Label>
                   <Input
                     value={typedSignature || defaultStaffSignature}

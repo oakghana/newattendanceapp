@@ -1329,10 +1329,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!user_signature_text && !user_signature_image_url && !user_signature_data_url) {
-      return NextResponse.json({ error: "A staff signature is required (typed, uploaded, or on-screen draw)." }, { status: 400 })
-    }
-
+    // Staff signature is optional
     const initialMemo = buildInitialLeaveMemoDraft({
       leaveTypeKey,
       leaveYearPeriod: selectedLeaveYearPeriod,
