@@ -246,7 +246,7 @@ export function LoanOfficePaymentAdviceTab() {
     fetchMemos()
   }, [filterMonth])
 
-  // Group memos by month → category
+  // Group memos by month → rank
   const monthGroups = useMemo<MonthGroup[]>(() => {
     const byMonth = new Map<string, PaymentMemo[]>()
     for (const memo of memos) {
@@ -259,20 +259,32 @@ export function LoanOfficePaymentAdviceTab() {
     return Array.from(byMonth.entries())
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([monthKey, monthMemos]) => {
-        const byCategory = new Map<string, PaymentMemo[]>()
+        const byRank = new Map<string, PaymentMemo[]>()
         for (const memo of monthMemos) {
-          const cat = normalizeCategory(memo.staff_category)
-          if (!byCategory.has(cat)) byCategory.set(cat, [])
-          byCategory.get(cat)!.push(memo)
+          // Extract rank from memo_body if available
+          let rank = "Other"
+          if (memo.memo_body) {
+            try {
+              const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+              rank = b.staff_rank_label || "Other"
+            } catch {}
+          }
+          if (!byRank.has(rank)) byRank.set(rank, [])
+          byRank.get(rank)!.push(memo)
         }
 
-        const CATEGORY_ORDER = ["Manager Staff", "Senior Staff", "Junior Staff"]
-        const categoryGroups: CategoryGroup[] = Array.from(byCategory.entries())
-          .sort(([a], [b]) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b))
-          .map(([category, catMemos]) => {
+        // Sort ranks in logical order: Manager, Senior, Junior, Other
+        const RANK_ORDER = ["Manager", "Senior", "Junior", "Other"]
+        const categoryGroups: CategoryGroup[] = Array.from(byRank.entries())
+          .sort(([a], [b]) => {
+            const aIdx = RANK_ORDER.findIndex(r => a.includes(r))
+            const bIdx = RANK_ORDER.findIndex(r => b.includes(r))
+            return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx)
+          })
+          .map(([rank, rankMemos]) => {
             const signerName =
-              catMemos.find((m) => m.signer_name)?.signer_name || "HRM"
-            return { category, signerName, memos: catMemos }
+              rankMemos.find((m) => m.signer_name)?.signer_name || "HRM"
+            return { category: rank, signerName, memos: rankMemos }
           })
 
         return {
@@ -426,17 +438,17 @@ export function LoanOfficePaymentAdviceTab() {
             </Button>
           </div>
 
-          {/* Category groups */}
+          {/* Rank groups */}
           <div className="divide-y divide-slate-100">
             {mg.categoryGroups.map((cg) => {
-              const catKey = `${mg.monthKey}-${cg.category}`
-              const isExpanded = expandedCategories.has(catKey)
+              const rankKey = `${mg.monthKey}-${cg.category}`
+              const isExpanded = expandedCategories.has(rankKey)
               const allKey = `all-${mg.monthKey}-${cg.category}`
               const combinedKey = `combined-${mg.monthKey}-${cg.category}`
 
               return (
-                <div key={catKey} className="bg-white">
-                  {/* Category row */}
+                <div key={rankKey} className="bg-white">
+                  {/* Rank row */}
                   <div className="flex flex-wrap items-center gap-3 px-5 py-3.5">
                     <div className="flex flex-1 items-center gap-2.5 min-w-0">
                       <Users className="h-4 w-4 shrink-0 text-slate-500" />
@@ -476,7 +488,7 @@ export function LoanOfficePaymentAdviceTab() {
                         Combined ({cg.memos.length})
                       </Button>
                       <button
-                        onClick={() => toggleCategory(catKey)}
+                        onClick={() => toggleCategory(rankKey)}
                         className="ml-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
                       >
                         {isExpanded ? "Hide" : "Show"} staff
