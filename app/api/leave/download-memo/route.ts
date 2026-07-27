@@ -341,14 +341,14 @@ export async function GET(request: NextRequest) {
     doc.text(openingLines, mL, y)
     y += openingLines.length * 5 + 4
 
-    doc.text('Your leave details are shown below.', mL, y)
-    y += 8
-
     // ── Leave details: TABLE FORMAT FOR ANNUAL ONLY, SIMPLE FOR OTHERS ────────
     const showTable = leaveTypeKey === "annual"  // ONLY annual leave gets table
 
     if (showTable) {
     // ── Leave details table (ANNUAL LEAVE ONLY) ──────────────────────────────
+    doc.text('Your leave details are shown below.', mL, y)
+    y += 8
+    
     const tableX = mL
     const colWidths = [40, 35, 35, 35, contentW - 145]
     const rowH = 7
