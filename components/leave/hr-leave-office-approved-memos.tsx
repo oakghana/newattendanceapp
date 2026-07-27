@@ -271,32 +271,30 @@ export function HrLeaveOfficeApprovedMemos() {
         return
       }
 
-      // Call generate-memo API to create combined memo
-      const res = await fetch("/api/leave/payment-advice/generate-memo", {
+      // Call new PDF generation API
+      const res = await fetch("/api/leave/payment-advice/generate-combined-memo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           month,
+          monthLabel,
           staffList,
-          combined: true, // Flag to generate combined memo
         }),
       })
 
       if (!res.ok) throw new Error("Failed to generate combined memo")
-      const { memos } = await res.json()
-
-      // Download the combined memo (should have a "combined" key)
-      const memoText = memos.combined || Object.values(memos)[0]
-      if (!memoText) throw new Error("No memo content generated")
-
-      // Convert text to PDF-like format and download
-      const element = document.createElement("a")
-      element.setAttribute("href", `data:text/plain;charset=utf-8,${encodeURIComponent(memoText)}`)
-      element.setAttribute("download", `payment-advice-${monthLabel.replace(/\s+/g, "-")}-combined.txt`)
-      element.style.display = "none"
-      document.body.appendChild(element)
-      element.click()
-      document.body.removeChild(element)
+      
+      // Get the PDF blob
+      const blob = await res.blob()
+      const filename = `payment-advice-${monthLabel.replace(/\s+/g, "-")}-combined.pdf`
+      
+      // Download the PDF
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
 
       toast({
         title: "Download complete",
@@ -372,15 +370,13 @@ export function HrLeaveOfficeApprovedMemos() {
       {/* Action buttons bar */}
       {!loading && totalMemos > 0 && (
         <div className="flex flex-col sm:flex-row gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <a
-            href="/dashboard/leave-management?tab=my-requests"
-            className="flex-1"
+          <Button 
+            onClick={() => window.location.href = "/dashboard/leave-management"}
+            className="flex-1 bg-teal-600 hover:bg-teal-700 text-white gap-2"
           >
-            <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white gap-2">
-              <Calendar className="h-4 w-4" />
-              Apply for Leave
-            </Button>
-          </a>
+            <Calendar className="h-4 w-4" />
+            Apply for Leave
+          </Button>
           <Button
             onClick={downloadAllGroupsFunc}
             disabled={downloadingAllGroups}

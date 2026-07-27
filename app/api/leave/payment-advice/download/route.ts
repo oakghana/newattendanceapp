@@ -338,22 +338,31 @@ export async function GET(request: NextRequest) {
     doc.line(margin, y, pageWidth - margin, y)
     y += 8
 
-    // === TO / FROM / SUBJECT ===
+    // === TO / FROM / SUBJECT with proper column alignment ===
     doc.setFontSize(9)
+    const labelColumnWidth = 20
+    const valueColumnX = margin + labelColumnWidth
+    const valueColumnWidth = contentWidth - labelColumnWidth
+
+    // TO
     doc.setFont(undefined, "bold")
     doc.text("TO:", margin, y)
     doc.setFont(undefined, "normal")
-    doc.text("DEPUTY DIRECTOR, FINANCE", margin + 15, y)
-    y += 6
+    const toLines = doc.splitTextToSize("DEPUTY DIRECTOR, FINANCE", valueColumnWidth)
+    doc.text(toLines, valueColumnX, y)
+    y += toLines.length * 4 + 3
 
+    // FROM
     doc.setFont(undefined, "bold")
     doc.text("FROM:", margin, y)
     doc.setFont(undefined, "normal")
     // Use the actual approver's position from memo_body (set at approval time)
     const fromPosition = (approverPosition || "HUMAN RESOURCE MANAGER").toUpperCase()
-    doc.text(fromPosition, margin + 15, y)
-    y += 6
+    const fromLines = doc.splitTextToSize(fromPosition, valueColumnWidth)
+    doc.text(fromLines, valueColumnX, y)
+    y += fromLines.length * 4 + 3
 
+    // SUBJECT
     doc.setFont(undefined, "bold")
     doc.text("SUBJECT:", margin, y)
     doc.setFont(undefined, "normal")
@@ -362,8 +371,8 @@ export async function GET(request: NextRequest) {
     const categoryLabel = memo.staff_category ? `(${memo.staff_category.toUpperCase()} STAFF)` : ""
     const monthYear = fmtMonthYear(memoDateStr)
     const subject = `PAYMENT OF LEAVE ALLOWANCE ${categoryLabel} – ${monthYear}`
-    const subjectLines = doc.splitTextToSize(subject, contentWidth - 30)
-    doc.text(subjectLines, margin + 30, y)
+    const subjectLines = doc.splitTextToSize(subject, valueColumnWidth)
+    doc.text(subjectLines, valueColumnX, y)
     y += (subjectLines.length * 4) + 6
 
     // === BODY TEXT ===
