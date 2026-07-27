@@ -3840,6 +3840,25 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               </div>
                             </div>
 
+                            {/* Annual Leave Entitlement Reference Guide — Only for annual leave */}
+                            {String(req.leave_type_key || "").toLowerCase() === "annual" && (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 space-y-2">
+                                <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">Annual Leave Entitlement Reference</p>
+                                <div className="space-y-1.5 text-xs text-amber-900">
+                                  <div className="font-medium">Senior Staff:</div>
+                                  <div className="ml-2">36 days + 2 travelling days = 38 total</div>
+                                  
+                                  <div className="font-medium mt-2">Junior Staff (by years of service):</div>
+                                  <div className="ml-2 space-y-0.5">
+                                    <div>1–3 years: 24 days + 2 travelling days = 26 total</div>
+                                    <div>4–5 years: 28 days + 2 travelling days = 30 total</div>
+                                    <div>6–10 years: 32 days + 2 travelling days = 34 total</div>
+                                    <div>11+ years: 36 days + 2 travelling days = 38 total</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="space-y-1">
                               <Label className="text-xs font-semibold text-slate-700">
                                 Reason for Adjustment{String(req.leave_type_key || "").toLowerCase() === "annual" && <span className="text-red-500">*</span>}
