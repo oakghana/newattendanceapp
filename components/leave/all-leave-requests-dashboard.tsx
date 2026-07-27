@@ -11,16 +11,9 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, Search, RotateCw } from "lucide-react"
+import { ArrowRight, RotateCw } from "lucide-react"
+import { SortableTable, ColumnDef } from "@/components/ui/sortable-table"
 
 interface LeaveRequest {
   id: string
@@ -136,35 +129,118 @@ export function AllLeaveRequestsDashboard() {
     }
   }
 
+  // Define columns for SortableTable
+  const columns: ColumnDef<LeaveRequest>[] = [
+    {
+      key: "staffName",
+      label: "Staff Name",
+      getValue: (row) => row.staffName,
+      render: (row) => (
+        <div className="space-y-1">
+          <div className="font-medium text-slate-900">{row.staffName}</div>
+          <div className="text-xs text-slate-500">{row.staffEmail}</div>
+        </div>
+      ),
+      sortable: true,
+      filterable: true,
+    },
+    {
+      key: "department",
+      label: "Department",
+      getValue: (row) => row.department,
+      sortable: true,
+      filterable: true,
+    },
+    {
+      key: "leaveType",
+      label: "Leave Type",
+      getValue: (row) => row.reason || "—",
+      sortable: true,
+      filterable: true,
+    },
+    {
+      key: "startDate",
+      label: "Start Date",
+      getValue: (row) => new Date(row.startDate),
+      render: (row) => formatDate(row.startDate),
+      sortable: true,
+      filterable: false,
+      compareFn: (a, b) => {
+        if (!(a instanceof Date) || !(b instanceof Date)) return 0
+        return a.getTime() - b.getTime()
+      },
+    },
+    {
+      key: "endDate",
+      label: "End Date",
+      getValue: (row) => new Date(row.endDate),
+      render: (row) => formatDate(row.endDate),
+      sortable: true,
+      filterable: false,
+      compareFn: (a, b) => {
+        if (!(a instanceof Date) || !(b instanceof Date)) return 0
+        return a.getTime() - b.getTime()
+      },
+    },
+    {
+      key: "days",
+      label: "Days",
+      getValue: (row) => calculateDays(row.startDate, row.endDate),
+      render: (row) => <span className="font-semibold">{calculateDays(row.startDate, row.endDate)}</span>,
+      sortable: true,
+      filterable: false,
+      compareFn: (a, b) => Number(a) - Number(b),
+      className: "text-center",
+    },
+    {
+      key: "hrApprovedAt",
+      label: "HR Approval Date",
+      getValue: (row) => row.hrApprovedAt || "—",
+      render: (row) => (row.hrApprovedAt ? formatDate(row.hrApprovedAt) : "—"),
+      sortable: true,
+      filterable: false,
+    },
+    {
+      key: "status",
+      label: "Status",
+      getValue: (row) => row.status,
+      render: (row) => {
+        const color = getStatusColor(row.status)
+        return (
+          <Badge className={`${color.bg} ${color.text} text-xs font-semibold border-0`}>
+            {color.label}
+          </Badge>
+        )
+      },
+      sortable: true,
+      filterable: true,
+      filterFn: (value, filterText) => {
+        const color = getStatusColor(String(value))
+        return color.label.toLowerCase().includes(filterText.toLowerCase()) ||
+               String(value).toLowerCase().includes(filterText.toLowerCase())
+      },
+    },
+  ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center space-y-2">
+          <div className="inline-block animate-spin">
+            <RotateCw className="h-6 w-6 text-slate-400" />
+          </div>
+          <p className="text-sm text-slate-600">Loading leave requests...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 w-full">
-      {/* Filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
-        <div className="flex-1">
-          <label className="block text-xs font-semibold text-slate-600 mb-2">Search Staff</label>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Name, email, or ID..."
-              value={searchTerm}
-              onChange={handleSearch}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSearchSubmit()
-              }}
-              className="text-sm"
-            />
-            <Button
-              onClick={handleSearchSubmit}
-              size="sm"
-              variant="outline"
-              className="px-3"
-            >
-              <Search className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
+      {/* Status Filter */}
+      <div className="flex gap-3">
         <div className="w-full sm:w-48">
-          <label className="block text-xs font-semibold text-slate-600 mb-2">Status</label>
+          <label className="block text-xs font-semibold text-slate-600 mb-2">Filter by Status</label>
           <Select value={statusFilter} onValueChange={handleStatusChange}>
             <SelectTrigger className="text-sm">
               <SelectValue />
@@ -185,7 +261,7 @@ export function AllLeaveRequestsDashboard() {
           onClick={() => fetchRequests(pagination.page, statusFilter, searchTerm)}
           variant="outline"
           size="sm"
-          className="gap-2"
+          className="gap-2 self-end"
         >
           <RotateCw className="h-4 w-4" />
           <span className="hidden sm:inline">Refresh</span>
@@ -194,103 +270,24 @@ export function AllLeaveRequestsDashboard() {
 
       {/* Summary */}
       <div className="text-sm text-slate-600">
-        Showing <strong>{requests.length}</strong> of <strong>{pagination.totalCount}</strong> requests
+        Total: <strong>{pagination.totalCount}</strong> requests
       </div>
 
-      {/* Table */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center space-y-2">
-              <div className="inline-block animate-spin">
-                <RotateCw className="h-6 w-6 text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-600">Loading leave requests...</p>
-            </div>
-          </div>
-        ) : requests.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center space-y-2">
-              <p className="text-sm font-medium text-slate-700">No leave requests found</p>
-              <p className="text-xs text-slate-500">Try adjusting your filters or search term</p>
-            </div>
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="border-slate-200 bg-slate-50">
-                <TableHead className="font-semibold text-slate-700">Staff Name</TableHead>
-                <TableHead className="font-semibold text-slate-700">Department</TableHead>
-                <TableHead className="font-semibold text-slate-700">Leave Period</TableHead>
-                <TableHead className="font-semibold text-slate-700 text-center">Days</TableHead>
-                <TableHead className="font-semibold text-slate-700">HR Approval Date</TableHead>
-                <TableHead className="font-semibold text-slate-700">Assigned HOD</TableHead>
-                <TableHead className="font-semibold text-slate-700">Reason</TableHead>
-                <TableHead className="font-semibold text-slate-700">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requests.map((request) => {
-                const color = getStatusColor(request.status)
-                const days = calculateDays(request.startDate, request.endDate)
-                return (
-                  <TableRow key={request.id} className="border-slate-200 hover:bg-slate-50 transition-colors">
-                    <TableCell className="font-medium text-slate-900">
-                      <div className="space-y-1">
-                        <div>{request.staffName}</div>
-                        <div className="text-xs text-slate-500">{request.staffEmail}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700">
-                      {request.department}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700">
-                      <div className="flex items-center gap-2">
-                        <span>{formatDate(request.startDate)}</span>
-                        <ArrowRight className="h-3 w-3 text-slate-400" />
-                        <span>{formatDate(request.endDate)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center text-sm font-semibold text-slate-900">
-                      {days}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700">
-                      {request.hrApprovedAt ? formatDate(request.hrApprovedAt) : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700 max-w-[180px]">
-                      {Array.isArray(request.hodReviewers) && request.hodReviewers.length > 0 ? (
-                        <div className="flex flex-col gap-0.5">
-                          {request.hodReviewers.slice(0, 2).map((name, i) => (
-                            <span key={i} className="block truncate text-xs">{name}</span>
-                          ))}
-                          {request.hodReviewers.length > 2 && (
-                            <span
-                              className="text-xs text-slate-400 italic cursor-default"
-                              title={request.hodReviewers.slice(2).join(", ")}
-                            >
-                              +{request.hodReviewers.length - 2} more
-                            </span>
-                          )}
-                        </div>
-                      ) : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700 max-w-xs truncate">
-                      {request.reason || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={`${color.bg} ${color.text} text-xs font-semibold border-0`}
-                      >
-                        {color.label}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+      {/* Sortable and Filterable Table */}
+      {requests.length === 0 ? (
+        <div className="border border-slate-200 rounded-lg bg-white p-8 text-center">
+          <p className="text-sm font-medium text-slate-700">No leave requests found</p>
+          <p className="text-xs text-slate-500 mt-1">Try adjusting your filters or search term</p>
+        </div>
+      ) : (
+        <SortableTable<LeaveRequest>
+          data={requests}
+          columns={columns}
+          rowKey={(row) => row.id}
+          showGlobalSearch={true}
+          searchPlaceholder="Search by staff name, email, or department..."
+        />
+      )}
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
