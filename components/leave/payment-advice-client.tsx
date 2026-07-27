@@ -100,6 +100,39 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [submittedMemos, setSubmittedMemos] = useState<any[]>([])
   const [loadingSubmittedMemos, setLoadingSubmittedMemos] = useState(false)
   const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7))
+  
+  // Check for approved memos in the selected month to prevent duplicate generation
+  const [approvedMemosForMonth, setApprovedMemosForMonth] = useState<any[]>([])
+  const [loadingApprovedMemosForMonth, setLoadingApprovedMemosForMonth] = useState(false)
+  const [hasApprovedMemosForMonth, setHasApprovedMemosForMonth] = useState(false)
+
+  // Check for approved memos in the selected month to prevent duplicate generation
+  useEffect(() => {
+    if (!isHrLeaveOffice || !selectedMonth) return
+
+    const checkApprovedMemos = async () => {
+      setLoadingApprovedMemosForMonth(true)
+      try {
+        const response = await fetch(`/api/leave/payment-advice/my-memos?month=${selectedMonth}`)
+        if (response.ok) {
+          const data = await response.json()
+          const memos = data.memos || []
+          // Filter for approved/signed memos only
+          const approved = memos.filter((m: any) => m.status === "approved")
+          setApprovedMemosForMonth(approved)
+          setHasApprovedMemosForMonth(approved.length > 0)
+          console.log("[v0] Approved memos for month", selectedMonth, ":", approved.length)
+        }
+      } catch (err) {
+        console.error("[v0] Error checking approved memos:", err)
+        setApprovedMemosForMonth([])
+        setHasApprovedMemosForMonth(false)
+      } finally {
+        setLoadingApprovedMemosForMonth(false)
+      }
+    }
+    checkApprovedMemos()
+  }, [isHrLeaveOffice, selectedMonth])
 
   // Load submitted memos for Monthly Summary tab
   useEffect(() => {
@@ -1772,8 +1805,47 @@ We count on your co-operation.`,
         </div>
       )}
 
+      {/* Show if approved memos already exist for this month */}
+      {hasApprovedMemosForMonth && (
+        <Card className="border-2 border-green-300 bg-green-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-green-900">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Payment Advice Already Generated for {selectedMonth}
+            </CardTitle>
+            <CardDescription className="text-green-800">
+              Approved payment advice memos have already been generated and signed for this month. View them below to prevent duplicate generation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3">
+              {approvedMemosForMonth.map((memo: any) => (
+                <div key={memo.id} className="bg-white border border-green-200 rounded p-3">
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <div>
+                      <p className="font-medium text-sm">{memo.staff_name || "Staff Member"}</p>
+                      <p className="text-xs text-gray-600">Memo ID: {memo.id?.substring(0, 12)}...</p>
+                      <p className="text-xs text-gray-600">Status: <span className="font-semibold text-green-700">{memo.status?.replace(/_/g, " ").toUpperCase()}</span></p>
+                    </div>
+                    <Badge className="bg-green-600">Approved</Badge>
+                  </div>
+                  {memo.created_at && (
+                    <p className="text-xs text-gray-500">Generated: {new Date(memo.created_at).toLocaleDateString()}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> To generate payment advice for a different month, select a different month above or go to the Monthly Summary tab to view all memos.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Create Payment Advice Tab */}
-      {(!isHrLeaveOffice || (activePaymentTab as any) === "pending") && (
+      {(!isHrLeaveOffice || (activePaymentTab as any) === "pending") && !hasApprovedMemosForMonth && (
       <>
       {/* Month Selection & HR Signer */}
       <Card>
@@ -1976,14 +2048,29 @@ We count on your co-operation.`,
               </div>
 
               {/* Generate Button */}
-              <Button 
+              <Button
                 onClick={handleGenerateMemos}
-                disabled={isLoading}
-                className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                disabled={isLoading || hasApprovedMemosForMonth}
+                className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 size="lg"
+                title={hasApprovedMemosForMonth ? "Approved memos already exist for this month. Select a different month to generate new memos." : ""}
               >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                Generate Professional Memos
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : hasApprovedMemosForMonth ? (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Memos Already Generated for This Month
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" />
+                    Generate Professional Memos
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
