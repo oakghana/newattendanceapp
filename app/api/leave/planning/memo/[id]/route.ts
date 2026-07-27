@@ -477,37 +477,24 @@ export async function GET(
     // For payment advice memos: use selectedSigner from memo_body (highest priority)
     if (paymentMemo && selectedSignerFromMemo) {
       signerToUse = selectedSignerFromMemo
-      console.log("[v0] Using selectedSigner from payment memo:", selectedSignerFromMemo?.name)
     }
     // For leave approval memos: use hr_approver_id from leave_plan_requests
     else if (!paymentMemo) {
       const hrApproverId = String((leaveRequest as any).hr_approver_id || "")
       if (hrApproverId) {
         signerToUse = { id: hrApproverId }
-        console.log("[v0] Using hr_approver_id from leave request:", hrApproverId)
       }
     }
     // Last resort: use memoBodyApprover if available
     else if (memoBodyApprover) {
       signerToUse = memoBodyApprover
-      console.log("[v0] Using approver from memo_body:", memoBodyApprover?.name)
     }
     
     let hrApproverId = signerToUse?.id || ""
     let hrApproverProfile: any = null
     let hrSignatureData: any = null
     
-    console.log("[v0] Memo[id] signer resolution:", {
-      memoType: paymentMemo ? "payment_advice" : "leave_approval",
-      hasPaymentMemo: !!paymentMemo,
-      hasSelectedSigner: !!selectedSignerFromMemo,
-      selectedSignerName: selectedSignerFromMemo?.name,
-      hasApprover: !!memoBodyApprover,
-      approverName: memoBodyApprover?.name,
-      signerToUse: signerToUse?.name,
-      hrApproverId,
-      leaveRequestHrApproverId: (leaveRequest as any).hr_approver_id,
-    })
+
     
     if (hrApproverId) {
       const [{ data: hrProf }, { data: hrSigRows }] = await Promise.all([
@@ -525,10 +512,7 @@ export async function GET(
       hrApproverProfile = hrProf
       hrSignatureData = pickBestSignature(hrSigRows || [])
       
-      console.log("[v0] Resolved signer profile:", hrApproverProfile?.first_name, hrApproverProfile?.last_name)
-      console.log("[v0] Resolved signature data:", hrSignatureData ? "found" : "not found")
-    } else {
-      console.warn("[v0] WARNING: No signer ID found for memo")
+
     }
 
     // Load QCC logo
@@ -608,7 +592,9 @@ export async function GET(
       const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso)
       paragraphs          = built.paragraphs
       closingLine         = built.closing
-      useTable            = built.useTable
+      // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
+      // Even if buildBuiltinBody returns useTable=true for another type, we override it.
+      useTable            = leaveTypeKey === "annual" ? built.useTable : false
       tableEntitlement    = built.tableEntitlement    ?? 0
       tableTravellingDays = built.tableTravellingDays ?? 0
     }
@@ -737,7 +723,6 @@ export async function GET(
 
     // ── Annual leave table ───────────────────────���─────���─────────────
     if (useTable === true) {
-      console.log(`[v0] Rendering table for ${leaveTypeKey}`)
       const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
       const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
@@ -809,7 +794,6 @@ export async function GET(
       y += 8
     } else {
       // For non-table types (casual, part_leave, paternity, etc.), resume duty is already in paragraphs
-      console.log(`[v0] NOT rendering table for ${leaveTypeKey} - simple format only`)
     }
 
     // ── Closing line ─────────────────────────────────────────────────
@@ -829,25 +813,22 @@ export async function GET(
     
     // Use selectedSigner data (which is stored during submit-memo and approve-secure)
     if (signerToUse?.name) {
-      signerNameForMemo = signerToUse.name
+      signerNameForMemo     = signerToUse.name
       signerPositionForMemo = signerToUse.position || "HR EXECUTIVE"
-      signerSignatureUrl = signerToUse.signature_data_url || signerToUse.signature_image_url || ""
-      console.log("[v0] Using signer from memo_body:", signerNameForMemo, "position:", signerPositionForMemo, "signature:", signerSignatureUrl ? "found" : "not found")
+      signerSignatureUrl    = signerToUse.signature_data_url || signerToUse.signature_image_url || ""
     }
-    // Fallback: Use hrApproverProfile only if we fetched it (hrApproverId was found)
+    // For leave approval memos: signerToUse only has {id}, so use hrApproverProfile
     else if (hrApproverProfile) {
-      signerNameForMemo = fmtName(hrApproverProfile)
-      signerPositionForMemo = String((hrApproverProfile as any)?.position || "HR EXECUTIVE")
-      console.log("[v0] Using hrApproverProfile:", signerNameForMemo)
-    }
-    // SHOULD NOT REACH HERE for properly submitted memos
-    else {
-      console.error("[v0] CRITICAL: No signer found! Memo was not properly submitted with a selectedSigner")
-      signerNameForMemo = "HR EXECUTIVE"
-      signerPositionForMemo = "PENDING SIGNATURE"
+      signerNameForMemo     = fmtName(hrApproverProfile).toUpperCase()
+      signerPositionForMemo = String((hrApproverProfile as any)?.position || "HR EXECUTIVE").toUpperCase()
+      // Signature comes from registry (fetched via hrSignatureData above)
+      signerSignatureUrl    = String((hrSignatureData as any)?.signature_data_url || "").trim()
+    } else {
+      signerNameForMemo     = "HR EXECUTIVE"
+      signerPositionForMemo = "HR DEPARTMENT"
     }
 
-    // Get signature image: PRIORITY - signerSignatureUrl from memo > registry signature
+    // Final signature URL: prefer signer's own URL, fall back to registry
     const registrySigDataUrl = String((hrSignatureData as any)?.signature_data_url || "").trim()
     const finalSignatureUrl = signerSignatureUrl || registrySigDataUrl
     
@@ -856,16 +837,11 @@ export async function GET(
     // Add modern signature block - PROFESSIONAL APPEARANCE
     if (finalSignatureUrl && finalSignatureUrl.length > 10) {
       try {
-        console.log("[v0] SIGNATURE RENDERING: URL found, length:", finalSignatureUrl.length, "starts with:", finalSignatureUrl.substring(0, 30))
-        // Handle both base64 data URLs and blob URLs
         if (finalSignatureUrl.startsWith("data:")) {
-          // Base64 data URL - properly extract base64 content
           const b64 = finalSignatureUrl.replace(/^data:image\/[^;]+;base64,/, "")
-          console.log("[v0] Base64 signature detected, length after cleaning:", b64.length, "first 50 chars:", b64.substring(0, 50))
           sigImgY = y
           doc.addImage(`data:image/png;base64,${b64}`, "PNG", marginLeft, y, 50, 18)
           y += 22
-          console.log("[v0] SUCCESS: Added base64 signature image to PDF at y:", sigImgY)
         } else if (finalSignatureUrl.startsWith("http")) {
           // Blob URL - fetch and convert to base64
           try {
@@ -877,9 +853,7 @@ export async function GET(
               sigImgY = y
               doc.addImage(`data:image/png;base64,${base64}`, "PNG", marginLeft, y, 50, 18)
               y += 22
-              console.log("[v0] SUCCESS: Added blob URL signature image to PDF")
             } else {
-              console.warn("[v0] Failed to fetch blob signature URL:", response.status)
               // Show placeholder if fetch fails
               doc.setDrawColor(100, 100, 100)
               doc.setLineWidth(0.3)
