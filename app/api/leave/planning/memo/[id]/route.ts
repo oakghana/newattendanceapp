@@ -557,6 +557,11 @@ export async function GET(
     const returnDateIso = returnDate.toISOString()
 
     const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
+    console.log("[v0] MEMO GENERATION:", {
+      leaveId: id,
+      leaveTypeKey,
+      memoSubject: safeDraftSubject || getMemoSubject(leaveTypeKey, ""),
+    })
     const leaveLabel   = leaveTypeLabel(leaveTypeKey)
 
     const rawDraftSubject = String(lr.memo_draft_subject || "").trim()
@@ -595,6 +600,12 @@ export async function GET(
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
       // Even if buildBuiltinBody returns useTable=true for another type, we override it.
       useTable            = leaveTypeKey === "annual" ? built.useTable : false
+      console.log("[v0] TABLE DECISION:", {
+        leaveTypeKey,
+        builtUseTable: built.useTable,
+        finalUseTable: useTable,
+        willRenderTable: useTable === true,
+      })
       tableEntitlement    = built.tableEntitlement    ?? 0
       tableTravellingDays = built.tableTravellingDays ?? 0
     }
