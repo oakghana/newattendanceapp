@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Merge location into memo_body where missing
+    // Merge location into memo_body where missing & extract staff details
     const enrichedMemos = memoList.map((memo: any) => {
       let memoBody: any = {}
       try {
@@ -132,9 +132,17 @@ export async function GET(request: NextRequest) {
 
       if (!memoBody.staff_location_name && locationMap[memo.staff_id]) {
         memoBody.staff_location_name = locationMap[memo.staff_id]
-        return { ...memo, memo_body: JSON.stringify(memoBody) }
       }
-      return memo
+
+      // Extract staff details from memo_body for combined memo generation
+      return {
+        ...memo,
+        memo_body: JSON.stringify(memoBody),
+        // Add extracted fields for easy access
+        staff_position: memoBody.staff_position || "N/A",
+        staff_department: memoBody.staff_department || "N/A",
+        staff_location: memoBody.staff_location_name || locationMap[memo.staff_id] || "N/A",
+      }
     })
 
     return NextResponse.json({

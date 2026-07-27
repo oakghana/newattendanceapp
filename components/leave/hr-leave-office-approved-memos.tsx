@@ -36,6 +36,9 @@ interface ApprovedMemoGroup {
     signer_name: string
     staff_category: string
     location?: string
+    staff_position?: string
+    staff_department?: string
+    staff_location?: string
   }[]
 }
 
@@ -252,13 +255,13 @@ export function HrLeaveOfficeApprovedMemos() {
       for (const group of monthGroups) {
         if (category && group.category !== category) continue // Skip other categories
         for (const memo of group.memos) {
-          // Extract staff data from memo details
+          // Extract staff data from memo - memo object now has staff_position, staff_department from enriched query
           staffList.push({
-            full_name: memo.staff_name,
-            employee_id: memo.staff_id || "N/A",
-            position: memo.position || "N/A",
-            department_name: memo.department_name || "N/A",
-            start_date: memo.start_date,
+            full_name: memo.staff_name || "N/A",
+            employee_id: memo.staff_number || "N/A",
+            position: memo.staff_position || "N/A",
+            department_name: memo.staff_department || "N/A",
+            start_date: memo.leave_period_start || new Date().toISOString(),
             category: group.category,
           })
         }
