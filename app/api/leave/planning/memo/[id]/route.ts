@@ -194,7 +194,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
 
     case "casual":
       return {
-        useTable: false,
+        useTable: false,  // NEVER use table for casual leave
         paragraphs: [
           `We acknowledge receipt of your letter dated ${submittedFormal} in relation to the above-mentioned subject and wish to inform you that Management has given approval for you to proceed on ${effectiveDays} working day(s) casual leave with effect from ${startFormal} to ${endFormal}.`,
           `You are expected to resume duty on ${returnFormal}.`,
@@ -205,7 +205,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
 
     case "part_leave":
       return {
-        useTable: false,
+        useTable: false,  // NEVER use table for part leave
         paragraphs: [
           `We acknowledge receipt of your letter dated ${submittedFormal} in connection with the above-mentioned subject and wish to inform you that approval has been given for you to proceed on ${effectiveDays} working day(s) part leave with effect from ${startFormal} to ${endFormal}.`,
           `You are expected to resume duty on ${returnFormal}.`,
@@ -736,7 +736,8 @@ export async function GET(
     }
 
     // ── Annual leave table ───────────────────────���─────���─────────────
-    if (useTable) {
+    if (useTable === true) {
+      console.log(`[v0] Rendering table for ${leaveTypeKey}`)
       const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
       const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
@@ -807,7 +808,8 @@ export async function GET(
       doc.text(`${resumeDate}.`, marginLeft + resumeWidth, y)
       y += 8
     } else {
-      // For non-table types, resume duty is already in the paragraphs
+      // For non-table types (casual, part_leave, paternity, etc.), resume duty is already in paragraphs
+      console.log(`[v0] NOT rendering table for ${leaveTypeKey} - simple format only`)
     }
 
     // ── Closing line ─────────────────────────────────────────────────
