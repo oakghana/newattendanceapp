@@ -71,7 +71,8 @@ export async function GET(request: NextRequest) {
         id, staff_id, staff_name, staff_number, memo_subject, memo_body,
         leave_period_start, leave_period_end, approved_days,
         hr_leave_office_name, signer_id, signer_name,
-        signature_data_url, created_at, status, staff_category
+        signature_data_url, created_at, status, staff_category,
+        leave_plan_request_id
       `)
       .eq("id", memoId)
       .maybeSingle()
@@ -166,8 +167,20 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Live-enrich staffList location from geofence_locations if missing ────
-    // This handles both single-staff memos and older memos that didn't store location_name
-    const userIdForLocation = memoBodyUserId || memo.user_id || memo.staff_id || null
+    // staff_id is the FK to user_profiles stored on the memo row itself.
+    // Fall back to memo_body.user_id, then resolve via leave_plan_request if all else fails.
+    let userIdForLocation: string | null = memo.staff_id || memoBodyUserId || null
+
+    if (!userIdForLocation && memo.leave_plan_request_id) {
+      // Older memos may not have staff_id set — look it up via the leave request
+      const { data: lpr } = await admin
+        .from("leave_plan_requests")
+        .select("user_id")
+        .eq("id", memo.leave_plan_request_id)
+        .maybeSingle()
+      userIdForLocation = lpr?.user_id || null
+    }
+
     if (userIdForLocation) {
       const { data: liveProfile } = await admin
         .from("user_profiles")
