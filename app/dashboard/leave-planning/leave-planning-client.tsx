@@ -2532,6 +2532,35 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 </div>
 
+                {/* Show user's active/approved leaves to avoid overlaps */}
+                {myRequests.some((r: any) => ["approved", "active"].includes(r.status)) && (
+                  <div className="border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg px-4 py-3.5">
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <AlertCircle className="h-5 w-5 text-amber-600 font-bold" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-amber-900 mb-2">
+                          Your Active Leave Periods
+                        </h4>
+                        <div className="space-y-1.5 text-sm text-amber-800">
+                          {myRequests
+                            .filter((r: any) => ["approved", "active"].includes(r.status))
+                            .map((leave: any) => (
+                              <div key={leave.id} className="flex gap-2 items-start">
+                                <span className="flex-shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-amber-600 text-white text-xs font-bold">•</span>
+                                <span>
+                                  <strong>{leave.leave_type_key?.replace(/_/g, " ").toUpperCase()}</strong>: {leave.preferred_start_date} to {leave.preferred_end_date} ({leave.status})
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-amber-700 mt-2 italic">Avoid selecting dates that overlap with these periods.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
