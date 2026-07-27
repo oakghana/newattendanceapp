@@ -484,19 +484,49 @@ export function LoanOfficePaymentAdviceTab() {
                     </div>
                   </div>
 
-                  {/* Individual staff list — expandable */}
+                  {/* Individual staff list — table view */}
                   {isExpanded && (
-                    <div className="border-t border-slate-100 bg-slate-50 px-5 py-2">
-                      <div className="divide-y divide-slate-100">
-                        {cg.memos.map((memo) => (
-                          <div key={memo.id} className="flex items-center justify-between gap-3 py-2.5">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-slate-800 truncate">{memo.staff_name}</p>
-                              <p className="text-xs text-slate-500">
-                                {memo.staff_number} &middot; {fmtDate(memo.leave_period_start)} &ndash; {fmtDate(memo.leave_period_end)}
-                              </p>
-                            </div>
-                            <Button
+                    <div className="border-t border-slate-100 bg-white">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50">
+                            <th className="px-5 py-3 text-left font-medium text-slate-700">Name</th>
+                            <th className="px-5 py-3 text-left font-medium text-slate-700">Staff No.</th>
+                            <th className="px-5 py-3 text-left font-medium text-slate-700">Rank</th>
+                            <th className="px-5 py-3 text-left font-medium text-slate-700">Station/Location</th>
+                            <th className="px-5 py-3 text-left font-medium text-slate-700">Leave Date</th>
+                            <th className="px-5 py-3 text-left font-medium text-slate-700">Days</th>
+                            <th className="px-5 py-3 text-left font-medium text-slate-700">Status</th>
+                            <th className="px-5 py-3 text-center font-medium text-slate-700">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cg.memos.map((memo) => {
+                            let staffRank = "N/A"
+                            let staffLocation = "N/A"
+                            if (memo.memo_body) {
+                              try {
+                                const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
+                                staffRank = b.staff_rank_label || b.staffList?.[0]?.rank || "N/A"
+                                staffLocation = b.staff_location_name || b.staffList?.[0]?.assigned_location_name || b.staffList?.[0]?.location_name || "N/A"
+                              } catch {}
+                            }
+                            const leaveStartDate = memo.leave_period_start ? new Date(memo.leave_period_start) : null
+                            const leaveEndDate = memo.leave_period_end ? new Date(memo.leave_period_end) : null
+                            const daysDiff = leaveStartDate && leaveEndDate ? Math.ceil((leaveEndDate.getTime() - leaveStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1 : 0
+                            return (
+                              <tr key={memo.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                <td className="px-5 py-3 text-slate-800 font-medium">{memo.staff_name || "N/A"}</td>
+                                <td className="px-5 py-3 text-slate-700">{memo.staff_number || "N/A"}</td>
+                                <td className="px-5 py-3 text-slate-700">{staffRank}</td>
+                                <td className="px-5 py-3 text-slate-700">{staffLocation}</td>
+                                <td className="px-5 py-3 text-slate-700">{leaveStartDate ? leaveStartDate.toLocaleDateString() : "N/A"}</td>
+                                <td className="px-5 py-3 text-slate-700">{daysDiff || "N/A"}</td>
+                                <td className="px-5 py-3">
+                                  <Badge className="bg-green-600 text-white text-xs">Approved</Badge>
+                                </td>
+                                <td className="px-5 py-3 text-center">
+                                  <Button
                               variant="outline"
                               size="sm"
                               className="shrink-0 gap-1 text-xs"
@@ -510,9 +540,12 @@ export function LoanOfficePaymentAdviceTab() {
                               )}
                               Download
                             </Button>
-                          </div>
-                        ))}
-                      </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>

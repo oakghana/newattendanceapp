@@ -1866,13 +1866,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // ─����� Derived lists ──���─────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => {
     if (!data) return []
-    const requests = data.myRequests || data.requests || []
+    // For loan_office role, show all staff leave requests (requests) instead of myRequests
+    // For other roles, show their own requests (myRequests)
+    const requests = (isLoanOffice ? (data.requests || []) : (data.myRequests || data.requests || []))
     
     // Role-based visibility filtering
     // All roles can see: requests that are theirs or for review/approval
     // The backend already filters based on the user, so just return the data
     return requests
-  }, [data])
+  }, [data, isLoanOffice])
 
   const hodAssignedReviews: any[] = useMemo(() => {
     if (!data) return []
