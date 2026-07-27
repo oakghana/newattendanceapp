@@ -194,18 +194,29 @@ function InlineSignaturePanel({ onSaved }: {
     }
     setSaving(true)
     try {
-      await fetch('/api/leave/signature', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workflow_domain: 'leave',
-          approval_stage: 'hr_approver',
-          signature_mode: mode,
-          signature_text: text,
-          signature_data_url: dataUrl,
+      // Save to approval_signature_registry (hr-signature-save) AND mirror to user_profiles
+      // so that next login the GET handler picks it up from user_profiles directly.
+      await Promise.allSettled([
+        fetch('/api/user/hr-signature-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            signatureDataUrl: dataUrl,
+            signature_mode: mode,
+            signature_text: text,
+          }),
         }),
-      })
-      toast({ title: 'Signature saved', description: 'Your signature will be used for this and future approvals.' })
+        fetch('/api/user/signature-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            signature_data_url: dataUrl,
+            signature_mode: mode,
+            signature_text: text,
+          }),
+        }),
+      ])
+      toast({ title: 'Signature saved', description: 'Your signature has been saved and will be used automatically for all future approvals.' })
       onSaved(dataUrl, text, mode)
     } catch {
       onSaved(dataUrl, text, mode)
@@ -823,6 +834,28 @@ export function HrApprovalsTab() {
   }, [toast])
 
   useEffect(() => { fetchRequests() }, [fetchRequests])
+
+  // ── Auto-fetch stored signature independently of the requests list ────────
+  // This catches signatures stored in approval_signature_registry or user_profiles
+  // so the "No stored signature" banner never shows for users who already signed up.
+  useEffect(() => {
+    async function loadStoredSignature() {
+      try {
+        const res = await fetch('/api/signature/auto-populate')
+        if (!res.ok) return
+        const data = await res.json()
+        if (data?.hasSignature && data?.signature?.signature_data_url) {
+          setStoredSignatureDataUrl(data.signature.signature_data_url)
+          setHasStoredSignature(true)
+        }
+        if (data?.signer?.name) setSignerName(data.signer.name)
+        if (data?.signer?.position) setSignerPosition(data.signer.position?.toUpperCase() || 'HR MANAGER')
+      } catch {
+        // silent — fetchRequests will also attempt to load the signature
+      }
+    }
+    loadStoredSignature()
+  }, [])
 
   // ── Fetch approved payment advice memos ──────────────────────────────────
   const fetchApprovedPaymentMemos = useCallback(async (month?: string) => {

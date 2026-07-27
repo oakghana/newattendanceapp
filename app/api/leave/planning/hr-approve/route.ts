@@ -114,18 +114,38 @@ export async function GET(request: NextRequest) {
     // Include HR executive profile for signature check and signer block
     const { data: hrProfile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name, position, signature_data_url, signature_text")
+      .select("first_name, last_name, position, signature_data_url, signature_text, signature_mode")
       .eq("id", user.id)
       .single()
-    const hasStoredSignature =
-      String((hrProfile as any)?.signature_data_url || "").trim().length > 0 ||
-      String((hrProfile as any)?.signature_text || "").trim().length > 0
+
     const signerName = [
       String((hrProfile as any)?.first_name || ""),
       String((hrProfile as any)?.last_name || ""),
     ].filter(Boolean).join(" ").trim() || "HR Executive"
     const signerPosition = String((hrProfile as any)?.position || "HR MANAGER").toUpperCase()
-    const signerSignatureDataUrl = String((hrProfile as any)?.signature_data_url || "").trim() || null
+
+    // Resolve signature: user_profiles first, then approval_signature_registry
+    let signerSignatureDataUrl = String((hrProfile as any)?.signature_data_url || "").trim() || null
+    let hasStoredSignature =
+      signerSignatureDataUrl !== null ||
+      String((hrProfile as any)?.signature_text || "").trim().length > 0
+
+    if (!hasStoredSignature) {
+      // Fall back to approval_signature_registry (where Profile Settings > Signature saves to)
+      const { data: registryRows } = await admin
+        .from("approval_signature_registry")
+        .select("signature_mode, signature_text, signature_data_url, is_active, approval_stage, updated_at")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+
+      const bestSig = pickBestSignature(registryRows || [])
+      if (bestSig) {
+        signerSignatureDataUrl = String((bestSig as any)?.signature_data_url || "").trim() || null
+        hasStoredSignature =
+          signerSignatureDataUrl !== null ||
+          String((bestSig as any)?.signature_text || "").trim().length > 0
+      }
+    }
 
     return NextResponse.json({
       requests: enrichedRequests || [],
