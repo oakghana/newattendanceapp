@@ -117,8 +117,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get leave request IDs and exclude those that already have approved payment advice
+    const leaveRequestIds = (staffOnLeave || []).map((r: any) => r.id).filter(Boolean)
+    
+    let requestsWithPaymentMemos: string[] = []
+    
+    if (leaveRequestIds.length > 0) {
+      // Query leave_payment_memos to find which leave requests already have approved payment memos
+      const { data: existingMemos, error: memoError } = await supabase
+        .from("leave_payment_memos")
+        .select("leave_plan_request_id")
+        .in("leave_plan_request_id", leaveRequestIds)
+        .eq("status", "approved")
+      
+      if (!memoError && existingMemos) {
+        requestsWithPaymentMemos = existingMemos.map((m: any) => m.leave_plan_request_id).filter(Boolean)
+        console.log("[v0] Found existing approved payment memos for requests:", requestsWithPaymentMemos)
+      } else if (memoError) {
+        console.warn("[v0] Warning checking for existing payment memos:", memoError.message)
+      }
+    }
+
+    // Filter out leave requests that already have approved payment memos
+    const staffOnLeaveFiltered = (staffOnLeave || []).filter((record: any) => 
+      !requestsWithPaymentMemos.includes(record.id)
+    )
+
+    if (staffOnLeaveFiltered.length < staffOnLeave.length) {
+      console.log(`[v0] Filtered out ${staffOnLeave.length - staffOnLeaveFiltered.length} leave requests that already have approved payment memos`)
+    }
+
     // Get user IDs and fetch user profiles separately with department names
-    const userIds = (staffOnLeave || []).map((r: any) => r.user_id).filter(Boolean)
+    const userIds = (staffOnLeaveFiltered || []).map((r: any) => r.user_id).filter(Boolean)
     
     let userProfiles: any[] = []
     let departments: any[] = []
@@ -204,7 +234,7 @@ export async function POST(request: NextRequest) {
       return "Junior"
     }
 
-    const formatted = (staffOnLeave || []).map((record: any) => {
+    const formatted = (staffOnLeaveFiltered || []).map((record: any) => {
       const profile = profileMap.get(record.user_id)
       const staffCategory = deriveStaffCategory(record, profile)
       
