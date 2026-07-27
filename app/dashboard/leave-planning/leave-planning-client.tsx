@@ -2219,10 +2219,24 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const adjStart = officeAdjStart[requestId]
     const adjEnd = officeAdjEnd[requestId]
     const rsn = officeReason[requestId]
+    const request = hrOfficeQueue.find(r => r.id === requestId)
+    const leaveType = String(request?.leave_type_key || "").toLowerCase()
+    const isAnnualLeave = leaveType === "annual"
+
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
-    if (!rsn || rsn.trim().length < 5) {
-      toast({ title: "Reason required", description: "Provide a detailed reason — it will appear in the memo.", variant: "destructive" })
+    
+    // Reason for adjustment is mandatory only for annual leave
+    if (isAnnualLeave && (!rsn || rsn.trim().length < 5)) {
+      toast({ title: "Reason required", description: "Provide a detailed reason for the adjustment — it will appear in the memo.", variant: "destructive" })
       return
+    }
+    
+    // For non-annual leave, warn if no reason is provided but still allow submission
+    if (!isAnnualLeave && (!rsn || rsn.trim().length < 5)) {
+      const continueWithoutReason = window.confirm(
+        "No reason for adjustment provided. Continue forwarding to HR Approvers without a reason?"
+      )
+      if (!continueWithoutReason) return
     }
 
     const holidayDeducted = Number(officeHolidayDays[requestId] || 0)
@@ -3828,8 +3842,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                             <div className="space-y-1">
                               <Label className="text-xs font-semibold text-slate-700">
-                                Reason for Adjustment <span className="text-red-500">*</span>
-                                <span className="text-slate-400 font-normal ml-1">(will appear in leave memo)</span>
+                                Reason for Adjustment{String(req.leave_type_key || "").toLowerCase() === "annual" && <span className="text-red-500">*</span>}
+                                <span className="text-slate-400 font-normal ml-1">
+                                  {String(req.leave_type_key || "").toLowerCase() === "annual" 
+                                    ? "(required — will appear in leave memo)" 
+                                    : "(optional — will appear in leave memo)"}
+                                </span>
                               </Label>
                               {generatedReason && (
                                 <div className="flex justify-end">
