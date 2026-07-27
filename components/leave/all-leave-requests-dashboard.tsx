@@ -12,7 +12,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, RotateCw } from "lucide-react"
+import { ArrowRight, RotateCw, Search } from "lucide-react"
 import { SortableTable, ColumnDef } from "@/components/ui/sortable-table"
 
 interface LeaveRequest {
@@ -59,9 +59,22 @@ export function AllLeaveRequestsDashboard() {
     totalPages: 0,
   })
   const [statusFilter, setStatusFilter] = useState("all")
+  const [departmentFilter, setDepartmentFilter] = useState("all")
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState("all")
+  const [dateRangeFilter, setDateRangeFilter] = useState<{ from: string; to: string }>({ from: "", to: "" })
   const [searchTerm, setSearchTerm] = useState("")
+  const [departments, setDepartments] = useState<string[]>([])
+  const [leaveTypes, setLeaveTypes] = useState<string[]>([])
 
-  const fetchRequests = useCallback(async (page = 1, status = "all", search = "") => {
+  const fetchRequests = useCallback(async (
+    page = 1,
+    status = "all",
+    search = "",
+    department = "all",
+    leaveType = "all",
+    dateFrom = "",
+    dateTo = ""
+  ) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -69,6 +82,10 @@ export function AllLeaveRequestsDashboard() {
       params.append("page_size", "50")
       if (status !== "all") params.append("status", status)
       if (search) params.append("search", search)
+      if (department !== "all") params.append("department", department)
+      if (leaveType !== "all") params.append("leave_type", leaveType)
+      if (dateFrom) params.append("date_from", dateFrom)
+      if (dateTo) params.append("date_to", dateTo)
 
       const res = await fetch(`/api/leave/all-requests?${params}`)
       if (!res.ok) {
@@ -91,9 +108,34 @@ export function AllLeaveRequestsDashboard() {
     }
   }, [toast])
 
+  // Load departments and leave types on mount
   useEffect(() => {
-    fetchRequests(1, statusFilter, searchTerm)
-  }, [statusFilter, fetchRequests])
+    const loadFilterOptions = async () => {
+      try {
+        const res = await fetch("/api/leave/filter-options")
+        if (res.ok) {
+          const json = await res.json()
+          setDepartments(json.departments || [])
+          setLeaveTypes(json.leaveTypes || [])
+        }
+      } catch (err) {
+        console.error("Error loading filter options:", err)
+      }
+    }
+    loadFilterOptions()
+  }, [])
+
+  useEffect(() => {
+    fetchRequests(
+      1,
+      statusFilter,
+      searchTerm,
+      departmentFilter,
+      leaveTypeFilter,
+      dateRangeFilter.from,
+      dateRangeFilter.to
+    )
+  }, [statusFilter, departmentFilter, leaveTypeFilter, dateRangeFilter, fetchRequests])
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value)
@@ -107,6 +149,32 @@ export function AllLeaveRequestsDashboard() {
     setStatusFilter(value)
     setPagination(prev => ({ ...prev, page: 1 }))
   }
+
+  const handleDepartmentChange = (value: string) => {
+    setDepartmentFilter(value)
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const handleLeaveTypeChange = (value: string) => {
+    setLeaveTypeFilter(value)
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const handleDateRangeChange = (type: "from" | "to", value: string) => {
+    setDateRangeFilter(prev => ({ ...prev, [type]: value }))
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const clearAllFilters = () => {
+    setStatusFilter("all")
+    setDepartmentFilter("all")
+    setLeaveTypeFilter("all")
+    setDateRangeFilter({ from: "", to: "" })
+    setSearchTerm("")
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const hasActiveFilters = statusFilter !== "all" || departmentFilter !== "all" || leaveTypeFilter !== "all" || dateRangeFilter.from || dateRangeFilter.to || searchTerm
 
   const calculateDays = (start: string, end: string) => {
     const startDate = new Date(start)
@@ -259,35 +327,133 @@ export function AllLeaveRequestsDashboard() {
 
   return (
     <div className="space-y-6 w-full">
-      {/* Status Filter */}
-      <div className="flex gap-3">
-        <div className="w-full sm:w-48">
-          <label className="block text-xs font-semibold text-slate-600 mb-2">Filter by Status</label>
-          <Select value={statusFilter} onValueChange={handleStatusChange}>
-            <SelectTrigger className="text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="pending_hod_review">Awaiting HOD</SelectItem>
-              <SelectItem value="hod_approved">HOD Approved</SelectItem>
-              <SelectItem value="hr_approved">HR Approved</SelectItem>
-              <SelectItem value="approved">Fully Approved</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Filters Section */}
+      <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-slate-700">Filters & Search</h3>
+          {hasActiveFilters && (
+            <Button
+              onClick={clearAllFilters}
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7"
+            >
+              Clear All
+            </Button>
+          )}
         </div>
 
-        <Button
-          onClick={() => fetchRequests(pagination.page, statusFilter, searchTerm)}
-          variant="outline"
-          size="sm"
-          className="gap-2 self-end"
-        >
-          <RotateCw className="h-4 w-4" />
-          <span className="hidden sm:inline">Refresh</span>
-        </Button>
+        {/* Search Bar */}
+        <div className="flex gap-2">
+          <Input
+            placeholder="Search by name, email, ID..."
+            value={searchTerm}
+            onChange={handleSearch}
+            onKeyDown={(e) => e.key === "Enter" && handleSearchSubmit()}
+            className="text-sm"
+          />
+          <Button
+            onClick={handleSearchSubmit}
+            variant="outline"
+            size="sm"
+            className="gap-2 px-3"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Filter Row 1: Status, Department, Leave Type */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
+            <Select value={statusFilter} onValueChange={handleStatusChange}>
+              <SelectTrigger className="text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="pending_hod_review">Awaiting HOD</SelectItem>
+                <SelectItem value="hod_approved">HOD Approved</SelectItem>
+                <SelectItem value="hr_approved">HR Approved</SelectItem>
+                <SelectItem value="approved">Fully Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Department</label>
+            <Select value={departmentFilter} onValueChange={handleDepartmentChange}>
+              <SelectTrigger className="text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map(dept => (
+                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Leave Type</label>
+            <Select value={leaveTypeFilter} onValueChange={handleLeaveTypeChange}>
+              <SelectTrigger className="text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {leaveTypes.map(type => (
+                  <SelectItem key={type} value={type}>{type.replace(/_/g, " ").toUpperCase()}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              onClick={() => fetchRequests(
+                pagination.page,
+                statusFilter,
+                searchTerm,
+                departmentFilter,
+                leaveTypeFilter,
+                dateRangeFilter.from,
+                dateRangeFilter.to
+              )}
+              variant="outline"
+              size="sm"
+              className="gap-2 w-full"
+            >
+              <RotateCw className="h-4 w-4" />
+              <span>Refresh</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Filter Row 2: Date Range */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">From Date</label>
+            <Input
+              type="date"
+              value={dateRangeFilter.from}
+              onChange={(e) => handleDateRangeChange("from", e.target.value)}
+              className="text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">To Date</label>
+            <Input
+              type="date"
+              value={dateRangeFilter.to}
+              onChange={(e) => handleDateRangeChange("to", e.target.value)}
+              className="text-sm"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Summary */}
