@@ -279,6 +279,9 @@ export async function POST(request: NextRequest) {
         leave_end_date: record.preferred_end_date,
         leave_type: record.leave_type_key,
         requested_days: record.requested_days || record.entitlement_days || 0,
+        // CRITICAL: Use adjusted_days (HR-approved days) as the source of truth for memos and documents
+        // This ensures all memos display the same approved days, not user-requested days
+        adjusted_days: record.adjusted_days || record.requested_days || record.entitlement_days || 0,
         // FIXED: Approved days now includes outstanding balance + adjusted days + travelling allowance
         approved_days: (
           (record.year_outstanding_balance || 0) + 
