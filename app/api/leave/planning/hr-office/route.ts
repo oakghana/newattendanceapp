@@ -1,7 +1,12 @@
+// HR Leave Office Route - Handles HR office adjustments with conditional reason field
 import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrLeaveOfficeRole, isHrApproverRole, HR_OFFICE_PENDING_STATUSES } from "@/lib/leave-planning"
+import {
+  resolveEntitlementFromProfile,
+  buildAnnualLeaveEntitlementSummary,
+} from "@/lib/annual-leave-entitlement"
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,18 +66,16 @@ export async function POST(request: NextRequest) {
       memo_draft_subject,
       memo_draft_body,
       memo_draft_cc,
+      // Support both field names — client sends forwarded_to_hr_approver_id
       hr_approver_id,
+      forwarded_to_hr_approver_id,
     } = body
+
+    // Resolve the HR executive ID from whichever field was sent
+    const resolvedHrApproverId = forwarded_to_hr_approver_id || hr_approver_id || null
 
     if (!leave_plan_request_id) {
       return NextResponse.json({ error: "leave_plan_request_id is required." }, { status: 400 })
-    }
-
-    if (!adjustment_reason || String(adjustment_reason).trim().length < 5) {
-      return NextResponse.json(
-        { error: "A detailed adjustment reason is required (this will appear in the memo to staff)." },
-        { status: 400 },
-      )
     }
 
     if (!adjusted_start_date || !adjusted_end_date) {
@@ -103,6 +106,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Reason for adjustment is mandatory for annual leave, optional for all other leave types
+    const leaveTypeKey = String((leaveRequest as any).leave_type_key || "").toLowerCase()
+    const requestIsAnnual = leaveTypeKey === "annual"
+    if (requestIsAnnual && (!adjustment_reason || String(adjustment_reason).trim().length < 5)) {
+      return NextResponse.json(
+        { error: "A detailed adjustment reason is required for annual leave (this will appear in the memo to staff)." },
+        { status: 400 },
+      )
+    }
+
     // Compute final adjusted days from date range if not explicitly provided
     const startDt = new Date(adjusted_start_date)
     const endDt = new Date(adjusted_end_date)
@@ -120,7 +133,8 @@ export async function POST(request: NextRequest) {
 
     const entitlementDays = Number((leaveRequest as any).entitlement_days || 0)
     const trimmedReason = String(adjustment_reason || "").trim()
-    if (entitlementDays > 0 && computedAdjustedDays > entitlementDays && trimmedReason.length < 10) {
+    // Only enforce reason length on entitlement overage for annual leave
+    if (requestIsAnnual && entitlementDays > 0 && computedAdjustedDays > entitlementDays && trimmedReason.length < 10) {
       return NextResponse.json(
         {
           error:
@@ -166,7 +180,7 @@ export async function POST(request: NextRequest) {
         memo_draft_last_edited_role: "hr_leave_office",
         memo_draft_last_edited_at: new Date().toISOString(),
         // Store the HR executive selected to receive this forwarded request
-        hr_approver_id: hr_approver_id || null,
+        hr_approver_id: resolvedHrApproverId,
         // Apply the adjusted dates as the effective dates for HR to finalize
         preferred_start_date: adjusted_start_date,
         preferred_end_date: adjusted_end_date,
@@ -198,7 +212,7 @@ export async function POST(request: NextRequest) {
 
     const { data: staffProfile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name, employee_id")
+      .select("first_name, last_name, employee_id, staff_category, date_of_appointment, years_of_service, position, rank")
       .eq("id", (leaveRequest as any).user_id)
       .maybeSingle()
 
@@ -206,6 +220,23 @@ export async function POST(request: NextRequest) {
       String((staffProfile as any)?.first_name || "").trim(),
       String((staffProfile as any)?.last_name || "").trim(),
     ].filter(Boolean).join(" ") || String((staffProfile as any)?.employee_id || "Staff")
+    const employeeId = String((staffProfile as any)?.employee_id || "N/A")
+
+    // Build annual leave entitlement summary for notification (only for annual leave)
+    let entitlementBlock = ""
+    if (requestIsAnnual && staffProfile) {
+      const entitlement = resolveEntitlementFromProfile(staffProfile as any)
+      const { summary } = buildAnnualLeaveEntitlementSummary(
+        staffName,
+        employeeId,
+        entitlement,
+        computedAdjustedDays,
+      )
+      entitlementBlock = "\n\nAnnual Leave Entitlement Summary:\n" +
+        Object.entries(summary)
+          .map(([k, v]) => `  ${k}: ${v}`)
+          .join("\n")
+    }
 
     // Email HR Approvers that a request is ready for final approval
     notifyLeaveHrOfficeForwarded(admin, {
@@ -216,6 +247,7 @@ export async function POST(request: NextRequest) {
       adjustedEndDate: adjusted_end_date,
       adjustedDays: computedAdjustedDays,
       reviewerName,
+      extraNote: entitlementBlock || undefined,
     }).catch(() => {})
 
     return NextResponse.json({

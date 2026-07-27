@@ -29,25 +29,10 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const targetUserId = searchParams.get("userId") || user.id
 
-    // Fetch signature from approval_signature_registry
-    const { data: signatureRecord, error: sigError } = await admin
-      .from("approval_signature_registry")
-      .select("*")
-      .eq("user_id", targetUserId)
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .single()
-
-    if (sigError && sigError.code !== "PGRST116") {
-      console.error("[v0] Error fetching signature:", sigError)
-      throw sigError
-    }
-
-    // Also fetch the user's profile for name and position
+    // Fetch user profile for name, position AND primary signature storage
     const { data: userProfile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, position, role, email")
+      .select("id, first_name, last_name, position, role, email, signature_data_url, signature_text, signature_mode")
       .eq("id", targetUserId)
       .single()
 
@@ -59,19 +44,59 @@ export async function GET(request: NextRequest) {
       ? `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim()
       : "Unknown"
 
-    const hasSignature = !!(signatureRecord?.signature_data_url)
+    // Priority 1: user_profiles.signature_data_url (set via Profile Settings > Signature)
+    let resolvedSigDataUrl: string | null = (userProfile as any)?.signature_data_url?.trim() || null
+    let resolvedSigText: string | null = (userProfile as any)?.signature_text?.trim() || null
+    let signatureRecord: any = null
+
+    if (resolvedSigDataUrl) {
+      // Construct a synthetic record so the response shape stays the same
+      signatureRecord = {
+        id: targetUserId,
+        signature_data_url: resolvedSigDataUrl,
+        workflow_domain: "profile",
+        approval_stage: "profile",
+        created_at: null,
+        updated_at: (userProfile as any)?.signature_updated_at || null,
+      }
+    } else {
+      // Priority 2: approval_signature_registry (where hr-signature-save writes)
+      const { data: registryRecord, error: sigError } = await admin
+        .from("approval_signature_registry")
+        .select("*")
+        .eq("user_id", targetUserId)
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (sigError && sigError.code !== "PGRST116") {
+        console.error("[v0] Error fetching signature from registry:", sigError)
+      }
+
+      if (registryRecord?.signature_data_url) {
+        resolvedSigDataUrl = registryRecord.signature_data_url
+        signatureRecord = {
+          id: registryRecord.id,
+          signature_data_url: registryRecord.signature_data_url,
+          signature_image_url: registryRecord.signature_data_url,
+          workflow_domain: registryRecord.workflow_domain,
+          approval_stage: registryRecord.approval_stage,
+          created_at: registryRecord.created_at,
+          updated_at: registryRecord.updated_at,
+        }
+      }
+    }
+
+    const hasSignature = !!(resolvedSigDataUrl || resolvedSigText)
 
     return NextResponse.json({
       success: true,
       hasSignature,
       signature: signatureRecord ? {
-        id: signatureRecord.id,
-        signature_data_url: signatureRecord.signature_data_url,
-        signature_image_url: signatureRecord.signature_data_url, // Alias for compatibility
-        workflow_domain: signatureRecord.workflow_domain,
-        approval_stage: signatureRecord.approval_stage,
-        created_at: signatureRecord.created_at,
-        updated_at: signatureRecord.updated_at,
+        ...signatureRecord,
+        signature_data_url: resolvedSigDataUrl,
+        signature_image_url: resolvedSigDataUrl,
       } : null,
       signer: userProfile ? {
         id: userProfile.id,

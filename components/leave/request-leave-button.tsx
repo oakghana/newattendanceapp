@@ -14,9 +14,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
-import { Calendar, Loader2 } from "lucide-react"
+import { Calendar, Loader2, Info } from "lucide-react"
 import { useEffect } from "react"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+
+interface AnnualEntitlementInfo {
+  annualLeaveDays: number
+  travelDays: number
+  totalEntitlement: number
+  tierLabel: string
+  yearsOfService: number
+}
 
 interface LeaveTypeOption {
   leaveTypeKey: string
@@ -32,6 +40,23 @@ export function RequestLeaveButton() {
   const [formData, setFormData] = useState({ start_date: "", end_date: "", leave_type: "annual", reason: "" })
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [activePeriod, setActivePeriod] = useState("2026/2027")
+  const [annualEntitlement, setAnnualEntitlement] = useState<AnnualEntitlementInfo | null>(null)
+
+  // Fetch annual leave entitlement for this user when the dialog opens
+  useEffect(() => {
+    if (!open) return
+    const loadEntitlement = async () => {
+      try {
+        const res = await fetch("/api/leave/annual-entitlement", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (data?.entitlement) setAnnualEntitlement(data.entitlement)
+      } catch {
+        // non-fatal
+      }
+    }
+    void loadEntitlement()
+  }, [open])
 
   useEffect(() => {
     const loadLeavePolicy = async () => {
@@ -150,6 +175,39 @@ export function RequestLeaveButton() {
             />
             <p className="text-xs text-muted-foreground mt-1">Active Leave Period: {activePeriod}</p>
           </div>
+
+          {/* Annual leave entitlement summary — only shown when annual leave is selected */}
+          {formData.leave_type === "annual" && annualEntitlement && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-blue-600 shrink-0" />
+                <span className="text-xs font-semibold text-blue-800">Your Annual Leave Entitlement</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-blue-900">
+                <div><span className="text-blue-600">Category:</span> {annualEntitlement.tierLabel}</div>
+                <div><span className="text-blue-600">Service:</span> {annualEntitlement.yearsOfService} year{annualEntitlement.yearsOfService !== 1 ? "s" : ""}</div>
+                <div><span className="text-blue-600">Leave days:</span> {annualEntitlement.annualLeaveDays} days</div>
+                <div><span className="text-blue-600">Travel days:</span> {annualEntitlement.travelDays} days</div>
+              </div>
+              <div className="pt-1 border-t border-blue-200 flex items-center justify-between">
+                <span className="text-xs text-blue-700 font-medium">Total entitlement</span>
+                <span className="text-sm font-bold text-blue-900">{annualEntitlement.totalEntitlement} days</span>
+              </div>
+              {formData.start_date && formData.end_date && (() => {
+                const requested = computeLeaveDays(formData.start_date, formData.end_date)
+                const exceeds = requested > annualEntitlement.totalEntitlement
+                const remaining = annualEntitlement.totalEntitlement - requested
+                return (
+                  <div className={`text-xs px-2 py-1.5 rounded ${exceeds ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                    {exceeds
+                      ? `Request of ${requested} days exceeds your entitlement of ${annualEntitlement.totalEntitlement} days by ${requested - annualEntitlement.totalEntitlement} day(s). HR will review.`
+                      : `${requested} days requested — ${remaining} day(s) remaining within entitlement.`
+                    }
+                  </div>
+                )
+              })()}
+            </div>
+          )}
 
           <div>
             <Label htmlFor="start_date">Start Date</Label>

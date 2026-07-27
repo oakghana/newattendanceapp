@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
+import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 
 const LEADERSHIP_ROLES = new Set(["manager_hr", "director_hr", "hr_leave_office", "admin", "hr_director", "hr_officer"])
 
@@ -31,12 +32,19 @@ export async function GET() {
 
     const { data: profile } = await admin
       .from("user_profiles")
-      .select("role")
+      .select("role, staff_category, date_of_appointment, years_of_service, position, rank")
       .eq("id", user.id)
       .maybeSingle()
 
     const normalizedRole = normalizeRole((profile as any)?.role)
     const showLeadershipMetrics = LEADERSHIP_ROLES.has(normalizedRole)
+
+    // Compute per-staff annual leave entitlement (overrides flat policy value for regular staff)
+    let perStaffAnnualEntitlement: number | null = null
+    if (!showLeadershipMetrics && profile) {
+      const e = resolveEntitlementFromProfile(profile as any)
+      perStaffAnnualEntitlement = e.totalEntitlement
+    }
 
     // Detect active period from policy (fallback to October-based cycle)
     let activePeriod = getDefaultLeaveYearPeriod()
@@ -196,12 +204,17 @@ export async function GET() {
 
     // Build the response array, ordered by entitlement descending
     const balances = Object.entries(entitlements).map(([key, { label, entitlement }]) => {
+      // For annual leave, replace the flat policy entitlement with the per-staff calculated value
+      const resolvedEntitlement =
+        key === "annual" && perStaffAnnualEntitlement !== null
+          ? perStaffAnnualEntitlement
+          : entitlement
       const used = usageMap[key] || 0
-      const remaining = Math.max(0, entitlement - used)
+      const remaining = Math.max(0, resolvedEntitlement - used)
       return {
         key,
         label,
-        entitlement,
+        entitlement: resolvedEntitlement,
         used,
         remaining,
         active_staff_count: activeStaffCountByType[key] || 0,

@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * pageSize
 
     // Fetch leave requests with user profiles
+    // Sort by HR approval time (newest first), with fallback to submission date for unapproved requests
     let query = admin
       .from("leave_plan_requests")
       .select(
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
          user_profiles!user_id (id, first_name, last_name, email, department_id, employee_id, position)`,
         { count: "exact" }
       )
+      .order("hr_approved_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
 
     if (statusParam && statusParam !== "all") {

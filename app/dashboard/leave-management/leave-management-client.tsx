@@ -2938,13 +2938,11 @@ export function LeaveManagementClient({
                                   size="sm"
                                   className="bg-teal-600 hover:bg-teal-700 text-white"
                                   onClick={() => {
-                                    // Download memo using the memo[id] API route
-                                    const memoId = memo.id || memo.leave_plan_request_id
-                                    if (memoId) {
-                                      window.open(`/api/leave/planning/memo/${memoId}`, "_blank")
-                                    } else {
-                                      console.error("[v0] No memo ID found for download")
-                                    }
+                                    const memoId = memo.leave_plan_request_id || memo.id
+                                    if (!memoId) return
+                                    // Include the memo_token so staff/HOD users pass the token check
+                                    const token = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
+                                    window.open(`/api/leave/planning/memo/${memoId}${token}`, "_blank")
                                   }}
                                 >
                                   <Download className="h-3.5 w-3.5 mr-1" />

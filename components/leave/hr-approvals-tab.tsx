@@ -194,18 +194,29 @@ function InlineSignaturePanel({ onSaved }: {
     }
     setSaving(true)
     try {
-      await fetch('/api/leave/signature', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workflow_domain: 'leave',
-          approval_stage: 'hr_approver',
-          signature_mode: mode,
-          signature_text: text,
-          signature_data_url: dataUrl,
+      // Save to approval_signature_registry (hr-signature-save) AND mirror to user_profiles
+      // so that next login the GET handler picks it up from user_profiles directly.
+      await Promise.allSettled([
+        fetch('/api/user/hr-signature-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            signatureDataUrl: dataUrl,
+            signature_mode: mode,
+            signature_text: text,
+          }),
         }),
-      })
-      toast({ title: 'Signature saved', description: 'Your signature will be used for this and future approvals.' })
+        fetch('/api/user/signature-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            signature_data_url: dataUrl,
+            signature_mode: mode,
+            signature_text: text,
+          }),
+        }),
+      ])
+      toast({ title: 'Signature saved', description: 'Your signature has been saved and will be used automatically for all future approvals.' })
       onSaved(dataUrl, text, mode)
     } catch {
       onSaved(dataUrl, text, mode)
@@ -792,6 +803,11 @@ export function HrApprovalsTab() {
   const [approvedPaymentMonth, setApprovedPaymentMonth] = useState('')
   const [downloadingMemoId, setDownloadingMemoId] = useState<string | null>(null)
 
+  // Deferments and recalls state
+  const [deferments, setDeferments] = useState<any[]>([])
+  const [recalls, setRecalls] = useState<any[]>([])
+  const [loadingDefermentRecall, setLoadingDefermentRecall] = useState(false)
+
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
     setLoading(true)
@@ -819,6 +835,28 @@ export function HrApprovalsTab() {
 
   useEffect(() => { fetchRequests() }, [fetchRequests])
 
+  // ── Auto-fetch stored signature independently of the requests list ────────
+  // This catches signatures stored in approval_signature_registry or user_profiles
+  // so the "No stored signature" banner never shows for users who already signed up.
+  useEffect(() => {
+    async function loadStoredSignature() {
+      try {
+        const res = await fetch('/api/signature/auto-populate')
+        if (!res.ok) return
+        const data = await res.json()
+        if (data?.hasSignature && data?.signature?.signature_data_url) {
+          setStoredSignatureDataUrl(data.signature.signature_data_url)
+          setHasStoredSignature(true)
+        }
+        if (data?.signer?.name) setSignerName(data.signer.name)
+        if (data?.signer?.position) setSignerPosition(data.signer.position?.toUpperCase() || 'HR MANAGER')
+      } catch {
+        // silent — fetchRequests will also attempt to load the signature
+      }
+    }
+    loadStoredSignature()
+  }, [])
+
   // ── Fetch approved payment advice memos ──────────────────────────────────
   const fetchApprovedPaymentMemos = useCallback(async (month?: string) => {
     setLoadingApprovedPayment(true)
@@ -844,6 +882,45 @@ export function HrApprovalsTab() {
       fetchApprovedPaymentMemos(approvedPaymentMonth || undefined)
     }
   }, [hrApproveSubTab, approvedPaymentMonth, fetchApprovedPaymentMemos])
+
+  // ── Fetch deferments and recalls ──────────────────────────────────────────
+  const fetchDefermentRecallRequests = useCallback(async () => {
+    setLoadingDefermentRecall(true)
+    try {
+      // Fetch deferments and recalls in parallel from the management endpoint
+      // For Executive HR, we fetch "pending" status to show requests awaiting their decision
+      const [deferRes, recallRes] = await Promise.all([
+        fetch('/api/leave/hr-deferment-recall-management?type=deferment&status=pending'),
+        fetch('/api/leave/hr-deferment-recall-management?type=recall&status=pending'),
+      ])
+
+      if (!deferRes.ok && !recallRes.ok) {
+        console.error('[v0] Both deferment and recall fetch failed')
+        setDeferments([])
+        setRecalls([])
+        return
+      }
+
+      const deferData = deferRes.ok ? await deferRes.json() : { requests: [] }
+      const recallData = recallRes.ok ? await recallRes.json() : { requests: [] }
+      
+      setDeferments(deferData.requests || [])
+      setRecalls(recallData.requests || [])
+    } catch (err) {
+      console.error('[v0] fetchDefermentRecallRequests error:', err)
+      setDeferments([])
+      setRecalls([])
+    } finally {
+      setLoadingDefermentRecall(false)
+    }
+  }, [])
+
+  // Fetch when switching to deferments or recalls tab
+  useEffect(() => {
+    if (hrApproveSubTab === 'deferments' || hrApproveSubTab === 'recalls') {
+      fetchDefermentRecallRequests()
+    }
+  }, [hrApproveSubTab, fetchDefermentRecallRequests])
 
   // ── Download approved payment memo ───────────────────────────────────────
   const handleDownloadMemo = async (memoId: string, staffName: string) => {
@@ -1221,8 +1298,42 @@ export function HrApprovalsTab() {
       {/* Deferments tab */}
       {hrApproveSubTab === 'deferments' && (
         <Card>
-          <CardContent className="py-8 text-center text-slate-600">
-            <p>Deferment requests will appear here</p>
+          <CardContent className="py-8">
+            {loadingDefermentRecall ? (
+              <div className="flex items-center justify-center gap-2 text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading deferment requests...
+              </div>
+            ) : deferments.length === 0 ? (
+              <div className="text-center text-slate-600 py-4">
+                <p>No deferment requests pending</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {deferments.map((req: any) => {
+                  const profile = req.staff || req.leave_plan_requests?.user_profiles
+                  const staffName = req.staff_name || 
+                    (profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown Staff')
+                  const staffId = req.staff_user_id || profile?.employee_id || profile?.id || 'N/A'
+                  return (
+                    <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-900">{staffName}</p>
+                          <p className="text-sm text-slate-600">Staff ID: {staffId}</p>
+                          <p className="text-sm text-slate-600 mt-1">Reason: {req.request_reason || 'N/A'}</p>
+                          <p className="text-sm text-slate-600">Defer to Year: {req.deferment_to_year || 'N/A'}</p>
+                          <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                        </div>
+                        <Badge variant="outline" className="text-amber-600 border-amber-300">
+                          {(req.status || 'pending').toUpperCase()}
+                        </Badge>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1230,8 +1341,42 @@ export function HrApprovalsTab() {
       {/* Recalls tab */}
       {hrApproveSubTab === 'recalls' && (
         <Card>
-          <CardContent className="py-8 text-center text-slate-600">
-            <p>Recall requests will appear here</p>
+          <CardContent className="py-8">
+            {loadingDefermentRecall ? (
+              <div className="flex items-center justify-center gap-2 text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading recall requests...
+              </div>
+            ) : recalls.length === 0 ? (
+              <div className="text-center text-slate-600 py-4">
+                <p>No recall requests pending</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recalls.map((req: any) => {
+                  const profile = req.staff || req.leave_plan_requests?.user_profiles
+                  const staffName = req.staff_name || 
+                    (profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown Staff')
+                  const staffId = req.staff_user_id || profile?.employee_id || profile?.id || 'N/A'
+                  return (
+                    <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-900">{staffName}</p>
+                          <p className="text-sm text-slate-600">Staff ID: {staffId}</p>
+                          <p className="text-sm text-slate-600 mt-1">Recall Date: {fmtDate(req.recall_date || req.created_at)}</p>
+                          <p className="text-sm text-slate-600">Reason: {req.recall_reason || req.recall_notes || 'N/A'}</p>
+                          <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                        </div>
+                        <Badge variant="outline" className="text-red-600 border-red-300">
+                          {(req.status || 'pending').toUpperCase()}
+                        </Badge>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

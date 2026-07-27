@@ -61,6 +61,7 @@ import {
   MapPin,
   Users,
   LayoutList,
+  Info,
 } from "lucide-react"
 
 interface LeaveAnalyticsRecord {
@@ -2106,10 +2107,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     }
     // End date is now auto-calculated, no manual validation needed
     // part_leave_days is auto-derived from computedDays, no manual input required
-    if (!activeSig.text && !activeSig.dataUrl) {
-      toast({ title: "Signature required", description: "Please provide your signature.", variant: "destructive" })
-      return
-    }
+    // Staff signature is optional
     setSubmitting(true)
     setError(null)
     try {
@@ -2218,10 +2216,24 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const adjStart = officeAdjStart[requestId]
     const adjEnd = officeAdjEnd[requestId]
     const rsn = officeReason[requestId]
+    const request = hrOfficeQueue.find(r => r.id === requestId)
+    const leaveType = String(request?.leave_type_key || "").toLowerCase()
+    const isAnnualLeave = leaveType === "annual"
+
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
-    if (!rsn || rsn.trim().length < 5) {
-      toast({ title: "Reason required", description: "Provide a detailed reason — it will appear in the memo.", variant: "destructive" })
+    
+    // Reason for adjustment is mandatory only for annual leave
+    if (isAnnualLeave && (!rsn || String(rsn).trim().length < 5)) {
+      toast({ title: "Reason required", description: "Provide a detailed reason for the adjustment — it will appear in the memo.", variant: "destructive" })
       return
+    }
+    
+    // For non-annual leave, warn if no reason is provided but still allow submission
+    if (!isAnnualLeave && (!rsn || String(rsn).trim().length < 5)) {
+      const continueWithoutReason = window.confirm(
+        "No reason for adjustment provided. Continue forwarding to HR Approvers without a reason?"
+      )
+      if (!continueWithoutReason) return
     }
 
     const holidayDeducted = Number(officeHolidayDays[requestId] || 0)
@@ -2247,7 +2259,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       `- Prior Leave Enjoyed: ${priorDeducted}\n` +
       `+ Travelling Days: ${travelAdded}\n` +
       `Final Days to Approvers: ${finalDays}\n\n` +
-      `Reason: ${rsn.trim()}\n\n` +
+      `Reason: ${rsn ? String(rsn).trim() : "(No reason provided)"}\n\n` +
       `Forward To: ${execName}\n\n` +
       `Click OK to confirm accuracy and forward to HR Approvers.`,
     )
@@ -2520,6 +2532,35 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </div>
                 </div>
 
+                {/* Show user's active/approved leaves to avoid overlaps */}
+                {myRequests.some((r: any) => ["approved", "active"].includes(r.status)) && (
+                  <div className="border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg px-4 py-3.5">
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <AlertCircle className="h-5 w-5 text-amber-600 font-bold" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-amber-900 mb-2">
+                          Your Active Leave Periods
+                        </h4>
+                        <div className="space-y-1.5 text-sm text-amber-800">
+                          {myRequests
+                            .filter((r: any) => ["approved", "active"].includes(r.status))
+                            .map((leave: any) => (
+                              <div key={leave.id} className="flex gap-2 items-start">
+                                <span className="flex-shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-amber-600 text-white text-xs font-bold">•</span>
+                                <span>
+                                  <strong>{leave.leave_type_key?.replace(/_/g, " ").toUpperCase()}</strong>: {leave.preferred_start_date} to {leave.preferred_end_date} ({leave.status})
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-amber-700 mt-2 italic">Avoid selecting dates that overlap with these periods.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Leave Year Period</Label>
@@ -2651,7 +2692,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                    Staff Signature <span className="text-red-500">*</span>
+                    Staff Signature
                   </Label>
                   <Input
                     value={typedSignature || defaultStaffSignature}
@@ -2679,28 +2720,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
           {/* HOD Review ���────────────────────────────────────────────���── */}
           {activeTab === "hod-review" && <div>
-            {/* 2-day approval notice for HOD/RM */}
-            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
-              <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
-                <span className="text-lg">⏱️</span> Important: 2-Day Approval Window
+            {/* HOD review notice */}
+            <div className="mb-4 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-3">
+              <Info className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Staff leave requests assigned to you require your timely review. Please action each request promptly — delays in approval affect staff planning and payroll processing. Ensure all pending requests are reviewed before the close of each working day.
               </p>
-              <div className="text-xs text-blue-800 space-y-2">
-                <p>
-                  Please note that you have <strong>2 working days</strong> to review and approve leave requests.
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-sm mt-0.5">👉</span>
-                  <span>If no action is taken within this period, the request will be automatically approved and forwarded to the HR Leave Office.</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-sm mt-0.5">⚠️</span>
-                  <span><strong>Exception:</strong> Annual Leave requests will not be auto-approved — they require your direct and explicit approval.</span>
-                </p>
-                <p className="pt-1 flex items-start gap-2">
-                  <span className="text-sm">😊</span>
-                  <span>Kindly stay on top of your approvals to avoid automatic processing. Let's keep things running smoothly 👍🏽</span>
-                </p>
-              </div>
             </div>
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -3568,6 +3593,50 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
                           <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
                         </div>
+
+                        {/* Annual Leave Entitlement Summary — shown only for annual leave requests */}
+                        {String(req.leave_type_key || "").toLowerCase() === "annual" && (
+                          req.annual_leave_days != null || req.staff_category != null
+                        ) && (
+                          <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200">
+                              <span className="text-xs font-semibold text-slate-700 tracking-wide uppercase">Annual Leave Entitlement</span>
+                              {req.entitlement_validation_status && (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                  req.entitlement_validation_status === "Approved Entitlement"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-red-100 text-red-700"
+                                }`}>
+                                  {req.entitlement_validation_status}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 divide-x divide-y divide-slate-200">
+                              {[
+                                { label: "Staff Category", value: req.staff_category
+                                    ? String(req.staff_category).charAt(0).toUpperCase() + String(req.staff_category).slice(1)
+                                    : "—" },
+                                { label: "Years of Service", value: req.years_of_service_at_submission != null
+                                    ? `${req.years_of_service_at_submission} yr${req.years_of_service_at_submission !== 1 ? "s" : ""}`
+                                    : "—" },
+                                { label: "Leave Days", value: req.annual_leave_days != null ? `${req.annual_leave_days} days` : "—" },
+                                { label: "Travel Days", value: req.travel_days != null ? `${req.travel_days} days` : "2 days" },
+                              ].map(({ label, value }) => (
+                                <div key={label} className="px-3 py-2">
+                                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
+                                  <p className="text-xs font-semibold text-slate-800">{value}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="px-3 py-2 border-t border-slate-200 bg-white flex items-center justify-between">
+                              <span className="text-xs text-slate-500">Total entitlement (leave + travel)</span>
+                              <span className="text-sm font-bold text-slate-800">
+                                {req.entitlement_days != null ? `${req.entitlement_days} days` : "—"}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Entitlement Exceeded Warning */}
                         {req.adjustment_reason?.includes("ENTITLEMENT EXCEEDED") && (
                           <div className="flex items-start gap-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-300 mb-3">
@@ -3618,8 +3687,16 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || renderedTemplate.body || memoTpl.body }))
                               setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
                               
-                              // Fetch outstanding leave for annual leave type
+                              // Auto-populate travel days and fetch outstanding leave for annual leave
                               if (String(req.leave_type_key || "").toLowerCase() === "annual") {
+                                // Auto-populate travel days from entitlement snapshot (always 2 per QCC policy)
+                                // Only set if not already set by the user
+                                const existingTravel = Number(officeTravelDays[req.id] || 0)
+                                if (existingTravel === 0) {
+                                  const travelFromSnapshot = req.travel_days != null ? String(req.travel_days) : "2"
+                                  setOfficeTravelDays((p) => ({ ...p, [req.id]: travelFromSnapshot }))
+                                }
+
                                 const outstanding = await fetchOutstandingLeaveForStaff(
                                   String(req.user_id || req.user?.id || ""),
                                   String(req.leave_type_key || ""),
@@ -3789,10 +3866,33 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               </div>
                             </div>
 
+                            {/* Annual Leave Entitlement Reference Guide — Only for annual leave */}
+                            {String(req.leave_type_key || "").toLowerCase() === "annual" && (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 space-y-2">
+                                <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">Annual Leave Entitlement Reference</p>
+                                <div className="space-y-1.5 text-xs text-amber-900">
+                                  <div className="font-medium">Senior Staff:</div>
+                                  <div className="ml-2">36 days + 2 travelling days = 38 total</div>
+                                  
+                                  <div className="font-medium mt-2">Junior Staff (by years of service):</div>
+                                  <div className="ml-2 space-y-0.5">
+                                    <div>1–3 years: 24 days + 2 travelling days = 26 total</div>
+                                    <div>4–5 years: 28 days + 2 travelling days = 30 total</div>
+                                    <div>6–10 years: 32 days + 2 travelling days = 34 total</div>
+                                    <div>11+ years: 36 days + 2 travelling days = 38 total</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="space-y-1">
                               <Label className="text-xs font-semibold text-slate-700">
-                                Reason for Adjustment <span className="text-red-500">*</span>
-                                <span className="text-slate-400 font-normal ml-1">(will appear in leave memo)</span>
+                                Reason for Adjustment{String(req.leave_type_key || "").toLowerCase() === "annual" && <span className="text-red-500">*</span>}
+                                <span className="text-slate-400 font-normal ml-1">
+                                  {String(req.leave_type_key || "").toLowerCase() === "annual" 
+                                    ? "(required — will appear in leave memo)" 
+                                    : "(optional — will appear in leave memo)"}
+                                </span>
                               </Label>
                               {generatedReason && (
                                 <div className="flex justify-end">

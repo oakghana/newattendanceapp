@@ -14,6 +14,10 @@ import {
   HR_OFFICE_PENDING_STATUSES,
 } from "@/lib/leave-planning"
 import { DEFAULT_LEAVE_TYPES } from "@/lib/leave-policy"
+import {
+  resolveEntitlementFromProfile,
+  buildAnnualLeaveEntitlementSummary,
+} from "@/lib/annual-leave-entitlement"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -67,6 +71,51 @@ const OVERLAP_BLOCKING_STATUSES = [
 ] as const
 
 const DUPLICATE_BLOCKING_STATUSES = OVERLAP_BLOCKING_STATUSES
+
+/**
+ * Fetch an existing user profile or create a minimal one on first access.
+ * Staff signature is not mandatory — a user can exist in Supabase Auth without
+ * a pre-seeded user_profiles row. This helper ensures they always get a row.
+ */
+async function getOrCreateProfile(admin: any, user: any, selectCols: string) {
+  let { data: profile, error } = await admin
+    .from("user_profiles")
+    .select(selectCols)
+    .eq("id", user.id)
+    .single()
+
+  if (profile) return profile
+
+  // No profile found — create a minimal one from auth metadata so the user can proceed.
+  const rawName: string = user.user_metadata?.full_name || user.user_metadata?.name || ""
+  const parts = rawName.trim().split(/\s+/)
+  const firstName = parts[0] || (user.email || "User").split("@")[0]
+  const lastName  = parts.slice(1).join(" ") || "Staff"
+  // employee_id must be unique; use a short deterministic prefix from the UUID
+  const tempEmployeeId = `TMP-${user.id.replace(/-/g, "").substring(0, 7).toUpperCase()}`
+
+  const { data: created, error: createErr } = await admin
+    .from("user_profiles")
+    .upsert(
+      {
+        id:          user.id,
+        email:       user.email,
+        role:        "staff",
+        first_name:  firstName,
+        last_name:   lastName,
+        employee_id: tempEmployeeId,
+      },
+      { onConflict: "id" }   // no-op if row already exists (race condition safety)
+    )
+    .select(selectCols)
+    .single()
+
+  if (created) return created
+
+  // Last-resort in-memory fallback — never block the user entirely
+  console.error("[getOrCreateProfile] Could not create profile:", createErr?.message)
+  return { id: user.id, role: "staff", department_id: null, departments: null } as any
+}
 
 function normalizeRoleValue(role: string | null | undefined) {
   return String(role || "")
@@ -652,15 +701,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id, departments(name, code)")
-      .eq("id", user.id)
-      .single()
-
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
-    }
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, departments(name, code)")
 
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
@@ -1110,17 +1151,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id")
-      .eq("id", user.id)
-      .single()
+    const profile = await getOrCreateProfile(
+      admin, user,
+      "id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, rank"
+    )
 
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
-    }
-
-    const role = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+    const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
     const canSelfApply =
       isStaffRole(role) ||
       [
@@ -1168,13 +1204,64 @@ export async function POST(request: NextRequest) {
 
     const requestedDays = calculateRequestedDays(preferred_start_date, preferred_end_date)
     const leaveTypeKey = String(leave_type || "annual").toLowerCase()
-    const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
-    if (entitlementResult.error) {
-      return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
-    }
-    const entitlementDays = entitlementResult.entitlementDays
 
-    // Track if entitlement is exceeded - still allow save but flag for HR review
+    // ── Annual leave: use per-staff entitlement engine ─────────────────────
+    // For all other leave types, fall back to policy catalog as before.
+    let annualLeaveSnapshot: {
+      annualLeaveDays: number | null
+      travelDays: number | null
+      staffCategory: string | null
+      yearsOfServiceAtSubmission: number | null
+      totalEntitlement: number | null
+      tierLabel: string | null
+      validationStatus: "Approved Entitlement" | "Exceeds Entitlement" | null
+    } = {
+      annualLeaveDays: null,
+      travelDays: null,
+      staffCategory: null,
+      yearsOfServiceAtSubmission: null,
+      totalEntitlement: null,
+      tierLabel: null,
+      validationStatus: null,
+    }
+
+    let entitlementDays: number | null
+
+    if (leaveTypeKey === "annual") {
+      const perStaffEntitlement = resolveEntitlementFromProfile(profile as any)
+      entitlementDays = perStaffEntitlement.totalEntitlement
+
+      const staffName = [
+        String((profile as any).first_name || ""),
+        String((profile as any).last_name || ""),
+      ].filter(Boolean).join(" ").trim() || "Staff"
+      const employeeId = String((profile as any).employee_id || "N/A")
+
+      const { validationStatus } = buildAnnualLeaveEntitlementSummary(
+        staffName,
+        employeeId,
+        perStaffEntitlement,
+        requestedDays,
+      )
+
+      annualLeaveSnapshot = {
+        annualLeaveDays: perStaffEntitlement.annualLeaveDays,
+        travelDays: perStaffEntitlement.travelDays,
+        staffCategory: perStaffEntitlement.staffCategory,
+        yearsOfServiceAtSubmission: perStaffEntitlement.yearsOfService,
+        totalEntitlement: perStaffEntitlement.totalEntitlement,
+        tierLabel: perStaffEntitlement.tierLabel,
+        validationStatus,
+      }
+    } else {
+      const entitlementResult = await resolveEntitlementDays(admin, leaveTypeKey, selectedLeaveYearPeriod)
+      if (entitlementResult.error) {
+        return NextResponse.json({ error: entitlementResult.error }, { status: 400 })
+      }
+      entitlementDays = entitlementResult.entitlementDays
+    }
+
+    // Track if entitlement is exceeded — still allow save but flag for HR review
     const entitlementExceeded = entitlementDays !== null && requestedDays > entitlementDays
     const entitlementWarning = entitlementExceeded
       ? `ENTITLEMENT EXCEEDED: Requested ${requestedDays} day(s) exceeds entitlement of ${entitlementDays} day(s). HR Leave Office must adjust.`
@@ -1256,10 +1343,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!user_signature_text && !user_signature_image_url && !user_signature_data_url) {
-      return NextResponse.json({ error: "A staff signature is required (typed, uploaded, or on-screen draw)." }, { status: 400 })
-    }
-
+    // Staff signature is optional
     const initialMemo = buildInitialLeaveMemoDraft({
       leaveTypeKey,
       leaveYearPeriod: selectedLeaveYearPeriod,
@@ -1285,6 +1369,8 @@ export async function POST(request: NextRequest) {
         requested_days: requestedDays,
         reason: reason || null,
         status: "pending_hod_review",
+        // Annual leave entitlement snapshot — only columns that exist in the DB
+        staff_category: annualLeaveSnapshot.staffCategory || null,
         user_signature_mode: user_signature_mode || "typed",
         user_signature_text: user_signature_text || null,
         user_signature_image_url: user_signature_image_url || null,
@@ -1364,15 +1450,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id")
-      .eq("id", user.id)
-      .single()
-
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
-    }
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id")
 
     const role = normalizeRoleValue(profile.role)
     const canSelfApply =

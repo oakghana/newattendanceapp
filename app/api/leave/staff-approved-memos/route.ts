@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
           hr_office_reviewed_at,
           hr_signature_image_url,
           hr_signature_data_url,
-          hr_approval_note
+          hr_approval_note,
+          memo_token
         `)
         .in("status", ["approved", "hr_approved"])
         .order("hr_approved_at", { ascending: false, nullsFirst: false })
@@ -96,11 +97,12 @@ export async function GET(request: NextRequest) {
         const profile = profileMap.get(req.user_id) || {}
         return {
           id: String(req.id),
+          leave_plan_request_id: String(req.id),
           user_id: String(req.user_id),
           staff_name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
-          employee_id: profile.employee_id || "N/A",
-          email: profile.email || "N/A",
-          department: profile.departments?.name || "N/A",
+          employee_id: (profile as any).employee_id || "N/A",
+          email: (profile as any).email || "N/A",
+          department: (profile as any).departments?.name || "N/A",
           location: "Not Assigned",
           address: "N/A",
           leave_type: req.leave_type_key || "annual",
@@ -115,6 +117,7 @@ export async function GET(request: NextRequest) {
           hr_office_reviewer_name: req.hr_office_reviewer_name,
           hr_office_reviewed_at: req.hr_office_reviewed_at,
           hr_signature_image_url: req.hr_signature_image_url,
+          memo_token: req.memo_token || null,
         }
       })
 
@@ -182,7 +185,8 @@ export async function GET(request: NextRequest) {
         hr_office_reviewer_name,
         hr_office_reviewed_at,
         hr_signature_image_url,
-        hr_approval_note
+        hr_approval_note,
+        memo_token
       `)
       .in("user_id", staffIds)
       .in("status", ["approved", "hr_approved"])
@@ -213,9 +217,10 @@ export async function GET(request: NextRequest) {
       const profile = profileMap.get(req.user_id) || {}
       return {
         id: String(req.id),
+        leave_plan_request_id: String(req.id),
         user_id: String(req.user_id),
-        staff_name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
-        email: profile.email || "N/A",
+        staff_name: `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Unknown",
+        email: (profile as any).email || "N/A",
         location: "Not Assigned",
         address: "N/A",
         leave_type: req.leave_type_key || "annual",
@@ -227,6 +232,7 @@ export async function GET(request: NextRequest) {
         hr_approver_name: req.hr_approver_name,
         hr_approved_at: req.hr_approved_at,
         hr_signature_image_url: req.hr_signature_image_url,
+        memo_token: req.memo_token || null,
       }
     })
 
