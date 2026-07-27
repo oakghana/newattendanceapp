@@ -222,7 +222,6 @@ export async function POST(request: NextRequest) {
     const employeeId = String((staffProfile as any)?.employee_id || "N/A")
 
     // Build annual leave entitlement summary for notification (only for annual leave)
-    const isAnnualLeave = String((leaveRequest as any).leave_type_key || "").toLowerCase() === "annual"
     let entitlementBlock = ""
     if (isAnnualLeave && staffProfile) {
       const entitlement = resolveEntitlementFromProfile(staffProfile as any)
