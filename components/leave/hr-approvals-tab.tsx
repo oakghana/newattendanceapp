@@ -854,11 +854,25 @@ export function HrApprovalsTab() {
   const fetchDefermentRecallRequests = useCallback(async () => {
     setLoadingDefermentRecall(true)
     try {
-      const res = await fetch('/api/leave/deferment-recall/hr-executive-requests')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setDeferments(data.deferments || [])
-      setRecalls(data.recalls || [])
+      // Fetch deferments and recalls in parallel from the management endpoint
+      // For Executive HR, we fetch "pending" status to show requests awaiting their decision
+      const [deferRes, recallRes] = await Promise.all([
+        fetch('/api/leave/hr-deferment-recall-management?type=deferment&status=pending'),
+        fetch('/api/leave/hr-deferment-recall-management?type=recall&status=pending'),
+      ])
+
+      if (!deferRes.ok && !recallRes.ok) {
+        console.error('[v0] Both deferment and recall fetch failed')
+        setDeferments([])
+        setRecalls([])
+        return
+      }
+
+      const deferData = deferRes.ok ? await deferRes.json() : { requests: [] }
+      const recallData = recallRes.ok ? await recallRes.json() : { requests: [] }
+      
+      setDeferments(deferData.requests || [])
+      setRecalls(recallData.requests || [])
     } catch (err) {
       console.error('[v0] fetchDefermentRecallRequests error:', err)
       setDeferments([])
@@ -1263,19 +1277,28 @@ export function HrApprovalsTab() {
               </div>
             ) : (
               <div className="space-y-3">
-                {deferments.map((req) => (
-                  <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="font-semibold text-slate-900">{req.staff_name || 'Unknown Staff'}</p>
-                        <p className="text-sm text-slate-600">Staff ID: {req.staff_id || 'N/A'}</p>
-                        <p className="text-sm text-slate-600 mt-1">Leave Type: {req.leave_type_key ? leaveTypeLabel(req.leave_type_key) : 'N/A'}</p>
-                        <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                {deferments.map((req: any) => {
+                  const profile = req.staff || req.leave_plan_requests?.user_profiles
+                  const staffName = req.staff_name || 
+                    (profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown Staff')
+                  const staffId = req.staff_user_id || profile?.employee_id || profile?.id || 'N/A'
+                  return (
+                    <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-900">{staffName}</p>
+                          <p className="text-sm text-slate-600">Staff ID: {staffId}</p>
+                          <p className="text-sm text-slate-600 mt-1">Reason: {req.request_reason || 'N/A'}</p>
+                          <p className="text-sm text-slate-600">Defer to Year: {req.deferment_to_year || 'N/A'}</p>
+                          <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                        </div>
+                        <Badge variant="outline" className="text-amber-600 border-amber-300">
+                          {(req.status || 'pending').toUpperCase()}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>
@@ -1297,19 +1320,28 @@ export function HrApprovalsTab() {
               </div>
             ) : (
               <div className="space-y-3">
-                {recalls.map((req) => (
-                  <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="font-semibold text-slate-900">{req.staff_name || 'Unknown Staff'}</p>
-                        <p className="text-sm text-slate-600">Staff ID: {req.staff_id || 'N/A'}</p>
-                        <p className="text-sm text-slate-600 mt-1">Leave Type: {req.leave_type_key ? leaveTypeLabel(req.leave_type_key) : 'N/A'}</p>
-                        <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                {recalls.map((req: any) => {
+                  const profile = req.staff || req.leave_plan_requests?.user_profiles
+                  const staffName = req.staff_name || 
+                    (profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Unknown Staff')
+                  const staffId = req.staff_user_id || profile?.employee_id || profile?.id || 'N/A'
+                  return (
+                    <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-900">{staffName}</p>
+                          <p className="text-sm text-slate-600">Staff ID: {staffId}</p>
+                          <p className="text-sm text-slate-600 mt-1">Recall Date: {fmtDate(req.recall_date || req.created_at)}</p>
+                          <p className="text-sm text-slate-600">Reason: {req.recall_reason || req.recall_notes || 'N/A'}</p>
+                          <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                        </div>
+                        <Badge variant="outline" className="text-red-600 border-red-300">
+                          {(req.status || 'pending').toUpperCase()}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="text-red-600 border-red-300">Pending</Badge>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>
