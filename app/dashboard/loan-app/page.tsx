@@ -1033,7 +1033,7 @@ export default function LoanAppPage() {
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
-  const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "director_hr", "manager_hr"].includes(normalizedRole)
+    const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "manager_hr"].includes(normalizedRole)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
