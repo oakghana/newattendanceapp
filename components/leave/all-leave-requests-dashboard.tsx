@@ -223,7 +223,7 @@ export function AllLeaveRequestsDashboard() {
                 <TableHead className="font-semibold text-slate-700">Department</TableHead>
                 <TableHead className="font-semibold text-slate-700">Leave Period</TableHead>
                 <TableHead className="font-semibold text-slate-700 text-center">Days</TableHead>
-                <TableHead className="font-semibold text-slate-700">Submitted</TableHead>
+                <TableHead className="font-semibold text-slate-700">HR Approval Date</TableHead>
                 <TableHead className="font-semibold text-slate-700">Assigned HOD</TableHead>
                 <TableHead className="font-semibold text-slate-700">Reason</TableHead>
                 <TableHead className="font-semibold text-slate-700">Status</TableHead>
@@ -255,7 +255,7 @@ export function AllLeaveRequestsDashboard() {
                       {days}
                     </TableCell>
                     <TableCell className="text-sm text-slate-700">
-                      {request.createdAt ? formatDate(request.createdAt) : "—"}
+                      {request.hrApprovedAt ? formatDate(request.hrApprovedAt) : "—"}
                     </TableCell>
                     <TableCell className="text-sm text-slate-700 max-w-[180px]">
                       {Array.isArray(request.hodReviewers) && request.hodReviewers.length > 0 ? (
