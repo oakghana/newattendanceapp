@@ -1369,12 +1369,8 @@ export async function POST(request: NextRequest) {
         requested_days: requestedDays,
         reason: reason || null,
         status: "pending_hod_review",
-        // Annual leave entitlement snapshot (null for non-annual leave types)
-        annual_leave_days: annualLeaveSnapshot.annualLeaveDays,
-        travel_days: annualLeaveSnapshot.travelDays,
-        staff_category: annualLeaveSnapshot.staffCategory,
-        years_of_service_at_submission: annualLeaveSnapshot.yearsOfServiceAtSubmission,
-        entitlement_validation_status: annualLeaveSnapshot.validationStatus,
+        // Annual leave entitlement snapshot — only columns that exist in the DB
+        staff_category: annualLeaveSnapshot.staffCategory || null,
         user_signature_mode: user_signature_mode || "typed",
         user_signature_text: user_signature_text || null,
         user_signature_image_url: user_signature_image_url || null,
