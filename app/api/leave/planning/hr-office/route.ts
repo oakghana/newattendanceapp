@@ -77,13 +77,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "leave_plan_request_id is required." }, { status: 400 })
     }
 
-    if (!adjustment_reason || String(adjustment_reason).trim().length < 5) {
-      return NextResponse.json(
-        { error: "A detailed adjustment reason is required (this will appear in the memo to staff)." },
-        { status: 400 },
-      )
-    }
-
     if (!adjusted_start_date || !adjusted_end_date) {
       return NextResponse.json(
         { error: "Adjusted start and end dates are required." },
@@ -112,6 +105,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Reason for adjustment is mandatory for annual leave, optional for all other leave types
+    const leaveTypeKey = String((leaveRequest as any).leave_type_key || "").toLowerCase()
+    const isAnnualLeave = leaveTypeKey === "annual"
+    if (isAnnualLeave && (!adjustment_reason || String(adjustment_reason).trim().length < 5)) {
+      return NextResponse.json(
+        { error: "A detailed adjustment reason is required for annual leave (this will appear in the memo to staff)." },
+        { status: 400 },
+      )
+    }
+
     // Compute final adjusted days from date range if not explicitly provided
     const startDt = new Date(adjusted_start_date)
     const endDt = new Date(adjusted_end_date)
@@ -129,7 +132,8 @@ export async function POST(request: NextRequest) {
 
     const entitlementDays = Number((leaveRequest as any).entitlement_days || 0)
     const trimmedReason = String(adjustment_reason || "").trim()
-    if (entitlementDays > 0 && computedAdjustedDays > entitlementDays && trimmedReason.length < 10) {
+    // Only enforce reason length on entitlement overage for annual leave
+    if (isAnnualLeave && entitlementDays > 0 && computedAdjustedDays > entitlementDays && trimmedReason.length < 10) {
       return NextResponse.json(
         {
           error:
