@@ -37,7 +37,7 @@ interface LeaveManagementModuleClientProps {
   inactivityDays: number
   userDepartmentName: string | null
   userDepartmentCode: string | null
-  userLocationName: string | null
+  userLocationName?: string | null
   hasHodLinkage: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
