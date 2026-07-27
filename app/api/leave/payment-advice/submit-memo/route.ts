@@ -254,6 +254,10 @@ export async function POST(request: NextRequest) {
           }
         }
         
+        // CRITICAL: Always use adjusted_days (HR Leave Office approved days) as the source of truth
+        // This prevents disparities where different memos show different days for the same leave request
+        const approvedDaysForMemo = staff.adjusted_days || staff.approved_days || staff.requested_days || 0
+        
         memoRecords.push({
           leave_plan_request_id: staff.leave_plan_request_id,
           staff_id: staff.user_id,
@@ -265,7 +269,7 @@ export async function POST(request: NextRequest) {
           hr_leave_office_name: submitterName,
           leave_period_start: leave_start || null,
           leave_period_end: leave_end || null,
-          approved_days: staff.approved_days || staff.requested_days || 0,
+          approved_days: approvedDaysForMemo,
           status: "ready_for_review",
           // CRITICAL: Store the list of HR executives who can approve this memo
           assigned_signers: assignedSigners,

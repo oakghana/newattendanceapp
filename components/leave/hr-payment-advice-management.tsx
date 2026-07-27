@@ -66,23 +66,34 @@ export function HRPaymentAdviceManagement() {
 
       const data = await res.json()
       
-      const memos = (data.memos || data.records || []).map((memo: any) => ({
-        id: memo.id,
-        batch_id: memo.batch_id || memo.id,
-        batch_name: memo.batch_name || 'Payment Advice Batch',
-        staff_count: memo.staff_count || 1,
-        status: activeTab as 'pending' | 'approved',
-        approved_on: memo.approved_on,
-        staff_records: memo.staff_records || [{
-          name: memo.staff_name || memo.full_name || 'N/A',
-          staff_number: memo.staff_number || memo.employee_id || 'N/A',
-          rank: memo.rank || 'N/A',
-          position: memo.position || 'N/A',
-          leave_days: memo.leave_days || 0,
-          leave_period: memo.leave_period || 'N/A',
+      const memos = (data.memos || data.records || []).map((memo: any) => {
+        // Extract rank from memo_body where it's stored as staff_rank_label (the actual rank name, not category)
+        let staffRank = 'N/A'
+        try {
+          const memoBody = typeof memo.memo_body === 'string' ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
+          staffRank = memoBody.staff_rank_label || memo.rank || 'N/A'
+        } catch {
+          staffRank = memo.rank || 'N/A'
+        }
+
+        return {
+          id: memo.id,
+          batch_id: memo.batch_id || memo.id,
+          batch_name: memo.batch_name || 'Payment Advice Batch',
+          staff_count: memo.staff_count || 1,
+          status: activeTab as 'pending' | 'approved',
           approved_on: memo.approved_on,
-        }],
-      }))
+          staff_records: memo.staff_records || [{
+            name: memo.staff_name || memo.full_name || 'N/A',
+            staff_number: memo.staff_number || memo.employee_id || 'N/A',
+            rank: staffRank,
+            position: memo.position || 'N/A',
+            leave_days: memo.leave_days || 0,
+            leave_period: memo.leave_period || 'N/A',
+            approved_on: memo.approved_on,
+          }],
+        }
+      })
 
       setPaymentMemos(memos)
     } catch (err) {
