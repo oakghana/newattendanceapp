@@ -16,6 +16,7 @@ import { AllLeaveRequestsDashboard } from "@/components/leave/all-leave-requests
 import { DefermentRequestsTracking } from "@/components/leave-management/deferment-requests-tracking"
 import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planning"
 import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
+import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
@@ -64,6 +65,7 @@ export function LeaveManagementModuleClient({
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
+  const isLoanOffice = normalizedRole === 'loan_office'
 
   // HR Executives get a simplified dedicated module instead of the full tab bar
   if (isHrExecutive) {
