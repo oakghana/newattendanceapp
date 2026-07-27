@@ -412,14 +412,18 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Verify token if provided (required for non-HR/admin users)
+    // Verify token if provided
     if (token) {
       const storedToken = String((leaveRequest as any).memo_token || "")
       if (!storedToken || token !== storedToken) {
         return NextResponse.json({ error: "Invalid or expired memo token." }, { status: 401 })
       }
     } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin") {
-      return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
+      // No token provided — allow the applicant to download their own memo, or HOD/manager.
+      // For other users without a token, reject.
+      if (!isApplicant && !isManagerRole(role)) {
+        return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
+      }
     }
 
     if ((leaveRequest as any).status !== "hr_approved") {
@@ -515,7 +519,6 @@ export async function GET(
         admin
           .from("approval_signature_registry")
           .select("workflow_domain, approval_stage, signature_mode, signature_text, signature_data_url, is_active, updated_at")
-          .in("workflow_domain", ["leave", "loan"])
           .eq("user_id", hrApproverId)
           .order("updated_at", { ascending: false }),
       ])
@@ -732,7 +735,7 @@ export async function GET(
       y += lines.length * 5.5 + 5
     }
 
-    // ── Annual leave table ─────────────────────────────���─────────────
+    // ── Annual leave table ───────────────────────���─────���─────────────
     if (useTable) {
       const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
