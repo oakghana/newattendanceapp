@@ -17,6 +17,7 @@ import { DefermentRequestsTracking } from "@/components/leave-management/deferme
 import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planning"
 import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
+import { LoanOfficeLeaveModule } from "./loan-office-leave-module"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
@@ -71,6 +72,27 @@ export function LeaveManagementModuleClient({
   if (isHrExecutive) {
     return (
       <HrExecutiveLeaveModule
+        userId={userId}
+        userRole={userRole}
+        userDepartment={userDepartment}
+        userFirstName={userFirstName}
+        userLastName={userLastName}
+        inactivityDays={inactivityDays}
+        userDepartmentName={userDepartmentName}
+        userDepartmentCode={userDepartmentCode}
+        userLocationName={userLocationName}
+        hasHodLinkage={hasHodLinkage}
+        initialStaffRequests={initialStaffRequests}
+        initialManagerNotifications={initialManagerNotifications}
+        initialApprovedStaffRequests={initialApprovedStaffRequests}
+      />
+    )
+  }
+
+  // Loan Office gets a dedicated module with limited tabs
+  if (isLoanOffice) {
+    return (
+      <LoanOfficeLeaveModule
         userId={userId}
         userRole={userRole}
         userDepartment={userDepartment}
