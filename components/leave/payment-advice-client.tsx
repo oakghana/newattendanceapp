@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { Download, Loader2, FileText, Users, Calendar, Check, CheckCircle, Clock, Filter, Eye, Info } from "lucide-react"
 import { SignatureRequiredDialog } from "@/components/leave/signature-required-dialog"
 import { MonthlySummaryTab } from "@/components/leave/monthly-summary-tab"
+import { HrLeaveOfficeApprovedMemos } from "@/components/leave/hr-leave-office-approved-memos"
 import { PaymentAdviceViewAllTab } from "@/components/leave/payment-advice-view-all-tab"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -1747,26 +1748,36 @@ We count on your co-operation.`,
     <div className="space-y-6">
       {/* Tabs for HR LEAVE_OFFICE users */}
       {isHrLeaveOffice && (
-        <div className="flex gap-2 border-b mb-4">
+        <div className="flex gap-0 border-b mb-4">
           <button
             onClick={() => setActivePaymentTab("pending" as any)}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
-              activePaymentTab === "pending" || (activePaymentTab as any) === "pending"
-                ? "border-b-2 border-blue-600 text-blue-600"
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-4 py-2.5 font-medium text-sm transition-colors border-b-2 ${
+              (activePaymentTab as any) === "pending"
+                ? "border-blue-600 text-blue-600 bg-blue-50"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
             }`}
           >
             Create Payment Advice
           </button>
           <button
             onClick={() => setActivePaymentTab("approved" as any)}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
-              activePaymentTab === "approved" || (activePaymentTab as any) === "approved"
-                ? "border-b-2 border-blue-600 text-blue-600"
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-4 py-2.5 font-medium text-sm transition-colors border-b-2 ${
+              (activePaymentTab as any) === "approved"
+                ? "border-blue-600 text-blue-600 bg-blue-50"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
             }`}
           >
             Monthly Summary ({submittedMemos.length})
+          </button>
+          <button
+            onClick={() => setActivePaymentTab("download" as any)}
+            className={`px-4 py-2.5 font-medium text-sm transition-colors border-b-2 flex items-center gap-2 ${
+              (activePaymentTab as any) === "download"
+                ? "border-green-600 text-green-700 bg-green-50"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            }`}
+          >
+            Approved &amp; Download
           </button>
         </div>
       )}
@@ -2052,6 +2063,11 @@ We count on your co-operation.`,
       {/* Monthly Summary Tab - Redesigned for both HR Leave Office and HR Executive */}
       {(isHrLeaveOffice || isHrExecutive) && activePaymentTab === "approved" && (
         <MonthlySummaryTab />
+      )}
+
+      {/* Approved & Download Tab - HR Leave Office only */}
+      {isHrLeaveOffice && (activePaymentTab as any) === "download" && (
+        <HrLeaveOfficeApprovedMemos />
       )}
 
       {/* Signature Required Dialog */}
