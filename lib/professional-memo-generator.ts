@@ -497,30 +497,102 @@ async function generateMainMemo(
   if (memoData.signatory.signature_image_url) {
     try {
       const sigUrl = memoData.signatory.signature_image_url
+      console.log("[v0] Processing signature URL:", sigUrl?.substring(0, 50) + (sigUrl?.length > 50 ? "..." : ""))
+      
       if (sigUrl.startsWith("data:image/")) {
+        // Data URL format (base64 embedded)
+        console.log("[v0] Processing data URL signature")
         const b64Match = sigUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
-        if (b64Match) {
+        if (b64Match && b64Match[2]) {
           const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+          console.log("[v0] Adding data URL image:", imageType)
           doc.addImage(sigUrl, imageType, margin, yPos - 4, 44, 16)
           yPos += 14
+          console.log("[v0] Signature image added successfully")
+        } else {
+          console.warn("[v0] Failed to parse data URL format")
         }
-      } else if (sigUrl.startsWith("http")) {
+      } else if (sigUrl.startsWith("http://") || sigUrl.startsWith("https://")) {
+        // HTTP URL - fetch and convert
+        console.log("[v0] Fetching signature from HTTP URL:", sigUrl.substring(0, 100))
         try {
-          const sr = await fetch(sigUrl, { headers: { Accept: "image/*" } })
-          if (sr.ok) {
-            const sb = await sr.blob()
-            const ab = await sb.arrayBuffer()
-            const ua = new Uint8Array(ab)
-            let bin = ""; for (let i = 0; i < ua.length; i++) bin += String.fromCharCode(ua[i])
-            const b64 = btoa(bin)
-            const ct = sr.headers.get("content-type") || "image/png"
-            const it = ct.includes("jpeg") || ct.includes("jpg") ? "JPEG" : "PNG"
-            doc.addImage(`data:${ct};base64,${b64}`, it, margin, yPos - 4, 44, 16)
-            yPos += 14
+          // Try fetching with different strategies
+          let response = null
+          try {
+            response = await fetch(sigUrl, { 
+              headers: { Accept: "image/*" },
+              mode: "cors",
+              credentials: "include"
+            })
+          } catch (e1) {
+            console.warn("[v0] CORS fetch failed, trying without credentials:", e1)
+            response = await fetch(sigUrl, { 
+              headers: { Accept: "image/*" },
+              mode: "cors"
+            })
           }
-        } catch { /* skip */ }
+          
+          if (!response.ok) {
+            console.warn("[v0] Failed to fetch signature:", response.status, response.statusText)
+          } else {
+            const blob = await response.blob()
+            console.log("[v0] Signature blob received:", {
+              size: blob.size,
+              type: blob.type
+            })
+            
+            if (blob.size > 0) {
+              try {
+                const arrayBuffer = await blob.arrayBuffer()
+                const uint8Array = new Uint8Array(arrayBuffer)
+                
+                // Convert to binary string
+                let binaryString = ""
+                for (let i = 0; i < uint8Array.length; i++) {
+                  binaryString += String.fromCharCode(uint8Array[i])
+                }
+                
+                // Convert to base64
+                const base64 = btoa(binaryString)
+                const contentType = response.headers.get("content-type") || blob.type || "image/png"
+                const imageType = (contentType.includes("jpeg") || contentType.includes("jpg")) ? "JPEG" : "PNG"
+                
+                console.log("[v0] Converting signature:", {
+                  base64Length: base64.length,
+                  imageType,
+                  contentType
+                })
+                
+                // Create data URL and add to PDF
+                const dataUrl = `data:${contentType};base64,${base64}`
+                console.log("[v0] Adding signature image to PDF at position:", { x: margin, y: yPos - 4, width: 44, height: 16 })
+                
+                try {
+                  doc.addImage(dataUrl, imageType, margin, yPos - 4, 44, 16)
+                  yPos += 14
+                  console.log("[v0] Signature image added successfully to PDF")
+                } catch (addImageErr) {
+                  console.warn("[v0] jsPDF addImage failed:", addImageErr)
+                  // Still continue - signature just won't show
+                }
+              } catch (convErr) {
+                console.warn("[v0] Error converting signature blob to image:", convErr)
+              }
+            } else {
+              console.warn("[v0] Signature blob is empty (0 bytes)")
+            }
+          }
+        } catch (fetchErr) {
+          console.warn("[v0] Error fetching signature image:", fetchErr instanceof Error ? fetchErr.message : fetchErr)
+        }
+      } else {
+        console.warn("[v0] Signature URL format not recognized:", sigUrl?.substring(0, 50))
       }
-    } catch { /* skip */ }
+    } catch (sigErr) {
+      console.warn("[v0] Error processing signature:", sigErr)
+    }
+  } else {
+    console.warn("[v0] No signature URL provided for signatory")
   }
 
   // Signature underline

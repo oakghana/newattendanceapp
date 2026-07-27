@@ -101,6 +101,14 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
       signerSignatureUrl = memo.signature_data_url
     }
 
+    console.log("[v0] Single memo - Signer signature data:", {
+      signerName,
+      signerTitle,
+      hasSignatureUrl: !!signerSignatureUrl,
+      signatureLength: signerSignatureUrl?.length || 0,
+      signaturePreview: signerSignatureUrl?.substring(0, 50) || "NONE"
+    })
+
     const memoData = {
       to: "DEPUTY DIRECTOR, FINANCE",
       from: "HUMAN RESOURCE MANAGER",
@@ -171,6 +179,15 @@ async function downloadCombinedMemo(
     if (!signerSignatureUrl && memos[0]?.signature_data_url) {
       signerSignatureUrl = memos[0].signature_data_url
     }
+
+    console.log("[v0] Combined memo - Signer signature data:", {
+      signerName,
+      signerTitle,
+      hasSignatureUrl: !!signerSignatureUrl,
+      signatureLength: signerSignatureUrl?.length || 0,
+      signaturePreview: signerSignatureUrl?.substring(0, 50) || "NONE",
+      memoCount: memos.length
+    })
 
     const staffList = memos.map((memo, idx) => {
       let staffPosition = "Staff"
