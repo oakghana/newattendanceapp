@@ -15,6 +15,10 @@ export interface MemoData {
     position: string
     department: string
     leaveDate: string
+    approved_days?: number
+    travelling_days_added?: number
+    leave_period_start?: string
+    leave_period_end?: string
   }>
   signatory: {
     name: string
@@ -388,20 +392,42 @@ async function generateMainMemo(
       ["Number of Days\nEntitled", "Number of Days\nGranted", "From", "To", "Remarks"]
     ]
 
-    // Try to extract values — best effort from memo body
-    const entitledMatch = memoData.body.match(/(\d+)(?:\s+plus\s+(\d+)\s+travel[a-z]* days?)?/i)
-    const entitled = entitledMatch ? entitledMatch[1] + (entitledMatch[2] ? ` plus ${entitledMatch[2]} travelling days` : "") : "—"
-    const grantedMatch = memoData.body.match(/\bgranted.*?(\d+)\b/i)
-    const granted = grantedMatch ? grantedMatch[1] : "—"
+    // Get days from staffList if available (preferred), otherwise parse from body
+    const firstStaff = memoData.staffList?.[0]
+    const approvedDays = firstStaff?.approved_days ?? 0
+    const travellingDays = firstStaff?.travelling_days_added ?? 0
+    const totalGrantedDays = approvedDays + travellingDays
+    
+    // Format entitled days with travelling info
+    const entitled = travellingDays > 0 
+      ? `${approvedDays} plus ${travellingDays} travelling day${travellingDays !== 1 ? 's' : ''}`
+      : `${approvedDays}`
+    
+    // Format granted days (total)
+    const granted = totalGrantedDays > 0 ? String(totalGrantedDays) : "—"
 
-    // Try to extract from/to from templateData hints in body
-    const fromMatch = memoData.body.match(/(?:from|start)\s+(\d{1,2}[a-z]{0,2}\s+\w+\s+\d{4})/i)
-    const toMatch = memoData.body.match(/(?:to|end|until)\s+(\d{1,2}[a-z]{0,2}\s+\w+\s+\d{4})/i)
-    const fromDate = fromMatch ? fromMatch[1] : "—"
-    const toDate = toMatch ? toMatch[1] : "—"
+    // Try to extract from/to dates from staffList if available
+    let fromDate = "—"
+    let toDate = "—"
+    if (firstStaff?.leave_period_start) {
+      const startDate = new Date(firstStaff.leave_period_start)
+      fromDate = fmtDateLongPdf(firstStaff.leave_period_start)
+    }
+    if (firstStaff?.leave_period_end) {
+      toDate = fmtDateLongPdf(firstStaff.leave_period_end)
+    }
+    
+    // Fallback: Try to extract from/to from templateData hints in body
+    if (fromDate === "—") {
+      const fromMatch = memoData.body.match(/(?:from|start)\s+(\d{1,2}[a-z]{0,2}\s+\w+\s+\d{4})/i)
+      fromDate = fromMatch ? fromMatch[1] : "—"
+    }
+    if (toDate === "—") {
+      const toMatch = memoData.body.match(/(?:to|end|until)\s+(\d{1,2}[a-z]{0,2}\s+\w+\s+\d{4})/i)
+      toDate = toMatch ? toMatch[1] : "—"
+    }
 
-    const travelMatch = memoData.body.match(/(\d+)\s+travel[a-z]* day/i)
-    const remarks = travelMatch ? `${travelMatch[1]} travelling day(s) added` : "—"
+    const remarks = travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? 's' : ''} added` : "—"
 
     autoTable(doc, {
       startY: yPos,

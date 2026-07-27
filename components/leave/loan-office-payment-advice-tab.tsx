@@ -20,6 +20,7 @@ interface PaymentMemo {
   leave_period_start: string
   leave_period_end: string
   approved_days: number
+  travelling_days_added?: number
   status: string
   signer_name?: string
   signer_id?: string
@@ -124,6 +125,10 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
           rank: staffRank || "N/A",
           location: staffLocation || "N/A",
           leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
+          approved_days: memo.approved_days || 0,
+          travelling_days_added: memo.travelling_days_added || 0,
+          leave_period_start: memo.leave_period_start || undefined,
+          leave_period_end: memo.leave_period_end || undefined,
         },
       ],
     }
@@ -190,6 +195,10 @@ async function downloadCombinedMemo(
         rank: staffRank,
         location: staffLocation,
         leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
+        approved_days: memo.approved_days || 0,
+        travelling_days_added: memo.travelling_days_added || 0,
+        leave_period_start: memo.leave_period_start || undefined,
+        leave_period_end: memo.leave_period_end || undefined,
       }
     })
 
