@@ -221,7 +221,11 @@ async function downloadCombinedMemo(
   }
 }
 
-export function LoanOfficePaymentAdviceTab() {
+interface LoanOfficePaymentAdviceTabProps {
+  isHrLeaveOffice?: boolean
+}
+
+export function LoanOfficePaymentAdviceTab({ isHrLeaveOffice = false }: LoanOfficePaymentAdviceTabProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [memos, setMemos] = useState<PaymentMemo[]>([])
