@@ -145,18 +145,22 @@ export function HrLeaveOfficeApprovedMemos() {
 
   const downloadSingleMemo = async (memoId: string, staffName: string) => {
     try {
-      const res = await fetch(`/api/leave/payment-advice/download?memoId=${memoId}`)
-      if (!res.ok) throw new Error("Download failed")
+      const res = await fetch(`/api/leave/payment-advice/download?memo_id=${memoId}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const blob = await res.blob()
       const cd = res.headers.get("content-disposition") || ""
       const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
-      const filename = match?.[1]?.replace(/['"]/g, "") ?? `payment-advice-${memoId}.pdf`
+      const filename = match?.[1]?.replace(/['"]/g, "") ?? `payment-advice-${staffName || memoId}.pdf`
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
-      a.href = url; a.download = filename; a.click()
+      a.href = url
+      a.download = filename
+      a.click()
       URL.revokeObjectURL(url)
+      return true
     } catch (err: any) {
-      toast({ title: "Download failed", description: err.message, variant: "destructive" })
+      console.error(`[v0] Download failed for memo ${memoId}:`, err.message)
+      return false
     }
   }
 
@@ -165,14 +169,20 @@ export function HrLeaveOfficeApprovedMemos() {
     setDownloadingGroup(key)
     try {
       let downloaded = 0
+      let failed = 0
       for (const memo of group.memos) {
-        await downloadSingleMemo(memo.id, memo.staff_name)
-        downloaded++
-        await new Promise(r => setTimeout(r, 350)) // slight delay between files
+        const success = await downloadSingleMemo(memo.id, memo.staff_name)
+        if (success) downloaded++
+        else failed++
+        await new Promise(r => setTimeout(r, 350))
       }
+      const msg = failed > 0 
+        ? `Downloaded ${downloaded}/${group.memos.length} memo(s) for ${group.category} Staff (${failed} failed)`
+        : `Downloaded ${downloaded} memo(s) for ${group.category} Staff – ${group.monthLabel}`
       toast({
-        title: "Download complete",
-        description: `Downloaded ${downloaded} memo(s) for ${group.category} Staff – ${group.monthLabel}`,
+        title: downloaded > 0 ? "Download complete" : "Download failed",
+        description: msg,
+        variant: failed > 0 && downloaded === 0 ? "destructive" : "default",
       })
     } finally {
       setDownloadingGroup(null)
@@ -184,16 +194,22 @@ export function HrLeaveOfficeApprovedMemos() {
     setDownloadingAll(key)
     try {
       let total = 0
+      let failed = 0
       for (const group of monthGroups) {
         for (const memo of group.memos) {
-          await downloadSingleMemo(memo.id, memo.staff_name)
-          total++
+          const success = await downloadSingleMemo(memo.id, memo.staff_name)
+          if (success) total++
+          else failed++
           await new Promise(r => setTimeout(r, 350))
         }
       }
+      const msg = failed > 0
+        ? `Downloaded ${total}/${total + failed} memo(s) for ${monthLabel} (${failed} failed)`
+        : `Downloaded all ${total} memo(s) for ${monthLabel}`
       toast({
-        title: "Download complete",
-        description: `Downloaded all ${total} memo(s) for ${monthLabel}`,
+        title: total > 0 ? "Download complete" : "Download failed",
+        description: msg,
+        variant: failed > 0 && total === 0 ? "destructive" : "default",
       })
     } finally {
       setDownloadingAll(null)
@@ -204,16 +220,22 @@ export function HrLeaveOfficeApprovedMemos() {
     setDownloadingAllGroups(true)
     try {
       let total = 0
+      let failed = 0
       for (const group of groups) {
         for (const memo of group.memos) {
-          await downloadSingleMemo(memo.id, memo.staff_name)
-          total++
+          const success = await downloadSingleMemo(memo.id, memo.staff_name)
+          if (success) total++
+          else failed++
           await new Promise(r => setTimeout(r, 350))
         }
       }
+      const msg = failed > 0
+        ? `Downloaded ${total}/${total + failed} memo(s) from all months (${failed} failed)`
+        : `Downloaded all ${total} approved memo(s) from all months`
       toast({
-        title: "Download complete",
-        description: `Downloaded all ${total} approved memo(s) from all months`,
+        title: total > 0 ? "Download complete" : "Download failed",
+        description: msg,
+        variant: failed > 0 && total === 0 ? "destructive" : "default",
       })
     } finally {
       setDownloadingAllGroups(false)
