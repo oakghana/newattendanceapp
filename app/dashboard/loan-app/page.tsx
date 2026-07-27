@@ -1058,8 +1058,13 @@ export default function LoanAppPage() {
       all: data?.inbox?.allLoans?.length || 0,
       mine: data?.myTasks?.length || 0,
     }
-    const tabs = [{ key: "staff", label: "My Loans" }, { key: "tracking", label: "Tracking" }]
-    
+    // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
+    const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
+
+    const tabs = [{ key: "staff", label: "My Loans" }]
+    // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
+    if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
+
     // ADMIN ACCESS: Admins see all tabs without restriction
     if (isAdminUser) {
       tabs.push({ key: "hod", label: `HOD (${c.hod})` })
@@ -1082,7 +1087,8 @@ export default function LoanAppPage() {
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    if (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.directorHr || p?.viewAllTabs || p?.allLoans) {
+    // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
+    if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
     if (p?.allLoans || p?.viewAllTabs) {
