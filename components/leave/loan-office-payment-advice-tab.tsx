@@ -24,6 +24,7 @@ interface PaymentMemo {
   signer_name?: string
   signer_id?: string
   hr_leave_office_name?: string
+  signature_data_url?: string
   created_at: string
   updated_at: string
 }
@@ -93,6 +94,11 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
         }
       } catch {}
     }
+    
+    // Fallback: If signature still missing, try to fetch from memo record's signature_data_url column
+    if (!signerSignatureUrl && memo.signature_data_url) {
+      signerSignatureUrl = memo.signature_data_url
+    }
 
     const memoData = {
       to: "DEPUTY DIRECTOR, FINANCE",
@@ -154,6 +160,11 @@ async function downloadCombinedMemo(
           signerSignatureUrl = body.selectedSigner.signature_data_url || ""
         }
       } catch {}
+    }
+    
+    // Fallback: If signature still missing, try to fetch from first memo's signature_data_url column
+    if (!signerSignatureUrl && memos[0]?.signature_data_url) {
+      signerSignatureUrl = memos[0].signature_data_url
     }
 
     const staffList = memos.map((memo, idx) => {
