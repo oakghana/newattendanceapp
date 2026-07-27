@@ -243,12 +243,14 @@ export function HrLeaveOfficeApprovedMemos() {
     }
   }
 
-  const downloadCombinedGroupMemo = async (monthGroups: ApprovedMemoGroup[], monthLabel: string, month: string) => {
-    setDownloadingCombined(month)
+  const downloadCombinedGroupMemo = async (monthGroups: ApprovedMemoGroup[], monthLabel: string, month: string, category?: string) => {
+    const key = category ? `${month}||${category}` : month
+    setDownloadingCombined(key)
     try {
-      // Collect all staff from all categories in this month
+      // Collect staff from specified category (or all if no category provided)
       const staffList: any[] = []
       for (const group of monthGroups) {
+        if (category && group.category !== category) continue // Skip other categories
         for (const memo of group.memos) {
           // Extract staff data from memo details
           staffList.push({
@@ -429,31 +431,17 @@ export function HrLeaveOfficeApprovedMemos() {
                   {monthTotal} staff member{monthTotal !== 1 ? "s" : ""}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => downloadMonthAll(monthGroups, monthLabel)}
-                  disabled={isDownloadingThisMonth}
-                  className="h-7 gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs border-0"
-                >
-                  {isDownloadingThisMonth
-                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Downloading...</>
-                    : <><Download className="h-3 w-3" /> Download All ({monthTotal})</>
-                  }
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => downloadCombinedGroupMemo(monthGroups, monthLabel, month)}
-                  disabled={downloadingCombined === month}
-                  className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs border-0"
-                  title="Download all staff categories as a single combined memo"
-                >
-                  {downloadingCombined === month
-                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Combining...</>
-                    : <><FileText className="h-3 w-3" /> Combined Memo</>
-                  }
-                </Button>
-              </div>
+              <Button
+                size="sm"
+                onClick={() => downloadMonthAll(monthGroups, monthLabel)}
+                disabled={isDownloadingThisMonth}
+                className="h-7 gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs border-0"
+              >
+                {isDownloadingThisMonth
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Downloading...</>
+                  : <><Download className="h-3 w-3" /> Download All ({monthTotal})</>
+                }
+              </Button>
             </div>
 
             <CardContent className="p-0 divide-y divide-slate-100">
@@ -494,6 +482,18 @@ export function HrLeaveOfficeApprovedMemos() {
                           {isDownloading
                             ? <><Loader2 className="h-3 w-3 animate-spin" /> Downloading...</>
                             : <><Download className="h-3 w-3" /> Download All ({group.staffCount})</>
+                          }
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => downloadCombinedGroupMemo([group], `${group.category} Staff - ${monthLabel}`, month, group.category)}
+                          disabled={downloadingCombined === key}
+                          className="h-7 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs border-0"
+                          title={`Download combined memo for ${group.category} Staff only`}
+                        >
+                          {downloadingCombined === key
+                            ? <><Loader2 className="h-3 w-3 animate-spin" /> Combining...</>
+                            : <><FileText className="h-3 w-3" /> Combined ({group.staffCount})</>
                           }
                         </Button>
                         <button
