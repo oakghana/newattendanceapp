@@ -72,6 +72,51 @@ const OVERLAP_BLOCKING_STATUSES = [
 
 const DUPLICATE_BLOCKING_STATUSES = OVERLAP_BLOCKING_STATUSES
 
+/**
+ * Fetch an existing user profile or create a minimal one on first access.
+ * Staff signature is not mandatory — a user can exist in Supabase Auth without
+ * a pre-seeded user_profiles row. This helper ensures they always get a row.
+ */
+async function getOrCreateProfile(admin: any, user: any, selectCols: string) {
+  let { data: profile, error } = await admin
+    .from("user_profiles")
+    .select(selectCols)
+    .eq("id", user.id)
+    .single()
+
+  if (profile) return profile
+
+  // No profile found — create a minimal one from auth metadata so the user can proceed.
+  const rawName: string = user.user_metadata?.full_name || user.user_metadata?.name || ""
+  const parts = rawName.trim().split(/\s+/)
+  const firstName = parts[0] || (user.email || "User").split("@")[0]
+  const lastName  = parts.slice(1).join(" ") || "Staff"
+  // employee_id must be unique; use a short deterministic prefix from the UUID
+  const tempEmployeeId = `TMP-${user.id.replace(/-/g, "").substring(0, 7).toUpperCase()}`
+
+  const { data: created, error: createErr } = await admin
+    .from("user_profiles")
+    .upsert(
+      {
+        id:          user.id,
+        email:       user.email,
+        role:        "staff",
+        first_name:  firstName,
+        last_name:   lastName,
+        employee_id: tempEmployeeId,
+      },
+      { onConflict: "id" }   // no-op if row already exists (race condition safety)
+    )
+    .select(selectCols)
+    .single()
+
+  if (created) return created
+
+  // Last-resort in-memory fallback — never block the user entirely
+  console.error("[getOrCreateProfile] Could not create profile:", createErr?.message)
+  return { id: user.id, role: "staff", department_id: null, departments: null } as any
+}
+
 function normalizeRoleValue(role: string | null | undefined) {
   return String(role || "")
     .toLowerCase()
@@ -656,58 +701,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    let { data: profile, error: profileError } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id, departments(name, code)")
-      .eq("id", user.id)
-      .single()
-
-    // If profile doesn't exist, create a basic one as staff member
-    // Handle both PGRST116 (no rows) and general errors by attempting to create
-    if (profileError || !profile) {
-      console.log("[leave-planning] Profile not found, attempting to create:", { userId: user.id, profileError: profileError?.message })
-      
-      // Try to create a profile with required fields
-      // Extract name from email or user metadata if available
-      const nameParts = (user.user_metadata?.name || user.email || "User").split(" ")
-      const firstName = nameParts[0] || "User"
-      const lastName = nameParts.slice(1).join(" ") || "Staff"
-      
-      const { data: newProfile, error: createError } = await admin
-        .from("user_profiles")
-        .insert({
-          id: user.id,
-          email: user.email,
-          role: "staff",
-          first_name: firstName,
-          last_name: lastName,
-          employee_id: user.id.substring(0, 8).toUpperCase(), // Use first 8 chars of UUID as temp employee_id
-        })
-        .select("id, role, department_id, departments(name, code)")
-        .single()
-      
-      if (createError) {
-        console.error("[leave-planning] Profile creation failed:", { createError: createError.message, code: createError.code })
-        // Even if creation fails, provide a minimal profile so user can continue
-        // This handles cases where the profile might already exist due to race conditions
-        profile = {
-          id: user.id,
-          role: "staff",
-          department_id: null,
-          departments: null,
-        } as any
-      } else if (newProfile) {
-        profile = newProfile
-      } else {
-        // Fallback profile
-        profile = {
-          id: user.id,
-          role: "staff",
-          department_id: null,
-          departments: null,
-        } as any
-      }
-    }
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, departments(name, code)")
 
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
@@ -1157,15 +1151,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, rank")
-      .eq("id", user.id)
-      .single()
-
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
-    }
+    const profile = await getOrCreateProfile(
+      admin, user,
+      "id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, rank"
+    )
 
     const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
     const canSelfApply =
@@ -1465,15 +1454,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await admin
-      .from("user_profiles")
-      .select("id, role, department_id")
-      .eq("id", user.id)
-      .single()
-
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
-    }
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id")
 
     const role = normalizeRoleValue(profile.role)
     const canSelfApply =
