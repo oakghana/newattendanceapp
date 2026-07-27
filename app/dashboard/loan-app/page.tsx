@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
+import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -1071,6 +1072,7 @@ export default function LoanAppPage() {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
       tabs.push({ key: "leave-payment", label: "Leave Payment" })
+      tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
       tabs.push({ key: "committee", label: `Committee (${c.committee})` })
       tabs.push({ key: "director", label: `Executive HR (${c.director})` })
       tabs.push({ key: "setup", label: "Setup & Linkage" })
@@ -1084,6 +1086,7 @@ export default function LoanAppPage() {
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
+    if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
@@ -3481,6 +3484,10 @@ export default function LoanAppPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="loan-payment-advice" className="space-y-4">
+          <LoanOfficePaymentAdviceTab />
         </TabsContent>
 
         <TabsContent value="committee" className="space-y-3">
