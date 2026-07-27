@@ -587,6 +587,7 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           department_name: staff.department_name,
           category: staff.category,
           staff_category: staff.staff_category,
+          rank: staff.rank || null,
           location_name: staff.location_name || null,
           location_id: staff.location_id || null,
           assigned_location_id: staff.assigned_location_id || null,

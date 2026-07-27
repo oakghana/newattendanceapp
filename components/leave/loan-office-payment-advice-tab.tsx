@@ -71,6 +71,9 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
     let signerSignatureUrl = ""
     let staffPosition = "Staff"
     let staffDepartment = "Department"
+    let staffRank = ""
+    let staffLocation = ""
+    let referenceNumber = "QCC/"
 
     if (memo.memo_body) {
       try {
@@ -83,6 +86,11 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
         if (memoBody.staffList?.[0]) {
           staffPosition = memoBody.staffList[0].position || staffPosition
           staffDepartment = memoBody.staffList[0].department || staffDepartment
+          staffRank = memoBody.staffList[0].rank || ""
+          staffLocation = memoBody.staffList[0].assigned_location_name || memoBody.staffList[0].location_name || ""
+        }
+        if (memoBody.referenceNumber) {
+          referenceNumber = memoBody.referenceNumber
         }
       } catch {}
     }
@@ -92,7 +100,7 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
       from: "HUMAN RESOURCE MANAGER",
       subject: `PAYMENT OF LEAVE ALLOWANCE - ${memo.staff_name || "Staff"}`,
       date: dateStr,
-      refNo: "QCC/",
+      refNo: referenceNumber,
       body: `We wish to inform you that the undermentioned staff member has been approved for leave payment.\n\nWe, therefore, kindly request you to process and pay their leave allowance accordingly.\n\nWe count on your co-operation.`,
       signatory: {
         name: signerName.toUpperCase(),
@@ -108,6 +116,8 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
           employeeId: memo.staff_number || "N/A",
           position: staffPosition,
           department: staffDepartment,
+          rank: staffRank || "N/A",
+          location: staffLocation || "N/A",
           leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
         },
       ],
@@ -150,12 +160,16 @@ async function downloadCombinedMemo(
     const staffList = memos.map((memo, idx) => {
       let staffPosition = "Staff"
       let staffDepartment = "Department"
+      let staffRank = "N/A"
+      let staffLocation = "N/A"
       if (memo.memo_body) {
         try {
           const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
           if (b.staffList?.[0]) {
             staffPosition = b.staffList[0].position || staffPosition
             staffDepartment = b.staffList[0].department || staffDepartment
+            staffRank = b.staffList[0].rank || "N/A"
+            staffLocation = b.staffList[0].assigned_location_name || b.staffList[0].location_name || "N/A"
           }
         } catch {}
       }
@@ -165,6 +179,8 @@ async function downloadCombinedMemo(
         employeeId: memo.staff_number || "N/A",
         position: staffPosition,
         department: staffDepartment,
+        rank: staffRank,
+        location: staffLocation,
         leaveDate: memo.leave_period_start ? new Date(memo.leave_period_start).toLocaleDateString() : "N/A",
       }
     })
