@@ -792,6 +792,11 @@ export function HrApprovalsTab() {
   const [approvedPaymentMonth, setApprovedPaymentMonth] = useState('')
   const [downloadingMemoId, setDownloadingMemoId] = useState<string | null>(null)
 
+  // Deferments and recalls state
+  const [deferments, setDeferments] = useState<any[]>([])
+  const [recalls, setRecalls] = useState<any[]>([])
+  const [loadingDefermentRecall, setLoadingDefermentRecall] = useState(false)
+
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
     setLoading(true)
@@ -844,6 +849,31 @@ export function HrApprovalsTab() {
       fetchApprovedPaymentMemos(approvedPaymentMonth || undefined)
     }
   }, [hrApproveSubTab, approvedPaymentMonth, fetchApprovedPaymentMemos])
+
+  // ── Fetch deferments and recalls ──────────────────────────────────────────
+  const fetchDefermentRecallRequests = useCallback(async () => {
+    setLoadingDefermentRecall(true)
+    try {
+      const res = await fetch('/api/leave/deferment-recall/hr-executive-requests')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setDeferments(data.deferments || [])
+      setRecalls(data.recalls || [])
+    } catch (err) {
+      console.error('[v0] fetchDefermentRecallRequests error:', err)
+      setDeferments([])
+      setRecalls([])
+    } finally {
+      setLoadingDefermentRecall(false)
+    }
+  }, [])
+
+  // Fetch when switching to deferments or recalls tab
+  useEffect(() => {
+    if (hrApproveSubTab === 'deferments' || hrApproveSubTab === 'recalls') {
+      fetchDefermentRecallRequests()
+    }
+  }, [hrApproveSubTab, fetchDefermentRecallRequests])
 
   // ── Download approved payment memo ───────────────────────────────────────
   const handleDownloadMemo = async (memoId: string, staffName: string) => {
@@ -1221,8 +1251,33 @@ export function HrApprovalsTab() {
       {/* Deferments tab */}
       {hrApproveSubTab === 'deferments' && (
         <Card>
-          <CardContent className="py-8 text-center text-slate-600">
-            <p>Deferment requests will appear here</p>
+          <CardContent className="py-8">
+            {loadingDefermentRecall ? (
+              <div className="flex items-center justify-center gap-2 text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading deferment requests...
+              </div>
+            ) : deferments.length === 0 ? (
+              <div className="text-center text-slate-600 py-4">
+                <p>No deferment requests pending</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {deferments.map((req) => (
+                  <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="font-semibold text-slate-900">{req.staff_name || 'Unknown Staff'}</p>
+                        <p className="text-sm text-slate-600">Staff ID: {req.staff_id || 'N/A'}</p>
+                        <p className="text-sm text-slate-600 mt-1">Leave Type: {req.leave_type_key ? leaveTypeLabel(req.leave_type_key) : 'N/A'}</p>
+                        <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                      </div>
+                      <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1230,8 +1285,33 @@ export function HrApprovalsTab() {
       {/* Recalls tab */}
       {hrApproveSubTab === 'recalls' && (
         <Card>
-          <CardContent className="py-8 text-center text-slate-600">
-            <p>Recall requests will appear here</p>
+          <CardContent className="py-8">
+            {loadingDefermentRecall ? (
+              <div className="flex items-center justify-center gap-2 text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading recall requests...
+              </div>
+            ) : recalls.length === 0 ? (
+              <div className="text-center text-slate-600 py-4">
+                <p>No recall requests pending</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recalls.map((req) => (
+                  <div key={req.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="font-semibold text-slate-900">{req.staff_name || 'Unknown Staff'}</p>
+                        <p className="text-sm text-slate-600">Staff ID: {req.staff_id || 'N/A'}</p>
+                        <p className="text-sm text-slate-600 mt-1">Leave Type: {req.leave_type_key ? leaveTypeLabel(req.leave_type_key) : 'N/A'}</p>
+                        <p className="text-xs text-slate-500 mt-2">Submitted: {fmtDate(req.created_at)}</p>
+                      </div>
+                      <Badge variant="outline" className="text-red-600 border-red-300">Pending</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
