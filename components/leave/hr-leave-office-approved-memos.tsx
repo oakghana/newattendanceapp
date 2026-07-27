@@ -299,7 +299,6 @@ export function HrLeaveOfficeApprovedMemos() {
           </Button>
         </div>
       )}
-    </div>
 
       {/* Loading */}
       {loading && (
