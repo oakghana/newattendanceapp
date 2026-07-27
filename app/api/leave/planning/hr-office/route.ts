@@ -1,3 +1,4 @@
+// HR Leave Office Route - Handles HR office adjustments with conditional reason field
 import { NextRequest, NextResponse } from "next/server"
 import { notifyLeaveHrOfficeForwarded } from "@/lib/workflow-emails"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
