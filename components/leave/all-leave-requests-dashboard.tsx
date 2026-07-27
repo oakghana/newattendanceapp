@@ -28,6 +28,7 @@ interface LeaveRequest {
   status: string
   createdAt: string
   updatedAt: string
+  hrApprovedAt?: string | null
   hodReviewers?: string[]
 }
 
@@ -154,7 +155,7 @@ export function AllLeaveRequestsDashboard() {
     {
       key: "leaveType",
       label: "Leave Type",
-      getValue: (row) => row.reason || "—",
+      getValue: (row) => row.leaveType || "—",
       sortable: true,
       filterable: true,
     },
@@ -219,6 +220,27 @@ export function AllLeaveRequestsDashboard() {
         return color.label.toLowerCase().includes(filterText.toLowerCase()) ||
                String(value).toLowerCase().includes(filterText.toLowerCase())
       },
+    },
+    {
+      key: "reason",
+      label: "Reason",
+      getValue: (row) => row.reason || "—",
+      sortable: true,
+      filterable: true,
+    },
+    {
+      key: "employeeId",
+      label: "Employee ID",
+      getValue: (row) => row.employeeId || "—",
+      sortable: true,
+      filterable: true,
+    },
+    {
+      key: "position",
+      label: "Position",
+      getValue: (row) => row.position || "—",
+      sortable: true,
+      filterable: true,
     },
   ]
 
