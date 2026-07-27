@@ -23,7 +23,7 @@ export async function GET() {
 
     const { data: profile } = await admin
       .from("user_profiles")
-      .select("staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id")
+      .select("staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, rank")
       .eq("id", user.id)
       .maybeSingle()
 

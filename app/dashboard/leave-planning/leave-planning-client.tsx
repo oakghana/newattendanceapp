@@ -3647,8 +3647,16 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || renderedTemplate.body || memoTpl.body }))
                               setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
                               
-                              // Fetch outstanding leave for annual leave type
+                              // Auto-populate travel days and fetch outstanding leave for annual leave
                               if (String(req.leave_type_key || "").toLowerCase() === "annual") {
+                                // Auto-populate travel days from entitlement snapshot (always 2 per QCC policy)
+                                // Only set if not already set by the user
+                                const existingTravel = Number(officeTravelDays[req.id] || 0)
+                                if (existingTravel === 0) {
+                                  const travelFromSnapshot = req.travel_days != null ? String(req.travel_days) : "2"
+                                  setOfficeTravelDays((p) => ({ ...p, [req.id]: travelFromSnapshot }))
+                                }
+
                                 const outstanding = await fetchOutstandingLeaveForStaff(
                                   String(req.user_id || req.user?.id || ""),
                                   String(req.leave_type_key || ""),

@@ -1116,7 +1116,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id")
+      .select("id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, rank")
       .eq("id", user.id)
       .single()
 

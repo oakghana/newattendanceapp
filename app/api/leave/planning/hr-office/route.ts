@@ -65,8 +65,13 @@ export async function POST(request: NextRequest) {
       memo_draft_subject,
       memo_draft_body,
       memo_draft_cc,
+      // Support both field names — client sends forwarded_to_hr_approver_id
       hr_approver_id,
+      forwarded_to_hr_approver_id,
     } = body
+
+    // Resolve the HR executive ID from whichever field was sent
+    const resolvedHrApproverId = forwarded_to_hr_approver_id || hr_approver_id || null
 
     if (!leave_plan_request_id) {
       return NextResponse.json({ error: "leave_plan_request_id is required." }, { status: 400 })
@@ -170,7 +175,7 @@ export async function POST(request: NextRequest) {
         memo_draft_last_edited_role: "hr_leave_office",
         memo_draft_last_edited_at: new Date().toISOString(),
         // Store the HR executive selected to receive this forwarded request
-        hr_approver_id: hr_approver_id || null,
+        hr_approver_id: resolvedHrApproverId,
         // Apply the adjusted dates as the effective dates for HR to finalize
         preferred_start_date: adjusted_start_date,
         preferred_end_date: adjusted_end_date,
@@ -202,7 +207,7 @@ export async function POST(request: NextRequest) {
 
     const { data: staffProfile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name, employee_id, staff_category, date_of_appointment, years_of_service")
+      .select("first_name, last_name, employee_id, staff_category, date_of_appointment, years_of_service, position, rank")
       .eq("id", (leaveRequest as any).user_id)
       .maybeSingle()
 

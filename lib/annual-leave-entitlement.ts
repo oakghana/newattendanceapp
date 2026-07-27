@@ -95,8 +95,26 @@ export function computeAnnualLeaveEntitlement(
 }
 
 /**
+ * Derive staff category from position / rank title.
+ * Any title containing "Officer", "Manager" or "Director" (case-insensitive)
+ * is automatically classified as Senior Staff.
+ */
+export function deriveStaffCategoryFromPosition(
+  position?: string | null,
+  rank?: string | null,
+): StaffCategory | null {
+  const SENIOR_KEYWORDS = ["officer", "manager", "director"]
+  const combined = `${position || ""} ${rank || ""}`.toLowerCase()
+  if (SENIOR_KEYWORDS.some((kw) => combined.includes(kw))) return "senior"
+  return null
+}
+
+/**
  * Resolve entitlement from a user_profiles row.
- * Falls back to junior-1-3 years if staff_category is missing.
+ * Priority:
+ *   1. Explicit staff_category stored in user_profiles ("senior" / "junior")
+ *   2. Derived from position / rank keywords (Officer, Manager, Director → Senior)
+ *   3. Falls back to "junior" with 1–3-year tier
  *
  * @param profile  Partial user_profiles object
  * @param referenceDate  Defaults to today
@@ -106,13 +124,21 @@ export function resolveEntitlementFromProfile(
     staff_category?: string | null
     date_of_appointment?: string | null
     years_of_service?: number | null
+    position?: string | null
+    rank?: string | null
   },
   referenceDate: Date = new Date(),
 ): AnnualLeaveEntitlement {
-  // Normalise staff category
+  // Normalise staff category — prefer stored value, then derive from position/rank
   const rawCategory = String(profile.staff_category || "").toLowerCase().trim()
-  const staffCategory: StaffCategory =
+  let staffCategory: StaffCategory =
     rawCategory === "senior" || rawCategory === "senior staff" ? "senior" : "junior"
+
+  // If no explicit category is stored, derive it from position / rank
+  if (!rawCategory || rawCategory === "junior") {
+    const derivedCategory = deriveStaffCategoryFromPosition(profile.position, profile.rank)
+    if (derivedCategory) staffCategory = derivedCategory
+  }
 
   // Years of service — prefer stored value, then calculate from appointment date
   let yearsOfService = 0
