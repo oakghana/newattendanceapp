@@ -184,6 +184,14 @@ export async function POST(request: NextRequest) {
       const category = staff.category || staff.staff_category || "Junior"
       const refNumber = referenceNumbers[category] || ""
       
+      // Resolve the location name — use every possible field from detect-staff
+      const resolvedLocationName =
+        staff.location_name ||
+        staff.assigned_location_name ||
+        staff.location ||
+        staff.station ||
+        "HQ"
+
       // Build memo body with all relevant info including staff details for PDF generation
       const memoBody = {
         month,
@@ -192,13 +200,26 @@ export async function POST(request: NextRequest) {
         staff_position: staff.position || staff.rank || "",
         staff_department: staff.department_name || staff.department || "",
         staff_rank_label: staff.staff_category || category,
-        staff_location_name: staff.location_name || staff.assigned_location_name || "HQ", // Beneficiary location name
+        // Top-level location for backward-compat with older download code
+        staff_location_name: resolvedLocationName,
         staff_location_id: staff.location_id || staff.assigned_location_id || null,
+        // staffList array — consumed by the PDF download route to build the table rows
+        staffList: [
+          {
+            name: (staff.full_name || "").toUpperCase(),
+            employeeId: staff.staff_number || staff.employee_id || "",
+            position: staff.position || staff.rank || "",
+            rank: staff.staff_category || category,
+            location_name: resolvedLocationName,
+            leaveDate: staff.preferred_start_date || staff.leave_start_date || "",
+            approved_days: staff.approved_days || 0,
+          },
+        ],
         selectedSigner: {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
           position: selectedSigner.position || "",
-          signature_data_url: signerSignatureUrl, // Include signer's signature in memo data
+          signature_data_url: signerSignatureUrl,
         },
       }
 

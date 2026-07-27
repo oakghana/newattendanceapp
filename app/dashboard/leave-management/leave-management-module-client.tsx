@@ -16,6 +16,7 @@ import { AllLeaveRequestsDashboard } from "@/components/leave/all-leave-requests
 import { DefermentRequestsTracking } from "@/components/leave-management/deferment-requests-tracking"
 import { isHrLeaveOfficeRole, isRegionalHrOfficerRole } from "@/lib/leave-planning"
 import { HrExecutiveLeaveModule } from "./hr-executive-leave-module"
+import { HrLeaveOfficeApprovedMemos } from "@/components/leave/hr-leave-office-approved-memos"
 
 const HR_ANALYTICS_ROLES = ["hr_leave_office", "director_hr", "manager_hr", "admin", "hr_office", "hr", "department_head", "regional_manager"]
 
@@ -37,7 +38,7 @@ interface LeaveManagementModuleClientProps {
   inactivityDays: number
   userDepartmentName: string | null
   userDepartmentCode: string | null
-  userLocationName: string | null
+  userLocationName?: string | null
   hasHodLinkage: boolean
   initialStaffRequests: any[]
   initialManagerNotifications: any[]
@@ -64,6 +65,23 @@ export function LeaveManagementModuleClient({
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
+  const isLoanOffice = normalizedRole === 'loan_office'
+
+  // Loan Office role: restricted view with ONLY Payment Advice tab
+  if (isLoanOffice) {
+    return (
+      <div className="space-y-6 w-full">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-900">
+            <strong>Payment Advice Download:</strong> View and download approved leave payment advice memos.
+          </p>
+        </div>
+        <div>
+          <HrLeaveOfficeApprovedMemos />
+        </div>
+      </div>
+    )
+  }
 
   // HR Executives get a simplified dedicated module instead of the full tab bar
   if (isHrExecutive) {

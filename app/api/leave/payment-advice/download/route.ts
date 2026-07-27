@@ -71,7 +71,8 @@ export async function GET(request: NextRequest) {
         id, staff_id, staff_name, staff_number, memo_subject, memo_body,
         leave_period_start, leave_period_end, approved_days,
         hr_leave_office_name, signer_id, signer_name,
-        signature_data_url, created_at, status, staff_category
+        signature_data_url, created_at, status, staff_category,
+        leave_plan_request_id
       `)
       .eq("id", memoId)
       .maybeSingle()
@@ -135,11 +136,20 @@ export async function GET(request: NextRequest) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
         const rawList: any[] = body.staffList || body.staff || []
+        // Top-level location stored in older memos (submit-memo used to store it here only)
+        const bodyLocationName: string =
+          body.staff_location_name || body.location_name || body.station || ""
         // Enrich each staff record — position and location come from memo_body, not memo columns
         staffList = rawList.map((s: any) => ({
           ...s,
           position: s.position || s.rank || "",
-          location_name: s.location_name || s.assigned_location_name || s.location || s.station || "",
+          // Prefer the per-staff location; fall back to the top-level body location
+          location_name:
+            s.location_name ||
+            s.assigned_location_name ||
+            s.location ||
+            s.station ||
+            bodyLocationName,
         }))
         // Use the approval date stored at approval time — NOT today's date
         approvedAt = body.approver?.approved_at || null
@@ -156,43 +166,115 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Live-enrich staffList location from geofence_locations if missing ────
-    // This handles both single-staff memos and older memos that didn't store location_name
-    const userIdForLocation = memoBodyUserId || memo.user_id || memo.staff_id || null
-    if (userIdForLocation) {
-      const { data: liveProfile } = await admin
+    // ── Live-enrich staffList location from geofence_locations ────
+    // staffList items only store employeeId (staff number) — no UUID user IDs.
+    // Strategy:
+    //   1. Collect all employee_id values from staffList
+    //   2. Also include memo.staff_id (UUID) and memo.staff_number for single-staff memos
+    //   3. Fetch user_profiles matching by employee_id OR by id (UUID)
+    //   4. Build employee_id → location_name map
+    //   5. Patch every staffList row with the live location
+
+    // Collect employee numbers from staffList (stored as employeeId)
+    const staffEmployeeNumbers: string[] = staffList
+      .map((s: any) => s.employeeId || s.staff_number || s.sno || "")
+      .filter(Boolean)
+
+    // Collect UUID user IDs (single-staff memos have memo.staff_id)
+    const staffUUIDs: string[] = [memo.staff_id, memoBodyUserId]
+      .filter(Boolean) as string[]
+
+    // Fetch profiles by employee_id (covers group memos stored by staff number)
+    let profilesByEmployeeId: any[] = []
+    if (staffEmployeeNumbers.length > 0) {
+      const { data } = await admin
         .from("user_profiles")
-        .select("first_name, last_name, employee_id, position, assigned_location_id")
-        .eq("id", userIdForLocation)
+        .select("id, employee_id, assigned_location_id")
+        .in("employee_id", staffEmployeeNumbers)
+      profilesByEmployeeId = data || []
+    }
+
+    // Fetch profiles by UUID (covers single-staff memos with staff_id on the memo row)
+    let profilesByUUID: any[] = []
+    if (staffUUIDs.length > 0) {
+      const { data } = await admin
+        .from("user_profiles")
+        .select("id, employee_id, first_name, last_name, position, assigned_location_id")
+        .in("id", staffUUIDs)
+      profilesByUUID = data || []
+    }
+
+    // Fallback: look up via leave_plan_request if still empty
+    if (profilesByEmployeeId.length === 0 && profilesByUUID.length === 0 && memo.leave_plan_request_id) {
+      const { data: lpr } = await admin
+        .from("leave_plan_requests")
+        .select("user_id")
+        .eq("id", memo.leave_plan_request_id)
         .maybeSingle()
-
-      if (liveProfile?.assigned_location_id) {
-        const { data: liveLocation } = await admin
-          .from("geofence_locations")
-          .select("name")
-          .eq("id", liveProfile.assigned_location_id)
+      if (lpr?.user_id) {
+        const { data } = await admin
+          .from("user_profiles")
+          .select("id, employee_id, first_name, last_name, position, assigned_location_id")
+          .eq("id", lpr.user_id)
           .maybeSingle()
+        if (data) profilesByUUID = [data]
+      }
+    }
 
-        const liveLoc = liveLocation?.name || ""
-        const livePos = liveProfile.position || ""
+    const allProfiles = [...profilesByEmployeeId, ...profilesByUUID]
 
-        if (staffList.length === 0) {
-          // Single-staff memo — build the row from live data
-          staffList = [{
-            name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
-            employeeId: liveProfile.employee_id || memo.staff_number || "",
-            position: livePos,
-            location_name: liveLoc,
-            leaveDate: "",
-          }]
-        } else {
-          // Patch any rows that are missing location or position
-          staffList = staffList.map((s: any) => ({
-            ...s,
-            position: s.position || livePos,
-            location_name: s.location_name || liveLoc,
-          }))
+    if (allProfiles.length > 0) {
+      // Batch fetch all needed geofence_locations in one query
+      const locationIds = [...new Set(
+        allProfiles.map((p: any) => p.assigned_location_id).filter(Boolean)
+      )]
+      let geoMap: Record<string, string> = {}
+      if (locationIds.length > 0) {
+        const { data: locations } = await admin
+          .from("geofence_locations")
+          .select("id, name")
+          .in("id", locationIds)
+        locations?.forEach((l: any) => { geoMap[l.id] = l.name })
+      }
+
+      // Build lookup maps: employee_id → location_name  AND  uuid → location_name
+      const locationByEmployeeId: Record<string, string> = {}
+      const locationByUUID: Record<string, string> = {}
+      const profileByUUID: Record<string, any> = {}
+      allProfiles.forEach((p: any) => {
+        const loc = p.assigned_location_id ? geoMap[p.assigned_location_id] || "" : ""
+        if (p.employee_id) locationByEmployeeId[p.employee_id] = loc
+        if (p.id) {
+          locationByUUID[p.id] = loc
+          profileByUUID[p.id] = p
         }
+      })
+
+      if (staffList.length === 0 && memo.staff_id && profileByUUID[memo.staff_id]) {
+        // Single-staff memo with no stored staffList — rebuild from live profile
+        const profile = profileByUUID[memo.staff_id]
+        staffList = [{
+          name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
+          employeeId: profile.employee_id || memo.staff_number || "",
+          position: profile.position || "",
+          location_name: locationByUUID[memo.staff_id] || "",
+          leaveDate: fmtDate(memo.leave_period_start),
+        }]
+      } else {
+        // Patch each staffList row with location looked up by employee_id
+        staffList = staffList.map((s: any) => {
+          const empId = s.employeeId || s.staff_number || s.sno || ""
+          const uuid  = s.id || s.staff_id || s.user_id || ""
+          const liveLocation =
+            (empId && locationByEmployeeId[empId]) ||
+            (uuid  && locationByUUID[uuid])        ||
+            ""
+          return {
+            ...s,
+            position: s.position || "",
+            location_name: liveLocation || s.location_name || "",
+          }
+        })
       }
     }
 
@@ -256,22 +338,31 @@ export async function GET(request: NextRequest) {
     doc.line(margin, y, pageWidth - margin, y)
     y += 8
 
-    // === TO / FROM / SUBJECT ===
+    // === TO / FROM / SUBJECT with proper column alignment ===
     doc.setFontSize(9)
+    const labelColumnWidth = 20
+    const valueColumnX = margin + labelColumnWidth
+    const valueColumnWidth = contentWidth - labelColumnWidth
+
+    // TO
     doc.setFont(undefined, "bold")
     doc.text("TO:", margin, y)
     doc.setFont(undefined, "normal")
-    doc.text("DEPUTY DIRECTOR, FINANCE", margin + 15, y)
-    y += 6
+    const toLines = doc.splitTextToSize("DEPUTY DIRECTOR, FINANCE", valueColumnWidth)
+    doc.text(toLines, valueColumnX, y)
+    y += toLines.length * 4 + 3
 
+    // FROM
     doc.setFont(undefined, "bold")
     doc.text("FROM:", margin, y)
     doc.setFont(undefined, "normal")
     // Use the actual approver's position from memo_body (set at approval time)
     const fromPosition = (approverPosition || "HUMAN RESOURCE MANAGER").toUpperCase()
-    doc.text(fromPosition, margin + 15, y)
-    y += 6
+    const fromLines = doc.splitTextToSize(fromPosition, valueColumnWidth)
+    doc.text(fromLines, valueColumnX, y)
+    y += fromLines.length * 4 + 3
 
+    // SUBJECT
     doc.setFont(undefined, "bold")
     doc.text("SUBJECT:", margin, y)
     doc.setFont(undefined, "normal")
@@ -280,16 +371,15 @@ export async function GET(request: NextRequest) {
     const categoryLabel = memo.staff_category ? `(${memo.staff_category.toUpperCase()} STAFF)` : ""
     const monthYear = fmtMonthYear(memoDateStr)
     const subject = `PAYMENT OF LEAVE ALLOWANCE ${categoryLabel} – ${monthYear}`
-    const subjectLines = doc.splitTextToSize(subject, contentWidth - 30)
-    doc.text(subjectLines, margin + 30, y)
+    const subjectLines = doc.splitTextToSize(subject, valueColumnWidth)
+    doc.text(subjectLines, valueColumnX, y)
     y += (subjectLines.length * 4) + 6
 
     // === BODY TEXT ===
     doc.setFontSize(9)
     doc.setFont("helvetica", "normal")
     
-    const staffCount = staffList.length > 0 ? staffList.length : 1
-    const bodyText1 = `We wish to inform you that the attached list of ${staffCount} ${memo.staff_category ? memo.staff_category + " " : ""}staff are scheduled to proceed on their annual vacation leave in ${monthYear}.`
+    const bodyText1 = `We wish to inform you that the staff member listed in the attached document is scheduled to proceed on annual vacation leave in ${monthYear}.`
     const bodyLines1 = doc.splitTextToSize(bodyText1, contentWidth)
     doc.text(bodyLines1, margin, y)
     y += bodyLines1.length * 4 + 4
