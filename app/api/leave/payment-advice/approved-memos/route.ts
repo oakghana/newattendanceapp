@@ -129,18 +129,32 @@ export async function GET(request: NextRequest) {
       try {
         memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
       } catch { memoBody = {} }
+      
+      console.log("[v0] Memo body for", memo.staff_name, ":", { keys: Object.keys(memoBody), staff_position: memoBody.staff_position, staff_department: memoBody.staff_department })
 
       if (!memoBody.staff_location_name && locationMap[memo.staff_id]) {
         memoBody.staff_location_name = locationMap[memo.staff_id]
       }
 
       // Extract staff details from memo_body for combined memo generation
+      // Try multiple field names for position and department to handle different memo formats
+      const staffPosition = memoBody.staff_position || 
+                           memoBody.position || 
+                           memoBody.rank || 
+                           memoBody.staffList?.[0]?.position ||
+                           "N/A"
+      const staffDepartment = memoBody.staff_department || 
+                             memoBody.department_name || 
+                             memoBody.department ||
+                             memoBody.staffList?.[0]?.department_name ||
+                             "N/A"
+      
       return {
         ...memo,
         memo_body: JSON.stringify(memoBody),
         // Add extracted fields for easy access
-        staff_position: memoBody.staff_position || "N/A",
-        staff_department: memoBody.staff_department || "N/A",
+        staff_position: staffPosition,
+        staff_department: staffDepartment,
         staff_location: memoBody.staff_location_name || locationMap[memo.staff_id] || "N/A",
       }
     })
