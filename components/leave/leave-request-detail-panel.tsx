@@ -21,6 +21,7 @@ import {
   Send,
   Eye,
 } from "lucide-react"
+import { DeleteLeaveRequestButton } from "./delete-leave-request-button"
 
 interface LeaveRequest {
   id: string
@@ -43,6 +44,7 @@ interface LeaveRequest {
   payment_currency?: string
   payment_memo_generated?: boolean
   payment_memo_forwarded_to_accounts?: boolean
+  payment_memo_forwarded_at?: string
   accounts_acknowledgment_at?: string
   hr_office_reviewer_name?: string
   adjustment_reason?: string
@@ -53,8 +55,11 @@ interface LeaveRequestDetailPanelProps {
   onDownloadMemo?: (requestId: string, token: string) => void
   onViewPaymentMemo?: (requestId: string) => void
   onEditPayment?: (requestId: string) => void
+  onDeleteSuccess?: () => void
   isApproved?: boolean
   isStaff?: boolean
+  isAdmin?: boolean
+  showDeleteButton?: boolean
 }
 
 function fmtDate(val?: string | null) {
@@ -82,8 +87,11 @@ export function LeaveRequestDetailPanel({
   onDownloadMemo,
   onViewPaymentMemo,
   onEditPayment,
+  onDeleteSuccess,
   isApproved = false,
   isStaff = false,
+  isAdmin = false,
+  showDeleteButton = false,
 }: LeaveRequestDetailPanelProps) {
   const effectiveStart = request.adjusted_start_date || request.preferred_start_date
   const effectiveEnd = request.adjusted_end_date || request.preferred_end_date
@@ -312,6 +320,30 @@ export function LeaveRequestDetailPanel({
           )}
         </CardContent>
       </Card>
+
+      {/* Admin Delete Section */}
+      {isAdmin && showDeleteButton && (
+        <Card className="border-red-200 bg-red-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-red-900">Admin Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-xs text-red-700 mb-3">
+              As an administrator, you can permanently delete this leave request from the system.
+            </p>
+            <DeleteLeaveRequestButton
+              requestId={request.id}
+              staffName={request.user_id || 'Staff Member'}
+              requestStatus={request.status}
+              onDeleteSuccess={onDeleteSuccess}
+              variant="destructive"
+              size="sm"
+              className="w-full"
+              showIcon={true}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
