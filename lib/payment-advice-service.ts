@@ -111,8 +111,8 @@ export function generateProfessionalMemos(
 
   const categoryLabels: Record<string, string> = {
     Manager: "MANAGEMENT STAFF",
-    Senior: "SNR. STAFF",
-    Junior: "JNR. STAFF",
+    Senior: "SENIOR STAFF",
+    Junior: "JUNIOR STAFF",
   }
 
   // Category codes for reference numbers
@@ -155,7 +155,7 @@ SUBJECT: PAYMENT OF LEAVE ALLOWANCE (${categoryLabel}) – ${monthName.toUpperCa
 
 We wish to inform you that the under-listed ${categoryLabel} are scheduled to proceed on their annual vacation leave in ${monthName}.
 
-NO    NAME                          S/NO        POSITION                      DEPARTMENT              LEAVE DATE
+NO    NAME                          S/NO        RANK                          STATION                 LEAVE DATE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
 
     ;(staff as StaffOnLeave[]).forEach((s, idx) => {

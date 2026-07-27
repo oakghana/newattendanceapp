@@ -191,9 +191,19 @@ export async function POST(request: NextRequest) {
         category,
         staff_position: staff.position || staff.rank || "",
         staff_department: staff.department_name || staff.department || "",
-        staff_rank_label: staff.staff_category || category,
-        staff_location_name: staff.location_name || staff.assigned_location_name || "HQ", // Beneficiary location name
+        staff_rank_label: staff.position || staff.rank || staff.staff_category || category, // Actual position/rank of staff
+        staff_location_name: staff.location_name || staff.assigned_location_name || staff.department_name || "HQ", // Beneficiary location name
         staff_location_id: staff.location_id || staff.assigned_location_id || null,
+        staffList: [{
+          no: 1,
+          name: staff.full_name || "",
+          employeeId: staff.employee_id || staff.staff_number || "",
+          position: staff.position || staff.rank || "",
+          rank: staff.position || staff.rank || "",
+          location_name: staff.location_name || staff.assigned_location_name || staff.department_name || "HQ",
+          station: staff.location_name || staff.assigned_location_name || staff.department_name || "HQ",
+          leaveDate: staff.leave_start_date || staff.preferred_start_date || staff.start_date || "",
+        }],
         selectedSigner: {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
@@ -256,6 +266,7 @@ export async function POST(request: NextRequest) {
           staff_id: staff.user_id,
           staff_name: staff.full_name || "",
           staff_number: staff.staff_number || staff.employee_id || "",
+          staff_category: category, // CRITICAL: Store the staff category for proper subject line in PDF
           memo_body: JSON.stringify(memoBody),
           memo_subject: `Payment of Leave Allowance (${category} Staff) - ${month}`,
           hr_leave_office_id: user.id,
