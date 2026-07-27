@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
 
     // Reason for adjustment is mandatory for annual leave, optional for all other leave types
     const leaveTypeKey = String((leaveRequest as any).leave_type_key || "").toLowerCase()
-    const isAnnualLeave = leaveTypeKey === "annual"
-    if (isAnnualLeave && (!adjustment_reason || String(adjustment_reason).trim().length < 5)) {
+    const requestIsAnnual = leaveTypeKey === "annual"
+    if (requestIsAnnual && (!adjustment_reason || String(adjustment_reason).trim().length < 5)) {
       return NextResponse.json(
         { error: "A detailed adjustment reason is required for annual leave (this will appear in the memo to staff)." },
         { status: 400 },
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
     const entitlementDays = Number((leaveRequest as any).entitlement_days || 0)
     const trimmedReason = String(adjustment_reason || "").trim()
     // Only enforce reason length on entitlement overage for annual leave
-    if (isAnnualLeave && entitlementDays > 0 && computedAdjustedDays > entitlementDays && trimmedReason.length < 10) {
+    if (requestIsAnnual && entitlementDays > 0 && computedAdjustedDays > entitlementDays && trimmedReason.length < 10) {
       return NextResponse.json(
         {
           error:
@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
 
     // Build annual leave entitlement summary for notification (only for annual leave)
     let entitlementBlock = ""
-    if (isAnnualLeave && staffProfile) {
+    if (requestIsAnnual && staffProfile) {
       const entitlement = resolveEntitlementFromProfile(staffProfile as any)
       const { summary } = buildAnnualLeaveEntitlementSummary(
         staffName,
