@@ -218,6 +218,16 @@ export async function POST(request: NextRequest) {
         const start = new Date(startDate)
         const end = new Date(endDate)
         
+        // Debug: Check what we received
+        console.log("[v0] calculateLeaveDays inputs:", { 
+          startDate, 
+          endDate,
+          startParsed: start.toISOString(),
+          endParsed: end.toISOString(),
+          startTime: start.getTime(),
+          endTime: end.getTime()
+        })
+        
         // If dates are invalid, return 0
         if (isNaN(start.getTime()) || isNaN(end.getTime())) {
           console.warn("[v0] Invalid dates for calculation:", { startDate, endDate })
@@ -234,6 +244,7 @@ export async function POST(request: NextRequest) {
           current.setDate(current.getDate() + 1)
         }
         
+        console.log("[v0] Calculated leave days:", { startDate, endDate, totalDays })
         return totalDays
       } catch (err) {
         console.error("[v0] Error calculating leave days:", err)

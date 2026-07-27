@@ -197,6 +197,10 @@ export async function POST(request: NextRequest) {
         staff_rank_label: staffRankLabel, // Actual rank name (e.g., "Senior Officer", "Manager", "Accounts Officer")
         staff_location_name: staff.location_name || staff.assigned_location_name || "HQ", // Beneficiary location name
         staff_location_id: staff.location_id || staff.assigned_location_id || null,
+        // CRITICAL: Include calculated days in memo body so memo generator uses correct values
+        approved_days: undefined, // Will be set after calculation below
+        travelling_days_added: staff.travelling_days_added || 0,
+        calculated_days: staff.calculated_days || 0,
         selectedSigner: {
           id: selectedSigner.id || "",
           name: selectedSigner.name || "",
@@ -260,9 +264,24 @@ export async function POST(request: NextRequest) {
           })
         }
         
-        // CRITICAL: Always use adjusted_days (HR Leave Office approved days) as the source of truth
-        // This prevents disparities where different memos show different days for the same leave request
-        const approvedDaysForMemo = staff.adjusted_days || staff.approved_days || staff.requested_days || 0
+        // CRITICAL: Use approved_days FIRST - it contains the calculated days from dates
+        // Never use hardcoded adjusted_days which may contain incorrect database values
+        // This ensures memos show actual days calculated from FROM and TO dates, not hardcoded database values
+        const approvedDaysForMemo = staff.approved_days || staff.requested_days || 0
+        
+        console.log("[v0] Days used in memo:", {
+          staff_name: staff.full_name,
+          approved_days: staff.approved_days,
+          calculated_days: staff.calculated_days,
+          adjusted_days: staff.adjusted_days,
+          requested_days: staff.requested_days,
+          chosen_for_memo: approvedDaysForMemo,
+          source: "staff.approved_days (calculated from dates)"
+        })
+        
+        // Set the approved_days in memoBody so it's included in the serialized JSON
+        memoBody.approved_days = approvedDaysForMemo
+        memoBody.travelling_days_added = staff.travelling_days_added || 0
         
         const memoRecord = {
           leave_plan_request_id: staff.leave_plan_request_id,
