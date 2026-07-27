@@ -166,101 +166,115 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Live-enrich staffList location from geofence_locations using proven method ────
-    // Replicate the exact pattern from approved-memos route which works correctly
-    
-    // Collect all user IDs to fetch: from staffList, memo.staff_id, and memo_body.user_id
-    const staffUserIds = new Set<string>()
-    
-    // Add staff members from staffList
-    staffList.forEach((s: any) => {
-      if (s.id) staffUserIds.add(s.id)
-      if (s.staff_id) staffUserIds.add(s.staff_id)
-      if (s.user_id) staffUserIds.add(s.user_id)
-    })
-    
-    // Add memo's primary staff
-    if (memo.staff_id) staffUserIds.add(memo.staff_id)
-    
-    // Add memo_body's user_id if present
-    if (memoBodyUserId) staffUserIds.add(memoBodyUserId)
-    
-    // Fallback: look up user_id via leave_plan_request if we have no IDs yet
-    if (staffUserIds.size === 0 && memo.leave_plan_request_id) {
+    // ── Live-enrich staffList location from geofence_locations ────
+    // staffList items only store employeeId (staff number) — no UUID user IDs.
+    // Strategy:
+    //   1. Collect all employee_id values from staffList
+    //   2. Also include memo.staff_id (UUID) and memo.staff_number for single-staff memos
+    //   3. Fetch user_profiles matching by employee_id OR by id (UUID)
+    //   4. Build employee_id → location_name map
+    //   5. Patch every staffList row with the live location
+
+    // Collect employee numbers from staffList (stored as employeeId)
+    const staffEmployeeNumbers: string[] = staffList
+      .map((s: any) => s.employeeId || s.staff_number || s.sno || "")
+      .filter(Boolean)
+
+    // Collect UUID user IDs (single-staff memos have memo.staff_id)
+    const staffUUIDs: string[] = [memo.staff_id, memoBodyUserId]
+      .filter(Boolean) as string[]
+
+    // Fetch profiles by employee_id (covers group memos stored by staff number)
+    let profilesByEmployeeId: any[] = []
+    if (staffEmployeeNumbers.length > 0) {
+      const { data } = await admin
+        .from("user_profiles")
+        .select("id, employee_id, assigned_location_id")
+        .in("employee_id", staffEmployeeNumbers)
+      profilesByEmployeeId = data || []
+    }
+
+    // Fetch profiles by UUID (covers single-staff memos with staff_id on the memo row)
+    let profilesByUUID: any[] = []
+    if (staffUUIDs.length > 0) {
+      const { data } = await admin
+        .from("user_profiles")
+        .select("id, employee_id, first_name, last_name, position, assigned_location_id")
+        .in("id", staffUUIDs)
+      profilesByUUID = data || []
+    }
+
+    // Fallback: look up via leave_plan_request if still empty
+    if (profilesByEmployeeId.length === 0 && profilesByUUID.length === 0 && memo.leave_plan_request_id) {
       const { data: lpr } = await admin
         .from("leave_plan_requests")
         .select("user_id")
         .eq("id", memo.leave_plan_request_id)
         .maybeSingle()
-      if (lpr?.user_id) staffUserIds.add(lpr.user_id)
+      if (lpr?.user_id) {
+        const { data } = await admin
+          .from("user_profiles")
+          .select("id, employee_id, first_name, last_name, position, assigned_location_id")
+          .eq("id", lpr.user_id)
+          .maybeSingle()
+        if (data) profilesByUUID = [data]
+      }
     }
-    
-    // Now fetch all user profiles with locations
-    if (staffUserIds.size > 0) {
-      const userIdsArray = Array.from(staffUserIds)
-      
-      // Fetch user profiles with assigned location IDs
-      const { data: profiles } = await admin
-        .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, position, assigned_location_id")
-        .in("id", userIdsArray)
-      
-      if (profiles && profiles.length > 0) {
-        // Get all location IDs
-        const locationIds = [...new Set(
-          profiles
-            .map((p: any) => p.assigned_location_id)
-            .filter(Boolean)
-        )]
-        
-        // Fetch geofence_locations
+
+    const allProfiles = [...profilesByEmployeeId, ...profilesByUUID]
+
+    if (allProfiles.length > 0) {
+      // Batch fetch all needed geofence_locations in one query
+      const locationIds = [...new Set(
+        allProfiles.map((p: any) => p.assigned_location_id).filter(Boolean)
+      )]
+      let geoMap: Record<string, string> = {}
+      if (locationIds.length > 0) {
         const { data: locations } = await admin
           .from("geofence_locations")
           .select("id, name")
           .in("id", locationIds)
-        
-        // Build location map
-        const locationMap: Record<string, string> = {}
-        locations?.forEach((l: any) => {
-          locationMap[l.id] = l.name
-        })
-        
-        // Build user ID → location name map
-        const userLocationMap: Record<string, string> = {}
-        const userProfileMap: Record<string, any> = {}
-        profiles.forEach((p: any) => {
-          userProfileMap[p.id] = p
-          if (p.assigned_location_id && locationMap[p.assigned_location_id]) {
-            userLocationMap[p.id] = locationMap[p.assigned_location_id]
+        locations?.forEach((l: any) => { geoMap[l.id] = l.name })
+      }
+
+      // Build lookup maps: employee_id → location_name  AND  uuid → location_name
+      const locationByEmployeeId: Record<string, string> = {}
+      const locationByUUID: Record<string, string> = {}
+      const profileByUUID: Record<string, any> = {}
+      allProfiles.forEach((p: any) => {
+        const loc = p.assigned_location_id ? geoMap[p.assigned_location_id] || "" : ""
+        if (p.employee_id) locationByEmployeeId[p.employee_id] = loc
+        if (p.id) {
+          locationByUUID[p.id] = loc
+          profileByUUID[p.id] = p
+        }
+      })
+
+      if (staffList.length === 0 && memo.staff_id && profileByUUID[memo.staff_id]) {
+        // Single-staff memo with no stored staffList — rebuild from live profile
+        const profile = profileByUUID[memo.staff_id]
+        staffList = [{
+          name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
+          employeeId: profile.employee_id || memo.staff_number || "",
+          position: profile.position || "",
+          location_name: locationByUUID[memo.staff_id] || "",
+          leaveDate: fmtDate(memo.leave_period_start),
+        }]
+      } else {
+        // Patch each staffList row with location looked up by employee_id
+        staffList = staffList.map((s: any) => {
+          const empId = s.employeeId || s.staff_number || s.sno || ""
+          const uuid  = s.id || s.staff_id || s.user_id || ""
+          const liveLocation =
+            (empId && locationByEmployeeId[empId]) ||
+            (uuid  && locationByUUID[uuid])        ||
+            ""
+          return {
+            ...s,
+            position: s.position || "",
+            location_name: liveLocation || s.location_name || "",
           }
         })
-        
-        // If staffList is empty, build it from the primary staff
-        if (staffList.length === 0 && memo.staff_id && userProfileMap[memo.staff_id]) {
-          const profile = userProfileMap[memo.staff_id]
-          staffList = [{
-            name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
-            employeeId: profile.employee_id || memo.staff_number || "",
-            position: profile.position || "",
-            location_name: userLocationMap[memo.staff_id] || "",
-            leaveDate: fmtDate(memo.leave_period_start),
-          }]
-        } else {
-          // Patch staffList with live location and position data
-          staffList = staffList.map((s: any) => {
-            const staffUserId = s.id || s.staff_id || s.user_id
-            const profile = staffUserId ? userProfileMap[staffUserId] : null
-            const liveLocation = staffUserId ? userLocationMap[staffUserId] : null
-            
-            return {
-              ...s,
-              name: s.name || (profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim().toUpperCase() : ""),
-              position: s.position || profile?.position || "",
-              // Always use live location if available, otherwise fall back to stored
-              location_name: liveLocation || s.location_name || s.assigned_location_name || s.station || s.location || "",
-            }
-          })
-        }
       }
     }
 
