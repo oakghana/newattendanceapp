@@ -135,11 +135,20 @@ export async function GET(request: NextRequest) {
       try {
         const body = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
         const rawList: any[] = body.staffList || body.staff || []
+        // Top-level location stored in older memos (submit-memo used to store it here only)
+        const bodyLocationName: string =
+          body.staff_location_name || body.location_name || body.station || ""
         // Enrich each staff record — position and location come from memo_body, not memo columns
         staffList = rawList.map((s: any) => ({
           ...s,
           position: s.position || s.rank || "",
-          location_name: s.location_name || s.assigned_location_name || s.location || s.station || "",
+          // Prefer the per-staff location; fall back to the top-level body location
+          location_name:
+            s.location_name ||
+            s.assigned_location_name ||
+            s.location ||
+            s.station ||
+            bodyLocationName,
         }))
         // Use the approval date stored at approval time — NOT today's date
         approvedAt = body.approver?.approved_at || null
@@ -190,7 +199,11 @@ export async function GET(request: NextRequest) {
           staffList = staffList.map((s: any) => ({
             ...s,
             position: s.position || livePos,
-            location_name: s.location_name || liveLoc,
+            // Always override with live location when the stored one is blank/"HQ" fallback
+            location_name:
+              (s.location_name && s.location_name !== "HQ")
+                ? s.location_name
+                : (liveLoc || s.location_name || ""),
           }))
         }
       }
