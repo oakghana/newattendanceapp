@@ -61,6 +61,7 @@ import {
   MapPin,
   Users,
   LayoutList,
+  Info,
 } from "lucide-react"
 
 interface LeaveAnalyticsRecord {
@@ -2679,28 +2680,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
           {/* HOD Review ���────────────────────────────────────────────���── */}
           {activeTab === "hod-review" && <div>
-            {/* 2-day approval notice for HOD/RM */}
-            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
-              <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
-                <span className="text-lg">⏱️</span> Important: 2-Day Approval Window
+            {/* HOD review notice */}
+            <div className="mb-4 px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-3">
+              <Info className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Staff leave requests assigned to you require your timely review. Please action each request promptly — delays in approval affect staff planning and payroll processing. Ensure all pending requests are reviewed before the close of each working day.
               </p>
-              <div className="text-xs text-blue-800 space-y-2">
-                <p>
-                  Please note that you have <strong>2 working days</strong> to review and approve leave requests.
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-sm mt-0.5">👉</span>
-                  <span>If no action is taken within this period, the request will be automatically approved and forwarded to the HR Leave Office.</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-sm mt-0.5">⚠️</span>
-                  <span><strong>Exception:</strong> Annual Leave requests will not be auto-approved — they require your direct and explicit approval.</span>
-                </p>
-                <p className="pt-1 flex items-start gap-2">
-                  <span className="text-sm">😊</span>
-                  <span>Kindly stay on top of your approvals to avoid automatic processing. Let's keep things running smoothly 👍🏽</span>
-                </p>
-              </div>
             </div>
             {hodAssignedReviews.length === 0 ? (
               <div className="text-center py-16 text-slate-500 bg-white rounded-xl border border-slate-200">
