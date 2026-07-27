@@ -256,6 +256,7 @@ export function HrLeaveOfficeApprovedMemos() {
         if (category && group.category !== category) continue // Skip other categories
         for (const memo of group.memos) {
           // Extract staff data from memo - memo object now has staff_position, staff_department from enriched query
+          console.log("[v0] Memo data:", { staff_name: memo.staff_name, staff_position: memo.staff_position, staff_department: memo.staff_department })
           staffList.push({
             full_name: memo.staff_name || "N/A",
             employee_id: memo.staff_number || "N/A",
@@ -266,6 +267,7 @@ export function HrLeaveOfficeApprovedMemos() {
           })
         }
       }
+      console.log("[v0] Sending staffList to API:", staffList)
 
       if (staffList.length === 0) {
         toast({
@@ -376,7 +378,13 @@ export function HrLeaveOfficeApprovedMemos() {
       {!loading && totalMemos > 0 && (
         <div className="flex flex-col sm:flex-row gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <Button 
-            onClick={() => window.location.href = "/dashboard/leave-management"}
+            onClick={() => {
+              try {
+                window.location.href = "/dashboard/leave-management"
+              } catch (err) {
+                console.error("[v0] Navigation error:", err)
+              }
+            }}
             className="flex-1 bg-teal-600 hover:bg-teal-700 text-white gap-2"
           >
             <Calendar className="h-4 w-4" />
