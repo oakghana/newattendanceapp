@@ -105,6 +105,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   const [approvedMemosForMonth, setApprovedMemosForMonth] = useState<any[]>([])
   const [loadingApprovedMemosForMonth, setLoadingApprovedMemosForMonth] = useState(false)
   const [hasApprovedMemosForMonth, setHasApprovedMemosForMonth] = useState(false)
+  // Track which staff IDs have approved payment advice memos to show visual indicators
+  const [approvedStaffIds, setApprovedStaffIds] = useState<Set<string>>(new Set())
 
   // Check for approved memos in the selected month to prevent duplicate generation
   useEffect(() => {
@@ -121,12 +123,22 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
           const approved = memos.filter((m: any) => m.status === "approved")
           setApprovedMemosForMonth(approved)
           setHasApprovedMemosForMonth(approved.length > 0)
-          console.log("[v0] Approved memos for month", selectedMonth, ":", approved.length)
+          
+          // Extract staff IDs from approved memos to show visual indicators
+          const staffWithApprovedMemos = new Set<string>()
+          approved.forEach((memo: any) => {
+            if (memo.staff_id || memo.user_id) {
+              staffWithApprovedMemos.add(memo.staff_id || memo.user_id)
+            }
+          })
+          setApprovedStaffIds(staffWithApprovedMemos)
+          console.log("[v0] Approved memos for month", selectedMonth, ":", approved.length, "Staff IDs:", Array.from(staffWithApprovedMemos))
         }
       } catch (err) {
         console.error("[v0] Error checking approved memos:", err)
         setApprovedMemosForMonth([])
         setHasApprovedMemosForMonth(false)
+        setApprovedStaffIds(new Set())
       } finally {
         setLoadingApprovedMemosForMonth(false)
       }
@@ -2035,12 +2047,32 @@ We count on your co-operation.`,
                     <div key={category} className="border rounded-lg p-3 bg-slate-50">
                       <h4 className="font-semibold text-gray-800 mb-2 text-sm">{category} Staff ({staff.length})</h4>
                       <div className="space-y-1 text-xs">
-                        {staff.map((s) => (
-                          <div key={s.id} className="bg-white p-2 rounded border border-gray-200">
-                            <div className="font-medium text-gray-900">{s.full_name}</div>
-                            <div className="text-gray-600">{s.employee_id} • {s.department_name}</div>
-                          </div>
-                        ))}
+                        {staff.map((s) => {
+                          const staffId = s.id || s.user_id || ""
+                          const hasApprovedMemo = staffId ? approvedStaffIds.has(staffId) : false
+                          return (
+                            <div 
+                              key={s.id} 
+                              className={`bg-white p-2 rounded border transition-all ${
+                                hasApprovedMemo 
+                                  ? "border-green-400 bg-green-50" 
+                                  : "border-gray-200"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="font-medium text-gray-900">{s.full_name}</div>
+                                  <div className="text-gray-600">{s.employee_id} • {s.department_name}</div>
+                                </div>
+                                {hasApprovedMemo && (
+                                  <Badge className="bg-green-600 text-white text-xs" title="Payment advice memo already approved">
+                                    ✓ Approved
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )
