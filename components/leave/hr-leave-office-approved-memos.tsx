@@ -64,6 +64,7 @@ export function HrLeaveOfficeApprovedMemos() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [downloadingGroup, setDownloadingGroup] = useState<string | null>(null)
   const [downloadingAll, setDownloadingAll] = useState<string | null>(null)
+  const [downloadingAllGroups, setDownloadingAllGroups] = useState(false)
 
   const fetchApprovedMemos = useCallback(async () => {
     setLoading(true)
@@ -199,6 +200,26 @@ export function HrLeaveOfficeApprovedMemos() {
     }
   }
 
+  const downloadAllGroupsFunc = async () => {
+    setDownloadingAllGroups(true)
+    try {
+      let total = 0
+      for (const group of groups) {
+        for (const memo of group.memos) {
+          await downloadSingleMemo(memo.id, memo.staff_name)
+          total++
+          await new Promise(r => setTimeout(r, 350))
+        }
+      }
+      toast({
+        title: "Download complete",
+        description: `Downloaded all ${total} approved memo(s) from all months`,
+      })
+    } finally {
+      setDownloadingAllGroups(false)
+    }
+  }
+
   // Group groups by month for the month-level view
   const byMonth: Record<string, ApprovedMemoGroup[]> = {}
   for (const g of groups) {
@@ -221,7 +242,7 @@ export function HrLeaveOfficeApprovedMemos() {
               : "All payment advice memos approved by HR Executive, ready to download"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
           <div className="flex items-center gap-1.5">
             <Filter className="h-4 w-4 text-slate-400" />
             <Input
@@ -253,6 +274,32 @@ export function HrLeaveOfficeApprovedMemos() {
           </Button>
         </div>
       </div>
+
+      {/* Action buttons bar */}
+      {!loading && totalMemos > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <a
+            href="/dashboard/leave-management?tab=my-requests"
+            className="flex-1"
+          >
+            <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white gap-2">
+              <Calendar className="h-4 w-4" />
+              Apply for Leave
+            </Button>
+          </a>
+          <Button
+            onClick={downloadAllGroupsFunc}
+            disabled={downloadingAllGroups}
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+          >
+            {downloadingAllGroups
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Downloading...</>
+              : <><Download className="h-4 w-4" /> Download All ({totalMemos})</>
+            }
+          </Button>
+        </div>
+      )}
+    </div>
 
       {/* Loading */}
       {loading && (
