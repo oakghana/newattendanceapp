@@ -264,6 +264,7 @@ export async function POST(request: NextRequest) {
         employee_id: profile?.employee_id || "N/A",
         department_name: departmentName,
         position: position,
+        rank: position, // Actual rank/position name (e.g., "Senior Officer", "Manager"), not category (e.g., "junior")
         category: staffCategory,
         staff_category: staffCategory,
         // Location information (beneficiary location)
