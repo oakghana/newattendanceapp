@@ -557,11 +557,6 @@ export async function GET(
     const returnDateIso = returnDate.toISOString()
 
     const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
-    console.log("[v0] MEMO GENERATION:", {
-      leaveId: id,
-      leaveTypeKey,
-      memoSubject: safeDraftSubject || getMemoSubject(leaveTypeKey, ""),
-    })
     const leaveLabel   = leaveTypeLabel(leaveTypeKey)
 
     const rawDraftSubject = String(lr.memo_draft_subject || "").trim()
@@ -968,6 +963,8 @@ export async function GET(
   } catch (error) {
     console.error("[leave-memo] GET error:", error)
     const msg = error instanceof Error ? error.message : String(error)
-    return NextResponse.json({ error: `Failed to generate leave memo: ${msg}` }, { status: 500 })
+    const stack = error instanceof Error ? error.stack : ""
+    console.error("[leave-memo] Stack:", stack)
+    return NextResponse.json({ error: `Failed to generate leave memo: ${msg}`, details: stack }, { status: 500 })
   }
 }

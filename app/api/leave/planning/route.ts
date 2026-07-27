@@ -656,13 +656,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await admin
+    let { data: profile, error: profileError } = await admin
       .from("user_profiles")
       .select("id, role, department_id, departments(name, code)")
       .eq("id", user.id)
       .single()
 
-    if (profileError || !profile) {
+    // If profile doesn't exist, create a basic one as staff member
+    if (profileError && profileError.code === "PGRST116") {
+      // PGRST116 = no rows returned, so we need to create a profile
+      const { data: newProfile, error: createError } = await admin
+        .from("user_profiles")
+        .insert({
+          id: user.id,
+          email: user.email,
+          role: "staff",
+        })
+        .select("id, role, department_id, departments(name, code)")
+        .single()
+      
+      if (createError || !newProfile) {
+        console.error("[leave-planning] Profile creation failed:", createError)
+        return NextResponse.json({ error: "Unable to initialize profile" }, { status: 500 })
+      }
+      profile = newProfile
+    } else if (profileError || !profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
