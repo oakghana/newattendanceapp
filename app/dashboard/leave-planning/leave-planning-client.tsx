@@ -2226,13 +2226,13 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     if (!adjStart || !adjEnd) { toast({ title: "Adjusted dates required", variant: "destructive" }); return }
     
     // Reason for adjustment is mandatory only for annual leave
-    if (isAnnualLeave && (!rsn || rsn.trim().length < 5)) {
+    if (isAnnualLeave && (!rsn || String(rsn).trim().length < 5)) {
       toast({ title: "Reason required", description: "Provide a detailed reason for the adjustment — it will appear in the memo.", variant: "destructive" })
       return
     }
     
     // For non-annual leave, warn if no reason is provided but still allow submission
-    if (!isAnnualLeave && (!rsn || rsn.trim().length < 5)) {
+    if (!isAnnualLeave && (!rsn || String(rsn).trim().length < 5)) {
       const continueWithoutReason = window.confirm(
         "No reason for adjustment provided. Continue forwarding to HR Approvers without a reason?"
       )
@@ -2262,7 +2262,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       `- Prior Leave Enjoyed: ${priorDeducted}\n` +
       `+ Travelling Days: ${travelAdded}\n` +
       `Final Days to Approvers: ${finalDays}\n\n` +
-      `Reason: ${rsn.trim()}\n\n` +
+      `Reason: ${rsn ? String(rsn).trim() : "(No reason provided)"}\n\n` +
       `Forward To: ${execName}\n\n` +
       `Click OK to confirm accuracy and forward to HR Approvers.`,
     )
