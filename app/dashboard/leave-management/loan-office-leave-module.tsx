@@ -2,10 +2,8 @@
 
 import { Info, CalendarRange, Download } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { LeaveCenterInfo } from "./leave-center-info"
+import { LeaveManagementClient } from "./leave-management-client"
 import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
-import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
-import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 
 interface LoanOfficeLeaveModuleProps {
@@ -70,7 +68,18 @@ export function LoanOfficeLeaveModule({
 
         {/* Info Tab Content */}
         <TabsContent value="info" className="space-y-4 sm:space-y-6 w-full">
-          <LeaveCenterInfo userRole={userRole} userDepartmentName={userDepartmentName} />
+          <LeaveManagementClient
+            userId={userId}
+            userRole={userRole}
+            userDepartment={userDepartment}
+            userFirstName={userFirstName}
+            userLastName={userLastName}
+            hasHodLinkage={hasHodLinkage}
+            inactivityDays={inactivityDays}
+            initialStaffRequests={initialStaffRequests}
+            initialManagerNotifications={initialManagerNotifications}
+            initialApprovedStaffRequests={initialApprovedStaffRequests}
+          />
         </TabsContent>
 
         {/* Leave Center Tab Content */}
