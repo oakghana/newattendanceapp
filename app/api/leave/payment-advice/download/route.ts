@@ -166,58 +166,100 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Live-enrich staffList location from geofence_locations if missing ────
-    // staff_id is the FK to user_profiles stored on the memo row itself.
-    // Fall back to memo_body.user_id, then resolve via leave_plan_request if all else fails.
-    let userIdForLocation: string | null = memo.staff_id || memoBodyUserId || null
-
-    if (!userIdForLocation && memo.leave_plan_request_id) {
-      // Older memos may not have staff_id set — look it up via the leave request
+    // ── Live-enrich staffList location from geofence_locations using proven method ────
+    // Replicate the exact pattern from approved-memos route which works correctly
+    
+    // Collect all user IDs to fetch: from staffList, memo.staff_id, and memo_body.user_id
+    const staffUserIds = new Set<string>()
+    
+    // Add staff members from staffList
+    staffList.forEach((s: any) => {
+      if (s.id) staffUserIds.add(s.id)
+      if (s.staff_id) staffUserIds.add(s.staff_id)
+      if (s.user_id) staffUserIds.add(s.user_id)
+    })
+    
+    // Add memo's primary staff
+    if (memo.staff_id) staffUserIds.add(memo.staff_id)
+    
+    // Add memo_body's user_id if present
+    if (memoBodyUserId) staffUserIds.add(memoBodyUserId)
+    
+    // Fallback: look up user_id via leave_plan_request if we have no IDs yet
+    if (staffUserIds.size === 0 && memo.leave_plan_request_id) {
       const { data: lpr } = await admin
         .from("leave_plan_requests")
         .select("user_id")
         .eq("id", memo.leave_plan_request_id)
         .maybeSingle()
-      userIdForLocation = lpr?.user_id || null
+      if (lpr?.user_id) staffUserIds.add(lpr.user_id)
     }
-
-    if (userIdForLocation) {
-      const { data: liveProfile } = await admin
+    
+    // Now fetch all user profiles with locations
+    if (staffUserIds.size > 0) {
+      const userIdsArray = Array.from(staffUserIds)
+      
+      // Fetch user profiles with assigned location IDs
+      const { data: profiles } = await admin
         .from("user_profiles")
-        .select("first_name, last_name, employee_id, position, assigned_location_id")
-        .eq("id", userIdForLocation)
-        .maybeSingle()
-
-      if (liveProfile?.assigned_location_id) {
-        const { data: liveLocation } = await admin
+        .select("id, first_name, last_name, employee_id, position, assigned_location_id")
+        .in("id", userIdsArray)
+      
+      if (profiles && profiles.length > 0) {
+        // Get all location IDs
+        const locationIds = [...new Set(
+          profiles
+            .map((p: any) => p.assigned_location_id)
+            .filter(Boolean)
+        )]
+        
+        // Fetch geofence_locations
+        const { data: locations } = await admin
           .from("geofence_locations")
-          .select("name")
-          .eq("id", liveProfile.assigned_location_id)
-          .maybeSingle()
-
-        const liveLoc = liveLocation?.name || ""
-        const livePos = liveProfile.position || ""
-
-        if (staffList.length === 0) {
-          // Single-staff memo — build the row from live data
+          .select("id, name")
+          .in("id", locationIds)
+        
+        // Build location map
+        const locationMap: Record<string, string> = {}
+        locations?.forEach((l: any) => {
+          locationMap[l.id] = l.name
+        })
+        
+        // Build user ID → location name map
+        const userLocationMap: Record<string, string> = {}
+        const userProfileMap: Record<string, any> = {}
+        profiles.forEach((p: any) => {
+          userProfileMap[p.id] = p
+          if (p.assigned_location_id && locationMap[p.assigned_location_id]) {
+            userLocationMap[p.id] = locationMap[p.assigned_location_id]
+          }
+        })
+        
+        // If staffList is empty, build it from the primary staff
+        if (staffList.length === 0 && memo.staff_id && userProfileMap[memo.staff_id]) {
+          const profile = userProfileMap[memo.staff_id]
           staffList = [{
-            name: `${liveProfile.first_name || ""} ${liveProfile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
-            employeeId: liveProfile.employee_id || memo.staff_number || "",
-            position: livePos,
-            location_name: liveLoc,
-            leaveDate: "",
+            name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim().toUpperCase() || memo.staff_name || "",
+            employeeId: profile.employee_id || memo.staff_number || "",
+            position: profile.position || "",
+            location_name: userLocationMap[memo.staff_id] || "",
+            leaveDate: fmtDate(memo.leave_period_start),
           }]
         } else {
-          // Patch any rows that are missing location or position
-          staffList = staffList.map((s: any) => ({
-            ...s,
-            position: s.position || livePos,
-            // Always override with live location when the stored one is blank/"HQ" fallback
-            location_name:
-              (s.location_name && s.location_name !== "HQ")
-                ? s.location_name
-                : (liveLoc || s.location_name || ""),
-          }))
+          // Patch staffList with live location and position data
+          staffList = staffList.map((s: any) => {
+            const staffUserId = s.id || s.staff_id || s.user_id
+            const profile = staffUserId ? userProfileMap[staffUserId] : null
+            const liveLocation = staffUserId ? userLocationMap[staffUserId] : null
+            
+            return {
+              ...s,
+              name: s.name || (profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim().toUpperCase() : ""),
+              position: s.position || profile?.position || "",
+              // Always use live location if available, otherwise fall back to stored
+              location_name: liveLocation || s.location_name || s.assigned_location_name || s.station || s.location || "",
+            }
+          })
         }
       }
     }
