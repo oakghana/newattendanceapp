@@ -1,4 +1,5 @@
 "use client"
+// Payment evidence fix: loadData moved to finally block
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Image from "next/image"
