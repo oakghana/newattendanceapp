@@ -3550,6 +3550,7 @@ export default function LoanAppPage() {
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Attachment</TableHead>
                       <TableHead className="whitespace-nowrap">Submitted</TableHead>
                       {p?.accounts && <TableHead className="whitespace-nowrap">FD Action</TableHead>}
                     </TableRow>
@@ -3568,6 +3569,13 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {row.supporting_document_url ? (
+                              <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">View</a>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
                             <TableCell>
@@ -6118,27 +6126,45 @@ export default function LoanAppPage() {
 
                 setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: true }))
                 try {
-                  // TODO: Upload file to Vercel Blob Storage first
-                  // For now, we'll send the evidence without the file URL
+                  setPaymentEvidenceModal((prev) => ({ ...prev, isSubmitting: true }))
                   
+                  // Validate required fields before submission
+                  if (!actionModal.row?.id) {
+                    throw new Error("Loan request ID is missing")
+                  }
+                  if (!paymentEvidenceModal.paymentDate) {
+                    throw new Error("Payment date is required")
+                  }
+                  if (!paymentEvidenceModal.paymentAmount || parseFloat(paymentEvidenceModal.paymentAmount) <= 0) {
+                    throw new Error("Payment amount must be greater than 0")
+                  }
+
                   const response = await fetch("/api/loan/payment-evidence", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      loanRequestId: actionModal.row!.id,
+                      loanRequestId: actionModal.row.id,
                       paymentDate: paymentEvidenceModal.paymentDate,
                       paymentAmount: parseFloat(paymentEvidenceModal.paymentAmount),
                       paymentMethod: paymentEvidenceModal.paymentMethod,
                       referenceNumber: paymentEvidenceModal.referenceNumber,
                       description: paymentEvidenceModal.description || null,
-                      evidenceFileUrl: null, // Will be updated after file upload implementation
+                      evidenceFileUrl: null,
                     }),
                   })
 
                   if (!response.ok) {
-                    const error = await response.json()
-                    throw new Error(error.error || "Failed to submit payment evidence")
+                    let errorMessage = "Failed to submit payment evidence"
+                    try {
+                      const errorData = await response.json()
+                      errorMessage = errorData.error || errorMessage
+                    } catch (e) {
+                      errorMessage = `Server error (${response.status}): ${response.statusText}`
+                    }
+                    throw new Error(errorMessage)
                   }
+
+                  const result = await response.json()
 
                   toast({
                     title: "Payment Evidence Submitted",
@@ -6161,11 +6187,13 @@ export default function LoanAppPage() {
                   await data && refetch?.()
                 } catch (err) {
                   console.error("[v0] Payment evidence submission error:", err)
+                  const errorMessage = err instanceof Error ? err.message : "Failed to submit payment evidence"
                   toast({
-                    title: "Error",
-                    description: err instanceof Error ? err.message : "Failed to submit payment evidence",
+                    title: "Submission Failed",
+                    description: errorMessage,
                     variant: "destructive",
                   })
+                  setPaymentEvidenceModal((prev) => ({ ...prev, isSubmitting: false }))
                 } finally {
                   setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: false }))
                 }

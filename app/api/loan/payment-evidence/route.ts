@@ -8,7 +8,9 @@ export async function POST(request: NextRequest) {
   try {
     const admin = await createAdminClient()
     const { user } = await createClientAndGetUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized: User not authenticated" }, { status: 401 })
+    }
 
     // Check user role from user_profiles (not user_roles)
     const { data: profileData } = await admin
@@ -25,7 +27,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body = await request.json()
+    let body
+    try {
+      body = await request.json()
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
+    }
+
     const {
       loanRequestId,
       paymentDate,
@@ -37,15 +45,19 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Validation
-    if (!loanRequestId || !paymentDate || !paymentAmount) {
-      return NextResponse.json(
-        { error: "Missing required fields: loanRequestId, paymentDate, paymentAmount" },
-        { status: 400 }
-      )
+    if (!loanRequestId) {
+      return NextResponse.json({ error: "Missing required field: loanRequestId" }, { status: 400 })
+    }
+    if (!paymentDate) {
+      return NextResponse.json({ error: "Missing required field: paymentDate" }, { status: 400 })
+    }
+    if (!paymentAmount && paymentAmount !== 0) {
+      return NextResponse.json({ error: "Missing required field: paymentAmount" }, { status: 400 })
     }
 
-    if (paymentAmount <= 0) {
-      return NextResponse.json({ error: "Payment amount must be positive" }, { status: 400 })
+    const amount = typeof paymentAmount === "string" ? parseFloat(paymentAmount) : paymentAmount
+    if (isNaN(amount) || amount <= 0) {
+      return NextResponse.json({ error: "Payment amount must be a positive number" }, { status: 400 })
     }
 
     // Verify loan exists and get details
@@ -84,7 +96,7 @@ export async function POST(request: NextRequest) {
         loan_request_id: loanRequestId,
         user_id: loanData.user_id,
         payment_date: paymentDate,
-        payment_amount: paymentAmount,
+        payment_amount: amount,
         payment_method: paymentMethod || null,
         reference_number: referenceNumber || null,
         description: description || null,
@@ -114,7 +126,7 @@ export async function POST(request: NextRequest) {
           recipient_id: hr.id,
           type: "payment_evidence_pending_approval",
           title: "New Payment Evidence Requires Approval",
-          message: `Payment evidence submitted for loan - Amount: GHc ${paymentAmount}`,
+          message: `Payment evidence submitted for loan - Amount: GHc ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })}`,
           data: { evidenceId: evidenceData.id },
           is_read: false,
         }))
