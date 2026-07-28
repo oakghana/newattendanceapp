@@ -9,7 +9,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/admin": ["admin"],
   "/dashboard/admin": ["admin"],
   "/dashboard/settings": ["admin"],
-  "/dashboard/loan-app": ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+  "/dashboard/loan-app": ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract", "managing_director", "secretary"],
   
   // HR/Leave Management
   "/dashboard/leave-management": [
@@ -29,6 +29,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "hr_office",
     "audit_staff",
     "contract",
+    "managing_director",
+    "secretary",
   ],
   "/dashboard/leave-planning": [
     "admin",
@@ -47,10 +49,12 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "hr_office",
     "audit_staff",
     "contract",
+    "managing_director",
+    "secretary",
   ],
   
-  // Staff Dashboard
-  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee"],
+  // Staff Dashboard — all roles including executive roles must be listed here
+  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary"],
   
   // Regional Manager pages
   "/dashboard/regional": ["admin", "regional_manager"],
@@ -61,6 +65,15 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   
   // Audit pages
   "/dashboard/audit": ["admin", "audit_staff"],
+
+  // MD Approval Hub
+  "/dashboard/md-approvals": ["managing_director", "admin"],
+
+  // Secretary Memo Hub
+  "/dashboard/secretary-memos": ["secretary", "admin"],
+
+  // Overview dashboard — all roles
+  "/dashboard/overview": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary"],
 };
 
 function normalizeRole(role: string | null | undefined): string {
@@ -69,20 +82,25 @@ function normalizeRole(role: string | null | undefined): string {
 
 function isAuthorizedForRoute(userRole: string | null | undefined, pathname: string): boolean {
   const normalized = normalizeRole(userRole);
-  
-  // Check exact and pattern matches
-  for (const [pattern, allowedRoles] of Object.entries(PROTECTED_ROUTES)) {
+
+  // Sort patterns longest-first so more specific routes take priority over
+  // parent patterns (e.g. /dashboard/md-approvals beats /dashboard).
+  const sortedEntries = Object.entries(PROTECTED_ROUTES).sort(
+    ([a], [b]) => b.length - a.length
+  );
+
+  for (const [pattern, allowedRoles] of sortedEntries) {
     // Exact match
     if (pathname === pattern) {
       return allowedRoles.some(r => normalizeRole(r) === normalized);
     }
-    
-    // Pattern match (pathname starts with pattern)
+
+    // Prefix match (pathname starts with pattern + "/")
     if (pathname.startsWith(pattern + "/")) {
       return allowedRoles.some(r => normalizeRole(r) === normalized);
     }
   }
-  
+
   // If not in protected routes, allow access (public pages)
   return true;
 }

@@ -503,6 +503,14 @@ export default async function DashboardPage() {
     )
   } catch (error) {
     console.error("[v0] Dashboard error:", error)
-    redirect("/auth/login")
+    // Do not redirect to /auth/login on error — that creates an infinite loop
+    // for roles not handled by this page. Render a safe fallback instead.
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4">
+        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Unable to load dashboard</h2>
+        <p className="text-slate-500 text-sm max-w-sm">There was a problem loading your dashboard data. Please refresh the page or contact IT support.</p>
+        <a href="/dashboard" className="text-sm text-blue-600 underline">Refresh</a>
+      </div>
+    )
   }
 }
