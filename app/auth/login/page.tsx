@@ -292,11 +292,8 @@ export default function LoginPage() {
 
         showSuccess("Login successful! Redirecting to dashboard...", "Welcome Back")
 
-        // Route based on role: executive roles go to overview, staff go to attendance check-in
-        let dashboardUrl = "/dashboard/attendance"
-        if (approvalCheck.role === "managing_director" || approvalCheck.role === "secretary") {
-          dashboardUrl = "/dashboard/overview"
-        }
+        // All roles go to attendance check-in page (same as every other role)
+        const dashboardUrl = "/dashboard/attendance"
 
         // Wait longer for Supabase to properly set and persist cookies
         setTimeout(() => {
@@ -533,8 +530,8 @@ export default function LoginPage() {
         console.log("[v0] OTP verification successful")
         showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
 
-        // All users go to /dashboard (role-aware rendering handles UI for each role)
-        const dashboardUrl = "/dashboard"
+        // All roles go to attendance check-in page (same as every other role)
+        const dashboardUrl = "/dashboard/attendance"
 
         // Wait longer for Supabase to properly set and persist cookies
         setTimeout(() => {

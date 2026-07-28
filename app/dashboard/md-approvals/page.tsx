@@ -13,8 +13,8 @@ export default async function MdApprovalsPage() {
     .eq("id", user.id)
     .maybeSingle()
 
-  if (!profile || !["managing_director", "admin"].includes(profile.role)) {
-    redirect("/dashboard/overview")
+  if (!profile || !["managing_director", "admin", "it-admin"].includes(profile.role)) {
+    redirect("/dashboard/attendance")
   }
 
   return <MdApprovalsClient profile={profile} />

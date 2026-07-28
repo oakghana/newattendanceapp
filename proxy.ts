@@ -53,8 +53,11 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "secretary",
   ],
   
-  // Staff Dashboard — all roles including executive roles must be listed here
-  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary"],
+  // Attendance check-in — the universal landing page for every role after login
+  "/dashboard/attendance": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+
+  // Staff Dashboard root — all roles
+  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
   
   // Regional Manager pages
   "/dashboard/regional": ["admin", "regional_manager"],
@@ -66,11 +69,11 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   // Audit pages
   "/dashboard/audit": ["admin", "audit_staff"],
 
-  // MD Approval Hub
-  "/dashboard/md-approvals": ["managing_director", "admin"],
+  // MD Approval Hub — admin and it-admin can also access for oversight
+  "/dashboard/md-approvals": ["managing_director", "admin", "it-admin"],
 
-  // Secretary Memo Hub
-  "/dashboard/secretary-memos": ["secretary", "admin"],
+  // Secretary Memo Hub — admin and it-admin can also access for oversight
+  "/dashboard/secretary-memos": ["secretary", "admin", "it-admin"],
 
   // Overview dashboard — all roles
   "/dashboard/overview": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary"],
@@ -167,7 +170,7 @@ export default async function proxy(request: NextRequest) {
       console.warn(
         `[Authorization] User ${user.id} (role: ${userRole}) attempted unauthorized access to ${pathname}`
       );
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL("/dashboard/attendance", request.url));
     }
 
     return response;

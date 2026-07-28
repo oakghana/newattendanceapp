@@ -14,8 +14,8 @@ export default async function SecretaryMemosPage() {
     .eq("id", user.id)
     .maybeSingle()
 
-  if (!profile || !["secretary", "admin"].includes(profile.role)) {
-    redirect("/dashboard/overview")
+  if (!profile || !["secretary", "admin", "it-admin"].includes(profile.role)) {
+    redirect("/dashboard/attendance")
   }
 
   const admin = createAdminClient()
