@@ -101,13 +101,7 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
       signerSignatureUrl = memo.signature_data_url
     }
 
-    console.log("[v0] Single memo - Signer signature data:", {
-      signerName,
-      signerTitle,
-      hasSignatureUrl: !!signerSignatureUrl,
-      signatureLength: signerSignatureUrl?.length || 0,
-      signaturePreview: signerSignatureUrl?.substring(0, 50) || "NONE"
-    })
+
 
     const memoData = {
       to: "DEPUTY DIRECTOR, FINANCE",
@@ -180,14 +174,7 @@ async function downloadCombinedMemo(
       signerSignatureUrl = memos[0].signature_data_url
     }
 
-    console.log("[v0] Combined memo - Signer signature data:", {
-      signerName,
-      signerTitle,
-      hasSignatureUrl: !!signerSignatureUrl,
-      signatureLength: signerSignatureUrl?.length || 0,
-      signaturePreview: signerSignatureUrl?.substring(0, 50) || "NONE",
-      memoCount: memos.length
-    })
+
 
     const staffList = memos.map((memo, idx) => {
       let staffPosition = "Staff"
@@ -358,10 +345,28 @@ export function LoanOfficePaymentAdviceTab({ isHrLeaveOffice = false }: LoanOffi
   const handleDownloadAll = async (monthGroup: MonthGroup) => {
     const key = `month-${monthGroup.monthKey}`
     setDownloading(key, true)
-    for (const cg of monthGroup.categoryGroups) {
-      await downloadCombinedMemo(cg.memos, cg.category, cg.signerName, monthGroup.monthLabel, toast)
+    try {
+      // Merge all staff from all category groups into one combined PDF for the month
+      const allMemos = monthGroup.categoryGroups.flatMap((cg) => cg.memos)
+      const firstSigner = monthGroup.categoryGroups.find((cg) => cg.signerName)?.signerName || "HRM"
+
+      // Use a combined category label e.g. "All Staff"
+      const categoryLabel = monthGroup.categoryGroups.length === 1
+        ? monthGroup.categoryGroups[0].category
+        : "All Staff"
+
+      await downloadCombinedMemo(allMemos, categoryLabel, firstSigner, monthGroup.monthLabel, toast)
+
+      toast({
+        title: "Download complete",
+        description: `Downloaded combined memo for ${monthGroup.monthLabel} (${allMemos.length} staff member${allMemos.length !== 1 ? "s" : ""})`,
+      })
+    } catch (err) {
+      console.error("[v0] Error in bulk download:", err)
+      toast({ title: "Download failed", description: String(err), variant: "destructive" })
+    } finally {
+      setDownloading(key, false)
     }
-    setDownloading(key, false)
   }
 
   const handleDownloadAllCategory = async (cg: CategoryGroup, monthLabel: string, monthKey: string) => {
