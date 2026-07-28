@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -336,8 +336,8 @@ export function MdApprovalsClient({ profile }: Props) {
     }
   }
 
-  const pendingLoans = loans.filter((l) => !approvedIds.has(l.id))
-  const grouped = groupByPeriod(pendingLoans)
+  const pendingLoans = useMemo(() => loans.filter((l) => !approvedIds.has(l.id)), [loans, approvedIds])
+  const grouped = useMemo(() => groupByPeriod(pendingLoans), [pendingLoans])
   const totalPending = pendingLoans.length
   const selectedCount = selected.size
 
