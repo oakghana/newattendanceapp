@@ -816,7 +816,8 @@ export async function GET(
       const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
       const hasIncrease = adjustedRequested > originalRequested || travelDays > 0
       const remarksParts: string[] = []
-      if (travelDays > 0) remarksParts.push(`${travelDays} travelling day${travelDays !== 1 ? "s" : ""} added`)
+      // NOTE: travelling days are already shown in entitlementLabel, so don't repeat in remarks
+      // Only include other deductions/additions that aren't visible in the table labels
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
