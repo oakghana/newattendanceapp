@@ -351,9 +351,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request is not editable at Loan Office stage" }, { status: 400 })
       }
 
-      const normalizedReference = normalizeReferenceNumber(body.reference_number)
-      if (body.reference_number !== undefined && body.reference_number !== null && String(body.reference_number).trim() && !normalizedReference) {
-        return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+      // Only validate reference number if explicitly provided and non-empty
+      const refInput = String(body.reference_number || "").trim()
+      if (refInput) {
+        const normalizedReference = normalizeReferenceNumber(refInput)
+        if (!normalizedReference) {
+          return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+        }
+        update.reference_number = normalizedReference
       }
 
       if (body.staff_full_name !== undefined) requestedStaffFullName = String(body.staff_full_name || "").trim() || null
@@ -361,7 +366,6 @@ export async function POST(request: NextRequest) {
       if (body.staff_rank !== undefined) update.staff_rank = String(body.staff_rank || "").trim() || null
       if (body.corporate_email !== undefined) update.corporate_email = String(body.corporate_email || "").trim() || null
       if (body.hod_reviewer_id !== undefined) update.hod_reviewer_id = String(body.hod_reviewer_id || "").trim() || null
-      if (normalizedReference) update.reference_number = normalizedReference
       if (selectedDirectorApproverId) {
         const isValidDirector = await validateDirectorApprover(admin, selectedDirectorApproverId)
         if (!isValidDirector) {
@@ -602,11 +606,15 @@ export async function POST(request: NextRequest) {
       } else {
         update.recovery_months = normalizedRecoveryMonths
       }
-      const normalizedReference = normalizeReferenceNumber(body.reference_number)
-      if (body.reference_number !== undefined && body.reference_number !== null && String(body.reference_number).trim() && !normalizedReference) {
-        return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+      // Only validate reference number if explicitly provided and non-empty
+      const refInput = String(body.reference_number || "").trim()
+      if (refInput) {
+        const normalizedReference = normalizeReferenceNumber(refInput)
+        if (!normalizedReference) {
+          return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+        }
+        update.reference_number = normalizedReference
       }
-      if (normalizedReference) update.reference_number = normalizedReference
       update.disbursement_date = disbursementDate
       update.recovery_start_date = recoveryStartDate
       update.hr_forwarded_at = new Date().toISOString()
