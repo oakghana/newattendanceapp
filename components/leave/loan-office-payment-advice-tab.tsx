@@ -58,8 +58,9 @@ function fmtDate(d?: string | null): string {
 
 function normalizeCategory(raw?: string | null): string {
   const v = String(raw || "").toLowerCase()
-  if (v.includes("manager")) return "Manager Staff"
-  if (v.includes("senior")) return "Senior Staff"
+  if (v.includes("manager") || v.includes("director")) return "Manager Staff"
+  if (v.includes("senior") || v.includes("principal")) return "Senior Staff"
+  if (v.includes("officer")) return "Officer Staff"
   return "Junior Staff"
 }
 
@@ -289,14 +290,16 @@ export function LoanOfficePaymentAdviceTab({ isHrLeaveOffice = false }: LoanOffi
       .map(([monthKey, monthMemos]) => {
         const byRank = new Map<string, PaymentMemo[]>()
         for (const memo of monthMemos) {
-          // Extract rank from memo_body if available
-          let rank = "Other"
+          // Extract rank from memo_body and normalize to consolidate similar ranks
+          let rawRank = memo.staff_category || "Other"
           if (memo.memo_body) {
             try {
               const b = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : memo.memo_body
-              rank = b.staff_rank_label || "Other"
+              rawRank = b.staff_rank_label || memo.staff_category || "Other"
             } catch {}
           }
+          // Normalize to merge similar ranks (e.g. "leave officer" + "Accounts Officer" → "Officer Staff")
+          const rank = normalizeCategory(rawRank)
           if (!byRank.has(rank)) byRank.set(rank, [])
           byRank.get(rank)!.push(memo)
         }

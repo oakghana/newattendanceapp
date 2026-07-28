@@ -453,6 +453,7 @@ export function StaffManagement() {
         email: editingStaff.email,
         employee_id: editingStaff.employee_id,
         position: editingStaff.position,
+        staff_category: editingStaff.staff_category || "Junior",
         role: editingStaff.role,
         department_id: editingStaff.department_id || editingStaff.departments?.id,
         is_active: editingStaff.is_active,
@@ -1034,9 +1035,42 @@ export function StaffManagement() {
                     <Input
                       id="editPosition"
                       value={editingStaff.position || ""}
-                      onChange={(e) => setEditingStaff({ ...editingStaff, position: e.target.value })}
+                      onChange={(e) => {
+                        const pos = e.target.value
+                        // Auto-derive category from position text
+                        const lower = pos.toLowerCase()
+                        let derivedCategory = editingStaff.staff_category || "Junior"
+                        if (lower.includes("manager") || lower.includes("director")) derivedCategory = "Manager"
+                        else if (lower.includes("senior") || lower.includes("principal")) derivedCategory = "Senior"
+                        else if (lower.includes("officer")) derivedCategory = "Officer"
+                        else if (pos.trim().length > 0) derivedCategory = "Junior"
+                        setEditingStaff({ ...editingStaff, position: pos, staff_category: derivedCategory })
+                      }}
                       className="mt-1"
                     />
+                  </div>
+                  <div>
+                    <Label htmlFor="editStaffCategory" className="font-medium">
+                      Category
+                      <span className="text-xs text-muted-foreground font-normal ml-1">(Auto-set from Position)</span>
+                    </Label>
+                    <Select
+                      value={editingStaff.staff_category || "Junior"}
+                      onValueChange={(value) => setEditingStaff({ ...editingStaff, staff_category: value })}
+                    >
+                      <SelectTrigger id="editStaffCategory" className="mt-1">
+                        <SelectValue placeholder="Select Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Manager">Manager</SelectItem>
+                        <SelectItem value="Senior">Senior</SelectItem>
+                        <SelectItem value="Officer">Officer</SelectItem>
+                        <SelectItem value="Junior">Junior</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Used for leave entitlement and payment advice grouping
+                    </p>
                   </div>
                   <div>
                     <Label htmlFor="editDepartment" className="font-medium">
