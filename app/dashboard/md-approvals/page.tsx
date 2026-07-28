@@ -13,9 +13,8 @@ export default async function MdApprovalsPage() {
     .eq("id", user.id)
     .maybeSingle()
 
-  if (!profile || !["managing_director", "admin", "it-admin"].includes(profile.role)) {
-    redirect("/dashboard/attendance")
-  }
+  // The proxy has already validated the role — just render the client without redirects
+  if (!profile) redirect("/auth/login")
 
   return <MdApprovalsClient profile={profile} />
 }

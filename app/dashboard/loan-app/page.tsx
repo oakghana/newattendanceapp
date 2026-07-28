@@ -899,6 +899,10 @@ export default function LoanAppPage() {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [isSignatureMissing, setIsSignatureMissing] = useState(false)
   const [isEditingSignature, setIsEditingSignature] = useState(false)
+  const [modalLengthOfService, setModalLengthOfService] = useState("")
+  const [modalLastCarLoanDate, setModalLastCarLoanDate] = useState("")
+  const [modalNeverHadCarLoan, setModalNeverHadCarLoan] = useState(false)
+  const [modalAdditionalInfo, setModalAdditionalInfo] = useState("")
 
   const [lookupData, setLookupData] = useState<LookupPayload | null>(null)
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -1063,6 +1067,24 @@ export default function LoanAppPage() {
       setSalaryAdvanceMonths(null)
     }
   }, [isSalaryAdvanceRequest])
+
+  // Auto-populate Length of Service and reset car loan fields when committee modal opens
+  useEffect(() => {
+    if (actionModal.open && actionModal.actionType === "committee" && actionModal.row) {
+      // Auto-calculate Length of Service from hire_date if available
+      if (actionModal.row.hire_date) {
+        const hireDate = new Date(actionModal.row.hire_date)
+        const today = new Date()
+        const yearsOfService = (today.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25)
+        setModalLengthOfService(yearsOfService.toFixed(1))
+      } else {
+        setModalLengthOfService("")
+      }
+      setModalLastCarLoanDate("")
+      setModalNeverHadCarLoan(false)
+      setModalAdditionalInfo("")
+    }
+  }, [actionModal.open, actionModal.actionType, actionModal.row])
 
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
@@ -5535,19 +5557,19 @@ export default function LoanAppPage() {
                   </div>
                   <div>
                     <Label className="text-xs">Length of Service (Years)</Label>
-                    <Input type="number" placeholder="e.g. 5" min="0" step="0.5" className="h-7 text-xs" />
+                    <Input type="number" value={modalLengthOfService} onChange={(e) => setModalLengthOfService(e.target.value)} placeholder="e.g. 5" min="0" step="0.5" className="h-7 text-xs" />
                   </div>
                   <div>
                     <Label className="text-xs">Last Car Loan Date</Label>
-                    <Input type="date" className="h-7 text-xs" />
+                    <Input type="date" value={modalLastCarLoanDate} onChange={(e) => setModalLastCarLoanDate(e.target.value)} className="h-7 text-xs" />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Checkbox id="never_car_loan" />
+                  <Checkbox id="never_car_loan" checked={modalNeverHadCarLoan} onCheckedChange={(checked) => setModalNeverHadCarLoan(checked === true)} />
                   <Label htmlFor="never_car_loan" className="font-normal cursor-pointer text-xs">Never had a car loan</Label>
                 </div>
                 <Label className="text-xs">Additional Employee Information</Label>
-                <Textarea placeholder="Add any relevant employment history, loan history, or service information..." rows={2} className="text-xs" />
+                <Textarea value={modalAdditionalInfo} onChange={(e) => setModalAdditionalInfo(e.target.value)} placeholder="Add any relevant employment history, loan history, or service information..." rows={2} className="text-xs" />
               </>
             )}
             {/* HR Terms */}

@@ -14,9 +14,8 @@ export default async function SecretaryMemosPage() {
     .eq("id", user.id)
     .maybeSingle()
 
-  if (!profile || !["secretary", "admin", "it-admin"].includes(profile.role)) {
-    redirect("/dashboard/attendance")
-  }
+  // The proxy has already validated the role — just render the client without redirects
+  if (!profile) redirect("/auth/login")
 
   const admin = createAdminClient()
 
