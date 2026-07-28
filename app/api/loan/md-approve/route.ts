@@ -7,7 +7,10 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { data: profile } = await supabase
+  // Use admin client for profile lookup to bypass RLS
+  const admin = await createAdminClient()
+
+  const { data: profile } = await admin
     .from("user_profiles")
     .select("id, role, first_name, last_name, md_signature_url")
     .eq("id", user.id)
@@ -23,8 +26,6 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(loanIds) || loanIds.length === 0) {
     return NextResponse.json({ error: "No loan IDs provided." }, { status: 400 })
   }
-
-  const admin = await createAdminClient()
   const mdName = `${profile.first_name} ${profile.last_name}`.trim()
   const now = new Date().toISOString()
 
@@ -75,17 +76,19 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { data: profile } = await supabase
+  // Use admin client for profile lookup to bypass RLS — session-only cookies
+  // (without access/refresh tokens) cannot read user_profiles via the user client
+  const admin = await createAdminClient()
+
+  const { data: profile } = await admin
     .from("user_profiles")
     .select("role")
     .eq("id", user.id)
     .maybeSingle()
 
-  if (!profile || !["managing_director", "secretary", "admin"].includes(profile.role)) {
+  if (!profile || !["managing_director", "secretary", "admin", "it-admin"].includes(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
-
-  const admin = await createAdminClient()
   const url = new URL(req.url)
   const view = url.searchParams.get("view") || "pending" // "pending" | "approved"
 
