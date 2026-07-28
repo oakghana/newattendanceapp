@@ -43,6 +43,17 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
+  // Redirect executive roles to their dedicated overview dashboard
+  const { data: roleCheck } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  if (roleCheck?.role === "managing_director" || roleCheck?.role === "secretary") {
+    redirect("/dashboard/overview")
+  }
+
   try {
     // Get current date info
     const today = new Date()
