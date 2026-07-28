@@ -312,7 +312,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       { data: applicantProfile },
       { data: directorProfile },
       { data: directorUserProfile },
-      { data: directorRegistrySignature, error: signatureError },
+      { data: directorRegistryRecords, error: signatureError },
     ] = await Promise.all([
       admin
         .from("user_profiles")
@@ -326,62 +326,64 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             .eq("id", directorHrId)
             .single()
         : Promise.resolve({ data: null } as any),
-      // Check user_profiles for signature (PRIMARY source - saved via Profile > Signature)
+      // Priority 1: user_profiles.signature_data_url (saved via Profile > Signature page)
       directorHrId
         ? admin
             .from("user_profiles")
-            .select("id, signature_data_url, signature_text, signature_mode")
+            .select("id, signature_data_url, signature_mode")
             .eq("id", directorHrId)
             .single()
         : Promise.resolve({ data: null } as any),
-      // Check approval_signature_registry as secondary source
+      // Priority 2: approval_signature_registry — fetch ALL records (same as leave module)
+      // Use pickBestSignature to score drawn > typed
       directorHrId
         ? admin
             .from("approval_signature_registry")
-            .select("user_id, approval_stage, signature_mode, signature_text, signature_data_url")
+            .select("user_id, signature_mode, signature_text, signature_data_url, is_active")
             .eq("user_id", directorHrId)
-            .eq("is_active", true)
-            .order("updated_at", { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        : Promise.resolve({ data: null } as any),
+        : Promise.resolve({ data: [] } as any),
     ])
 
-    // Merge signatures: user_profiles > approval_signature_registry > loan stored columns
-    // user_profiles has signature_data_url and signature_mode (not signature_text)
-    // approval_signature_registry has all three fields
+    // Use same pickBestSignature scoring as leave module: drawn/upload > typed
+    const pickBestSignature = (rows: any[]): any | null => {
+      if (!Array.isArray(rows) || rows.length === 0) return null
+      const active = rows.filter((r) => r?.is_active !== false)
+      const pool = active.length > 0 ? active : rows
+      const score = (r: any) => {
+        const mode = String(r?.signature_mode || "").toLowerCase()
+        const hasImage = (mode === "draw" || mode === "drawn" || mode === "upload") && String(r?.signature_data_url || "").trim().length > 0
+        const hasTyped = mode === "typed" && String(r?.signature_text || "").trim().length > 0
+        return hasImage ? 100 : hasTyped ? 10 : 0
+      }
+      return [...pool].sort((a, b) => score(b) - score(a))[0] || null
+    }
+
     const upSig = directorUserProfile as any
-    const regSig = directorRegistrySignature as any
+    const regBest = pickBestSignature(Array.isArray(directorRegistryRecords) ? directorRegistryRecords : [])
     const loanSig = loan as any
 
+    // Resolve: user_profiles image > registry best > loan stored > null
     const resolvedSignatureDataUrl =
       upSig?.signature_data_url ||
-      regSig?.signature_data_url ||
+      regBest?.signature_data_url ||
       loanSig?.director_signature_data_url ||
       null
-
     const resolvedSignatureText =
-      regSig?.signature_text ||
+      regBest?.signature_text ||
       loanSig?.director_signature_text ||
       null
-
     const resolvedSignatureMode =
       upSig?.signature_mode ||
-      regSig?.signature_mode ||
+      regBest?.signature_mode ||
       loanSig?.director_signature_mode ||
       (resolvedSignatureDataUrl ? "drawn" : "typed")
 
-    // Build a unified signature object for rendering
     const directorSignature = (resolvedSignatureDataUrl || resolvedSignatureText)
-      ? {
-          signature_data_url: resolvedSignatureDataUrl,
-          signature_text: resolvedSignatureText,
-          signature_mode: resolvedSignatureMode,
-        }
+      ? { signature_data_url: resolvedSignatureDataUrl, signature_text: resolvedSignatureText, signature_mode: resolvedSignatureMode }
       : null
 
     if (signatureError) {
-      const signatureMessage = String(signatureError.message || "")
+      const signatureMessage = String((signatureError as any)?.message || "")
       if (!/does not exist|schema cache|relation/i.test(signatureMessage)) {
         throw signatureError
       }

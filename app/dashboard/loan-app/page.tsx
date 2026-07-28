@@ -80,6 +80,7 @@ type LoanRequest = {
   accounts_reviewer_id?: string | null
   accounts_reviewer_name?: string | null
   director_hr_id?: string | null
+  director_hr_name?: string | null
   hod_review_note?: string | null
   hod_name?: string | null
   hod_rank?: string | null
@@ -3977,6 +3978,11 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs whitespace-nowrap">{row.staff_location_name || "—"}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{fmtDate(row.updated_at || row.created_at)}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">
+                            {(row.director_hr_name || row.director_signature_text) && (
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Signed: <span className="font-medium text-slate-700">{row.director_hr_name || row.director_signature_text}</span>
+                              </div>
+                            )}
                             {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status)
                               ? <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                               : <span className="text-muted-foreground">—</span>}
@@ -3999,6 +4005,9 @@ export default function LoanAppPage() {
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
                   <div className="text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
+                  {(row.director_hr_name || row.director_signature_text) && (
+                    <div className="text-xs text-slate-600">Signed by: <span className="font-semibold">{row.director_hr_name || row.director_signature_text}</span></div>
+                  )}
                   {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
                     <div className="pt-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
@@ -4104,10 +4113,13 @@ export default function LoanAppPage() {
                   <div className="text-muted-foreground">Address: {row.staff_location_address || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Status: {statusText(row.status)}</div>
                   <div className="text-xs text-muted-foreground">FD Score: {row.fd_score ?? "—"} | FD Reviewer: {row.accounts_reviewer_name || "—"}</div>
+                  {(row.director_hr_name || row.director_signature_text) && (
+                    <div className="text-xs text-slate-600 font-medium">Signed by: {row.director_hr_name || row.director_signature_text}</div>
+                  )}
                   {["approved_director", "director_rejected", "rejected_fd"].includes(row.status) && (
                     <div className="mt-2 flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Secure Memo PDF</Button>
-                      {row.accounts_reviewer_id && ["approved_director"].includes(row.status) && (
+                      {["approved_director"].includes(row.status) && (
                         <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Download Signed Memo</Button>
                       )}
                     </div>

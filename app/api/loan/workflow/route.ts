@@ -624,6 +624,51 @@ export async function GET() {
           : null,
       }))
 
+    // Build director HR name map for all rows that have a director_hr_id
+    const allRowsForDirector: any[] = [
+      ...(allLoansRes.data || []),
+      ...(myTasksRes.data || []),
+      ...(myRes.data || []),
+      ...(directorRes.data || []),
+      ...(directorGoodFdRes.data || []),
+      ...(hrRes.data || []),
+    ]
+    const uniqueDirectorIds = Array.from(
+      new Set(allRowsForDirector.map((r: any) => r.director_hr_id).filter(Boolean)),
+    ) as string[]
+    let directorNameMap: Map<string, string> = new Map()
+    if (uniqueDirectorIds.length > 0) {
+      const { data: directorProfiles } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position")
+        .in("id", uniqueDirectorIds)
+      for (const dp of directorProfiles || []) {
+        const fullName = `${dp.first_name || ""} ${dp.last_name || ""}`.trim()
+        directorNameMap.set(dp.id, fullName || "")
+      }
+    }
+    // For rows without director_hr_id but status is approved, pick the first active HR director
+    let defaultDirectorName = ""
+    if (uniqueDirectorIds.length === 0) {
+      const { data: defaultDir } = await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name")
+        .in("role", ["director_hr", "manager_hr", "hr_director"])
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle()
+      if (defaultDir) {
+        defaultDirectorName = `${defaultDir.first_name || ""} ${defaultDir.last_name || ""}`.trim()
+      }
+    }
+    const attachDirectorName = (rows: any[]) =>
+      rows.map((r: any) => ({
+        ...r,
+        director_hr_name: r.director_hr_id
+          ? (directorNameMap.get(r.director_hr_id) || null)
+          : (["approved_director", "awaiting_director_hr"].includes(r.status) ? defaultDirectorName || null : null),
+      }))
+
     // Group timelines by loan_request_id
     const timelinesMap: Record<string, any[]> = {}
     for (const entry of (timelinesRes.data || [])) {
@@ -678,20 +723,20 @@ export async function GET() {
       role,
       permissions,
       loanTypes: resolvedTypesRes.data || [],
-      myRequests: attachAccountsReviewerName(attachName(myRes.data || [])),
+      myRequests: attachDirectorName(attachAccountsReviewerName(attachName(myRes.data || []))),
       myTimelines,
       directorApprovers,
-      myTasks: attachAccountsReviewerName(attachName(myTasksRes.data || [])),
+      myTasks: attachDirectorName(attachAccountsReviewerName(attachName(myTasksRes.data || []))),
       inbox: {
         hod: attachAccountsReviewerName(attachName(hodRes.data || [])),
         loanOffice: attachAccountsReviewerName(attachName(loanOfficeRes.data || [])),
         accounts: attachAccountsReviewerName(attachName(accountsRes.data || [])),
         accountsSigned: attachAccountsReviewerName(attachName(accountsSignedRes.data || [])),
         committee: attachAccountsReviewerName(attachName(committeeRes.data || [])),
-        hrOffice: attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || []))),
-        directorHr: attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || []))),
-        directorGoodFd: attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || []))),
-        allLoans: attachAccountsReviewerName(attachName(allLoansRes.data || [])),
+        hrOffice: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || [])))),
+        directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || [])))),
+        directorGoodFd: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || [])))),
+        allLoans: attachDirectorName(attachAccountsReviewerName(attachName(allLoansRes.data || []))),
       },
     })
   } catch (error: any) {
