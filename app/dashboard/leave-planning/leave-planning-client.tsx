@@ -1670,7 +1670,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ���── Holiday CRUD Functions ───────����────���────────��───────────────────
+  // ���── Holiday CRUD Functions ───────����────���────────���───────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -2252,7 +2252,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
     const refNum = String(officeRefNumber[requestId] || "").trim()
     if (!refNum) {
-      toast({ title: "Reference Number Required", description: "Please enter a memo reference number before forwarding.", variant: "destructive" })
+      toast({ title: "Reference Number Required", description: "Please enter a memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
       return
     }
 
@@ -3953,90 +3953,46 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               />
                             </div>
 
-                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2">
-                              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Editable)</p>
+                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
+
+                              {/* Our Ref No. — required before forwarding */}
                               <div className="space-y-1">
-                                <Label className="text-xs">Template Source</Label>
-                                <Select
-                                  value={officeTemplateKey[req.id] || ""}
-                                  onValueChange={(value) => {
-                                    setOfficeTemplateKey((p) => ({ ...p, [req.id]: value }))
-                                    const selected = templateOptions.find((template) => template.template_key === value)
-                                    if (selected) {
-                                      const rendered = renderTemplateForRequest(selected, req)
-                                      setOfficeMemoSubject((p) => ({ ...p, [req.id]: rendered.subject || "" }))
-                                      setOfficeMemoBody((p) => ({ ...p, [req.id]: rendered.body || "" }))
-                                      setOfficeMemoCc((p) => ({ ...p, [req.id]: rendered.cc || "" }))
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger className="h-9 bg-white">
-                                    <SelectValue placeholder="Select template" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {templateOptions.map((template) => (
-                                      <SelectItem key={template.id} value={template.template_key}>
-                                        {template.template_name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              {/* Reference Number — required before forwarding */}
-                              <div className="space-y-1">
-                                <Label className="text-xs font-semibold text-red-700 flex items-center gap-1">
+                                <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
                                   Our Ref No. <span className="text-red-500">*</span>
-                                  <span className="font-normal text-slate-500 ml-1">(required — appears on memo)</span>
                                 </Label>
                                 <Input
                                   value={officeRefNumber[req.id] || ""}
                                   onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
                                   placeholder="e.g. QCC/HRD/ANL/2025/2026/19AF24"
-                                  className={`h-9 bg-white font-mono text-sm ${!officeRefNumber[req.id]?.trim() ? "border-red-300 focus:ring-red-300" : "border-green-300"}`}
+                                  className={`h-9 bg-white font-mono text-sm ${!officeRefNumber[req.id]?.trim() ? "border-red-300 focus:ring-red-300" : "border-green-400"}`}
                                 />
                                 {!officeRefNumber[req.id]?.trim() && (
-                                  <p className="text-[10px] text-red-600">A reference number is required before this memo can be forwarded to the HR Executive.</p>
+                                  <p className="text-[10px] text-red-600">Required — this reference number will appear on the printed memo.</p>
                                 )}
                               </div>
 
+                              {/* CC List */}
                               <div className="space-y-1">
-                                <Label className="text-xs">Memo Subject</Label>
-                                <Input
-                                  value={officeMemoSubject[req.id] || ""}
-                                  onChange={(e) => setOfficeMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="RE: APPLICATION FOR ANNUAL LEAVE — 2026/2027"
-                                  className="h-9 bg-white"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Memo Body</Label>
+                                <Label className="text-xs font-semibold text-slate-700">CC List <span className="font-normal text-slate-400">(one per line)</span></Label>
                                 <Textarea
-                                  value={officeMemoBody[req.id] || ""}
-                                  onChange={(e) => setOfficeMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="Draft the memo body that HR approver can finalize before approval."
+                                  value={officeMemoCc[req.id] || ""}
+                                  onChange={(e) => setOfficeMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder={"Managing Director\nDeputy Managing Director\nHR Leave Office\nFile"}
                                   rows={4}
                                   className="resize-none text-sm bg-white"
                                 />
                               </div>
+
+                              {/* Forward To HR Executive */}
                               <div className="space-y-1">
-                                <Label className="text-xs">CC List (one per line)</Label>
-                                <Textarea
-                                  value={officeMemoCc[req.id] || ""}
-                                  onChange={(e) => setOfficeMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="HOD\nACCOUNTS MANAGER\nHR LEAVE OFFICE\nFILE"
-                                  rows={3}
-                                  className="resize-none text-sm bg-white"
-                                />
-                              </div>
-                              {/* HR Executive Selector */}
-                              <div className="space-y-1">
-                                <Label className="text-xs font-medium text-blue-700">Forward To (HR Executive) *</Label>
+                                <Label className="text-xs font-semibold text-blue-700">Forward To (HR Executive) <span className="text-red-500">*</span></Label>
                                 <Select
                                   value={selectedHrExecutive[req.id] || ""}
                                   onValueChange={(val) => setSelectedHrExecutive((p) => ({ ...p, [req.id]: val }))}
                                 >
                                   <SelectTrigger className="h-9 bg-white border-blue-200">
-                                    <SelectValue placeholder={loadingHrExecutives ? "Loading..." : "Select HR Executive to forward to"} />
+                                    <SelectValue placeholder={loadingHrExecutives ? "Loading..." : "Select HR Executive"} />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {hrExecutives.length === 0 && !loadingHrExecutives && (
@@ -4049,7 +4005,6 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                <p className="text-xs text-muted-foreground">Select which HR Executive should review and approve this leave request</p>
                               </div>
                             </div>
 
@@ -4058,18 +4013,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                 toast({ title: "Reference Number Required", description: "Please enter the memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
                                 return
                               }
-                              if (!officeMemoBody[req.id] || !officeMemoBody[req.id].trim()) {
-                                toast({ title: "Remarks Required", description: "Please provide remarks before forwarding to HR Approvers", variant: "destructive" })
-                                return
-                              }
                               if (!selectedHrExecutive[req.id]) {
-                                toast({ title: "HR Executive Required", description: "Please select an HR Executive to forward this request to", variant: "destructive" })
+                                toast({ title: "HR Executive Required", description: "Please select an HR Executive to forward this request to.", variant: "destructive" })
                                 return
                               }
                               submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || !officeRefNumber[req.id]?.trim() || !officeMemoBody[req.id]?.trim() || !selectedHrExecutive[req.id]}
-                              className="bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
+                              disabled={officeSubmitting === req.id || !officeRefNumber[req.id]?.trim() || !selectedHrExecutive[req.id]}
+                              className="w-full bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
                               {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
                             </Button>
                           </div>
