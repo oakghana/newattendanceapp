@@ -78,9 +78,6 @@ export async function GET(request: NextRequest) {
         hr_approver_name,
         hr_approved_at,
         hr_approval_note,
-        hr_approved_start_date,
-        hr_approved_end_date,
-        hr_approved_days,
         submitted_at,
         created_at,
         updated_at
