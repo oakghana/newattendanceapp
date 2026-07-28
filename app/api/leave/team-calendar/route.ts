@@ -21,6 +21,9 @@ export async function GET(request: NextRequest) {
     const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
     const userDepartment = userProfile?.department_id
 
+    // HR-level roles that can see all departments
+    const HR_GLOBAL_ROLES = ["hr_leave_office", "hr_office", "admin", "regional_manager", "director_hr", "manager_hr", "hr_executive", "hr"]
+
     // Optional: filter by month query param  ?month=2026-04
     const url = new URL(request.url)
     const monthParam = url.searchParams.get("month")
@@ -50,9 +53,9 @@ export async function GET(request: NextRequest) {
       .eq("is_archived", false)
       .order("preferred_start_date", { ascending: true })
 
-    // For HOD/RM: only show their department's staff leaves
-    if (["department_head", "regional_manager"].includes(userRole) && userDepartment) {
-      // Get all staff in this HOD/RM's department
+    // For non-HR roles: scope to their own department only
+    const isGlobalRole = HR_GLOBAL_ROLES.includes(userRole)
+    if (!isGlobalRole && userDepartment) {
       const { data: deptStaff } = await admin
         .from("user_profiles")
         .select("id")
@@ -60,7 +63,7 @@ export async function GET(request: NextRequest) {
 
       const staffIds = (deptStaff || []).map((s: any) => s.id)
       if (staffIds.length === 0) {
-        return NextResponse.json({ entries: [], rangeStart, rangeEnd })
+        return NextResponse.json({ entries: [], rangeStart, rangeEnd, userDepartment, isGlobalRole })
       }
       requestsQuery = requestsQuery.in("user_id", staffIds)
     }
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
     if (userIds.length > 0) {
       const { data: profiles } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, department_id")
+        .select("id, first_name, last_name, employee_id, department_id, position")
         .in("id", userIds)
 
       const departmentIds = Array.from(new Set((profiles || []).map((p: any) => String(p?.department_id || "")).filter(Boolean)))
@@ -104,25 +107,36 @@ export async function GET(request: NextRequest) {
       usersById = new Map((profiles || []).map((p: any) => [String(p.id), {
         name: `${String(p?.first_name || "")} ${String(p?.last_name || "")}`.trim(),
         employeeId: p?.employee_id ?? null,
+        position: p?.position ?? null,
         department: departmentsById.get(String(p?.department_id || "")) || null,
+        departmentId: String(p?.department_id || ""),
       }]))
     }
 
     const entries = normalized.map((r: any) => {
       const profile = usersById.get(r.userId)
+      // Calculate number of days
+      let days = 0
+      try {
+        const ms = new Date(r.endDate).getTime() - new Date(r.startDate).getTime()
+        days = Math.max(1, Math.round(ms / 86400000) + 1)
+      } catch {}
       return {
         id: r.id,
         userId: r.userId,
         name: profile?.name || "Staff Member",
         employeeId: profile?.employeeId || null,
+        position: profile?.position || null,
         department: profile?.department || null,
+        departmentId: profile?.departmentId || null,
         leaveType: r.leaveType,
         startDate: r.startDate,
         endDate: r.endDate,
+        days,
       }
     })
 
-    return NextResponse.json({ entries, rangeStart, rangeEnd })
+    return NextResponse.json({ entries, rangeStart, rangeEnd, isGlobalRole })
   } catch (err) {
     console.error("[leave/team-calendar]", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
