@@ -267,25 +267,29 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Fallback for legacy rows: use the latest workflow actor who handled director finalization/terms.
     if (!directorHrId) {
-      const { data: actorRow } = await admin
-        .from("loan_request_timeline")
-        .select("actor_id, action_key")
-        .eq("loan_request_id", loan.id)
-        .in("action_key", ["director_finalize", "hr_set_terms"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if ((actorRow as any)?.actor_id) {
-        const fallbackActorId = String((actorRow as any).actor_id)
-        const { data: fallbackActor } = await admin
-          .from("user_profiles")
-          .select("id, role")
-          .eq("id", fallbackActorId)
+      try {
+        const { data: actorRow } = await admin
+          .from("loan_request_timeline")
+          .select("actor_id, action_key")
+          .eq("loan_request_id", loan.id)
+          .in("action_key", ["director_finalize", "hr_set_terms"])
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle()
-        const fallbackRole = normalizeRole((fallbackActor as any)?.role)
-        if (["director_hr", "manager_hr", "hr_director"].includes(fallbackRole)) {
-          directorHrId = fallbackActorId
+        if ((actorRow as any)?.actor_id) {
+          const fallbackActorId = String((actorRow as any).actor_id)
+          const { data: fallbackActor } = await admin
+            .from("user_profiles")
+            .select("id, role")
+            .eq("id", fallbackActorId)
+            .maybeSingle()
+          const fallbackRole = normalizeRole((fallbackActor as any)?.role)
+          if (["director_hr", "manager_hr", "hr_director"].includes(fallbackRole)) {
+            directorHrId = fallbackActorId
+          }
         }
+      } catch {
+        // loan_request_timeline table may not exist — skip to next fallback
       }
     }
 
@@ -304,11 +308,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     const throRecipient = await resolveThroRecipient(admin, loan, applicantId)
 
-    const [
-      { data: applicantProfile },
-      { data: directorProfile },
-      { data: directorSignature, error: signatureError },
-    ] = await Promise.all([
+    const [{ data: applicantProfile }, { data: directorProfile }] = await Promise.all([
       admin
         .from("user_profiles")
         .select("*")
@@ -321,21 +321,53 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             .eq("id", directorHrId)
             .single()
         : Promise.resolve({ data: null } as any),
-      directorHrId
-        ? admin
-            .from("approval_signature_registry")
-            .select("user_id, approval_stage, signature_mode, signature_text, signature_data_url")
-            .eq("workflow_domain", "loan")
-            .eq("user_id", directorHrId)
-            .eq("approval_stage", "director_hr")
-            .maybeSingle()
-        : Promise.resolve({ data: null } as any),
     ])
 
-    if (signatureError) {
-      const signatureMessage = String(signatureError.message || "")
-      if (!/does not exist|schema cache|relation/i.test(signatureMessage)) {
-        throw signatureError
+    // Smart signature fetching — exactly like leave module (NO is_active filter)
+    let signerSignatureUrl = ""
+
+    // Priority 1: Check approval_signature_registry for director (NO is_active filter)
+    if (!signerSignatureUrl && directorHrId) {
+      try {
+        const { data: signatureRecords } = await admin
+          .from("approval_signature_registry")
+          .select("id, signature_data_url, signature_mode, signature_text")
+          .eq("user_id", directorHrId)
+
+        if (signatureRecords && signatureRecords.length > 0) {
+          // Score drawn/upload (100) > typed (10) — same as leave module
+          const bestSig = signatureRecords
+            .map((r: any) => {
+              const mode = String(r?.signature_mode || "").toLowerCase()
+              const hasImage = (mode === "draw" || mode === "drawn" || mode === "upload") && String(r?.signature_data_url || "").trim().length > 0
+              const hasTyped = mode === "typed" && String(r?.signature_text || "").trim().length > 0
+              return { ...r, score: hasImage ? 100 : hasTyped ? 10 : 0 }
+            })
+            .sort((a: any, b: any) => b.score - a.score)[0]
+
+          if (bestSig?.signature_data_url) {
+            signerSignatureUrl = bestSig.signature_data_url
+          }
+        }
+      } catch (err) {
+        console.log("[v0] approval_signature_registry query failed:", err)
+      }
+    }
+
+    // Priority 2: Check user_profiles for signature (like leave module)
+    if (!signerSignatureUrl && directorHrId) {
+      try {
+        const { data: signerProfile } = await admin
+          .from("user_profiles")
+          .select("signature_data_url")
+          .eq("id", directorHrId)
+          .single()
+
+        if (signerProfile?.signature_data_url) {
+          signerSignatureUrl = signerProfile.signature_data_url
+        }
+      } catch (err) {
+        console.log("[v0] user_profiles signature fetch failed:", err)
       }
     }
 
@@ -480,32 +512,52 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y = 24
     }
 
-    const sigRecord = directorSignature as any
+    // sigImgY: y-position where the signature image is placed, used by applySignatureSideWatermark
+    // Initialised to -1 so the text fallback path knows no image has been rendered yet
     let sigImgY = -1
-    const hasSavedSignature = sigRecord?.signature_data_url || sigRecord?.signature_text
-    
-    if (sigRecord?.signature_data_url) {
+
+    // Add signature image if available — RENDER ABOVE NAME (exact leave module approach)
+    if (signerSignatureUrl && signerSignatureUrl.length > 10) {
       try {
-        sigImgY = y
-        doc.addImage(sigRecord.signature_data_url, "PNG", marginLeft, y, 50, 18)
-        y += 20
-      } catch {
-        y += 20
+        if (signerSignatureUrl.startsWith("data:image/")) {
+          // Base64 data URL
+          const b64Match = signerSignatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
+          if (b64Match) {
+            const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+            sigImgY = y
+            doc.addImage(signerSignatureUrl, imageType, marginLeft, y, 50, 18)
+            y += 20
+          }
+        } else if (signerSignatureUrl.startsWith("https://")) {
+          // External URL — fetch and embed (exact leave module pattern)
+          try {
+            const sigResponse = await fetch(signerSignatureUrl)
+            if (sigResponse.ok) {
+              const sigBuffer = await sigResponse.arrayBuffer()
+              const sigBase64 = Buffer.from(sigBuffer).toString("base64")
+              const contentType = sigResponse.headers.get("content-type") || "image/png"
+              const imageType = contentType.includes("jpeg") ? "JPEG" : "PNG"
+              sigImgY = y
+              doc.addImage(`data:${contentType};base64,${sigBase64}`, imageType, marginLeft, y, 50, 18)
+              y += 20
+            }
+          } catch (fetchErr) {
+            // Fall through to text fallback
+          }
+        }
+      } catch (err) {
+        // Fall through to text fallback
       }
-    } else if (sigRecord?.signature_text) {
-      doc.setFont("times", "italic")
-      doc.setFontSize(12)
-      doc.setTextColor(30, 60, 100)
-      doc.text(sigRecord.signature_text, marginLeft, y + 14)
-      y += 20
+    }
+
+    // Fallback text signature if no image was rendered
+    if (sigImgY < 0) {
+      const profileName = fmtName(directorProfile)
+      const fallbackSigText = (profileName || String((loan as any).director_signature_text || "").trim() || "AUTHORISED SIGNATORY").toUpperCase()
+      doc.setFont("times", "bolditalic")
+      doc.setFontSize(13)
       doc.setTextColor(0, 0, 0)
-    } else {
-      // If no saved signature, show [DIGITALLY SIGNED] marker
-      doc.setFont("times", "bold")
-      doc.setFontSize(10)
-      doc.setTextColor(100, 100, 100)
-      doc.text("[DIGITALLY SIGNED]", marginLeft, y + 14)
-      doc.setTextColor(0, 0, 0)
+      doc.text(fallbackSigText, marginLeft, y + 14)
       y += 20
     }
 
