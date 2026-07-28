@@ -624,7 +624,10 @@ export async function POST(request: NextRequest) {
       if (!canDoHrOffice(role, deptName, deptCode)) {
         return NextResponse.json({ error: "Only HR Office/Admin can set terms" }, { status: 403 })
       }
-      if (req.status !== "awaiting_hr_terms") return NextResponse.json({ error: "Request is not at HR terms stage" }, { status: 400 })
+      // Accept both normal flow (awaiting_hr_terms) and FD-exempt loans (sent_to_hr_office like Funeral, Insurance, Repair with FD >= 0%)
+      if (!["awaiting_hr_terms", "sent_to_hr_office"].includes(req.status)) {
+        return NextResponse.json({ error: "Request is not at HR terms stage" }, { status: 400 })
+      }
 
       const disbursementDate = String(body.disbursement_date || "")
       const recoveryStartDate = String(body.recovery_start_date || "")
