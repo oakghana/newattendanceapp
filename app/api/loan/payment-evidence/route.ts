@@ -121,16 +121,20 @@ export async function POST(request: NextRequest) {
       .limit(10)
 
     if (hrDirectors && hrDirectors.length > 0) {
-      await admin.from("staff_notifications").insert(
-        hrDirectors.map((hr) => ({
-          recipient_id: hr.id,
-          type: "payment_evidence_pending_approval",
-          title: "New Payment Evidence Requires Approval",
-          message: `Payment evidence submitted for loan - Amount: GHc ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })}`,
-          data: { evidenceId: evidenceData.id },
-          is_read: false,
-        }))
-      ).catch(() => {})
+      try {
+        await admin.from("staff_notifications").insert(
+          hrDirectors.map((hr) => ({
+            recipient_id: hr.id,
+            type: "payment_evidence_pending_approval",
+            title: "New Payment Evidence Requires Approval",
+            message: `Payment evidence submitted for loan - Amount: GHc ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })}`,
+            data: { evidenceId: evidenceData.id },
+            is_read: false,
+          }))
+        )
+      } catch (_notifyErr) {
+        // Notification failure is non-fatal — evidence was already saved
+      }
     }
 
     return NextResponse.json(
