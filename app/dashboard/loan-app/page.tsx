@@ -18,7 +18,7 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -996,6 +996,31 @@ export default function LoanAppPage() {
   const [staffLoanRecordsSearch, setStaffLoanRecordsSearch] = useState("")
   const [staffLoanRecordsPage, setStaffLoanRecordsPage] = useState(1)
   const [staffLoanRecordsSort, setStaffLoanRecordsSort] = useState<"name" | "status">("name")
+
+  // Payment Evidence Upload Modal State
+  const [paymentEvidenceModal, setPaymentEvidenceModal] = useState({
+    open: false,
+    paymentDate: new Date().toISOString().split("T")[0],
+    paymentAmount: "",
+    paymentMethod: "bank_transfer",
+    referenceNumber: "",
+    description: "",
+    evidenceFile: null as File | null,
+    isSubmitting: false,
+  })
+
+  // Payment Approvals Tab State
+  const [paymentApprovalsSearch, setPaymentApprovalsSearch] = useState("")
+  const [paymentApprovalsFilter, setPaymentApprovalsFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending")
+  const [paymentApprovalsSort, setPaymentApprovalsSort] = useState<"date" | "amount">("date")
+  const [selectedPaymentEvidence, setSelectedPaymentEvidence] = useState<any | null>(null)
+  const [paymentApprovalModal, setPaymentApprovalModal] = useState({
+    open: false,
+    action: null as "approve" | "reject" | null,
+    approvalNotes: "",
+    rejectionReason: "",
+    isSubmitting: false,
+  })
   const [tasksSort, setTasksSort] = useState<"newest" | "oldest">("newest")
   const [tasksPage, setTasksPage] = useState(1)
   const [tasksViewMode, setTasksViewMode] = useState<"table" | "card">("table")
@@ -1105,6 +1130,7 @@ export default function LoanAppPage() {
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
+    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
     // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
     if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
@@ -4123,6 +4149,62 @@ export default function LoanAppPage() {
           </div>
         </TabsContent>
 
+        {/* ── Payment Approvals Tab (HR Executive) ── */}
+        <TabsContent value="payment-approvals" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-blue-600" />
+                Payment Evidence Approvals
+              </CardTitle>
+              <CardDescription>
+                Review and approve payment evidence submitted by HR/Accounts staff. Only approve evidence that has complete and valid payment documentation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Search and Filters */}
+              <div className="space-y-4 mb-6">
+                <div className="flex gap-3 items-center flex-wrap">
+                  <input
+                    type="text"
+                    placeholder="Search staff name or reference..."
+                    value={paymentApprovalsSearch}
+                    onChange={(e) => setPaymentApprovalsSearch(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  />
+                  <select
+                    value={paymentApprovalsFilter}
+                    onChange={(e) => setPaymentApprovalsFilter(e.target.value as any)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="pending">Pending Approval</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="all">All</option>
+                  </select>
+                  <select
+                    value={paymentApprovalsSort}
+                    onChange={(e) => setPaymentApprovalsSort(e.target.value as any)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="date">Sort by Date (Newest)</option>
+                    <option value="amount">Sort by Amount</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Payment Evidence List */}
+              <div className="space-y-3">
+                {/* TODO: Fetch and display payment evidence from API */}
+                <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
+                  <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm">No payment evidence records to display. Connect the Payment Evidence API to load pending approvals.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="director" className="space-y-3">
                     <ReadOnlyHint canAct={Boolean(p?.directorHr)} roleLabel="Executive HR" />
           <Card>
@@ -5624,14 +5706,20 @@ export default function LoanAppPage() {
               </>
             )}
             {actionModal.actionType === "payment_completed" && actionModal.row && (
-              <Button className="bg-green-600 hover:bg-green-700" onClick={() => {
-                runAction({ 
-                  action: "mark_payment_completed", 
-                  id: actionModal.row!.id, 
-                  note: modalNote || "Staff has completed repayment of their loan" 
-                })
-                setActionModal((s) => ({ ...s, open: false }))
-              }}>Mark Payment Completed</Button>
+              <>
+                <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>
+                  Cancel
+                </Button>
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700" 
+                  onClick={() => {
+                    setPaymentEvidenceModal((s) => ({ ...s, open: true }))
+                    setActionModal((s) => ({ ...s, open: false }))
+                  }}
+                >
+                  Submit Payment Evidence
+                </Button>
+              </>
             )}
           </DialogFooter>
         </DialogContent>
@@ -5787,6 +5875,240 @@ export default function LoanAppPage() {
                 {modalDecision === "approve" ? "✓ Approve & Send Letter" : "✗ Reject Request"}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Payment Evidence Upload Modal ────────────────────────────── */}
+      <Dialog open={paymentEvidenceModal.open} onOpenChange={(o) => setPaymentEvidenceModal((s) => ({ ...s, open: o }))}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-green-600" />
+              Submit Payment Evidence
+            </DialogTitle>
+            <DialogDescription>
+              Upload supporting evidence of payment (receipt, bank transfer confirmation, etc.) for HR Executive approval.
+              Once approved, the loan will be marked as fully repaid.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Loan Summary */}
+            {actionModal.row && (
+              <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
+                <div className="text-sm font-semibold text-slate-700 mb-3">Loan Details</div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-600">Reference:</span>
+                    <div className="font-semibold text-slate-900">{actionModal.row.request_number}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Type:</span>
+                    <div className="font-semibold text-slate-900">{actionModal.row.loan_type_label}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Staff:</span>
+                    <div className="font-semibold text-slate-900">{actionModal.row.staff_full_name || actionModal.row.staff_number}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Loan Amount:</span>
+                    <div className="font-semibold text-green-700">GHc {fmtAmount(actionModal.row.fixed_amount || actionModal.row.requested_amount)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Payment Details Form */}
+            <div className="space-y-4 border-t pt-4">
+              <div>
+                <Label htmlFor="paymentDate" className="text-sm font-semibold">Payment Date *</Label>
+                <Input
+                  id="paymentDate"
+                  type="date"
+                  value={paymentEvidenceModal.paymentDate}
+                  onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, paymentDate: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="paymentAmount" className="text-sm font-semibold">Payment Amount (GHc) *</Label>
+                  <Input
+                    id="paymentAmount"
+                    type="number"
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    value={paymentEvidenceModal.paymentAmount}
+                    onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, paymentAmount: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="paymentMethod" className="text-sm font-semibold">Payment Method *</Label>
+                  <Select 
+                    value={paymentEvidenceModal.paymentMethod}
+                    onValueChange={(value) => setPaymentEvidenceModal((s) => ({ ...s, paymentMethod: value }))}
+                  >
+                    <SelectTrigger id="paymentMethod" className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="referenceNumber" className="text-sm font-semibold">Reference Number *</Label>
+                <Input
+                  id="referenceNumber"
+                  placeholder="e.g., Bank ref, cheque no, transaction ID"
+                  value={paymentEvidenceModal.referenceNumber}
+                  onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, referenceNumber: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="description" className="text-sm font-semibold">Additional Details (optional)</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Add any additional notes or context about this payment..."
+                  value={paymentEvidenceModal.description}
+                  onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, description: e.target.value }))}
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
+                <div className="flex justify-center mb-3">
+                  <Upload className="h-8 w-8 text-slate-400" />
+                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-2">Upload Payment Evidence</p>
+                <p className="text-xs text-slate-600 mb-3">Receipt, bank transfer confirmation, screenshot, etc.</p>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file && file.size <= 5 * 1024 * 1024) { // 5MB limit
+                      setPaymentEvidenceModal((s) => ({ ...s, evidenceFile: file }))
+                    } else {
+                      toast({ title: "File too large", description: "Maximum file size is 5MB" })
+                    }
+                  }}
+                  className="hidden"
+                  id="evidenceFile"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById("evidenceFile")?.click()}
+                >
+                  Choose File
+                </Button>
+                {paymentEvidenceModal.evidenceFile && (
+                  <div className="mt-3 text-sm text-green-700 font-semibold">
+                    ✓ {paymentEvidenceModal.evidenceFile.name}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                <p className="text-xs text-blue-900">
+                  <strong>Note:</strong> After submission, the HR Executive will review your payment evidence. 
+                  Once approved, your loan will be marked as fully repaid and you'll be able to request the same loan type again in the future.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPaymentEvidenceModal((s) => ({ ...s, open: false }))}
+              disabled={paymentEvidenceModal.isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              disabled={
+                !paymentEvidenceModal.paymentDate ||
+                !paymentEvidenceModal.paymentAmount ||
+                !paymentEvidenceModal.referenceNumber ||
+                !paymentEvidenceModal.evidenceFile ||
+                paymentEvidenceModal.isSubmitting
+              }
+              onClick={async () => {
+                if (!actionModal.row || !paymentEvidenceModal.paymentAmount) return
+
+                setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: true }))
+                try {
+                  // TODO: Upload file to Vercel Blob Storage first
+                  // For now, we'll send the evidence without the file URL
+                  
+                  const response = await fetch("/api/loan/payment-evidence", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      loanRequestId: actionModal.row!.id,
+                      paymentDate: paymentEvidenceModal.paymentDate,
+                      paymentAmount: parseFloat(paymentEvidenceModal.paymentAmount),
+                      paymentMethod: paymentEvidenceModal.paymentMethod,
+                      referenceNumber: paymentEvidenceModal.referenceNumber,
+                      description: paymentEvidenceModal.description || null,
+                      evidenceFileUrl: null, // Will be updated after file upload implementation
+                    }),
+                  })
+
+                  if (!response.ok) {
+                    const error = await response.json()
+                    throw new Error(error.error || "Failed to submit payment evidence")
+                  }
+
+                  toast({
+                    title: "Payment Evidence Submitted",
+                    description: "Your payment evidence has been submitted and is awaiting HR Executive approval.",
+                  })
+
+                  // Reset modal and reload data
+                  setPaymentEvidenceModal({
+                    open: false,
+                    paymentDate: new Date().toISOString().split("T")[0],
+                    paymentAmount: "",
+                    paymentMethod: "bank_transfer",
+                    referenceNumber: "",
+                    description: "",
+                    evidenceFile: null,
+                    isSubmitting: false,
+                  })
+
+                  // Reload loan data
+                  await data && refetch?.()
+                } catch (err) {
+                  console.error("[v0] Payment evidence submission error:", err)
+                  toast({
+                    title: "Error",
+                    description: err instanceof Error ? err.message : "Failed to submit payment evidence",
+                    variant: "destructive",
+                  })
+                } finally {
+                  setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: false }))
+                }
+              }}
+            >
+              {paymentEvidenceModal.isSubmitting ? "Submitting..." : "Submit for Approval"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
