@@ -15,7 +15,7 @@ export default async function MdApprovalsPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select("id, role, first_name, last_name, rank_position, profile_image_url, md_signature_url, departments(name)")
+    .select("id, role, first_name, last_name, profile_image_url, md_signature_url, departments(name)")
     .eq("id", user.id)
     .maybeSingle()
 
