@@ -697,10 +697,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request is not at Director HR stage" }, { status: 400 })
       }
 
-      const assignedDirectorId = String(req.director_hr_id || "").trim() || null
-      if (assignedDirectorId && role !== "admin" && assignedDirectorId !== user.id) {
-        return NextResponse.json({ error: "This request is assigned to another approver. You can view copy only." }, { status: 403 })
-      }
+      // Any HR Executive can approve forwarded requests - no assignment restriction
 
       const decision = body.decision === "reject" ? "reject" : "approve"
       const directorLetter = String(body.director_letter || "").trim() || null
