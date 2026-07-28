@@ -512,7 +512,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y = 24
     }
 
-    // sigImgY tracks where the signature is placed — used by applySignatureSideWatermark
+    // sigImgY: y-position where the signature image is placed, used by applySignatureSideWatermark
+    // Initialised to -1 so the text fallback path knows no image has been rendered yet
     let sigImgY = -1
 
     // Add signature image if available — RENDER ABOVE NAME (exact leave module approach)
