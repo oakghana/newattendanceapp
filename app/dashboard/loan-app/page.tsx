@@ -2389,36 +2389,59 @@ export default function LoanAppPage() {
                 </div>
                 <CardTitle className="text-3xl font-semibold tracking-tight text-slate-900">QCC Loan Processing Hub</CardTitle>
                 <div className="grid grid-cols-1 gap-x-8 gap-y-3 pt-3 text-sm text-slate-700 md:grid-cols-2">
-                  <div><strong>Corporate Email:</strong> {data?.profile.email || "N/A"}</div>
-                  <div><strong>Staff Number:</strong> {data?.profile.employeeId || "N/A"}</div>
-                  <div><strong>Station / Department:</strong> {data?.profile.departmentName || "N/A"}</div>
-                  <div><strong>Rank / Position:</strong> {data?.profile.position || "N/A"}</div>
-                  <div>
+                  <div><strong>Corporate Email:</strong>{" "}
+                    {loading ? <span className="inline-block h-4 w-40 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.email || <span className="text-slate-400">Not set</span>}</span>}
+                  </div>
+                  <div><strong>Staff Number:</strong>{" "}
+                    {loading ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.employeeId || <span className="text-slate-400">Not set</span>}</span>}
+                  </div>
+                  <div><strong>Station / Department:</strong>{" "}
+                    {loading ? <span className="inline-block h-4 w-32 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.departmentName || <span className="text-slate-400">Not assigned</span>}</span>}
+                  </div>
+                  <div><strong>Rank / Position:</strong>{" "}
+                    {loading ? <span className="inline-block h-4 w-36 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.position || <span className="text-slate-400">Not set</span>}</span>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
                     <strong>Category:</strong>{" "}
-                    {data?.profile.staffCategory ? (
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ml-1 ${
-                        data.profile.staffCategory === "Manager" ? "bg-indigo-100 text-indigo-800" :
-                        data.profile.staffCategory === "Senior" ? "bg-blue-100 text-blue-800" :
-                        data.profile.staffCategory === "Officer" ? "bg-teal-100 text-teal-800" :
-                        "bg-slate-100 text-slate-700"
-                      }`}>{data.profile.staffCategory}</span>
-                    ) : "N/A"}
+                    {loading
+                      ? <span className="inline-block h-5 w-20 animate-pulse rounded-full bg-slate-200 align-middle" />
+                      : data?.profile.staffCategory
+                        ? <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            data.profile.staffCategory === "Manager" ? "bg-indigo-100 text-indigo-800" :
+                            data.profile.staffCategory === "Senior" ? "bg-blue-100 text-blue-800" :
+                            data.profile.staffCategory === "Officer" ? "bg-teal-100 text-teal-800" :
+                            "bg-slate-100 text-slate-700"
+                          }`}>{data.profile.staffCategory}</span>
+                        : <span className="text-xs text-slate-400 italic">Set via Staff Management</span>}
                   </div>
-                  <div>
-                    <strong>Length of Service:</strong>{" "}
-                    {data?.profile.yearsOfService != null
-                      ? `${data.profile.yearsOfService} yr${data.profile.yearsOfService !== 1 ? "s" : ""}`
-                      : data?.profile.dateOfAppointment
-                        ? (() => {
-                            const yrs = Math.floor((Date.now() - new Date(data.profile.dateOfAppointment!).getTime()) / (365.25 * 24 * 3600 * 1000))
-                            return `${yrs} yr${yrs !== 1 ? "s" : ""} (since ${fmtDate(data.profile.dateOfAppointment)})`
-                          })()
-                        : "N/A"}
+                  <div><strong>Length of Service:</strong>{" "}
+                    {loading
+                      ? <span className="inline-block h-4 w-20 animate-pulse rounded bg-slate-200 align-middle" />
+                      : data?.profile.yearsOfService != null
+                        ? <span className="text-slate-600">{data.profile.yearsOfService} yr{data.profile.yearsOfService !== 1 ? "s" : ""}</span>
+                        : data?.profile.dateOfAppointment
+                          ? (() => {
+                              const yrs = Math.floor((Date.now() - new Date(data.profile.dateOfAppointment!).getTime()) / (365.25 * 24 * 3600 * 1000))
+                              return <span className="text-slate-600">{yrs} yr{yrs !== 1 ? "s" : ""} <span className="text-slate-400 text-xs">(since {fmtDate(data.profile.dateOfAppointment)})</span></span>
+                            })()
+                          : <span className="text-xs text-slate-400 italic">Set via Staff Management</span>}
                   </div>
-                  <div><strong>Assigned Location:</strong> {data?.profile.assignedLocationName || "N/A"}</div>
-                  <div><strong>Assigned District:</strong> {data?.profile.assignedDistrictName || "N/A"}</div>
-                  <div><strong>Linked HOD:</strong> {data?.profile.currentHodProfile?.name ? `${data.profile.currentHodProfile.name} (${data.profile.currentHodProfile.rank})` : "Not yet assigned"}</div>
-                  <div className="md:col-span-2"><strong>Location Address:</strong> {data?.profile.assignedLocationAddress || "N/A"}</div>
+                  <div><strong>Assigned Location:</strong>{" "}
+                    {loading ? <span className="inline-block h-4 w-32 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedLocationName || <span className="text-slate-400">Not assigned</span>}</span>}
+                  </div>
+                  <div><strong>Assigned District:</strong>{" "}
+                    {loading ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedDistrictName || <span className="text-slate-400">Not assigned</span>}</span>}
+                  </div>
+                  <div><strong>Linked HOD:</strong>{" "}
+                    {loading
+                      ? <span className="inline-block h-4 w-40 animate-pulse rounded bg-slate-200 align-middle" />
+                      : data?.profile.currentHodProfile?.name
+                        ? <span className="text-slate-600">{data.profile.currentHodProfile.name} <span className="text-slate-400 text-xs">({data.profile.currentHodProfile.rank})</span></span>
+                        : <span className="text-slate-400">Not yet assigned</span>}
+                  </div>
+                  <div className="md:col-span-2"><strong>Location Address:</strong>{" "}
+                    {loading ? <span className="inline-block h-4 w-56 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedLocationAddress || <span className="text-slate-400">Not set</span>}</span>}
+                  </div>
                 </div>
               </div>
             </div>

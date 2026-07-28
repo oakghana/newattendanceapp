@@ -202,12 +202,31 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, staff_category, years_of_service, date_of_appointment, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
     if (profileError || !profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    // Fetch optional welfare fields separately so a missing column never breaks the main query
+    let staffCategory: string | null = null
+    let yearsOfService: number | null = null
+    let dateOfAppointment: string | null = null
+    try {
+      const { data: welfareFields } = await admin
+        .from("user_profiles")
+        .select("staff_category, years_of_service, date_of_appointment")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (welfareFields) {
+        staffCategory = (welfareFields as any).staff_category ?? null
+        yearsOfService = (welfareFields as any).years_of_service ?? null
+        dateOfAppointment = (welfareFields as any).date_of_appointment ?? null
+      }
+    } catch {
+      // columns may not exist yet — silently ignore
     }
 
     const role = normalizeRole((profile as any).role)
@@ -631,9 +650,9 @@ export async function GET() {
         email: (profile as any).email || user.email,
         role: (profile as any).role,
         position: (profile as any).position,
-        staffCategory: (profile as any).staff_category || null,
-        yearsOfService: (profile as any).years_of_service ?? null,
-        dateOfAppointment: (profile as any).date_of_appointment || null,
+        staffCategory,
+        yearsOfService,
+        dateOfAppointment,
         departmentId: (profile as any).department_id,
         assignedLocationId: (profile as any).assigned_location_id,
         departmentName: (profile as any)?.departments?.name || null,
