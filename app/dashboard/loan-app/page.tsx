@@ -101,6 +101,9 @@ type WorkflowResponse = {
     email: string
     role: string
     position: string
+    staffCategory: string | null
+    yearsOfService: number | null
+    dateOfAppointment: string | null
     departmentName: string | null
     assignedLocationId?: string | null
     assignedLocationName?: string | null
@@ -2389,7 +2392,29 @@ export default function LoanAppPage() {
                   <div><strong>Corporate Email:</strong> {data?.profile.email || "N/A"}</div>
                   <div><strong>Staff Number:</strong> {data?.profile.employeeId || "N/A"}</div>
                   <div><strong>Station / Department:</strong> {data?.profile.departmentName || "N/A"}</div>
-                  <div><strong>Rank:</strong> {data?.profile.position || "N/A"}</div>
+                  <div><strong>Rank / Position:</strong> {data?.profile.position || "N/A"}</div>
+                  <div>
+                    <strong>Category:</strong>{" "}
+                    {data?.profile.staffCategory ? (
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ml-1 ${
+                        data.profile.staffCategory === "Manager" ? "bg-indigo-100 text-indigo-800" :
+                        data.profile.staffCategory === "Senior" ? "bg-blue-100 text-blue-800" :
+                        data.profile.staffCategory === "Officer" ? "bg-teal-100 text-teal-800" :
+                        "bg-slate-100 text-slate-700"
+                      }`}>{data.profile.staffCategory}</span>
+                    ) : "N/A"}
+                  </div>
+                  <div>
+                    <strong>Length of Service:</strong>{" "}
+                    {data?.profile.yearsOfService != null
+                      ? `${data.profile.yearsOfService} yr${data.profile.yearsOfService !== 1 ? "s" : ""}`
+                      : data?.profile.dateOfAppointment
+                        ? (() => {
+                            const yrs = Math.floor((Date.now() - new Date(data.profile.dateOfAppointment!).getTime()) / (365.25 * 24 * 3600 * 1000))
+                            return `${yrs} yr${yrs !== 1 ? "s" : ""} (since ${fmtDate(data.profile.dateOfAppointment)})`
+                          })()
+                        : "N/A"}
+                  </div>
                   <div><strong>Assigned Location:</strong> {data?.profile.assignedLocationName || "N/A"}</div>
                   <div><strong>Assigned District:</strong> {data?.profile.assignedDistrictName || "N/A"}</div>
                   <div><strong>Linked HOD:</strong> {data?.profile.currentHodProfile?.name ? `${data.profile.currentHodProfile.name} (${data.profile.currentHodProfile.rank})` : "Not yet assigned"}</div>
@@ -2564,42 +2589,154 @@ export default function LoanAppPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tracking" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Loan Flow Tracking</CardTitle>
-              <CardDescription>See every step your loan has passed through from submission to final decision.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {(data?.myRequests || []).map((req) => {
-                const timeline = data?.myTimelines.find((x) => x.loan_request_id === req.id)?.entries || []
-                return (
-                  <div key={req.id} className="border rounded-md p-3 space-y-2">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="font-medium">{req.request_number} - {req.loan_type_label}</div>
-                      <Badge className={statusBadgeClass(req.status, "soft")}>{statusText(req.status)}</Badge>
+        <TabsContent value="tracking" className="space-y-5">
+          {(data?.myRequests || []).length === 0 ? (
+            <Card className="border-dashed border-2 border-violet-200 bg-violet-50/30">
+              <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
+                <div className="text-6xl select-none">📋</div>
+                <p className="text-lg font-semibold text-slate-700">No active loan requests</p>
+                <p className="text-sm text-slate-500">Your submitted loan requests will appear here with live tracking.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            (data?.myRequests || []).map((req) => {
+              const timeline = data?.myTimelines.find((x) => x.loan_request_id === req.id)?.entries || []
+              const currentStepIdx = WORKFLOW_ORDER.indexOf(req.status as typeof WORKFLOW_ORDER[number])
+              const isRejected = ["hod_rejected","rejected_fd","committee_rejected","director_rejected"].includes(req.status)
+              const isApproved = req.status === "approved_director"
+
+              const STEP_META: Record<string, { icon: string; label: string; owner: string; desc: string }> = {
+                pending_hod:         { icon: "🏢", label: "HOD Review",       owner: "Department Head",    desc: "Awaiting your HOD to review and forward" },
+                hod_approved:        { icon: "✅", label: "Loan Office",      owner: "Loan Officer",       desc: "Loan Office is processing your request" },
+                sent_to_accounts:    { icon: "🔢", label: "Accounts / FD",    owner: "Accounts Team",      desc: "FD check & financial review in progress" },
+                awaiting_committee:  { icon: "👥", label: "Committee",        owner: "Welfare Committee",  desc: "Under committee deliberation" },
+                awaiting_hr_terms:   { icon: "📝", label: "HR Terms",         owner: "HR Office",          desc: "HR is setting loan repayment terms" },
+                awaiting_director_hr:{ icon: "🎖️", label: "Executive HR",     owner: "Director / Executive","desc": "Final executive approval pending" },
+                approved_director:   { icon: "🎉", label: "Approved!",        owner: "Complete",           desc: "Your loan has been fully approved" },
+              }
+
+              return (
+                <Card key={req.id} className="overflow-hidden border border-violet-100 shadow-md">
+                  {/* Header */}
+                  <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-3 ${isApproved ? "bg-emerald-600" : isRejected ? "bg-red-600" : "bg-gradient-to-r from-violet-700 to-purple-600"} text-white`}>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-widest opacity-80">{req.request_number}</p>
+                      <h3 className="text-lg font-bold leading-tight">{req.loan_type_label}</h3>
+                      <p className="text-sm opacity-90 mt-0.5">GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</p>
                     </div>
-                    <div className="text-sm text-muted-foreground">Amount: GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</div>
-                    {timeline.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No timeline events yet.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {timeline.map((entry) => (
-                          <div key={entry.id} className="text-sm rounded border p-2 bg-slate-50">
-                            <div className="font-medium">{ACTION_LABELS[entry.action_key] || entry.action_key}</div>
-                            <div className="text-muted-foreground">{fmtDate(entry.created_at)} | {entry.actor_role || "system"}</div>
-                            <div>From: {entry.from_status ? statusText(entry.from_status) : "N/A"} {" -> "} To: {entry.to_status ? statusText(entry.to_status) : "N/A"}</div>
-                            {entry.note && <div>Note: {entry.note}</div>}
+                    <div className="flex flex-col items-end gap-1.5">
+                      <Badge className={`${isApproved ? "bg-white text-emerald-700" : isRejected ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1`}>
+                        {isApproved ? "🎉 Approved" : isRejected ? "❌ " + statusText(req.status) : "⏳ " + statusText(req.status)}
+                      </Badge>
+                      <p className="text-xs opacity-70">Submitted {fmtDate(req.submitted_at || req.created_at)}</p>
+                    </div>
+                  </div>
+
+                  <CardContent className="pt-6 pb-4 px-5 space-y-6">
+                    {/* Visual Workflow Stepper */}
+                    {!isRejected && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">Loan Journey</p>
+                        <div className="flex items-start gap-0 overflow-x-auto pb-2">
+                          {WORKFLOW_ORDER.map((step, idx) => {
+                            const meta = STEP_META[step]
+                            const isDone = currentStepIdx > idx || isApproved
+                            const isCurrent = currentStepIdx === idx && !isApproved
+                            const isFuture = currentStepIdx < idx && !isApproved
+                            return (
+                              <div key={step} className="flex items-start flex-1 min-w-[80px]">
+                                <div className="flex flex-col items-center flex-1">
+                                  <div className={`relative flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold transition-all duration-500 ${
+                                    isDone ? "bg-emerald-500 shadow-lg shadow-emerald-200" :
+                                    isCurrent ? "bg-violet-600 shadow-lg shadow-violet-200 ring-4 ring-violet-200 animate-pulse" :
+                                    "bg-slate-200 text-slate-400"
+                                  }`}>
+                                    {isDone ? "✓" : meta.icon}
+                                  </div>
+                                  <p className={`mt-2 text-center text-[10px] font-semibold leading-tight max-w-[72px] ${isCurrent ? "text-violet-700" : isDone ? "text-emerald-700" : "text-slate-400"}`}>
+                                    {meta.label}
+                                  </p>
+                                </div>
+                                {idx < WORKFLOW_ORDER.length - 1 && (
+                                  <div className={`h-0.5 flex-1 mt-5 transition-all duration-700 ${isDone ? "bg-emerald-400" : isCurrent ? "bg-violet-300" : "bg-slate-200"}`} />
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {STEP_META[req.status] && (
+                          <div className="mt-3 rounded-xl bg-violet-50 border border-violet-100 px-4 py-3 flex items-center gap-3">
+                            <span className="text-2xl">{STEP_META[req.status]?.icon}</span>
+                            <div>
+                              <p className="text-sm font-semibold text-violet-900">Currently with: {STEP_META[req.status]?.owner}</p>
+                              <p className="text-xs text-violet-700">{STEP_META[req.status]?.desc}</p>
+                            </div>
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
-                  </div>
-                )
-              })}
-              {(data?.myRequests || []).length === 0 && <p className="text-sm text-muted-foreground">No loans available for tracking.</p>}
-            </CardContent>
-          </Card>
+
+                    {isRejected && (
+                      <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-3">
+                        <span className="text-3xl">❌</span>
+                        <div>
+                          <p className="text-sm font-semibold text-red-800">Application {statusText(req.status)}</p>
+                          <p className="text-xs text-red-600">Please contact HR for further assistance.</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Timeline Events */}
+                    {timeline.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Activity Log</p>
+                        <div className="relative space-y-0 before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                          {timeline.map((entry, i) => {
+                            const isLatest = i === timeline.length - 1
+                            const actionIcon: Record<string, string> = {
+                              staff_submit: "📤", staff_edit: "✏️", hod_decision: "🏢",
+                              hod_auto_approved: "⚡", loan_office_update_request: "📋",
+                              loan_office_forward: "➡️", accounts_fd_update: "🔢",
+                              committee_decision: "👥", hr_set_terms: "📝",
+                              director_finalize: "🎖️",
+                            }
+                            return (
+                              <div key={entry.id} className="relative flex gap-4 pl-10 pb-4">
+                                <div className={`absolute left-2 top-1 flex h-5 w-5 items-center justify-center rounded-full text-xs ring-2 ring-white ${isLatest ? "bg-violet-600 text-white" : "bg-slate-300 text-slate-600"}`}>
+                                  {isLatest ? "●" : "○"}
+                                </div>
+                                <div className={`flex-1 rounded-xl border px-4 py-3 ${isLatest ? "border-violet-200 bg-violet-50/50" : "border-slate-100 bg-white"}`}>
+                                  <div className="flex flex-wrap items-center justify-between gap-1">
+                                    <span className="font-semibold text-sm text-slate-800">
+                                      {actionIcon[entry.action_key] || "📌"} {ACTION_LABELS[entry.action_key] || entry.action_key.replace(/_/g," ")}
+                                    </span>
+                                    <span className="text-[11px] text-slate-400">{fmtDate(entry.created_at)}</span>
+                                  </div>
+                                  {entry.to_status && (
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Status moved to: <span className="font-semibold text-slate-700">{statusText(entry.to_status)}</span>
+                                    </p>
+                                  )}
+                                  {entry.note && <p className="mt-1 text-xs italic text-slate-600">"{entry.note}"</p>}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {timeline.length === 0 && (
+                      <div className="text-center py-4 text-slate-400 text-sm">
+                        <span className="text-2xl block mb-1">🕐</span>
+                        Timeline events will appear once action is taken on this request.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })
+          )}
         </TabsContent>
 
         <TabsContent value="hod" className="space-y-3">
