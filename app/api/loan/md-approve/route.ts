@@ -108,7 +108,6 @@ export async function GET(req: NextRequest) {
         first_name,
         last_name,
         employee_id,
-        rank_position,
         profile_image_url
       )
     `)
