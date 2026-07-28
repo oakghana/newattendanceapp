@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No loan IDs provided." }, { status: 400 })
   }
 
-  const admin = createAdminClient()
+  const admin = await createAdminClient()
   const mdName = `${profile.first_name} ${profile.last_name}`.trim()
   const now = new Date().toISOString()
 
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const admin = createAdminClient()
+  const admin = await createAdminClient()
   const url = new URL(req.url)
   const view = url.searchParams.get("view") || "pending" // "pending" | "approved"
 
