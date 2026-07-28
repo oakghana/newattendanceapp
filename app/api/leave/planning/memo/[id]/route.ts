@@ -825,14 +825,23 @@ export async function GET(
         tableWidth: contentWidth,
         styles: {
           font: "times",
-          fontSize: 9,
+          fontSize: 8.5,
           textColor: [0, 0, 0],
           lineColor: [0, 0, 0],
           lineWidth: 0.3,
-          cellPadding: 2,
+          cellPadding: [1.5, 1.5],
+          overflow: "linebreak",
+          valign: "middle",
         },
-        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: "bold", halign: "center" },
-        bodyStyles: { halign: "center" },
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: "bold", halign: "center", fontSize: 8 },
+        bodyStyles: { halign: "center", fontSize: 8.5 },
+        columnStyles: {
+          0: { cellWidth: 28 }, // Entitled
+          1: { cellWidth: 28 }, // Granted
+          2: { cellWidth: 32 }, // From
+          3: { cellWidth: 32 }, // To
+          4: { halign: "left", cellWidth: "auto" }, // Remarks - left aligned, flexible width
+        },
         head: [["Number of Days\nEntitled", "Number of Days\nGranted", "From", "To", "Remarks"]],
         body: [
           [
@@ -843,7 +852,7 @@ export async function GET(
             remarksSummary,
           ],
           [
-            { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold" } },
+            { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold", fontSize: 8.5 } },
           ],
         ],
       })
