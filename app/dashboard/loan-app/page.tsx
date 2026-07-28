@@ -3191,6 +3191,13 @@ export default function LoanAppPage() {
                             <span className="ml-1 inline-flex items-center rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">Auto</span>
                           )}
                         </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.supporting_document_url ? (
+                            <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">View</a>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
                           {row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}
                         </td>
