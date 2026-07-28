@@ -2879,474 +2879,418 @@ export default function LoanAppPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="loan-office" className="space-y-3">
+        <TabsContent value="loan-office" className="space-y-5">
           <ReadOnlyHint canAct={Boolean(p?.loanOffice || p?.hrOffice)} roleLabel="Loan Office / HR Office" />
-          <Card>
-            <CardHeader>
-              <CardTitle>Loan Office Processing Queue</CardTitle>
-              <CardDescription>
-                Organized workspace with loan-type tabs and stage tabs for good FD, poor FD, pending push, sent approval, and archivable requests.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {loanOfficeStageTab === "archivable" && p?.loanOffice && loanOfficeStageBuckets.archivable.length > 0 && (
-                <div className="flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 p-3">
-                  <div className="text-sm text-violet-800">
-                    <span className="font-semibold">{loanOfficeStageBuckets.archivable.length}</span> loan request{loanOfficeStageBuckets.archivable.length !== 1 ? "s" : ""} ready to archive
-                  </div>
-                  <Button
-                    size="sm"
-                    disabled={isArchivingLoans}
-                    className="bg-violet-700 hover:bg-violet-800 text-white gap-1"
-                    onClick={async () => {
-                      if (!window.confirm(`Archive all ${loanOfficeStageBuckets.archivable.length} archivable loan requests? They will be removed from the active queue.`)) return
-                      setIsArchivingLoans(true)
-                      try {
-                        const res = await fetch("/api/loan/bulk-archive", { method: "POST" })
-                        const json = await res.json()
-                        if (!res.ok) throw new Error(json.error || "Failed to archive")
-                        toast({ title: "Loans Archived", description: json.message })
-                        await loadData()
-                      } catch (e: any) {
-                        toast({ title: "Archive Failed", description: e.message, variant: "destructive" })
-                      } finally {
-                        setIsArchivingLoans(false)
-                      }
-                    }}
-                  >
-                    {isArchivingLoans ? "Archiving…" : `Archive All (${loanOfficeStageBuckets.archivable.length})`}
-                  </Button>
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant={loanOfficeViewMode === "table" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setLoanOfficeViewMode("table")}
-                    className="gap-1"
-                  >
-                    <LayoutList className="h-4 w-4" /> Table
-                  </Button>
-                  <Button
-                    variant={loanOfficeViewMode === "card" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setLoanOfficeViewMode("card")}
-                    className="gap-1"
-                  >
-                    <LayoutGrid className="h-4 w-4" /> Cards
-                  </Button>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredLoanOfficeStageRows, "loan-office-queue-filtered.csv")}>Export Filtered CSV</Button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
-                <Input value={loanOfficeSearch} onChange={(e) => setLoanOfficeSearch(e.target.value)} placeholder="Search requests" />
-                <Select value={loanOfficeStatus} onValueChange={setLoanOfficeStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All statuses</SelectItem>
-                    {Object.keys(STATUS_LABELS).map((status) => (
-                      <SelectItem key={`loan-office-${status}`} value={status}>{statusText(status)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={loanOfficeSort} onValueChange={(v: "newest" | "oldest") => setLoanOfficeSort(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newest">Newest first</SelectItem>
-                    <SelectItem value="oldest">Oldest first</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={loanOfficeLocation} onValueChange={setLoanOfficeLocation}>
-                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All locations</SelectItem>
-                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={loanOfficeDept} onValueChange={setLoanOfficeDept}>
-                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All departments</SelectItem>
-                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedLoanOfficeStage.length} of {filteredLoanOfficeStageRows.length}</div>
-              </div>
 
-              <Tabs value={loanOfficeStageTab} onValueChange={setLoanOfficeStageTab} className="space-y-2">
-                <TabsList className="flex w-full flex-wrap gap-2 h-auto bg-transparent p-0">
-                  <TabsTrigger value="pending" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Pending FD ({loanOfficeStageBuckets["pending"].length})
-                  </TabsTrigger>
-                  <TabsTrigger value="good-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Good FD ({loanOfficeStageBuckets["good-fd"].length})
-                  </TabsTrigger>
-                  <TabsTrigger value="poor-fd" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Poor FD ({loanOfficeStageBuckets["poor-fd"].length})
-                  </TabsTrigger>
-                  <TabsTrigger value="good-fd-not-pushed" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Good FD Not Pushed ({loanOfficeStageBuckets["good-fd-not-pushed"].length})
-                  </TabsTrigger>
-                  <TabsTrigger value="sent-for-approval" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Sent for Approval ({loanOfficeStageBuckets["sent-for-approval"].length})
-                  </TabsTrigger>
-                  <TabsTrigger value="archivable" className="data-[state=active]:bg-fuchsia-700 data-[state=active]:text-white">
-                    Archivable ({loanOfficeStageBuckets.archivable.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="archived" className="data-[state=active]:bg-slate-700 data-[state=active]:text-white">
-                    Archived ({loanOfficeStageBuckets.archived.length})
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </CardContent>
-          </Card>
-          {filteredLoanOfficeStageRows.length === 0 && (
-            <Card>
-              <CardContent className="pt-4 text-sm text-muted-foreground">
-                No requests match this loan-type tab and stage tab.
-              </CardContent>
-            </Card>
-          )}
+          {/* ── Compact metric strip ── */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "Total", value: loanOfficeAnalytics.totals.total_requests, color: "bg-slate-900 text-white" },
+              { label: "Active pipeline", value: loanOfficeAnalytics.totals.active_pipeline, color: "bg-violet-700 text-white" },
+              { label: "FD good", value: loanOfficeAnalytics.totals.good_fd, color: "bg-emerald-600 text-white" },
+              { label: "FD poor", value: loanOfficeAnalytics.totals.poor_fd, color: "bg-rose-600 text-white" },
+            ].map((m) => (
+              <div key={m.label} className={`flex flex-col gap-0.5 rounded-xl px-4 py-3 ${m.color}`}>
+                <span className="text-[11px] font-medium uppercase tracking-widest opacity-75">{m.label}</span>
+                <span className="text-2xl font-semibold tabular-nums leading-none">{m.value ?? 0}</span>
+              </div>
+            ))}
+          </div>
 
-          {loanOfficeViewMode === "table" && filteredLoanOfficeStageRows.length > 0 && (
-            <Card>
-              <CardContent className="p-0 overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-purple-950/10">
-                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
-                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
-                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
-                      <TableHead className="whitespace-nowrap">Rank</TableHead>
-                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
-                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
-                      <TableHead className="whitespace-nowrap">FD Score</TableHead>
-                      {canSeeFdReviewerName && <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>}
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap">Submitted</TableHead>
-                      <TableHead className="whitespace-nowrap">Reason</TableHead>
-                      {p?.loanOffice && <TableHead className="whitespace-nowrap">Action</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+          {/* ── Processing Queue ── */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            {/* section header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Processing Queue</p>
+                <p className="text-xs text-slate-500">Review HOD-approved requests, score FD, and forward for approval</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-slate-600 hover:text-slate-900" onClick={() => setLoanOfficeViewMode(loanOfficeViewMode === "table" ? "card" : "table")}>
+                  {loanOfficeViewMode === "table" ? <><LayoutGrid className="h-3.5 w-3.5" /> Cards</> : <><LayoutList className="h-3.5 w-3.5" /> Table</>}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-slate-600 hover:text-slate-900" onClick={() => downloadCsv(filteredLoanOfficeStageRows, "loan-office-queue.csv")}>
+                  <Download className="h-3.5 w-3.5" /> Export
+                </Button>
+              </div>
+            </div>
+
+            {/* stage pills */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
+              {([ 
+                { key: "pending",           label: "Pending FD" },
+                { key: "good-fd",           label: "Good FD" },
+                { key: "poor-fd",           label: "Poor FD" },
+                { key: "good-fd-not-pushed",label: "Not Pushed" },
+                { key: "sent-for-approval", label: "Sent for Approval" },
+                { key: "archivable",        label: "Archivable" },
+                { key: "archived",          label: "Archived" },
+              ] as const).map(({ key, label }) => {
+                const count = (loanOfficeStageBuckets as any)[key]?.length ?? 0
+                const isActive = loanOfficeStageTab === key
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setLoanOfficeStageTab(key)}
+                    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      isActive
+                        ? "border-violet-700 bg-violet-700 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700"
+                    }`}
+                  >
+                    {label}
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${isActive ? "bg-white/25" : "bg-slate-100 text-slate-500"}`}>{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* search + filters row */}
+            <div className="flex flex-wrap items-center gap-2 px-5 py-2.5">
+              <Input
+                value={loanOfficeSearch}
+                onChange={(e) => setLoanOfficeSearch(e.target.value)}
+                placeholder="Search name, staff no., request no…"
+                className="h-8 w-56 text-xs"
+              />
+              <Select value={loanOfficeLocation} onValueChange={setLoanOfficeLocation}>
+                <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="All locations" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={loanOfficeDept} onValueChange={setLoanOfficeDept}>
+                <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="All departments" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All departments</SelectItem>
+                  {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={loanOfficeSort} onValueChange={(v: "newest" | "oldest") => setLoanOfficeSort(v)}>
+                <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest first</SelectItem>
+                  <SelectItem value="oldest">Oldest first</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="ml-auto text-xs text-slate-400">{filteredLoanOfficeStageRows.length} result{filteredLoanOfficeStageRows.length !== 1 ? "s" : ""}</span>
+            </div>
+
+            {/* archive banner */}
+            {loanOfficeStageTab === "archivable" && p?.loanOffice && loanOfficeStageBuckets.archivable.length > 0 && (
+              <div className="mx-5 mb-3 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5">
+                <p className="text-xs text-violet-800">
+                  <span className="font-semibold">{loanOfficeStageBuckets.archivable.length}</span> request{loanOfficeStageBuckets.archivable.length !== 1 ? "s" : ""} ready to archive
+                </p>
+                <Button
+                  size="sm"
+                  disabled={isArchivingLoans}
+                  className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800"
+                  onClick={async () => {
+                    if (!window.confirm(`Archive all ${loanOfficeStageBuckets.archivable.length} archivable loan requests?`)) return
+                    setIsArchivingLoans(true)
+                    try {
+                      const res = await fetch("/api/loan/bulk-archive", { method: "POST" })
+                      const json = await res.json()
+                      if (!res.ok) throw new Error(json.error || "Failed to archive")
+                      toast({ title: "Loans Archived", description: json.message })
+                      await loadData()
+                    } catch (e: any) {
+                      toast({ title: "Archive Failed", description: e.message, variant: "destructive" })
+                    } finally {
+                      setIsArchivingLoans(false)
+                    }
+                  }}
+                >
+                  {isArchivingLoans ? "Archiving…" : `Archive All (${loanOfficeStageBuckets.archivable.length})`}
+                </Button>
+              </div>
+            )}
+
+            {/* table */}
+            {filteredLoanOfficeStageRows.length === 0 ? (
+              <div className="px-5 py-10 text-center text-sm text-slate-400">No requests in this stage.</div>
+            ) : loanOfficeViewMode === "table" ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-5 py-2.5 whitespace-nowrap">Request No.</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Staff</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Type</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Amount (GHc)</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
+                      {canSeeFdReviewerName && <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>}
+                      <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Submitted</th>
+                      {p?.loanOffice && <th className="px-4 py-2.5 whitespace-nowrap">Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
                     {pagedLoanOfficeStage.map((row) => (
-                      <TableRow key={row.id} className="align-top">
-                        <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-                        <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
-                        <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <Badge className={`text-[10px] whitespace-nowrap ${row.status === "hod_approved" ? "bg-green-700" : "bg-purple-700"} text-white`}>
-                              {statusText(row.status)}
-                            </Badge>
-                            {String(row.hod_review_note || "").toLowerCase().includes("auto-approved") && (
-                              <Badge variant="outline" className="text-[10px] whitespace-nowrap border-amber-300 text-amber-700">
-                                Auto-forwarded: HOD did not act in 3 days
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
-                        <TableCell className="text-xs max-w-[200px] truncate" title={row.reason || ""}>{row.reason || "—"}</TableCell>
-                        {p?.loanOffice && (
-                          <TableCell className="whitespace-nowrap">
-                            {row.status === "hod_approved" ? (
-                              <div className="flex flex-col gap-1 min-w-[160px]">
-                                <Textarea
-                                  placeholder="Note"
-                                  value={loanOfficeNotes[row.id] || ""}
-                                  onChange={(e) => setLoanOfficeNotes((s) => ({ ...s, [row.id]: e.target.value }))}
-                                  rows={1}
-                                  className="text-xs"
-                                />
-                                <Button
-                                  size="sm"
-                                  className="text-xs"
-                                  onClick={() => openActionModal(row, "loan_office")}
-                                >
-                                  Review &amp; Forward
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">{statusText(row.status)}</span>
-                            )}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          {loanOfficeViewMode === "card" && pagedLoanOfficeStage.map((row) => (
-            <StageCard key={row.id} row={row}>
-              {row.status === "hod_approved" && p?.loanOffice
-                ? <Button size="sm" onClick={() => openActionModal(row, "loan_office")}>Review &amp; Forward</Button>
-                : <div className="text-xs text-muted-foreground">Status: <strong>{statusText(row.status)}</strong></div>
-              }
-            </StageCard>
-          ))}
-
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setLoanOfficePage((n) => Math.max(1, n - 1))} disabled={loanOfficePage <= 1}>Prev</Button>
-            <span className="text-xs text-muted-foreground">Page {loanOfficePage} of {totalLoanOfficeStagePages}</span>
-            <Button variant="outline" size="sm" onClick={() => setLoanOfficePage((n) => Math.min(totalLoanOfficeStagePages, n + 1))} disabled={loanOfficePage >= totalLoanOfficeStagePages}>Next</Button>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>HR Terms Queue</CardTitle>
-              <CardDescription>Set disbursement and recovery terms here before forwarding each memo to Executive HR.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-1 pb-1">
-                <Button variant={hrViewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setHrViewMode("table")} className="gap-1"><LayoutList className="h-4 w-4" /> Table</Button>
-                <Button variant={hrViewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setHrViewMode("card")} className="gap-1"><LayoutGrid className="h-4 w-4" /> Cards</Button>
-              </div>
-              <div className="flex items-center justify-end gap-2 pb-1">
-                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredHr, "hr-terms-queue-filtered.csv")}>Export Filtered CSV</Button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
-                <Input value={hrSearch} onChange={(e) => setHrSearch(e.target.value)} placeholder="Search requests" />
-                <Select value={hrStatus} onValueChange={setHrStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All statuses</SelectItem>
-                    {Object.keys(STATUS_LABELS).map((status) => (
-                      <SelectItem key={`hr-${status}`} value={status}>{statusText(status)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={hrSort} onValueChange={(v: "newest" | "oldest") => setHrSort(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newest">Newest first</SelectItem>
-                    <SelectItem value="oldest">Oldest first</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={hrLocation} onValueChange={setHrLocation}>
-                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All locations</SelectItem>
-                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={hrDept} onValueChange={setHrDept}>
-                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All departments</SelectItem>
-                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <div className="text-xs text-muted-foreground flex items-center md:justify-end">Showing {pagedHr.length} of {filteredHr.length}</div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {filteredHr.length === 0 && (
-            <Card>
-              <CardContent className="pt-4 text-sm text-muted-foreground">No requests are currently awaiting HR terms setup.</CardContent>
-            </Card>
-          )}
-
-          {hrViewMode === "table" && filteredHr.length > 0 && (
-            <Card>
-              <CardContent className="p-0 overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-purple-950/10">
-                      <TableHead className="whitespace-nowrap">Request No.</TableHead>
-                      <TableHead className="whitespace-nowrap">Staff Name</TableHead>
-                      <TableHead className="whitespace-nowrap">Staff No.</TableHead>
-                      <TableHead className="whitespace-nowrap">Rank</TableHead>
-                      <TableHead className="whitespace-nowrap">Loan Type</TableHead>
-                      <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
-                      <TableHead className="whitespace-nowrap">FD Score</TableHead>
-                      <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      {p?.hrOffice && <TableHead className="whitespace-nowrap">Terms &amp; Action</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pagedHr.map((row) => {
-                      const entry = hrInputs[row.id] || { disbursement: "", recovery: "", months: "", note: "" }
-                      return (
-                        <TableRow key={row.id} className="align-top">
-                          <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
-                          <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.staff_rank || "—"}</TableCell>
-                          <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
-                          <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
-                          {p?.hrOffice && (
-                            <TableCell>
-                              <Button size="sm" className="text-xs whitespace-nowrap" onClick={() => openActionModal(row, "hr_terms")}>Set Terms</Button>
-                            </TableCell>
+                      <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
+                          <p className="text-[11px] text-slate-400">{row.staff_number || ""} {row.staff_rank ? `· ${row.staff_rank}` : ""}</p>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{row.loan_type_label || row.loan_type_key}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-800 whitespace-nowrap tabular-nums">
+                          {row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap tabular-nums">
+                          {row.fd_score != null ? (
+                            <span className={`font-semibold ${Number(row.fd_score) >= 60 ? "text-emerald-700" : "text-rose-600"}`}>{row.fd_score}</span>
+                          ) : <span className="text-slate-400">—</span>}
+                        </td>
+                        {canSeeFdReviewerName && <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{row.accounts_reviewer_name || "—"}</td>}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            row.status === "hod_approved" ? "bg-emerald-100 text-emerald-800" :
+                            row.status === "sent_to_accounts" ? "bg-blue-100 text-blue-800" :
+                            row.status === "awaiting_committee" ? "bg-amber-100 text-amber-800" :
+                            "bg-slate-100 text-slate-700"
+                          }`}>
+                            {statusText(row.status)}
+                          </span>
+                          {String(row.hod_review_note || "").toLowerCase().includes("auto-approved") && (
+                            <span className="ml-1 inline-flex items-center rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">Auto</span>
                           )}
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                          {row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}
+                        </td>
+                        {p?.loanOffice && (
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {row.status === "hod_approved" ? (
+                              <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>
+                                Review &amp; Forward
+                              </Button>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">{statusText(row.status)}</span>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
+                {pagedLoanOfficeStage.map((row) => (
+                  <StageCard key={row.id} row={row}>
+                    {row.status === "hod_approved" && p?.loanOffice
+                      ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>Review &amp; Forward</Button>
+                      : <span className="text-xs text-slate-500">{statusText(row.status)}</span>
+                    }
+                  </StageCard>
+                ))}
+              </div>
+            )}
+
+            {/* pagination */}
+            {filteredLoanOfficeStageRows.length > 0 && (
+              <div className="flex items-center justify-between border-t border-slate-100 px-5 py-2.5">
+                <span className="text-xs text-slate-400">Page {loanOfficePage} of {totalLoanOfficeStagePages}</span>
+                <div className="flex gap-1.5">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setLoanOfficePage((n) => Math.max(1, n - 1))} disabled={loanOfficePage <= 1}>Prev</Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setLoanOfficePage((n) => Math.min(totalLoanOfficeStagePages, n + 1))} disabled={loanOfficePage >= totalLoanOfficeStagePages}>Next</Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── HR Terms Queue ── */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">HR Terms Queue</p>
+                <p className="text-xs text-slate-500">Set disbursement and recovery terms before forwarding to Executive HR</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-slate-600 hover:text-slate-900" onClick={() => setHrViewMode(hrViewMode === "table" ? "card" : "table")}>
+                  {hrViewMode === "table" ? <><LayoutGrid className="h-3.5 w-3.5" /> Cards</> : <><LayoutList className="h-3.5 w-3.5" /> Table</>}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-slate-600 hover:text-slate-900" onClick={() => downloadCsv(filteredHr, "hr-terms-queue.csv")}>
+                  <Download className="h-3.5 w-3.5" /> Export
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-2.5">
+              <Input value={hrSearch} onChange={(e) => setHrSearch(e.target.value)} placeholder="Search…" className="h-8 w-48 text-xs" />
+              <Select value={hrLocation} onValueChange={setHrLocation}>
+                <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="All locations" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={hrDept} onValueChange={setHrDept}>
+                <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="All departments" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All departments</SelectItem>
+                  {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <span className="ml-auto text-xs text-slate-400">{filteredHr.length} result{filteredHr.length !== 1 ? "s" : ""}</span>
+            </div>
+
+            {filteredHr.length === 0 ? (
+              <div className="px-5 py-10 text-center text-sm text-slate-400">No requests awaiting HR terms setup.</div>
+            ) : hrViewMode === "table" ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-5 py-2.5 whitespace-nowrap">Request No.</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Staff</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Loan Type</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Amount (GHc)</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                      {p?.hrOffice && <th className="px-4 py-2.5 whitespace-nowrap">Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pagedHr.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
+                          <p className="text-[11px] text-slate-400">{row.staff_number || ""}{row.staff_rank ? ` · ${row.staff_rank}` : ""}</p>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{row.loan_type_label || row.loan_type_key}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-800 whitespace-nowrap tabular-nums">
+                          {row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap tabular-nums">
+                          {row.fd_score != null ? (
+                            <span className={`font-semibold ${Number(row.fd_score) >= 60 ? "text-emerald-700" : "text-rose-600"}`}>{row.fd_score}</span>
+                          ) : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{row.accounts_reviewer_name || "—"}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadgeClass(row.status, "soft")}`}>
+                            {statusText(row.status)}
+                          </span>
+                        </td>
+                        {p?.hrOffice && (
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "hr_terms")}>
+                              Set Terms
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
+                {pagedHr.map((row) => (
+                  <StageCard key={row.id} row={row}>
+                    {p?.hrOffice && <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "hr_terms")}>Set Terms</Button>}
+                  </StageCard>
+                ))}
+              </div>
+            )}
+
+            {filteredHr.length > 0 && (
+              <div className="flex items-center justify-between border-t border-slate-100 px-5 py-2.5">
+                <span className="text-xs text-slate-400">Page {hrPage} of {totalHrPages}</span>
+                <div className="flex gap-1.5">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setHrPage((n) => Math.max(1, n - 1))} disabled={hrPage <= 1}>Prev</Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setHrPage((n) => Math.min(totalHrPages, n + 1))} disabled={hrPage >= totalHrPages}>Next</Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Loan type breakdown ── */}
+          {loanOfficeTypeSummary.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-5 py-3.5">
+                <p className="text-sm font-semibold text-slate-900">Loan Type Breakdown</p>
+                <p className="text-xs text-slate-500">Stage counts per loan type across the active queue</p>
+              </div>
+              <div className="grid gap-px bg-slate-100 divide-x-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {loanOfficeTypeSummary.map((item) => (
+                  <div key={`loan-summary-${item.loanKey}`} className="bg-white px-5 py-4">
+                    <p className="font-semibold text-slate-900 text-sm">{item.loanLabel}</p>
+                    <p className="mt-0.5 text-xs text-slate-400 mb-3">Total: {item.totalUnique}</p>
+                    <div className="space-y-1.5">
+                      {[
+                        { label: "Good FD", value: item.goodFd, color: "text-emerald-700" },
+                        { label: "Poor FD", value: item.poorFd, color: "text-rose-600" },
+                        { label: "Not Pushed", value: item.goodFdNotPushed, color: "text-amber-600" },
+                        { label: "For Approval", value: item.sentForApproval, color: "text-blue-700" },
+                        { label: "Archivable", value: item.archivable, color: "text-slate-500" },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">{label}</span>
+                          <span className={`text-xs font-semibold tabular-nums ${color}`}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
-          {hrViewMode === "card" && pagedHr.map((row) => (
-            <StageCard key={row.id} row={row}>
-              {p?.hrOffice && <Button size="sm" onClick={() => openActionModal(row, "hr_terms")}>Set Terms</Button>}
-            </StageCard>
-          ))}
-
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setHrPage((n) => Math.max(1, n - 1))} disabled={hrPage <= 1}>Prev</Button>
-            <span className="text-xs text-muted-foreground">Page {hrPage} of {totalHrPages}</span>
-            <Button variant="outline" size="sm" onClick={() => setHrPage((n) => Math.min(totalHrPages, n + 1))} disabled={hrPage >= totalHrPages}>Next</Button>
-          </div>
-
-          <Card className="border-slate-200 bg-white shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-base font-semibold text-slate-900">Loan Type Workflow Status</CardTitle>
-                <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">5 Stages</Badge>
-              </div>
-              <CardDescription className="text-sm text-slate-600">
-                Quick overview of each loan type's progress through approval stages
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {loanOfficeTypeSummary.length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-500">No loan type data available yet.</p>
-              ) : (
-                <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                  {loanOfficeTypeSummary.map((item) => (
-                    <div key={`loan-summary-${item.loanKey}`} className="flex flex-col rounded-lg border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 hover:shadow-md transition-shadow">
-                      <div className="mb-4">
-                        <h4 className="font-semibold text-slate-900">{item.loanLabel}</h4>
-                        <p className="text-sm text-slate-500">Total: <span className="font-semibold text-slate-700">{item.totalUnique}</span></p>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
-                          <span className="text-xs font-medium text-slate-600">Good FD</span>
-                          <span className="text-sm font-semibold text-emerald-700">{item.goodFd}</span>
-                        </div>
-                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
-                          <span className="text-xs font-medium text-slate-600">Poor FD</span>
-                          <span className="text-sm font-semibold text-orange-700">{item.poorFd}</span>
-                        </div>
-                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
-                          <span className="text-xs font-medium text-slate-600">Not Pushed</span>
-                          <span className="text-sm font-semibold text-amber-700">{item.goodFdNotPushed}</span>
-                        </div>
-                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
-                          <span className="text-xs font-medium text-slate-600">For Approval</span>
-                          <span className="text-sm font-semibold text-blue-700">{item.sentForApproval}</span>
-                        </div>
-                        <div className="flex items-center justify-between rounded-md bg-white border border-slate-200 px-3 py-2">
-                          <span className="text-xs font-medium text-slate-600">Archivable</span>
-                          <span className="text-sm font-semibold text-slate-700">{item.archivable}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <LoanAnalyticsMetricCard
-              label="Total Loan Requests"
-              value={loanOfficeAnalytics.totals.total_requests}
-              hint="Cross-board loan volume in the current workspace"
-              accent="border-cyan-200"
-              icon={<Wallet className="h-5 w-5" />}
-            />
-            <LoanAnalyticsMetricCard
-              label="Worked On"
-              value={loanOfficeAnalytics.totals.worked_on}
-              hint="Requests already advanced beyond the first waiting stages"
-              accent="border-emerald-200"
-              icon={<Activity className="h-5 w-5" />}
-            />
-            <LoanAnalyticsMetricCard
-              label="Yet To Work On"
-              value={loanOfficeAnalytics.totals.yet_to_be_worked}
-              hint="Requests still waiting at HOD or ready for Loan Office attention"
-              accent="border-amber-200"
-              icon={<Clock className="h-5 w-5" />}
-            />
-            <LoanAnalyticsMetricCard
-              label="Finalized"
-              value={loanOfficeAnalytics.totals.finalized}
-              hint="Approved or closed requests across the board"
-              accent="border-violet-200"
-              icon={<CheckCircle2 className="h-5 w-5" />}
-            />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-            <Card className="overflow-hidden border border-slate-200 bg-[linear-gradient(135deg,_#250b2c_0%,_#4b1366_52%,_#8a1b5c_100%)] text-white shadow-lg">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.24em] text-fuchsia-100">Loan Office Intelligence</p>
-                    <h3 className="mt-2 text-2xl font-semibold tracking-tight">Processing Analytics Board</h3>
-                    <p className="mt-2 max-w-2xl text-sm text-fuchsia-100/90">
-                      Track worked-on requests, untouched queue segments, FD quality, loan-location concentration, and live leave exposure affecting operational staffing decisions.
-                    </p>
-                  </div>
-                  <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                    <BarChart3 className="h-7 w-7 text-fuchsia-100" />
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3 text-xs text-fuchsia-100/90">
-                  <span>Active pipeline: {loanOfficeAnalytics.totals.active_pipeline}</span>
-                  <span>FD good: {loanOfficeAnalytics.totals.good_fd}</span>
-                  <span>FD poor: {loanOfficeAnalytics.totals.poor_fd}</span>
-                </div>
-              </CardContent>
-            </Card>
-
+          {/* ── Analytics strip ── */}
+          <div className="grid gap-4 xl:grid-cols-2">
             <LoanAnalyticsBarChart
               title="Stage Distribution"
               rows={loanOfficeAnalytics.stageBreakdown}
               valueKey="total"
-              colorClass="bg-gradient-to-r from-fuchsia-500 to-violet-600"
-              emptyMessage="No loan requests available for stage analysis."
+              colorClass="bg-violet-600"
+              emptyMessage="No stage data available."
               formatter={(row) => statusText(String(row?.status || "unknown"))}
             />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
             <LoanAnalyticsBarChart
               title="Loan Intake Trend"
               rows={loanOfficeAnalytics.monthlyIntake}
               valueKey="total"
-              colorClass="bg-gradient-to-r from-emerald-500 to-teal-500"
-              emptyMessage="No monthly loan intake data available."
+              colorClass="bg-emerald-600"
+              emptyMessage="No monthly intake data."
               formatter={(row) => monthLabel(String(row?.month || currentMonthValue()))}
             />
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
             <LoanAnalyticsBarChart
               title="Location Exposure"
               rows={loanOfficeAnalytics.locationRanking}
               valueKey="total"
-              colorClass="bg-gradient-to-r from-cyan-500 to-blue-600"
-              emptyMessage="No location analytics available for the current loan workspace."
+              colorClass="bg-slate-700"
+              emptyMessage="No location data available."
               formatter={(row) => String(row?.name || "Unassigned")}
             />
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Pipeline Summary</p>
+              <div className="space-y-2">
+                {[
+                  { label: "Worked on", value: loanOfficeAnalytics.totals.worked_on, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.worked_on / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-violet-600" },
+                  { label: "Yet to work on", value: loanOfficeAnalytics.totals.yet_to_be_worked, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.yet_to_be_worked / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-amber-500" },
+                  { label: "Finalized", value: loanOfficeAnalytics.totals.finalized, pct: loanOfficeAnalytics.totals.total_requests ? Math.round((loanOfficeAnalytics.totals.finalized / loanOfficeAnalytics.totals.total_requests) * 100) : 0, color: "bg-emerald-600" },
+                ].map(({ label, value, pct, color }) => (
+                  <div key={label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-600">{label}</span>
+                      <span className="text-xs font-semibold tabular-nums text-slate-800">{value} <span className="text-slate-400 font-normal">({pct}%)</span></span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-slate-100">
+                      <div className={`h-1.5 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </TabsContent>
 
