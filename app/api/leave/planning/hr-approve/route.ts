@@ -78,6 +78,9 @@ export async function GET(request: NextRequest) {
         hr_approver_name,
         hr_approved_at,
         hr_approval_note,
+        hr_approved_start_date,
+        hr_approved_end_date,
+        hr_approved_days,
         submitted_at,
         created_at,
         updated_at
@@ -280,6 +283,9 @@ export async function POST(request: NextRequest) {
       memo_draft_subject,
       memo_draft_body,
       memo_draft_cc,
+      hr_approved_start_date,
+      hr_approved_end_date,
+      hr_approved_days,
     } = body
 
     const memoDraftPatch = {
@@ -555,6 +561,10 @@ export async function POST(request: NextRequest) {
         hr_approver_name: approverName,
         hr_approved_at: now,
         hr_approval_note: note || null,
+        // HR executive date override — if set, these replace the HR office adjusted dates
+        hr_approved_start_date: hr_approved_start_date ? String(hr_approved_start_date).slice(0, 10) : null,
+        hr_approved_end_date: hr_approved_end_date ? String(hr_approved_end_date).slice(0, 10) : null,
+        hr_approved_days: hr_approved_days ? Number(hr_approved_days) : null,
         ...memoDraftPatch,
         memo_draft_subject: resolvedSubject,
         memo_draft_body: resolvedBody,

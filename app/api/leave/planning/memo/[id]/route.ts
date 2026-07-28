@@ -171,10 +171,15 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
   const yearPart = leaveType === "annual" ? String(currentYear) : String(lr.leave_year_period || `${currentYear}/${currentYear + 1}`)
   const calYear = yearPart.split("/")[0]
   const travellingDays = Number(lr.travelling_days_added || 0)
-  // NOTE: entitlementDays is intentionally unused — we compute actual working days from the leave dates
-  // to avoid showing a stale DB entitlement lookup value (e.g. 24) when the real period may differ.
-  // baseLeaveDays = working days between effectiveStart and effectiveEnd (excl. weekends & public holidays)
-  const baseLeaveDays = Number(lr.adjusted_days || lr.requested_days || 0)
+  
+  // Use HR executor's final dates/days if set (they may have modified before signing);
+  // otherwise fall back to HR office adjusted dates, then original requested dates.
+  // CRITICAL: entitlement_days is NEVER used for memo generation — only for HR office reference during calculations.
+  const finalStartDate = lr.hr_approved_start_date || lr.adjusted_start_date || lr.preferred_start_date
+  const finalEndDate = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
+  const baseLeaveDays = lr.hr_approved_days !== null && lr.hr_approved_days !== undefined
+    ? Number(lr.hr_approved_days)
+    : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
 
   const adjustmentParagraph = lr.adjustment_reason
     ? `Adjustment Details: ${String(lr.adjustment_reason).trim()}`
@@ -585,9 +590,10 @@ export async function GET(
     const lr = leaveRequest as any
     const ap = applicantProfile as any
 
-    const effectiveStart = lr.adjusted_start_date || lr.preferred_start_date
-    const effectiveEnd   = lr.adjusted_end_date   || lr.preferred_end_date
-    const effectiveDays  = Number(lr.adjusted_days || lr.requested_days || 0)
+    // Use final dates set by HR executor (if they overrode during approval), or fall back to HR office dates
+    const effectiveStart = finalStartDate
+    const effectiveEnd   = finalEndDate
+    const effectiveDays  = baseLeaveDays
     const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
 
     // Adjust end date if outstanding leave days are added
@@ -638,7 +644,7 @@ export async function GET(
     // Stored draftBody values are stale and may contain wrong leave-type content
     // (e.g. a casual leave record with annual leave body text from old data entry).
     {
-      const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso, holidayDatesForMemo)
+      const built = buildBuiltinBody(lr, finalStartDate, finalEndDate, baseLeaveDays, returnDateIso, holidayDatesForMemo)
       paragraphs          = built.paragraphs
       closingLine         = built.closing
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
