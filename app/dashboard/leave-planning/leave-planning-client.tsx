@@ -2297,13 +2297,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       })
       const json = await res.json()
       if (!res.ok) {
-        // Special handling for missing memo_reference column — trigger migration and show instructions
+        // Special handling for missing memo_reference column — show SQL instructions
         if (res.status === 503 && json.sql) {
-          // Auto-trigger the migration route
-          try { await fetch("/api/migrate/memo-reference", { method: "POST" }) } catch (_) {}
           toast({
             title: "Database Setup Required",
-            description: `A new column needs to be added to your database. Please run this SQL in Supabase SQL Editor, then retry:\n${json.sql}`,
+            description: `A new column needs to be added. Please run this SQL in Supabase SQL Editor, then retry:\n${json.sql}`,
             variant: "destructive",
           })
           return
