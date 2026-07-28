@@ -10,7 +10,7 @@ export async function POST() {
   try {
     const admin = await createAdminClient()
 
-    // Check if column already exists
+    // Check if column already exists by attempting a minimal select
     const { error: checkError } = await admin
       .from("leave_plan_requests")
       .select("memo_reference")
@@ -20,7 +20,10 @@ export async function POST() {
       return NextResponse.json({ message: "memo_reference column already exists" })
     }
 
-    // Column is missing — run the DDL via the Supabase REST API
+    // Column is missing — return the SQL the admin needs to run manually
+    const sql =
+      "ALTER TABLE public.leave_plan_requests ADD COLUMN IF NOT EXISTS memo_reference TEXT;"
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -28,16 +31,14 @@ export async function POST() {
       return NextResponse.json(
         {
           error: "Supabase configuration missing",
-          sql: "ALTER TABLE public.leave_plan_requests ADD COLUMN IF NOT EXISTS memo_reference TEXT;",
+          sql,
           message: "Please run the SQL above in your Supabase SQL Editor.",
         },
         { status: 500 },
       )
     }
 
-    const sql =
-      "ALTER TABLE public.leave_plan_requests ADD COLUMN IF NOT EXISTS memo_reference TEXT;"
-
+    // Attempt to run DDL via Supabase REST SQL endpoint
     const response = await fetch(`${supabaseUrl}/rest/v1/rpc/exec_sql`, {
       method: "POST",
       headers: {
