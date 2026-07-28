@@ -267,25 +267,29 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Fallback for legacy rows: use the latest workflow actor who handled director finalization/terms.
     if (!directorHrId) {
-      const { data: actorRow } = await admin
-        .from("loan_request_timeline")
-        .select("actor_id, action_key")
-        .eq("loan_request_id", loan.id)
-        .in("action_key", ["director_finalize", "hr_set_terms"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if ((actorRow as any)?.actor_id) {
-        const fallbackActorId = String((actorRow as any).actor_id)
-        const { data: fallbackActor } = await admin
-          .from("user_profiles")
-          .select("id, role")
-          .eq("id", fallbackActorId)
+      try {
+        const { data: actorRow } = await admin
+          .from("loan_request_timeline")
+          .select("actor_id, action_key")
+          .eq("loan_request_id", loan.id)
+          .in("action_key", ["director_finalize", "hr_set_terms"])
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle()
-        const fallbackRole = normalizeRole((fallbackActor as any)?.role)
-        if (["director_hr", "manager_hr", "hr_director"].includes(fallbackRole)) {
-          directorHrId = fallbackActorId
+        if ((actorRow as any)?.actor_id) {
+          const fallbackActorId = String((actorRow as any).actor_id)
+          const { data: fallbackActor } = await admin
+            .from("user_profiles")
+            .select("id, role")
+            .eq("id", fallbackActorId)
+            .maybeSingle()
+          const fallbackRole = normalizeRole((fallbackActor as any)?.role)
+          if (["director_hr", "manager_hr", "hr_director"].includes(fallbackRole)) {
+            directorHrId = fallbackActorId
+          }
         }
+      } catch {
+        // loan_request_timeline table may not exist — skip to next fallback
       }
     }
 
@@ -525,9 +529,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
 
     const sig = directorSignature as any
-    // Guaranteed name text: director profile name > stored loan text > "AUTHORISED SIGNATORY"
+    // Guaranteed name text: use multiple sources to always have a non-empty string
+    // directorProfile is fetched above and used for the name line below the signature too
+    const profileName = fmtName(directorProfile)
     const guaranteedName = (
-      fmtName(directorProfile) ||
+      profileName ||
       String((loan as any).director_signature_text || "").trim() ||
       "AUTHORISED SIGNATORY"
     ).toUpperCase()
@@ -540,15 +546,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         y += 20
       } catch {
         // Image failed to load — fall through to text
+        const fallbackText = String(sig?.signature_text || guaranteedName).trim() || "AUTHORISED SIGNATORY"
         doc.setFont("times", "bolditalic")
         doc.setFontSize(13)
         doc.setTextColor(0, 0, 0)
-        doc.text(sig?.signature_text || guaranteedName, marginLeft, y + 14)
+        doc.text(fallbackText, marginLeft, y + 14)
         y += 20
       }
     } else {
-      // Always render a text signature — either from registry/loan columns or director name
-      const sigText = sig?.signature_text || guaranteedName
+      // Always render a text signature — registry text, loan stored text, or director name
+      const sigText = String(sig?.signature_text || guaranteedName).trim() || "AUTHORISED SIGNATORY"
       doc.setFont("times", "bolditalic")
       doc.setFontSize(13)
       doc.setTextColor(0, 0, 0)
