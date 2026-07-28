@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -15,27 +16,57 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Loader2,
   Search,
-  ArrowRight,
   AlertCircle,
   CheckCircle2,
   Clock,
-  Briefcase,
   Users,
   Send,
+  RotateCcw,
+  CalendarClock,
+  FileText,
+  ChevronRight,
+  RefreshCw,
+  UserCheck,
   X,
+  Calendar,
+  Building2,
+  Hash,
+  Briefcase,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 
-interface RequestData {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface LeaveRequest {
+  id: string
+  user_id: string
+  leave_type_key: string
+  preferred_start_date: string
+  preferred_end_date: string
+  status: string
+  hod_approved_at?: string | null
+  created_at: string
+  staff?: {
+    id: string
+    first_name: string
+    last_name: string
+    employee_id: string
+    position: string
+    department?: { name: string } | null
+  }
+}
+
+interface DeferRecallRequest {
   id: string
   staff_user_id: string
   request_reason?: string
-  deferment_to_year?: string
   recall_reason?: string
+  deferment_to_year?: string
   created_at: string
   hod_approval_status: string
   assigned_hr_executive_id?: string | null
@@ -45,473 +76,565 @@ interface RequestData {
     last_name: string
     employee_id: string
     position: string
-  }
-  department?: {
-    id: string
-    name: string
-  }
-  leave?: {
-    id: string
-    leave_type: string
-    balance_period_start: string
-    balance_period_end: string
-  }
+  } | null
+  department?: { id: string; name: string } | null
+  leave?: { id: string; leave_type: string } | null
+  type: 'deferment' | 'recall'
 }
 
 interface HRExecutive {
   id: string
   name: string
-  email: string
   position: string
-  department: string | null
 }
+
+interface MetricCard {
+  label: string
+  count: number
+  icon: React.ReactNode
+  colour: string
+  bg: string
+  border: string
+  tab: string
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(dateStr?: string | null) {
+  if (!dateStr) return '—'
+  try { return format(parseISO(dateStr), 'd MMM yyyy') } catch { return dateStr }
+}
+
+function leaveTypeLabel(key: string) {
+  const map: Record<string, string> = {
+    annual: 'Annual Leave', sick: 'Sick Leave', maternity: 'Maternity',
+    paternity: 'Paternity', casual: 'Casual Leave', compassionate: 'Compassionate',
+    study_with_pay: 'Study (Paid)', study_without_pay: 'Study (Unpaid)',
+  }
+  return map[key?.toLowerCase()] ?? key ?? 'Leave'
+}
+
+function daysBetween(start: string, end: string) {
+  try {
+    const ms = parseISO(end).getTime() - parseISO(start).getTime()
+    return Math.max(1, Math.round(ms / 86400000) + 1)
+  } catch { return 0 }
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function StaffInfo({ name, employeeId, position, department }: { name: string; employeeId?: string; position?: string; department?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-semibold text-slate-900 text-sm">{name || 'Unknown Staff'}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+        {employeeId && <span className="flex items-center gap-1"><Hash className="h-3 w-3" />{employeeId}</span>}
+        {position && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{position}</span>}
+        {department && <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{department}</span>}
+      </div>
+    </div>
+  )
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+      <FileText className="h-10 w-10 mb-3 opacity-40" />
+      <p className="text-sm font-medium">{message}</p>
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export function HRLeaveOfficeRequestDashboard() {
   const { toast } = useToast()
-  const [defermentRequests, setDefermentRequests] = useState<RequestData[]>([])
-  const [recallRequests, setRecallRequests] = useState<RequestData[]>([])
+
+  // Data state
+  const [hodPendingRequests, setHodPendingRequests] = useState<LeaveRequest[]>([])
+  const [hrPendingRequests, setHrPendingRequests] = useState<LeaveRequest[]>([])
+  const [defermentRequests, setDefermentRequests] = useState<DeferRecallRequest[]>([])
+  const [recallRequests, setRecallRequests] = useState<DeferRecallRequest[]>([])
   const [hrExecutives, setHrExecutives] = useState<HRExecutive[]>([])
   const [loading, setLoading] = useState(true)
-  const [assigning, setAssigning] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [requestTypeFilter, setRequestTypeFilter] = useState<'all' | 'deferment' | 'recall'>('all')
+  const [refreshing, setRefreshing] = useState(false)
 
-  // Assignment modal state
-  const [assignModalOpen, setAssignModalOpen] = useState(false)
-  const [selectedRequest, setSelectedRequest] = useState<{ data: RequestData; type: 'deferment' | 'recall' } | null>(null)
+  // UI state
+  const [search, setSearch] = useState('')
+  const [actionModal, setActionModal] = useState<{
+    open: boolean
+    type: 'leave-approve' | 'leave-reject' | 'assign-exec'
+    requestId: string
+    requestKind: 'deferment' | 'recall'
+    staffName: string
+  } | null>(null)
   const [selectedExecutive, setSelectedExecutive] = useState('')
-  const [assignmentNotes, setAssignmentNotes] = useState('')
+  const [actionNotes, setActionNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  // ── Data fetching ──────────────────────────────────────────────────────────
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
+
     try {
-      // Fetch pending deferment and recall requests — route checks authenticated user is hr_leave_office role
-      const requestsRes = await fetch('/api/leave/deferment-recall/pending-requests')
-      if (!requestsRes.ok) {
-        const errData = await requestsRes.json().catch(() => ({}))
-        throw new Error(errData.error || `Failed to fetch requests (${requestsRes.status})`)
-      }
-      const requestsData = await requestsRes.json()
-      // Route returns { defermentRequests: [], recallRequests: [], total: 0 }
-      setDefermentRequests(requestsData.defermentRequests || [])
-      setRecallRequests(requestsData.recallRequests || [])
+      const [deferRecallRes, execRes, allRequestsRes] = await Promise.all([
+        fetch('/api/leave/deferment-recall/pending-requests'),
+        fetch('/api/admin/users/by-role?roles=hr_executive,manager_hr,director_hr'),
+        fetch('/api/leave/requests?status=hod_approved,pending&limit=100'),
+      ])
 
-      // Fetch HR executives — query across all HR executive role variants using multi-role support
-      const execRes = await fetch('/api/admin/users/by-role?roles=hr_executive,manager_hr,director_hr')
+      // Deferments & Recalls
+      if (deferRecallRes.ok) {
+        const data = await deferRecallRes.json()
+        setDefermentRequests((data.defermentRequests || []).map((r: any) => ({ ...r, type: 'deferment' })))
+        setRecallRequests((data.recallRequests || []).map((r: any) => ({ ...r, type: 'recall' })))
+      }
+
+      // HR Executives
       if (execRes.ok) {
         const execData = await execRes.json()
-        const executives = (execData.data || execData.users || []).map((user: any) => ({
-          id: user.id,
-          name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-          email: user.email,
-          position: user.position || 'HR Executive',
-          department: user.department,
-        }))
-        setHrExecutives(executives)
-      } else {
-        console.warn('[v0] Failed to fetch HR executives, using empty list')
-        setHrExecutives([])
+        setHrExecutives(
+          (execData.data || execData.users || []).map((u: any) => ({
+            id: u.id,
+            name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+            position: u.position || 'HR Executive',
+          }))
+        )
       }
-    } catch (error: any) {
-      console.error('[v0] Error fetching data:', error)
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to load requests. Please try again.',
-        variant: 'destructive',
-      })
+
+      // Leave requests in processing states
+      if (allRequestsRes.ok) {
+        const reqData = await allRequestsRes.json()
+        const requests: LeaveRequest[] = reqData.requests || reqData.data || []
+        setHodPendingRequests(requests.filter((r) => r.status === 'pending'))
+        setHrPendingRequests(requests.filter((r) => r.status === 'hod_approved'))
+      }
+    } catch (err: any) {
+      if (!silent) {
+        toast({ title: 'Error loading data', description: err.message || 'Please try again.', variant: 'destructive' })
+      }
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }
+  }, [toast])
 
-  const handleAssignClick = (request: RequestData, type: 'deferment' | 'recall') => {
-    setSelectedRequest({ data: request, type })
+  useEffect(() => { fetchData() }, [fetchData])
+
+  // ── Action handlers ────────────────────────────────────────────────────────
+
+  const openAssignModal = (req: DeferRecallRequest) => {
+    setActionModal({ open: true, type: 'assign-exec', requestId: req.id, requestKind: req.type, staffName: req.staff ? `${req.staff.first_name} ${req.staff.last_name}` : 'Staff' })
     setSelectedExecutive('')
-    setAssignmentNotes('')
-    setAssignModalOpen(true)
+    setActionNotes('')
   }
 
   const handleAssignSubmit = async () => {
-    if (!selectedRequest || !selectedExecutive) {
-      toast({
-        title: 'Error',
-        description: 'Please select an HR executive',
-        variant: 'destructive',
-      })
+    if (!actionModal || !selectedExecutive) {
+      toast({ title: 'Select an HR executive first', variant: 'destructive' })
       return
     }
-
-    setAssigning(true)
+    setSubmitting(true)
     try {
-      const response = await fetch('/api/leave/deferment-recall/assign-to-executive', {
+      const res = await fetch('/api/leave/deferment-recall/assign-to-executive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: selectedRequest.type,
-          requestId: selectedRequest.data.id,
-          hrExecutiveId: selectedExecutive,
-          notes: assignmentNotes || null,
-        }),
+        body: JSON.stringify({ type: actionModal.requestKind, requestId: actionModal.requestId, hrExecutiveId: selectedExecutive, notes: actionNotes || null }),
       })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to assign request')
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Request assigned to HR executive successfully',
-      })
-
-      setAssignModalOpen(false)
-      fetchData()
-    } catch (error) {
-      console.error('[v0] Assignment error:', error)
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to assign request',
-        variant: 'destructive',
-      })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed to assign') }
+      toast({ title: 'Assigned successfully' })
+      setActionModal(null)
+      fetchData(true)
+    } catch (err: any) {
+      toast({ title: 'Assignment failed', description: err.message, variant: 'destructive' })
     } finally {
-      setAssigning(false)
+      setSubmitting(false)
     }
   }
 
-  const allRequests = [...defermentRequests.map(r => ({ ...r, type: 'deferment' as const })), ...recallRequests.map(r => ({ ...r, type: 'recall' as const }))]
+  // ── Filter helpers ─────────────────────────────────────────────────────────
 
-  const filteredRequests = allRequests.filter(req => {
-    const matchesSearch =
-      !searchTerm ||
-      req.staff?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.staff?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.staff?.employee_id?.toLowerCase().includes(searchTerm.toLowerCase())
+  function filterLeave(list: LeaveRequest[]) {
+    if (!search) return list
+    const q = search.toLowerCase()
+    return list.filter((r) =>
+      r.staff?.first_name?.toLowerCase().includes(q) ||
+      r.staff?.last_name?.toLowerCase().includes(q) ||
+      r.staff?.employee_id?.toLowerCase().includes(q)
+    )
+  }
 
-    const matchesType = requestTypeFilter === 'all' || req.type === requestTypeFilter
+  function filterDeferRecall(list: DeferRecallRequest[]) {
+    if (!search) return list
+    const q = search.toLowerCase()
+    return list.filter((r) =>
+      r.staff?.first_name?.toLowerCase().includes(q) ||
+      r.staff?.last_name?.toLowerCase().includes(q) ||
+      r.staff?.employee_id?.toLowerCase().includes(q)
+    )
+  }
 
-    return matchesSearch && matchesType
-  })
+  // ── Metric cards data ──────────────────────────────────────────────────────
 
-  const RequestCard = ({ request, type }: { request: RequestData; type: 'deferment' | 'recall' }) => (
-    <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <Briefcase className={`h-4 w-4 ${type === 'deferment' ? 'text-amber-600' : 'text-rose-600'}`} />
-              <h3 className="font-semibold text-slate-800 truncate">
-                {request.staff?.first_name} {request.staff?.last_name}
-              </h3>
-              <Badge variant="outline" className={type === 'deferment' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200'}>
-                {type === 'deferment' ? 'Deferment' : 'Recall'}
-              </Badge>
-            </div>
+  const metrics: MetricCard[] = [
+    {
+      label: 'Awaiting HOD Approval',
+      count: hodPendingRequests.length,
+      icon: <Clock className="h-5 w-5" />,
+      colour: 'text-amber-700',
+      bg: 'bg-amber-50',
+      border: 'border-amber-200',
+      tab: 'hod-pending',
+    },
+    {
+      label: 'Awaiting HR Action',
+      count: hrPendingRequests.length,
+      icon: <UserCheck className="h-5 w-5" />,
+      colour: 'text-blue-700',
+      bg: 'bg-blue-50',
+      border: 'border-blue-200',
+      tab: 'hr-pending',
+    },
+    {
+      label: 'Deferments Pending',
+      count: defermentRequests.length,
+      icon: <CalendarClock className="h-5 w-5" />,
+      colour: 'text-violet-700',
+      bg: 'bg-violet-50',
+      border: 'border-violet-200',
+      tab: 'deferments',
+    },
+    {
+      label: 'Recalls Pending',
+      count: recallRequests.length,
+      icon: <RotateCcw className="h-5 w-5" />,
+      colour: 'text-rose-700',
+      bg: 'bg-rose-50',
+      border: 'border-rose-200',
+      tab: 'recalls',
+    },
+  ]
 
-            <p className="text-xs text-slate-500 mb-3">
-              {request.staff?.employee_id} • {request.department?.name}
-            </p>
+  const totalPending = metrics.reduce((a, m) => a + m.count, 0)
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mb-3">
-              <div>
-                <p className="text-slate-500">Position</p>
-                <p className="font-medium text-slate-700 truncate">{request.staff?.position}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Submitted</p>
-                <p className="font-medium text-slate-700">{request.created_at ? format(new Date(request.created_at), 'dd MMM yyyy') : 'N/A'}</p>
-              </div>
-            </div>
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-            <p className="text-xs text-slate-600 line-clamp-2 italic">
-              {type === 'deferment' ? request.request_reason : request.recall_reason}
-            </p>
-          </div>
-
-          <div className="flex-shrink-0">
-            <Button
-              size="sm"
-              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
-              onClick={() => handleAssignClick(request, type)}
-            >
-              <Send className="h-4 w-4" />
-              <span className="hidden sm:inline">Assign</span>
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-7 w-7 animate-spin text-slate-400" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-slate-900">Process Requests</h1>
-        <p className="text-slate-600">Review and assign pending deferment and recall requests to HR executives</p>
+      {/* Page header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Processing Requests</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Review and action leave, deferment, and recall requests assigned to HR Leave Office
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => fetchData(true)}
+          disabled={refreshing}
+        >
+          {refreshing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
+          Refresh
+        </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-blue-50 to-blue-100">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Total Pending</p>
-                <p className="text-2xl font-bold text-slate-900">{filteredRequests.length}</p>
+      {/* Metric cards */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {metrics.map((m) => (
+          <Card key={m.tab} className={`border ${m.border} ${m.bg} shadow-none`}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-500 leading-tight">{m.label}</p>
+                  <p className={`text-3xl font-bold mt-1 ${m.colour}`}>{m.count}</p>
+                </div>
+                <div className={`p-2 rounded-lg ${m.bg} border ${m.border} ${m.colour}`}>
+                  {m.icon}
+                </div>
               </div>
-              <Clock className="h-8 w-8 text-blue-600 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Deferments</p>
-                <p className="text-2xl font-bold text-slate-900">{defermentRequests.length}</p>
-              </div>
-              <Briefcase className="h-8 w-8 text-amber-600 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-rose-50 to-rose-100">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Recalls</p>
-                <p className="text-2xl font-bold text-slate-900">{recallRequests.length}</p>
-              </div>
-              <Users className="h-8 w-8 text-rose-600 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Quick Help */}
-      <Alert className="border-blue-200 bg-blue-50">
-        <AlertCircle className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-700">
-          <strong>Workflow:</strong> Click the &quot;Assign&quot; button on any request below, select an HR executive, and click submit. The request will then appear in their Memo Management dashboard for approval.
-        </AlertDescription>
-      </Alert>
+      {totalPending === 0 ? (
+        <Card className="border-dashed border-slate-200">
+          <CardContent className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <CheckCircle2 className="h-12 w-12 mb-4 text-emerald-400" />
+            <p className="text-base font-semibold text-slate-600">All clear — no pending requests</p>
+            <p className="text-sm mt-1">All leave, deferment, and recall requests are processed.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Search */}
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search by name or staff ID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 text-sm"
+            />
+          </div>
 
-      {/* Filters */}
-      <Card className="border-0 shadow-sm">
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-2 block">Search Staff</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Name, ID, Department..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-slate-50"
-                />
-              </div>
-            </div>
+          {/* Tabbed sections */}
+          <Tabs defaultValue="hod-pending">
+            <TabsList className="flex h-auto w-full flex-wrap gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+              <TabsTrigger value="hod-pending" className="rounded-lg px-4 py-2 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-amber-700">
+                Awaiting HOD
+                {hodPendingRequests.length > 0 && (
+                  <Badge className="ml-1.5 h-4 px-1.5 text-[10px] bg-amber-100 text-amber-700 border-0">{hodPendingRequests.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="hr-pending" className="rounded-lg px-4 py-2 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700">
+                Awaiting HR Action
+                {hrPendingRequests.length > 0 && (
+                  <Badge className="ml-1.5 h-4 px-1.5 text-[10px] bg-blue-100 text-blue-700 border-0">{hrPendingRequests.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="deferments" className="rounded-lg px-4 py-2 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-violet-700">
+                Deferments
+                {defermentRequests.length > 0 && (
+                  <Badge className="ml-1.5 h-4 px-1.5 text-[10px] bg-violet-100 text-violet-700 border-0">{defermentRequests.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="recalls" className="rounded-lg px-4 py-2 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-rose-700">
+                Recalls
+                {recallRequests.length > 0 && (
+                  <Badge className="ml-1.5 h-4 px-1.5 text-[10px] bg-rose-100 text-rose-700 border-0">{recallRequests.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-2 block">Request Type</label>
-              <Select value={requestTypeFilter} onValueChange={(value: any) => setRequestTypeFilter(value)}>
-                <SelectTrigger className="bg-slate-50">
-                  <SelectValue />
+            {/* ── Awaiting HOD ─────────────────────────────────────────────── */}
+            <TabsContent value="hod-pending" className="mt-4">
+              {filterLeave(hodPendingRequests).length === 0 ? (
+                <EmptyState message="No requests awaiting HOD approval" />
+              ) : (
+                <div className="space-y-3">
+                  {filterLeave(hodPendingRequests).map((req) => (
+                    <LeaveRequestRow key={req.id} req={req} status="hod-pending" />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── Awaiting HR Action ────────────────────────────────────────── */}
+            <TabsContent value="hr-pending" className="mt-4">
+              {filterLeave(hrPendingRequests).length === 0 ? (
+                <EmptyState message="No requests awaiting HR action" />
+              ) : (
+                <div className="space-y-3">
+                  {filterLeave(hrPendingRequests).map((req) => (
+                    <LeaveRequestRow key={req.id} req={req} status="hr-pending" onRefresh={() => fetchData(true)} />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── Deferments ────────────────────────────────────────────────── */}
+            <TabsContent value="deferments" className="mt-4">
+              {filterDeferRecall(defermentRequests).length === 0 ? (
+                <EmptyState message="No deferment requests pending assignment" />
+              ) : (
+                <div className="space-y-3">
+                  {filterDeferRecall(defermentRequests).map((req) => (
+                    <DeferRecallRow key={req.id} req={req} onAssign={() => openAssignModal(req)} />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── Recalls ───────────────────────────────────────────────────── */}
+            <TabsContent value="recalls" className="mt-4">
+              {filterDeferRecall(recallRequests).length === 0 ? (
+                <EmptyState message="No recall requests pending assignment" />
+              ) : (
+                <div className="space-y-3">
+                  {filterDeferRecall(recallRequests).map((req) => (
+                    <DeferRecallRow key={req.id} req={req} onAssign={() => openAssignModal(req)} />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
+
+      {/* Assign to HR Executive Modal */}
+      <Dialog open={!!actionModal?.open} onOpenChange={() => setActionModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign to HR Executive</DialogTitle>
+            <DialogDescription>
+              Assign this {actionModal?.requestKind} request from{' '}
+              <span className="font-semibold text-slate-800">{actionModal?.staffName}</span> to an HR executive for processing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>HR Executive</Label>
+              <Select value={selectedExecutive} onValueChange={setSelectedExecutive}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select executive..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Requests</SelectItem>
-                  <SelectItem value="deferment">Deferments Only</SelectItem>
-                  <SelectItem value="recall">Recalls Only</SelectItem>
+                  {hrExecutives.length === 0 ? (
+                    <SelectItem value="_none" disabled>No executives available</SelectItem>
+                  ) : (
+                    hrExecutives.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name} — {e.position}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                className="w-full gap-2"
-                onClick={() => {
-                  setSearchTerm('')
-                  setRequestTypeFilter('all')
-                }}
-              >
-                Reset Filters
-              </Button>
+            <div className="space-y-1.5">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                placeholder="Any notes for the executive..."
+                value={actionNotes}
+                onChange={(e) => setActionNotes(e.target.value)}
+                rows={3}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Requests List */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        </div>
-      ) : filteredRequests.length === 0 ? (
-        <Alert className="border-blue-200 bg-blue-50">
-          <CheckCircle2 className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-700">
-            {defermentRequests.length + recallRequests.length === 0
-              ? 'No pending requests. All deferments and recalls have been assigned!'
-              : 'No requests match your search filters.'}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <div className="space-y-4">
-          {defermentRequests.filter(req =>
-            !searchTerm ||
-            req.staff?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            req.staff?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            req.staff?.employee_id?.toLowerCase().includes(searchTerm.toLowerCase())
-          ).length > 0 && requestTypeFilter !== 'recall' && (
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <div className="w-1 h-6 bg-amber-600 rounded-full" />
-                Pending Deferments
-              </h2>
-              <div className="space-y-2">
-                {defermentRequests
-                  .filter(req =>
-                    !searchTerm ||
-                    req.staff?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    req.staff?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    req.staff?.employee_id?.toLowerCase().includes(searchTerm.toLowerCase())
-                  )
-                  .map(request => (
-                    <RequestCard key={request.id} request={request} type="deferment" />
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {recallRequests.filter(req =>
-            !searchTerm ||
-            req.staff?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            req.staff?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            req.staff?.employee_id?.toLowerCase().includes(searchTerm.toLowerCase())
-          ).length > 0 && requestTypeFilter !== 'deferment' && (
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <div className="w-1 h-6 bg-rose-600 rounded-full" />
-                Pending Recalls
-              </h2>
-              <div className="space-y-2">
-                {recallRequests
-                  .filter(req =>
-                    !searchTerm ||
-                    req.staff?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    req.staff?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    req.staff?.employee_id?.toLowerCase().includes(searchTerm.toLowerCase())
-                  )
-                  .map(request => (
-                    <RequestCard key={request.id} request={request} type="recall" />
-                  ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Assignment Modal */}
-      <Dialog open={assignModalOpen} onOpenChange={setAssignModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Send className="h-5 w-5 text-blue-600" />
-              Assign to HR Executive
-            </DialogTitle>
-            <DialogDescription>
-              Select an HR executive to review and approve this {selectedRequest?.type} request
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedRequest && (
-            <div className="space-y-4">
-              {/* Request Summary */}
-              <div className="bg-slate-50 p-4 rounded-lg space-y-2 text-sm">
-                <div className="font-semibold text-slate-900">
-                  {selectedRequest.data.staff?.first_name} {selectedRequest.data.staff?.last_name}
-                </div>
-                <div className="text-slate-600">
-                  {selectedRequest.data.staff?.employee_id} • {selectedRequest.data.department?.name}
-                </div>
-                <div className="text-slate-600">
-                  {selectedRequest.type === 'deferment' ? 'Deferment Request' : 'Recall Request'}
-                  {selectedRequest.type === 'deferment' && selectedRequest.data.deferment_to_year
-                    ? ` — defer to ${selectedRequest.data.deferment_to_year}`
-                    : ''}
-                </div>
-              </div>
-
-              {/* Executive Selector */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">Select HR Executive *</label>
-                {hrExecutives.length === 0 ? (
-                  <p className="text-sm text-slate-500 italic py-2">
-                    No HR executives found. Ensure users with roles <span className="font-medium">hr_executive</span>, <span className="font-medium">manager_hr</span>, or <span className="font-medium">director_hr</span> are registered in the system.
-                  </p>
-                ) : (
-                  <Select value={selectedExecutive} onValueChange={setSelectedExecutive}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose an HR executive..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {hrExecutives.map(exec => (
-                        <SelectItem key={exec.id} value={exec.id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{exec.name}</span>
-                            <span className="text-xs text-slate-500">{exec.position}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">Internal Notes (Optional)</label>
-                <Input
-                  placeholder="Add any notes for the HR executive..."
-                  value={assignmentNotes}
-                  onChange={(e) => setAssignmentNotes(e.target.value)}
-                  className="text-sm"
-                />
-              </div>
-            </div>
-          )}
-
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setAssignModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleAssignSubmit}
-              disabled={assigning || !selectedExecutive}
-              className="gap-2 bg-blue-600 hover:bg-blue-700"
-            >
-              {assigning ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Assigning...
-                </>
-              ) : (
-                <>
-                  <ArrowRight className="h-4 w-4" />
-                  Assign & Forward
-                </>
-              )}
+            <Button variant="outline" onClick={() => setActionModal(null)}>Cancel</Button>
+            <Button onClick={handleAssignSubmit} disabled={submitting || !selectedExecutive}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              Assign
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// ─── Leave Request Row ─────────────────────────────────────────────────────────
+
+function LeaveRequestRow({ req, status, onRefresh }: { req: LeaveRequest; status: string; onRefresh?: () => void }) {
+  const staffName = req.staff ? `${req.staff.first_name} ${req.staff.last_name}` : 'Unknown Staff'
+  const days = daysBetween(req.preferred_start_date, req.preferred_end_date)
+  const isHodPending = status === 'hod-pending'
+
+  const statusBadge = isHodPending
+    ? { label: 'Awaiting HOD', bg: 'bg-amber-100 text-amber-700 border-amber-200' }
+    : { label: 'HOD Approved', bg: 'bg-blue-100 text-blue-700 border-blue-200' }
+
+  return (
+    <Card className="border border-slate-200 shadow-none hover:shadow-sm transition-shadow">
+      <CardContent className="p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100">
+              <FileText className="h-4 w-4 text-slate-500" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <StaffInfo
+                name={staffName}
+                employeeId={req.staff?.employee_id}
+                position={req.staff?.position}
+                department={req.staff?.department?.name}
+              />
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <Badge variant="outline" className="text-xs">
+                  {leaveTypeLabel(req.leave_type_key)}
+                </Badge>
+                <span className="text-xs text-slate-500 flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  {fmt(req.preferred_start_date)} — {fmt(req.preferred_end_date)}
+                </span>
+                <span className="text-xs font-medium text-slate-700">{days} day{days !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge className={`border text-xs font-medium ${statusBadge.bg}`}>{statusBadge.label}</Badge>
+            {!isHodPending && (
+              <Button size="sm" variant="outline" className="text-xs gap-1" onClick={onRefresh}>
+                <ChevronRight className="h-3.5 w-3.5" />
+                View
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Deferment / Recall Row ────────────────────────────────────────────────────
+
+function DeferRecallRow({ req, onAssign }: { req: DeferRecallRequest; onAssign: () => void }) {
+  const staffName = req.staff ? `${req.staff.first_name} ${req.staff.last_name}` : 'Unknown Staff'
+  const isDeferment = req.type === 'deferment'
+  const reason = isDeferment ? req.request_reason : req.recall_reason
+
+  return (
+    <Card className="border border-slate-200 shadow-none hover:shadow-sm transition-shadow">
+      <CardContent className="p-4">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isDeferment ? 'bg-violet-50' : 'bg-rose-50'}`}>
+              {isDeferment
+                ? <CalendarClock className="h-4 w-4 text-violet-600" />
+                : <RotateCcw className="h-4 w-4 text-rose-600" />
+              }
+            </div>
+            <div className="flex flex-col gap-1">
+              <StaffInfo
+                name={staffName}
+                employeeId={req.staff?.employee_id}
+                position={req.staff?.position}
+                department={req.department?.name}
+              />
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <Badge
+                  variant="outline"
+                  className={`text-xs border ${isDeferment ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}
+                >
+                  {isDeferment ? 'Deferment' : 'Recall'}
+                  {isDeferment && req.deferment_to_year && ` → ${req.deferment_to_year}`}
+                </Badge>
+                {req.leave?.leave_type && (
+                  <span className="text-xs text-slate-500">{leaveTypeLabel(req.leave.leave_type)}</span>
+                )}
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Submitted {fmt(req.created_at)}
+                </span>
+              </div>
+              {reason && (
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2 max-w-md">
+                  Reason: {reason}
+                </p>
+              )}
+            </div>
+          </div>
+          <Button size="sm" onClick={onAssign} className="shrink-0 gap-1.5 text-xs">
+            <Users className="h-3.5 w-3.5" />
+            Assign to Executive
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
