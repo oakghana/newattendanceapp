@@ -28,6 +28,7 @@ type ActionKey =
   | "hr_set_terms"
   | "director_finalize"
   | "save_memo_draft"
+  | "mark_payment_completed"
 
 function normalizeReferenceNumber(value: string | null | undefined): string | null {
   const raw = String(value || "").trim()
@@ -895,6 +896,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request was already processed by another approver. Refresh queue." }, { status: 409 })
       }
       throw updateError
+    }
+
+    if (action === "mark_payment_completed") {
+      actionHandled = true
+      if (!canDoLoanOffice(role, deptName, deptCode)) {
+        return NextResponse.json({ error: "Only Loan Office staff can mark payments as completed" }, { status: 403 })
+      }
+      
+      // Allow marking as completed from any status where the loan was approved
+      if (!["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered"].includes(req.status)) {
+        return NextResponse.json({ error: `Cannot mark loan as payment completed from status: ${req.status}` }, { status: 400 })
+      }
+
+      update.loan_office_payment_completed_by = user.id
+      update.loan_office_payment_completed_at = new Date().toISOString()
+      toStatus = "payment_completed"
+      update.status = toStatus
+
+      const completionMemo = `${req.staff_full_name || "Staff"} has completed repayment of their ${req.loan_type_label} loan (${req.request_number}). Total amount: GHc ${req.fixed_amount || req.requested_amount || 0}`
+      
+      await notifyUsers(
+        admin,
+        [req.user_id],
+        "Loan Repayment Completed",
+        completionMemo,
+        "loan_payment_completed_notification",
+        { request_id: req.id, loan_type: req.loan_type_label, amount: req.fixed_amount || req.requested_amount },
+      )
     }
 
     if (requestedStaffFullName !== null) {

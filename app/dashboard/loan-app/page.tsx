@@ -863,7 +863,7 @@ export default function LoanAppPage() {
   const [memoPreviewLoanId, setMemoPreviewLoanId] = useState<string | null>(null)
 
   // ── Action modal state ──────────────────────────────────────────────
-  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director"
+  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
@@ -2193,6 +2193,9 @@ export default function LoanAppPage() {
           setMemoReviewModal({ open: true, row })
           return
         }
+        if (actionType === "payment_completed") {
+          setModalNote(`Mark ${row.staff_full_name} loan (${row.request_number}) as payment completed.`)
+        }
         setActionModal({ open: true, row, actionType })
       }
 
@@ -3290,6 +3293,44 @@ export default function LoanAppPage() {
               </div>
             )}
           </div>
+
+          {/* ── Payment Completion Queue ── */}
+          {p?.hrOffice && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-5 py-3.5">
+                <p className="text-sm font-semibold text-slate-900">Mark Payment Completed</p>
+                <p className="text-xs text-slate-500">Record staff loan repayment completion</p>
+              </div>
+              {(() => {
+                const paymentReadyLoans = (data?.inbox?.hrOffice || []).filter(
+                  (row) => ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered"].includes(row.status) && row.recovery_months
+                )
+                if (paymentReadyLoans.length === 0) {
+                  return (
+                    <div className="px-5 py-8">
+                      <p className="text-sm text-slate-500 text-center">No loans ready for payment completion marking</p>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="divide-y divide-slate-100">
+                    {paymentReadyLoans.slice(0, 5).map((row) => (
+                      <div key={row.id} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-slate-900">{row.staff_full_name || row.staff_number}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{row.request_number} — {row.loan_type_label}</p>
+                          <p className="text-xs text-slate-400 mt-1">Recovery: {row.recovery_start_date || "TBD"} ({row.recovery_months} months)</p>
+                        </div>
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap" onClick={() => openActionModal(row, "payment_completed")}>
+                          Mark Completed
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
 
           {/* ── Loan type breakdown ── */}
           {loanOfficeTypeSummary.length > 0 && (
@@ -4996,6 +5037,7 @@ export default function LoanAppPage() {
               {actionModal.actionType === "accounts" && "Set FD Score"}
               {actionModal.actionType === "committee" && "Employee Further Information"}
               {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Executive HR"}
+              {actionModal.actionType === "payment_completed" && "Mark Loan Payment Completed"}
             </DialogTitle>
             {actionModal.row && (
               <DialogDescription>
@@ -5294,6 +5336,16 @@ export default function LoanAppPage() {
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Set Terms &amp; Forward to Executive HR</Button>
               </>
+            )}
+            {actionModal.actionType === "payment_completed" && actionModal.row && (
+              <Button className="bg-green-600 hover:bg-green-700" onClick={() => {
+                runAction({ 
+                  action: "mark_payment_completed", 
+                  id: actionModal.row!.id, 
+                  note: modalNote || "Staff has completed repayment of their loan" 
+                })
+                setActionModal((s) => ({ ...s, open: false }))
+              }}>Mark Payment Completed</Button>
             )}
           </DialogFooter>
         </DialogContent>
