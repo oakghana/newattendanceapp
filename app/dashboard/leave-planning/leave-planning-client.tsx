@@ -3956,17 +3956,49 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
 
                               {/* Our Ref No. — required before forwarding */}
                               <div className="space-y-1">
-                                <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                                  Our Ref No. <span className="text-red-500">*</span>
-                                </Label>
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                                    Our Ref No. <span className="text-red-500">*</span>
+                                  </Label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      // Auto-generate reference number based on staff category
+                                      fetch(`/api/leave/planning/staff-category-ref-prefixes`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ staff_category: req.staff_category || "junior" }),
+                                      })
+                                        .then((res) => res.json())
+                                        .then((data) => {
+                                          if (data.reference_number) {
+                                            setOfficeRefNumber((p) => ({ ...p, [req.id]: data.reference_number }))
+                                            toast({ title: "Reference Number Generated", description: `Auto-generated: ${data.reference_number}` })
+                                          } else {
+                                            toast({ title: "Error", description: data.error || "Could not generate reference number", variant: "destructive" })
+                                          }
+                                        })
+                                        .catch((err) => {
+                                          console.error("[v0] Error generating ref:", err)
+                                          toast({ title: "Error", description: "Failed to generate reference number", variant: "destructive" })
+                                        })
+                                    }}
+                                    className="text-[11px] px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded border border-blue-300 font-medium transition-colors"
+                                  >
+                                    Auto-Generate
+                                  </button>
+                                </div>
                                 <Input
                                   value={officeRefNumber[req.id] || ""}
                                   onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="e.g. QCC/HRD/ANL/2025/2026/19AF24"
+                                  placeholder="e.g. QCC/HRD/ANL/2025/2026/01"
                                   className={`h-9 bg-white font-mono text-sm ${!officeRefNumber[req.id]?.trim() ? "border-red-300 focus:ring-red-300" : "border-green-400"}`}
                                 />
                                 {!officeRefNumber[req.id]?.trim() && (
-                                  <p className="text-[10px] text-red-600">Required — this reference number will appear on the printed memo.</p>
+                                  <p className="text-[10px] text-red-600">Required — this reference number will appear on the printed memo. Click Auto-Generate to create from staff category prefix.</p>
+                                )}
+                                {officeRefNumber[req.id]?.trim() && (
+                                  <p className="text-[10px] text-green-600">✓ Reference number set — will appear on memo</p>
                                 )}
                               </div>
 
