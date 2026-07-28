@@ -740,6 +740,51 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   }
 
   // Download memo as professional PDF - traditional memo format
+  // Download all approved memos for selected month as a batch
+  const handleDownloadAllForMonth = async () => {
+    if (!approvedFilterMonth) {
+      toast({ title: "Please select a month first", variant: "destructive" })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const memosByMonth = approvedMemos.filter((m) => {
+        const subjectMatch = m.memo_subject?.match(/\(\d{4}-\d{2}\)/)
+        const monthInSubject = m.memo_subject?.match(/\d{4}-\d{2}/)
+        return monthInSubject?.[0] === approvedFilterMonth
+      })
+
+      if (memosByMonth.length === 0) {
+        toast({ title: "No memos found for this month", variant: "default" })
+        return
+      }
+
+      // Download each memo in the batch
+      for (let i = 0; i < memosByMonth.length; i++) {
+        const m = memosByMonth[i]
+        // Add small delay between downloads to avoid browser throttling
+        if (i > 0) await new Promise((resolve) => setTimeout(resolve, 500))
+
+        try {
+          await downloadMemoPDF(m, `${m.staff_name}_${approvedFilterMonth}_payment_advice.pdf`)
+        } catch (err) {
+          console.error(`[v0] Failed to download memo for ${m.staff_name}:`, err)
+        }
+      }
+
+      toast({
+        title: "Download Complete",
+        description: `Successfully downloaded ${memosByMonth.length} memo${memosByMonth.length > 1 ? "s" : ""} for ${approvedFilterMonth}`,
+      })
+    } catch (err) {
+      console.error("[v0] Error downloading batch:", err)
+      toast({ title: "Download failed", description: String(err), variant: "destructive" })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleDownloadMemo = async (category: string) => {
     const memo = memos[category]
     if (!memo) return
@@ -1437,8 +1482,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
             {/* APPROVED TAB */}
             {activePaymentTab === "approved" && (
               <>
-                {/* Month filter */}
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                {/* Month filter with download all button */}
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg flex-wrap">
                   <Filter className="h-4 w-4 text-gray-500" />
                   <label className="text-sm font-medium text-gray-700">Filter by Month:</label>
                   <input
@@ -1448,15 +1493,34 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                     className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
                   />
                   {approvedFilterMonth && (
-                    <button
-                      onClick={() => {
-                        setApprovedFilterMonth("")
-                        setApprovedPage(1)
-                      }}
-                      className="text-xs text-gray-500 hover:text-gray-700 underline"
-                    >
-                      Clear
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          setApprovedFilterMonth("")
+                          setApprovedPage(1)
+                        }}
+                        className="text-xs text-gray-500 hover:text-gray-700 underline"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleDownloadAllForMonth}
+                        disabled={isLoading || approvedMemos.length === 0}
+                        className="ml-auto px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4" />
+                            Download All for {approvedFilterMonth}
+                          </>
+                        )}
+                      </button>
+                    </>
                   )}
                 </div>
 
