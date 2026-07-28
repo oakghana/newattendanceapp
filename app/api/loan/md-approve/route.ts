@@ -1,14 +1,11 @@
-import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/server"
+import type { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
+import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-  // Use admin client for profile lookup to bypass RLS
   const admin = await createAdminClient()
+  const { user, authError } = await createClientAndGetUser()
+  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const { data: profile } = await admin
     .from("user_profiles")
@@ -72,13 +69,9 @@ export async function POST(req: NextRequest) {
 
 // GET: fetch loans pending MD approval, grouped by today/week/month
 export async function GET(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-  // Use admin client for profile lookup to bypass RLS — session-only cookies
-  // (without access/refresh tokens) cannot read user_profiles via the user client
   const admin = await createAdminClient()
+  const { user, authError } = await createClientAndGetUser()
+  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const { data: profile } = await admin
     .from("user_profiles")
