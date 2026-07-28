@@ -680,7 +680,10 @@ export async function GET(
     const approvalDate = lr.hr_approved_at || lr.created_at
     const refYear  = new Date(approvalDate).getFullYear()
     const refCode  = leaveReferenceCode(leaveTypeKey)
-    const refNum   = `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
+    // Prefer the HR-leave-office-entered reference number; fall back to auto-generated
+    const refNum   = (lr.memo_reference && String(lr.memo_reference).trim())
+      ? String(lr.memo_reference).trim()
+      : `QCC/HRD/${refCode}/${refYear}/${String(lr.id || "").slice(-6).toUpperCase()}`
     doc.text(`Our Ref No:  ${refNum}`, marginLeft, y)
     doc.text(`Date:  ${fmtFormalDate(approvalDate)}`, pageWidth - marginRight, y, { align: "right" })
     y += 10
@@ -743,7 +746,7 @@ export async function GET(
     }
     y += subjectLines.length * 5.5 + 8
 
-    // ── Body paragraphs ──────────────────────────────────────────────
+    // ── Body paragraphs ───────���──────────────────────────────────────
     doc.setFont("times", "normal")
     doc.setFontSize(9.5)
     doc.setTextColor(0, 0, 0)

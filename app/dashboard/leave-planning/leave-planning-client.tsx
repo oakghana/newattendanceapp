@@ -1138,6 +1138,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officePriorDays, setOfficePriorDays] = useState<Record<string, string>>({})
   const [officeOutstandingDays, setOfficeOutstandingDays] = useState<Record<string, string>>({})
   const [officeReason, setOfficeReason] = useState<Record<string, string>>({})
+  const [officeRefNumber, setOfficeRefNumber] = useState<Record<string, string>>({})
   const [officeMemoSubject, setOfficeMemoSubject] = useState<Record<string, string>>({})
   const [officeMemoBody, setOfficeMemoBody] = useState<Record<string, string>>({})
   const [officeMemoCc, setOfficeMemoCc] = useState<Record<string, string>>({})
@@ -2249,8 +2250,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const selectedExec = hrExecutives.find(e => e.id === forwardToHrExecutiveId)
     const execName = selectedExec ? `${selectedExec.name} (${selectedExec.role_label})` : "HR Approvers"
 
+    const refNum = String(officeRefNumber[requestId] || "").trim()
+    if (!refNum) {
+      toast({ title: "Reference Number Required", description: "Please enter a memo reference number before forwarding.", variant: "destructive" })
+      return
+    }
+
     const confirmForward = window.confirm(
       `Please confirm the adjusted leave values before forwarding:\n\n` +
+      `Reference No: ${refNum}\n` +
       `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
       `Base Days: ${baseDays}\n` +
       `${outstandingAdded > 0 ? `+ Outstanding Days: ${outstandingAdded}\n` : ""}` +
@@ -2280,6 +2288,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           travelling_days_added: Number(officeTravelDays[requestId] || 0),
           prior_leave_days_deducted: Number(officePriorDays[requestId] || 0),
           adjusted_days: finalDays,
+          memo_reference: refNum,
           memo_draft_subject: officeMemoSubject[requestId] || null,
           memo_draft_body: officeMemoBody[requestId] || null,
           memo_draft_cc: officeMemoCc[requestId] || null,
@@ -3580,14 +3589,28 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     <Card key={req.id} className="group border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50/30 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
                       <CardContent className="p-5">
                         <div className="flex items-start justify-between mb-3">
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
-                            <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "—")} ·{" "}
-                              {leaveTypeLabelShort(req.leave_type_key)} · HOD approved {fmtDate(req.hod_reviewed_at)}
+                            {/* Staff position */}
+                            {req.user?.position && (
+                              <p className="text-xs font-medium text-slate-600">{String(req.user.position).toUpperCase()}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2">
+                              <span>{String(req.user?.departments?.name || "—")}</span>
+                              {/* Station / Location */}
+                              {(req.user?.geofence_locations?.name || req.location_name) && (
+                                <span className="text-slate-400">·</span>
+                              )}
+                              {(req.user?.geofence_locations?.name || req.location_name) && (
+                                <span>{req.user?.geofence_locations?.name || req.location_name}</span>
+                              )}
+                              <span className="text-slate-400">·</span>
+                              <span>{leaveTypeLabelShort(req.leave_type_key)}</span>
+                              <span className="text-slate-400">·</span>
+                              <span>HOD approved {fmtDate(req.hod_reviewed_at)}</span>
                             </p>
                           </div>
-                          <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
+                          <Badge className={`text-xs border ml-2 flex-shrink-0 ${getStatusColor(req.status)}`}>
                             {getStatusLabel(req.status)}
                           </Badge>
                         </div>
@@ -3946,6 +3969,23 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                   </SelectContent>
                                 </Select>
                               </div>
+                              {/* Reference Number — required before forwarding */}
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold text-red-700 flex items-center gap-1">
+                                  Our Ref No. <span className="text-red-500">*</span>
+                                  <span className="font-normal text-slate-500 ml-1">(required — appears on memo)</span>
+                                </Label>
+                                <Input
+                                  value={officeRefNumber[req.id] || ""}
+                                  onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="e.g. QCC/HRD/ANL/2025/2026/19AF24"
+                                  className={`h-9 bg-white font-mono text-sm ${!officeRefNumber[req.id]?.trim() ? "border-red-300 focus:ring-red-300" : "border-green-300"}`}
+                                />
+                                {!officeRefNumber[req.id]?.trim() && (
+                                  <p className="text-[10px] text-red-600">A reference number is required before this memo can be forwarded to the HR Executive.</p>
+                                )}
+                              </div>
+
                               <div className="space-y-1">
                                 <Label className="text-xs">Memo Subject</Label>
                                 <Input
@@ -4001,6 +4041,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                             </div>
 
                             <Button onClick={() => {
+                              if (!officeRefNumber[req.id]?.trim()) {
+                                toast({ title: "Reference Number Required", description: "Please enter the memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
+                                return
+                              }
                               if (!officeMemoBody[req.id] || !officeMemoBody[req.id].trim()) {
                                 toast({ title: "Remarks Required", description: "Please provide remarks before forwarding to HR Approvers", variant: "destructive" })
                                 return
@@ -4011,8 +4055,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               }
                               submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || !officeMemoBody[req.id]?.trim() || !selectedHrExecutive[req.id]}
-                              className="bg-blue-700 hover:bg-blue-800 text-white">
+                              disabled={officeSubmitting === req.id || !officeRefNumber[req.id]?.trim() || !officeMemoBody[req.id]?.trim() || !selectedHrExecutive[req.id]}
+                              className="bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
                               {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
                             </Button>
                           </div>
