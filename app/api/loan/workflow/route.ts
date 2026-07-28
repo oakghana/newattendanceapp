@@ -597,29 +597,36 @@ export async function GET() {
         }
       })
 
-    // Build accounts reviewer info map
-    const accountsRows: any[] = [
+    // Build accounts/FD reviewer info map — collect from ALL row pools so that
+    // allLoans, myTasks, myRequests etc. always resolve the reviewer name
+    const allPooledRows: any[] = [
       ...(accountsRes.data || []),
       ...(accountsSignedRes.data || []),
+      ...(allLoansRes.data || []),
+      ...(myTasksRes.data || []),
+      ...(myRes.data || []),
+      ...(hrRes.data || []),
+      ...(directorRes.data || []),
+      ...(directorGoodFdRes.data || []),
     ]
     const uniqueAccountsReviewerIds = Array.from(
-      new Set(accountsRows.map((r: any) => r.accounts_reviewer_id).filter(Boolean)),
+      new Set(allPooledRows.map((r: any) => r.accounts_reviewer_id).filter(Boolean)),
     ) as string[]
     let accountsReviewerMap: Map<string, string> = new Map()
     if (uniqueAccountsReviewerIds.length > 0) {
       const { data: accountsProfiles } = await admin
         .from("user_profiles")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, position, role")
         .in("id", uniqueAccountsReviewerIds)
       for (const ap of accountsProfiles || []) {
         const fullName = `${ap.first_name || ""} ${ap.last_name || ""}`.trim()
-        accountsReviewerMap.set(ap.id, fullName || "")
+        accountsReviewerMap.set(ap.id, fullName || ap.position || ap.role || "")
       }
     }
     const attachAccountsReviewerName = (rows: any[]) =>
       rows.map((r: any) => ({
         ...r,
-        accounts_reviewer_name: r.accounts_reviewer_id 
+        accounts_reviewer_name: r.accounts_reviewer_id
           ? (accountsReviewerMap.get(r.accounts_reviewer_id) || null)
           : null,
       }))
