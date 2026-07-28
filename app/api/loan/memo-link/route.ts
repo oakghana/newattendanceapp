@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import {
   canDoAccounts,
   canDoCommittee,
@@ -15,13 +15,8 @@ export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
     const admin = await createAdminClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const { user, authError } = await createClientAndGetUser()
 
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -48,6 +43,8 @@ export async function POST(request: NextRequest) {
     const canAccess =
       loan.user_id === user.id ||
       role === "admin" ||
+      role === "managing_director" ||
+      role === "it-admin" ||
       canDoHodReview(role) ||
       canDoCommittee(role) ||
       canDoLoanOffice(role, deptName, deptCode) ||

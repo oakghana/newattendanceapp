@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { jsPDF } from "jspdf"
 import fs from "fs"
 import path from "path"
-import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import {
   isFdExemptLoanType,
   canDoAccounts,
@@ -217,13 +217,8 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const supabase = await createClient()
     const admin = await createAdminClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const { user, authError } = await createClientAndGetUser()
 
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -261,6 +256,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const canAccess =
       loan.user_id === user.id ||
       role === "admin" ||
+      role === "managing_director" ||
+      role === "it-admin" ||
       canDoHodReview(role) ||
       canDoCommittee(role) ||
       canDoLoanOffice(role, deptName, deptCode) ||
@@ -271,7 +268,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-    const memoEligibleStatuses = ["approved_director", "director_rejected", "rejected_fd", "awaiting_director_hr"]
+    // Include md_approved status so MD can view/download the stamped memo after approving
+    const memoEligibleStatuses = ["approved_director", "md_approved", "director_rejected", "rejected_fd", "awaiting_director_hr"]
     if (!memoEligibleStatuses.includes(String(loan.status || ""))) {
       return NextResponse.json({ error: "Memo is not available for this current stage" }, { status: 400 })
     }

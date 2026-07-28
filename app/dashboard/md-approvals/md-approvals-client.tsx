@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 import {
   CheckCircle2,
   Clock,
+  Download,
   FileText,
   Loader2,
   RefreshCw,
@@ -256,6 +257,34 @@ export function MdApprovalsClient({ profile }: Props) {
   const [justApproved, setJustApproved] = useState<string[]>([])
   const [showApprovedRecently, setShowApprovedRecently] = useState(false)
   const [recentlyApprovedLoans, setRecentlyApprovedLoans] = useState<Loan[]>([])
+  const [downloadingMemoId, setDownloadingMemoId] = useState<string | null>(null)
+
+  const downloadMemo = useCallback(async (loan: Loan) => {
+    setDownloadingMemoId(loan.id)
+    try {
+      // Get a secure signed memo link
+      const linkRes = await fetch("/api/loan/memo-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: loan.id }),
+      })
+      const linkData = await linkRes.json()
+      if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate memo link")
+      // Trigger browser download
+      const a = document.createElement("a")
+      a.href = linkData.path
+      a.download = `loan-memo-${loan.request_number}.pdf`
+      a.target = "_blank"
+      a.rel = "noopener noreferrer"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (err) {
+      toast({ title: "Download failed", description: err instanceof Error ? err.message : "Could not download memo", variant: "destructive" })
+    } finally {
+      setDownloadingMemoId(null)
+    }
+  }, [toast])
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
   const initials = [profile.first_name[0], profile.last_name[0]].join("").toUpperCase()
@@ -452,13 +481,29 @@ export function MdApprovalsClient({ profile }: Props) {
                 Dismiss
               </button>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {recentlyApprovedLoans.map((l) => (
-                <div key={l.id} className="flex items-center justify-between text-sm">
-                  <span className="text-emerald-800 font-medium">
-                    {l.staff_full_name} &mdash; {l.loan_type_label}
-                  </span>
-                  <span className="font-mono text-emerald-600 text-xs">{l.request_number}</span>
+                <div key={l.id} className="flex items-center justify-between text-sm bg-white rounded-lg px-3 py-2 border border-emerald-100">
+                  <div>
+                    <span className="text-emerald-800 font-medium">
+                      {l.staff_full_name} &mdash; {l.loan_type_label}
+                    </span>
+                    <span className="block font-mono text-emerald-600 text-xs mt-0.5">{l.request_number}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 ml-3 flex-shrink-0"
+                    onClick={() => downloadMemo(l)}
+                    disabled={downloadingMemoId === l.id}
+                  >
+                    {downloadingMemoId === l.id ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Download Stamped Memo
+                  </Button>
                 </div>
               ))}
             </div>
