@@ -391,20 +391,39 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   }, [isHrLeaveOffice, summaryMonth])
 
   // Group staff by category
+  // Smart rank normalization - consolidate similar officer ranks
+  const normalizeRank = (rank: string): string => {
+    if (!rank) return "Other"
+    const normalized = rank.toLowerCase().trim()
+    
+    // Consolidate all officer ranks
+    if (normalized.includes("officer")) {
+      return "Officer"
+    }
+    // Consolidate all manager ranks
+    if (normalized.includes("manager") || normalized.includes("director")) {
+      return "Manager"
+    }
+    // Consolidate all senior ranks
+    if (normalized.includes("senior") || normalized.includes("principal")) {
+      return "Senior Staff"
+    }
+    // Consolidate all junior ranks
+    if (normalized.includes("junior") || normalized.includes("staff")) {
+      return "Junior Staff"
+    }
+    
+    return rank
+  }
+
   const staffByCategory = useMemo(() => {
-    return staffList.reduce(
-      (acc, staff) => {
-        const category = staff.staff_category || "Junior"
-        if (!acc[category]) acc[category] = []
-        acc[category].push(staff)
-        return acc
-      },
-      {
-        Manager: [] as StaffOnLeave[],
-        Senior: [] as StaffOnLeave[],
-        Junior: [] as StaffOnLeave[],
-      } as Record<string, StaffOnLeave[]>
-    )
+    const categories: Record<string, any[]> = {}
+    staffList.forEach((staff) => {
+      const category = normalizeRank(staff.staff_category || "Junior")
+      if (!categories[category]) categories[category] = []
+      categories[category].push(staff)
+    })
+    return categories
   }, [staffList])
 
   // Detect staff on leave
@@ -1183,12 +1202,14 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                   <div className="space-y-4">
                     {/* Group memos by month and category for batch approval */}
                     {(() => {
-                      // Group by month-category key
+                      // Group by month-category key with smart rank normalization
                       const grouped = pendingMemos.reduce((acc: Record<string, any[]>, memo) => {
                         // Extract month from memo_subject like "Payment of Leave Allowance (Junior Staff) - 2026-07"
                         const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
-                        const category = subjectMatch?.[1] || "Unknown"
+                        let category = subjectMatch?.[1] || "Unknown"
                         const month = subjectMatch?.[2] || "Unknown"
+                        // Apply smart rank normalization to consolidate similar ranks
+                        category = normalizeRank(category)
                         const key = `${month}|${category}`
                         if (!acc[key]) acc[key] = []
                         acc[key].push(memo)
@@ -1458,11 +1479,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                   <div className="space-y-4">
                     {/* Group approved memos by month and category for batch download */}
                     {(() => {
-                      // Group by month-category key
+                      // Group by month-category key with smart rank normalization
                       const grouped = approvedMemos.reduce((acc: Record<string, any[]>, memo) => {
                         const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
-                        const category = subjectMatch?.[1] || "Unknown"
+                        let category = subjectMatch?.[1] || "Unknown"
                         const month = subjectMatch?.[2] || "Unknown"
+                        // Apply smart rank normalization to consolidate similar ranks
+                        category = normalizeRank(category)
                         const key = `${month}|${category}`
                         if (!acc[key]) acc[key] = []
                         acc[key].push(memo)
