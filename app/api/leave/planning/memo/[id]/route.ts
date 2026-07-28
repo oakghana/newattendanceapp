@@ -171,10 +171,18 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
   const yearPart = leaveType === "annual" ? String(currentYear) : String(lr.leave_year_period || `${currentYear}/${currentYear + 1}`)
   const calYear = yearPart.split("/")[0]
   const travellingDays = Number(lr.travelling_days_added || 0)
-  // NOTE: entitlementDays is intentionally unused — we compute actual working days from the leave dates
-  // to avoid showing a stale DB entitlement lookup value (e.g. 24) when the real period may differ.
-  // baseLeaveDays = working days between effectiveStart and effectiveEnd (excl. weekends & public holidays)
-  const baseLeaveDays = Number(lr.adjusted_days || lr.requested_days || 0)
+  
+  // Use HR executor's final dates/days if set (they may have modified before signing);
+  // otherwise fall back to HR office adjusted dates, then original requested dates.
+  // CRITICAL: entitlement_days is NEVER used for memo generation — only for HR office reference during calculations.
+  const finalStartDate = lr.hr_approved_start_date || lr.adjusted_start_date || lr.preferred_start_date
+  const finalEndDate = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
+  const baseLeaveDays = lr.hr_approved_days !== null && lr.hr_approved_days !== undefined
+    ? Number(lr.hr_approved_days)
+    : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
+
+  // Note: effectiveStart, effectiveEnd, effectiveDays are parameters passed to buildBuiltinBody()
+  // They're already set by the caller with finalStartDate, finalEndDate, and baseLeaveDays
 
   const adjustmentParagraph = lr.adjustment_reason
     ? `Adjustment Details: ${String(lr.adjustment_reason).trim()}`
@@ -585,9 +593,14 @@ export async function GET(
     const lr = leaveRequest as any
     const ap = applicantProfile as any
 
-    const effectiveStart = lr.adjusted_start_date || lr.preferred_start_date
-    const effectiveEnd   = lr.adjusted_end_date   || lr.preferred_end_date
-    const effectiveDays  = Number(lr.adjusted_days || lr.requested_days || 0)
+    // Compute effective dates/days for memo generation
+    // Use HR executor's final dates/days if set; otherwise fall back to HR office dates, then requested dates
+    const effectiveStart = lr.hr_approved_start_date || lr.adjusted_start_date || lr.preferred_start_date
+    const effectiveEnd = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
+    const effectiveDays = lr.hr_approved_days !== null && lr.hr_approved_days !== undefined
+      ? Number(lr.hr_approved_days)
+      : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
+
     const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
 
     // Adjust end date if outstanding leave days are added
@@ -817,14 +830,23 @@ export async function GET(
         tableWidth: contentWidth,
         styles: {
           font: "times",
-          fontSize: 9,
+          fontSize: 8.5,
           textColor: [0, 0, 0],
           lineColor: [0, 0, 0],
           lineWidth: 0.3,
-          cellPadding: 2,
+          cellPadding: [1.5, 1.5],
+          overflow: "linebreak",
+          valign: "middle",
         },
-        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: "bold", halign: "center" },
-        bodyStyles: { halign: "center" },
+        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: "bold", halign: "center", fontSize: 8 },
+        bodyStyles: { halign: "center", fontSize: 8.5 },
+        columnStyles: {
+          0: { cellWidth: 28 }, // Entitled
+          1: { cellWidth: 28 }, // Granted
+          2: { cellWidth: 32 }, // From
+          3: { cellWidth: 32 }, // To
+          4: { halign: "left", cellWidth: "auto" }, // Remarks - left aligned, flexible width
+        },
         head: [["Number of Days\nEntitled", "Number of Days\nGranted", "From", "To", "Remarks"]],
         body: [
           [
@@ -835,7 +857,7 @@ export async function GET(
             remarksSummary,
           ],
           [
-            { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold" } },
+            { content: String(totalGranted || effectiveDays), colSpan: 5, styles: { halign: "center", fontStyle: "bold", fontSize: 8.5 } },
           ],
         ],
       })

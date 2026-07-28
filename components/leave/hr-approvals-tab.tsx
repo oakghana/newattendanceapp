@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -564,7 +565,7 @@ function HrApprovalCard({
   req: LeaveRequest
   expanded: boolean
   onToggle: () => void
-  onApprove: (note: string) => void
+  onApprove: (note: string, dateOverride?: string | null) => void
   onReject: (note: string) => void
   processing: boolean
   hasStoredSignature: boolean
@@ -576,6 +577,12 @@ function HrApprovalCard({
 }) {
   const [note, setNote] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
+  
+  // HR executive date override state
+  const [overrideMode, setOverrideMode] = useState(false)
+  const [hrStartDate, setHrStartDate] = useState(req.adjusted_start_date || req.preferred_start_date || '')
+  const [hrEndDate, setHrEndDate] = useState(req.adjusted_end_date || req.preferred_end_date || '')
+  const [hrDays, setHrDays] = useState(String(req.adjusted_days ?? req.requested_days))
 
   const staffName = req.user
     ? `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim()
@@ -707,6 +714,59 @@ function HrApprovalCard({
               </div>
             </div>
 
+            {/* HR Executive Date Override */}
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+              <button
+                type="button"
+                onClick={() => setOverrideMode(!overrideMode)}
+                className="flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900 transition-colors"
+              >
+                <PenLine className="h-4 w-4" />
+                {overrideMode ? 'Cancel Date Override' : 'Override Leave Dates (Optional)'}
+              </button>
+              
+              {overrideMode && (
+                <div className="space-y-2 bg-white rounded p-3 border border-blue-100">
+                  <p className="text-xs text-slate-600 mb-2">
+                    If you want to modify the leave dates before final approval, set them here. These dates will be used in the signed memo instead of the HR office dates.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 block mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={hrStartDate}
+                        onChange={(e) => setHrStartDate(e.target.value)}
+                        className="w-full h-8 px-2 border border-slate-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 block mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={hrEndDate}
+                        onChange={(e) => setHrEndDate(e.target.value)}
+                        className="w-full h-8 px-2 border border-slate-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 block mb-1">Final Days (Working)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={hrDays}
+                        onChange={(e) => setHrDays(e.target.value)}
+                        className="w-full h-8 px-2 border border-slate-300 rounded text-xs"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 italic">
+                    The working days value you set here will appear as the final approved days in the memo when signed.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Approval note */}
             <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1">
@@ -753,7 +813,18 @@ function HrApprovalCard({
                     : !sigReady ? 'Set a signature above before approving' 
                     : undefined
                 }
-                onClick={() => onApprove(note)}
+                onClick={() => {
+                  // Pass HR executive's override dates if in override mode
+                  const dateOverride = overrideMode 
+                    ? JSON.stringify({ 
+                        hr_approved_start_date: hrStartDate || null,
+                        hr_approved_end_date: hrEndDate || null,
+                        hr_approved_days: hrDays ? Number(hrDays) : null
+                      })
+                    : null
+                  // TODO: Modify onApprove signature to accept dateOverride
+                  onApprove(note, dateOverride)
+                }}
               >
                 {processing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                 Approve &amp; Issue Memo
@@ -949,22 +1020,36 @@ export function HrApprovalsTab() {
   }
 
   // ── Approve ───────────────────────────────────────────────────────────────
-  const handleApprove = async (reqId: string, note: string, subject: string, body: string) => {
+  const handleApprove = async (reqId: string, note: string, subject: string, body: string, dateOverrideJson?: string | null) => {
     try {
       setProcessingId(reqId)
+      const requestBody: any = {
+        leave_plan_request_id: reqId,
+        action: 'approve',
+        note: note || undefined,
+        memo_draft_subject: subject || undefined,
+        memo_draft_body: body || undefined,
+        hr_signature_mode: inlineSig?.mode || undefined,
+        hr_signature_text: inlineSig?.text || undefined,
+        hr_signature_data_url: inlineSig?.dataUrl || undefined,
+      }
+      
+      // Add HR executive date override if provided
+      if (dateOverrideJson) {
+        try {
+          const override = JSON.parse(dateOverrideJson)
+          requestBody.hr_approved_start_date = override.hr_approved_start_date
+          requestBody.hr_approved_end_date = override.hr_approved_end_date
+          requestBody.hr_approved_days = override.hr_approved_days
+        } catch (e) {
+          console.error('[v0] Failed to parse dateOverride:', e)
+        }
+      }
+      
       const res = await fetch('/api/leave/planning/hr-approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leave_plan_request_id: reqId,
-          action: 'approve',
-          note: note || undefined,
-          memo_draft_subject: subject || undefined,
-          memo_draft_body: body || undefined,
-          hr_signature_mode: inlineSig?.mode || undefined,
-          hr_signature_text: inlineSig?.text || undefined,
-          hr_signature_data_url: inlineSig?.dataUrl || undefined,
-        }),
+        body: JSON.stringify(requestBody),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -984,7 +1069,16 @@ export function HrApprovalsTab() {
         fetchRequests()
       }
     } catch (err: any) {
-      toast({ title: 'Error', description: String(err.message || err), variant: 'destructive' })
+      let errorMsg = 'Approval failed'
+      if (err?.message) {
+        errorMsg = err.message
+      } else if (typeof err === 'string') {
+        errorMsg = err
+      } else if (err && typeof err === 'object') {
+        errorMsg = JSON.stringify(err)
+      }
+      console.error('[v0] handleApprove error:', err)
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' })
     } finally {
       setProcessingId(null)
     }
@@ -1148,7 +1242,7 @@ export function HrApprovalsTab() {
               req={req}
               expanded={expandedId === req.id}
               onToggle={() => setExpandedId(expandedId === req.id ? null : req.id)}
-              onApprove={(note) => handleApprove(req.id, note, '', '')}
+                onApprove={(note, dateOverride) => handleApprove(req.id, note, '', '', dateOverride)}
               onReject={(note) => handleReject(req.id, note)}
               processing={processingId === req.id}
               hasStoredSignature={hasStoredSignature}
