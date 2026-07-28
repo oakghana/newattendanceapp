@@ -4,7 +4,7 @@ import autoTable from "jspdf-autotable"
 import fs from "fs"
 import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
-import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole } from "@/lib/leave-planning"
+import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
 
 export const runtime = "nodejs"
 
@@ -154,7 +154,7 @@ function getMemoSubject(leaveTypeKey: string, leavePeriod: string, draftSubject?
  * Returns { paragraphs: string[], closing: string, useTable: boolean } where
  * useTable=true means annual leave table format should be rendered by the PDF layer.
  */
-function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string, effectiveDays: number, returnDateIso: string): {
+function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string, effectiveDays: number, returnDateIso: string, holidays: string[] = []): {
   paragraphs: string[]
   closing: string
   useTable: boolean
@@ -171,7 +171,10 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
   const yearPart = leaveType === "annual" ? String(currentYear) : String(lr.leave_year_period || `${currentYear}/${currentYear + 1}`)
   const calYear = yearPart.split("/")[0]
   const travellingDays = Number(lr.travelling_days_added || 0)
-  const entitlementDays = Number(lr.entitlement_days || 0)
+  // NOTE: entitlementDays is intentionally unused — we compute actual working days from the leave dates
+  // to avoid showing a stale DB entitlement lookup value (e.g. 24) when the real period may differ.
+  // baseLeaveDays = working days between effectiveStart and effectiveEnd (excl. weekends & public holidays)
+  const baseLeaveDays = Number(lr.adjusted_days || lr.requested_days || 0)
 
   const adjustmentParagraph = lr.adjustment_reason
     ? `Adjustment Details: ${String(lr.adjustment_reason).trim()}`
@@ -180,6 +183,12 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
   switch (leaveType) {
     case "annual": {
       const yearRange = `January to December ${calYear}`
+      // Compute actual working days between the granted leave dates (excl. weekends & public holidays)
+      // This is the authoritative figure — never use the stored entitlement_days lookup value.
+      const computedWorkingDays = calculateWorkingDays(effectiveStart, effectiveEnd, holidays).workingDays
+      // Use the stored adjusted_days if it was explicitly set by HR office (may include travel adjustments),
+      // otherwise fall back to the computed working-days figure so the table never shows a stale entitlement.
+      const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
       return {
         useTable: true,
         paragraphs: [
@@ -187,7 +196,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
           "Your leave details are shown below.",
         ],
         closing: "We wish you a pleasant and relaxing vacation.",
-        tableEntitlement: entitlementDays,
+        tableEntitlement: actualBaseDays,
         tableTravellingDays: travellingDays,
       }
     }
@@ -542,6 +551,19 @@ export async function GET(
 
     }
 
+    // Fetch public holidays for working-days calculation
+    let holidayDatesForMemo: string[] = []
+    try {
+      const { data: holidayRows } = await admin
+        .from("public_holidays")
+        .select("holiday_date")
+      if (holidayRows) {
+        holidayDatesForMemo = holidayRows.map((h: any) => String(h.holiday_date).slice(0, 10))
+      }
+    } catch {
+      // proceed without holidays — weekends still excluded
+    }
+
     // Load QCC logo
     let logoBase64: string | null = null
     try {
@@ -616,7 +638,7 @@ export async function GET(
     // Stored draftBody values are stale and may contain wrong leave-type content
     // (e.g. a casual leave record with annual leave body text from old data entry).
     {
-      const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso)
+      const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso, holidayDatesForMemo)
       paragraphs          = built.paragraphs
       closingLine         = built.closing
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
@@ -759,28 +781,29 @@ export async function GET(
 
     // ── Annual leave table ───────────────────────���─────���─────────────
     if (useTable === true) {
-      const holidayDaysDeducted = Number(lr.holiday_days_deducted || 0)
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
       const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
-      const grossEntitledDays = Math.max(0, Number(tableEntitlement || 0) + Number(tableTravellingDays || 0))
-      const totalDeductions = Math.max(0, holidayDaysDeducted + priorLeaveDaysDeducted)
 
-      const entitlementLabel = tableTravellingDays > 0
-        ? `${tableEntitlement} plus ${tableTravellingDays} travelling day${tableTravellingDays !== 1 ? "s" : ""}`
-        : String(tableEntitlement || effectiveDays)
+      // tableEntitlement is now the actual working-day base (from calculateWorkingDays or adjusted_days).
+      // Travel days are additive; prior leave is deductive; outstanding leave is additive.
+      // Public holidays are already excluded from the working-days base — do NOT deduct them again.
+      const baseDays   = Math.max(0, Number(tableEntitlement || 0))
+      const travelDays = Math.max(0, Number(tableTravellingDays || 0))
 
-      // Annual memo should reflect entitlement arithmetic: entitlement + travel - deductions + outstanding days added.
-      const totalGranted = grossEntitledDays > 0
-        ? Math.max(0, grossEntitledDays - totalDeductions + outstandingLeaveDaysAdded)
-        : Math.max(0, effectiveDays + outstandingLeaveDaysAdded)
+      const entitlementLabel = travelDays > 0
+        ? `${baseDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
+        : String(baseDays || effectiveDays)
+
+      // Total granted = base working days + travel − prior leave already enjoyed + outstanding added
+      const totalGranted = Math.max(0, baseDays + travelDays - priorLeaveDaysDeducted + outstandingLeaveDaysAdded)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
       )
       const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
-      const hasIncrease = adjustedRequested > originalRequested || Number(lr.travelling_days_added || 0) > 0
+      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0
       const remarksParts: string[] = []
-      if (holidayDaysDeducted > 0) remarksParts.push(`${holidayDaysDeducted} day(s) public holiday`) 
+      if (travelDays > 0) remarksParts.push(`${travelDays} travelling day${travelDays !== 1 ? "s" : ""} added`)
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
