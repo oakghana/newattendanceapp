@@ -294,7 +294,7 @@ export default function LoginPage() {
 
         // Route based on role: executive roles go to overview, staff go to attendance check-in
         let dashboardUrl = "/dashboard/attendance"
-        if (userProfile?.role === "managing_director" || userProfile?.role === "secretary") {
+        if (approvalCheck.role === "managing_director" || approvalCheck.role === "secretary") {
           dashboardUrl = "/dashboard/overview"
         }
 
@@ -535,7 +535,7 @@ export default function LoginPage() {
 
         // Route based on role: executive roles go to overview, staff go to attendance check-in
         let dashboardUrl = "/dashboard/attendance"
-        if (userProfile?.role === "managing_director" || userProfile?.role === "secretary") {
+        if (approvalCheck.role === "managing_director" || approvalCheck.role === "secretary") {
           dashboardUrl = "/dashboard/overview"
         }
 
