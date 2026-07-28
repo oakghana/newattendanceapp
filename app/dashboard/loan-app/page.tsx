@@ -4098,32 +4098,89 @@ export default function LoanAppPage() {
               {pagedAllLoans.map((row) => (
                 <div key={row.id} className="rounded border p-3 text-sm">
                   {isAdmin && (
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3 pb-3 border-b">
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <input type="checkbox" checked={selectedLoanIds.includes(row.id)} onChange={() => toggleSelectedLoanId(row.id)} />
-                        Select for delete
+                        Select
                       </label>
-                      <Button variant="destructive" size="sm" onClick={() => void deleteLoanRequestById(row.id)}>Delete This Loan</Button>
+                      <Button variant="destructive" size="sm" onClick={() => void deleteLoanRequestById(row.id)}>Delete</Button>
                     </div>
                   )}
-                  <div className="font-medium">{row.request_number} - {row.loan_type_label}</div>
-                  {row.staff_full_name && <div className="font-semibold text-purple-900">Staff: {row.staff_full_name}</div>}
-                  <div>{row.staff_rank || "N/A"} | Staff No: {row.staff_number || "N/A"}</div>
-                  <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
-                  <div className="text-muted-foreground">Address: {row.staff_location_address || "N/A"}</div>
-                  <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Status: {statusText(row.status)}</div>
-                  <div className="text-xs text-muted-foreground">FD Score: {row.fd_score ?? "—"} | FD Reviewer: {row.accounts_reviewer_name || "—"}</div>
+                  
+                  {/* Header: Request Number & Status Badge */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
+                      <div className="text-xs text-slate-600">{row.loan_type_label}</div>
+                    </div>
+                    <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                      row.status === "approved_director" ? "bg-emerald-100 text-emerald-700" :
+                      row.status === "director_rejected" ? "bg-red-100 text-red-700" :
+                      row.status === "rejected_fd" ? "bg-red-100 text-red-700" :
+                      "bg-slate-100 text-slate-700"
+                    }`}>
+                      {statusText(row.status)}
+                    </div>
+                  </div>
+
+                  {/* Staff Information */}
+                  <div className="space-y-2 mb-3 pb-3 border-b">
+                    {row.staff_full_name && <div className="font-semibold text-slate-900">{row.staff_full_name}</div>}
+                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                      <div><span className="text-slate-500">Position:</span> {row.staff_rank || "—"}</div>
+                      <div><span className="text-slate-500">Staff No:</span> {row.staff_number || "—"}</div>
+                      <div><span className="text-slate-500">Location:</span> {row.staff_location_name || "—"}</div>
+                      <div><span className="text-slate-500">District:</span> {row.staff_district_name || "—"}</div>
+                    </div>
+                  </div>
+
+                  {/* Amount & Reviewers */}
+                  <div className="space-y-2 mb-3 pb-3 border-b">
+                    <div className="text-lg font-bold text-slate-900">GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-slate-500 block">FD Score</span>
+                        <span className="font-semibold text-slate-900">{row.fd_score ?? "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">FD Reviewed By</span>
+                        <span className="font-semibold text-slate-900">{row.accounts_reviewer_name || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Approver Information */}
                   {(row.director_hr_name || row.director_signature_text) && (
-                    <div className="text-xs text-slate-600 font-medium">Signed by: {row.director_hr_name || row.director_signature_text}</div>
-                  )}
-                  {["approved_director", "director_rejected", "rejected_fd"].includes(row.status) && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Secure Memo PDF</Button>
-                      {["approved_director"].includes(row.status) && (
-                        <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Download Signed Memo</Button>
-                      )}
+                    <div className="mb-3 pb-3 border-b bg-blue-50 rounded px-2 py-1.5">
+                      <div className="text-xs text-blue-700">
+                        <span className="font-semibold">Approved & Signed by:</span> {row.director_hr_name || row.director_signature_text}
+                      </div>
                     </div>
                   )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => openSecureMemo(row.id)}
+                        className="flex-1"
+                      >
+                        View Memo
+                      </Button>
+                    )}
+                    {row.status === "approved_director" && (
+                      <Button 
+                        variant="default" 
+                        size="sm" 
+                        onClick={() => openSecureMemo(row.id)}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        Download Signed Memo
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
               {filteredAllLoans.length === 0 && <p className="text-sm text-muted-foreground">No loans found.</p>}
