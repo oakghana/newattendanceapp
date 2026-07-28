@@ -179,10 +179,11 @@ export function HRLeaveOfficeRequestDashboard() {
     else setRefreshing(true)
 
     try {
-      const [deferRecallRes, execRes, allRequestsRes] = await Promise.all([
+      const [deferRecallRes, execRes, hodPendingRes, hrPendingRes] = await Promise.all([
         fetch('/api/leave/deferment-recall/pending-requests'),
         fetch('/api/admin/users/by-role?roles=hr_executive,manager_hr,director_hr'),
-        fetch('/api/leave/requests?status=hod_approved,pending&limit=100'),
+        fetch('/api/leave/requests?status=pending&limit=100'),
+        fetch('/api/leave/requests?status=hod_approved&limit=100'),
       ])
 
       // Deferments & Recalls
@@ -204,12 +205,14 @@ export function HRLeaveOfficeRequestDashboard() {
         )
       }
 
-      // Leave requests in processing states
-      if (allRequestsRes.ok) {
-        const reqData = await allRequestsRes.json()
-        const requests: LeaveRequest[] = reqData.requests || reqData.data || []
-        setHodPendingRequests(requests.filter((r) => r.status === 'pending'))
-        setHrPendingRequests(requests.filter((r) => r.status === 'hod_approved'))
+      // Leave requests in processing states — separate API calls per status
+      if (hodPendingRes.ok) {
+        const reqData = await hodPendingRes.json()
+        setHodPendingRequests(reqData.requests || reqData.data || [])
+      }
+      if (hrPendingRes.ok) {
+        const reqData = await hrPendingRes.json()
+        setHrPendingRequests(reqData.requests || reqData.data || [])
       }
     } catch (err: any) {
       if (!silent) {
