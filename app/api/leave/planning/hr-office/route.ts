@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       holiday_days_deducted,
       travelling_days_added,
       prior_leave_days_deducted,
+      memo_reference,
       memo_draft_subject,
       memo_draft_body,
       memo_draft_cc,
@@ -70,6 +71,14 @@ export async function POST(request: NextRequest) {
       hr_approver_id,
       forwarded_to_hr_approver_id,
     } = body
+
+    // Reference number is mandatory before forwarding to HR Executive
+    if (!memo_reference || String(memo_reference).trim().length < 3) {
+      return NextResponse.json(
+        { error: "A memo reference number (Our Ref No.) is required before forwarding to HR Executive." },
+        { status: 400 },
+      )
+    }
 
     // Resolve the HR executive ID from whichever field was sent
     const resolvedHrApproverId = forwarded_to_hr_approver_id || hr_approver_id || null
@@ -173,6 +182,7 @@ export async function POST(request: NextRequest) {
         hr_office_reviewer_id: user.id,
         hr_office_reviewer_name: reviewerName,
         hr_office_reviewed_at: new Date().toISOString(),
+        memo_reference: String(memo_reference).trim(),
         memo_draft_subject: memo_draft_subject ? String(memo_draft_subject).trim() : null,
         memo_draft_body: memo_draft_body ? String(memo_draft_body).trim() : null,
         memo_draft_cc: memo_draft_cc ? String(memo_draft_cc).trim() : null,
@@ -191,6 +201,26 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error("[hr-office] update error:", updateError)
+      // Handle missing column gracefully — trigger the migration automatically
+      const errMsg = String(updateError.message || "")
+      if (errMsg.includes("memo_reference") && (errMsg.includes("schema cache") || errMsg.includes("Could not find"))) {
+        // Attempt auto-migration
+        try {
+          const origin = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+          await fetch(`${origin}/api/migrate/memo-reference`, { method: "POST" })
+        } catch (_) {}
+        return NextResponse.json(
+          {
+            error:
+              "A required database column (memo_reference) is missing. The system has triggered an automatic migration. " +
+              "Please run this SQL in your Supabase SQL Editor, then retry: " +
+              "ALTER TABLE public.leave_plan_requests ADD COLUMN IF NOT EXISTS memo_reference TEXT;",
+            sql: "ALTER TABLE public.leave_plan_requests ADD COLUMN IF NOT EXISTS memo_reference TEXT;",
+            retryable: true,
+          },
+          { status: 503 },
+        )
+      }
       throw updateError
     }
 

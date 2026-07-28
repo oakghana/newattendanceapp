@@ -1138,6 +1138,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [officePriorDays, setOfficePriorDays] = useState<Record<string, string>>({})
   const [officeOutstandingDays, setOfficeOutstandingDays] = useState<Record<string, string>>({})
   const [officeReason, setOfficeReason] = useState<Record<string, string>>({})
+  const [officeRefNumber, setOfficeRefNumber] = useState<Record<string, string>>({})
   const [officeMemoSubject, setOfficeMemoSubject] = useState<Record<string, string>>({})
   const [officeMemoBody, setOfficeMemoBody] = useState<Record<string, string>>({})
   const [officeMemoCc, setOfficeMemoCc] = useState<Record<string, string>>({})
@@ -1669,7 +1670,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ���── Holiday CRUD Functions ───────����────���────────────────────────────
+  // ���── Holiday CRUD Functions ───────����────���────────���───────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -1866,15 +1867,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // ─����� Derived lists ──���─────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => {
     if (!data) return []
-    // For loan_office role, show all staff leave requests (requests) instead of myRequests
-    // For other roles, show their own requests (myRequests)
-    const requests = (isLoanOffice ? (data.requests || []) : (data.myRequests || data.requests || []))
-    
-    // Role-based visibility filtering
-    // All roles can see: requests that are theirs or for review/approval
-    // The backend already filters based on the user, so just return the data
-    return requests
-  }, [data, isLoanOffice])
+    // For loan_office role, the backend now returns mode:"loan_office" with myRequests populated
+    // with the user's own requests. Fall back to data.requests for backwards compatibility.
+    return data.myRequests || data.requests || []
+  }, [data])
 
   const hodAssignedReviews: any[] = useMemo(() => {
     if (!data) return []
@@ -2243,9 +2239,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const priorDeducted = Number(officePriorDays[requestId] || 0)
     const travelAdded = Number(officeTravelDays[requestId] || 0)
     const outstandingAdded = Number(officeOutstandingDays[requestId] || 0)
-    // Use calendar days (total days including weekends) as base, consistent with the UI breakdown
-    const baseDays = adjStart && adjEnd 
-      ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
+    // Base days = working days only (excluding weekends and public holidays) from from-date to to-date
+    const holidayDatesForCalc = holidays.map((h) => h.holiday_date)
+    const baseDays = adjStart && adjEnd
+      ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForCalc).workingDays
       : 0
     const finalDays = Math.max(0, baseDays + outstandingAdded - holidayDeducted - priorDeducted + travelAdded)
 
@@ -2253,8 +2250,15 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const selectedExec = hrExecutives.find(e => e.id === forwardToHrExecutiveId)
     const execName = selectedExec ? `${selectedExec.name} (${selectedExec.role_label})` : "HR Approvers"
 
+    const refNum = String(officeRefNumber[requestId] || "").trim()
+    if (!refNum) {
+      toast({ title: "Reference Number Required", description: "Please enter a memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
+      return
+    }
+
     const confirmForward = window.confirm(
       `Please confirm the adjusted leave values before forwarding:\n\n` +
+      `Reference No: ${refNum}\n` +
       `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
       `Base Days: ${baseDays}\n` +
       `${outstandingAdded > 0 ? `+ Outstanding Days: ${outstandingAdded}\n` : ""}` +
@@ -2284,6 +2288,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
           travelling_days_added: Number(officeTravelDays[requestId] || 0),
           prior_leave_days_deducted: Number(officePriorDays[requestId] || 0),
           adjusted_days: finalDays,
+          memo_reference: refNum,
           memo_draft_subject: officeMemoSubject[requestId] || null,
           memo_draft_body: officeMemoBody[requestId] || null,
           memo_draft_cc: officeMemoCc[requestId] || null,
@@ -2291,7 +2296,18 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
         }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || "HR office review failed")
+      if (!res.ok) {
+        // Special handling for missing memo_reference column — show SQL instructions
+        if (res.status === 503 && json.sql) {
+          toast({
+            title: "Database Setup Required",
+            description: `A new column needs to be added. Please run this SQL in Supabase SQL Editor, then retry:\n${json.sql}`,
+            variant: "destructive",
+          })
+          return
+        }
+        throw new Error(json.error || "HR office review failed")
+      }
       toast({ title: "Request forwarded to HR Approvers", description: `Adjusted to ${json.adjusted_days} day(s)` })
       setOfficeExpanded(null)
       await loadData()
@@ -2390,10 +2406,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
-  // ── Render ────��──────��──────────────────────────────────────────────
+  // ── Render ────��──────��───────────────────────────────────────────��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─��� Header Banner ──────�����──────────��────────────────────────── */}
+      {/* ─��� Header Banner ──────�����──────────��──────��─────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -3568,9 +3584,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                   const travelD = Number(officeTravelDays[req.id] || 0)
                                   const priorD = Number(officePriorDays[req.id] || 0)
                                   const outstandingD = Number(officeOutstandingDays[req.id] || 0)
+                                  // Base days = working days (excl. weekends & holidays) from from-date to to-date
+                                  const holidayDatesForRender = holidays.map((h) => h.holiday_date)
                                   const baseDays = adjStart && adjEnd
-                                    ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
-                                    : req.requested_days
+                                    ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
+                                    : Number(req.requested_days || 0)
                                   const finalDays = Math.max(0, baseDays + outstandingD - holidayD - priorD + travelD)
                                   const generatedReason = [
                                     outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
@@ -3582,14 +3600,28 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     <Card key={req.id} className="group border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50/30 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
                       <CardContent className="p-5">
                         <div className="flex items-start justify-between mb-3">
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <p className="font-semibold text-slate-800">{fmtName(req.user)}</p>
-                            <p className="text-xs text-slate-500">
-                              {String(req.user?.departments?.name || "—")} ·{" "}
-                              {leaveTypeLabelShort(req.leave_type_key)} · HOD approved {fmtDate(req.hod_reviewed_at)}
+                            {/* Staff position */}
+                            {req.user?.position && (
+                              <p className="text-xs font-medium text-slate-600">{String(req.user.position).toUpperCase()}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2">
+                              <span>{String(req.user?.departments?.name || "—")}</span>
+                              {/* Station / Location */}
+                              {(req.user?.geofence_locations?.name || req.location_name) && (
+                                <span className="text-slate-400">·</span>
+                              )}
+                              {(req.user?.geofence_locations?.name || req.location_name) && (
+                                <span>{req.user?.geofence_locations?.name || req.location_name}</span>
+                              )}
+                              <span className="text-slate-400">·</span>
+                              <span>{leaveTypeLabelShort(req.leave_type_key)}</span>
+                              <span className="text-slate-400">·</span>
+                              <span>HOD approved {fmtDate(req.hod_reviewed_at)}</span>
                             </p>
                           </div>
-                          <Badge className={`text-xs border ${getStatusColor(req.status)}`}>
+                          <Badge className={`text-xs border ml-2 flex-shrink-0 ${getStatusColor(req.status)}`}>
                             {getStatusLabel(req.status)}
                           </Badge>
                         </div>
@@ -3599,6 +3631,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
                           <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
                         </div>
+
+                        {/* Staff leave history — guides the HR office on prior leave taken */}
+                        <StaffHistoryPanel
+                          history={staffHistoryByUser[String(req.user?.id || "")] || []}
+                          currentRequestId={req.id}
+                        />
 
                         {/* Annual Leave Entitlement Summary — shown only for annual leave requests */}
                         {String(req.leave_type_key || "").toLowerCase() === "annual" && (
@@ -3872,22 +3910,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               </div>
                             </div>
 
-                            {/* Annual Leave Entitlement Reference Guide — Only for annual leave */}
+                            {/* Annual Leave Entitlement Quick Reference — for annual leave only */}
                             {String(req.leave_type_key || "").toLowerCase() === "annual" && (
-                              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 space-y-2">
-                                <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">Annual Leave Entitlement Reference</p>
-                                <div className="space-y-1.5 text-xs text-amber-900">
-                                  <div className="font-medium">Senior Staff:</div>
-                                  <div className="ml-2">36 days + 2 travelling days = 38 total</div>
-                                  
-                                  <div className="font-medium mt-2">Junior Staff (by years of service):</div>
-                                  <div className="ml-2 space-y-0.5">
-                                    <div>1–3 years: 24 days + 2 travelling days = 26 total</div>
-                                    <div>4–5 years: 28 days + 2 travelling days = 30 total</div>
-                                    <div>6–10 years: 32 days + 2 travelling days = 34 total</div>
-                                    <div>11+ years: 36 days + 2 travelling days = 38 total</div>
-                                  </div>
-                                </div>
+                              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+                                <p className="text-[10px] font-semibold text-amber-900 uppercase tracking-wide mb-1">Entitlement Reference <span className="font-normal normal-case text-amber-700">(for guidance only — use HR-saved values below)</span></p>
+                                <p className="text-xs text-amber-900">
+                                  <span className="font-medium">Senior:</span> 36 + 2 travel = 38 &nbsp;|&nbsp;
+                                  <span className="font-medium">Junior:</span> 1–3 yr: 26 · 4–5 yr: 30 · 6–10 yr: 34 · 11+ yr: 38
+                                </p>
                               </div>
                             )}
 
@@ -3921,73 +3951,46 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               />
                             </div>
 
-                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2">
-                              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Draft (Editable)</p>
+                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
+
+                              {/* Our Ref No. — required before forwarding */}
                               <div className="space-y-1">
-                                <Label className="text-xs">Template Source</Label>
-                                <Select
-                                  value={officeTemplateKey[req.id] || ""}
-                                  onValueChange={(value) => {
-                                    setOfficeTemplateKey((p) => ({ ...p, [req.id]: value }))
-                                    const selected = templateOptions.find((template) => template.template_key === value)
-                                    if (selected) {
-                                      const rendered = renderTemplateForRequest(selected, req)
-                                      setOfficeMemoSubject((p) => ({ ...p, [req.id]: rendered.subject || "" }))
-                                      setOfficeMemoBody((p) => ({ ...p, [req.id]: rendered.body || "" }))
-                                      setOfficeMemoCc((p) => ({ ...p, [req.id]: rendered.cc || "" }))
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger className="h-9 bg-white">
-                                    <SelectValue placeholder="Select template" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {templateOptions.map((template) => (
-                                      <SelectItem key={template.id} value={template.template_key}>
-                                        {template.template_name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Memo Subject</Label>
+                                <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                                  Our Ref No. <span className="text-red-500">*</span>
+                                </Label>
                                 <Input
-                                  value={officeMemoSubject[req.id] || ""}
-                                  onChange={(e) => setOfficeMemoSubject((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="RE: APPLICATION FOR ANNUAL LEAVE — 2026/2027"
-                                  className="h-9 bg-white"
+                                  value={officeRefNumber[req.id] || ""}
+                                  onChange={(e) => setOfficeRefNumber((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder="e.g. QCC/HRD/ANL/2025/2026/19AF24"
+                                  className={`h-9 bg-white font-mono text-sm ${!officeRefNumber[req.id]?.trim() ? "border-red-300 focus:ring-red-300" : "border-green-400"}`}
                                 />
+                                {!officeRefNumber[req.id]?.trim() && (
+                                  <p className="text-[10px] text-red-600">Required — this reference number will appear on the printed memo.</p>
+                                )}
                               </div>
+
+                              {/* CC List */}
                               <div className="space-y-1">
-                                <Label className="text-xs">Memo Body</Label>
+                                <Label className="text-xs font-semibold text-slate-700">CC List <span className="font-normal text-slate-400">(one per line)</span></Label>
                                 <Textarea
-                                  value={officeMemoBody[req.id] || ""}
-                                  onChange={(e) => setOfficeMemoBody((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="Draft the memo body that HR approver can finalize before approval."
+                                  value={officeMemoCc[req.id] || ""}
+                                  onChange={(e) => setOfficeMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
+                                  placeholder={"Managing Director\nDeputy Managing Director\nHR Leave Office\nFile"}
                                   rows={4}
                                   className="resize-none text-sm bg-white"
                                 />
                               </div>
+
+                              {/* Forward To HR Executive */}
                               <div className="space-y-1">
-                                <Label className="text-xs">CC List (one per line)</Label>
-                                <Textarea
-                                  value={officeMemoCc[req.id] || ""}
-                                  onChange={(e) => setOfficeMemoCc((p) => ({ ...p, [req.id]: e.target.value }))}
-                                  placeholder="HOD\nACCOUNTS MANAGER\nHR LEAVE OFFICE\nFILE"
-                                  rows={3}
-                                  className="resize-none text-sm bg-white"
-                                />
-                              </div>
-                              {/* HR Executive Selector */}
-                              <div className="space-y-1">
-                                <Label className="text-xs font-medium text-blue-700">Forward To (HR Executive) *</Label>
+                                <Label className="text-xs font-semibold text-blue-700">Forward To (HR Executive) <span className="text-red-500">*</span></Label>
                                 <Select
                                   value={selectedHrExecutive[req.id] || ""}
                                   onValueChange={(val) => setSelectedHrExecutive((p) => ({ ...p, [req.id]: val }))}
                                 >
                                   <SelectTrigger className="h-9 bg-white border-blue-200">
-                                    <SelectValue placeholder={loadingHrExecutives ? "Loading..." : "Select HR Executive to forward to"} />
+                                    <SelectValue placeholder={loadingHrExecutives ? "Loading..." : "Select HR Executive"} />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {hrExecutives.length === 0 && !loadingHrExecutives && (
@@ -4000,23 +4003,22 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                <p className="text-xs text-muted-foreground">Select which HR Executive should review and approve this leave request</p>
                               </div>
                             </div>
 
                             <Button onClick={() => {
-                              if (!officeMemoBody[req.id] || !officeMemoBody[req.id].trim()) {
-                                toast({ title: "Remarks Required", description: "Please provide remarks before forwarding to HR Approvers", variant: "destructive" })
+                              if (!officeRefNumber[req.id]?.trim()) {
+                                toast({ title: "Reference Number Required", description: "Please enter the memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
                                 return
                               }
                               if (!selectedHrExecutive[req.id]) {
-                                toast({ title: "HR Executive Required", description: "Please select an HR Executive to forward this request to", variant: "destructive" })
+                                toast({ title: "HR Executive Required", description: "Please select an HR Executive to forward this request to.", variant: "destructive" })
                                 return
                               }
                               submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || !officeMemoBody[req.id]?.trim() || !selectedHrExecutive[req.id]}
-                              className="bg-blue-700 hover:bg-blue-800 text-white">
+                              disabled={officeSubmitting === req.id || !officeRefNumber[req.id]?.trim() || !selectedHrExecutive[req.id]}
+                              className="w-full bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
                               {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
                             </Button>
                           </div>
