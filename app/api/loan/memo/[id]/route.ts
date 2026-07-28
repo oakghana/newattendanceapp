@@ -512,6 +512,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y = 24
     }
 
+    // sigImgY tracks where the signature is placed — used by applySignatureSideWatermark
+    let sigImgY = -1
+
     // Add signature image if available — RENDER ABOVE NAME (exact leave module approach)
     if (signerSignatureUrl && signerSignatureUrl.length > 10) {
       try {
@@ -520,6 +523,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
           const b64Match = signerSignatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
           if (b64Match) {
             const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+            sigImgY = y
             doc.addImage(signerSignatureUrl, imageType, marginLeft, y, 50, 18)
             y += 20
           }
@@ -532,22 +536,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
               const sigBase64 = Buffer.from(sigBuffer).toString("base64")
               const contentType = sigResponse.headers.get("content-type") || "image/png"
               const imageType = contentType.includes("jpeg") ? "JPEG" : "PNG"
+              sigImgY = y
               doc.addImage(`data:${contentType};base64,${sigBase64}`, imageType, marginLeft, y, 50, 18)
               y += 20
             }
           } catch (fetchErr) {
-            console.log("[v0] Failed to fetch signature from URL:", fetchErr)
             // Fall through to text fallback
           }
         }
       } catch (err) {
-        console.log("[v0] Signature image render failed:", err)
         // Fall through to text fallback
       }
     }
 
-    // Fallback text signature if image not available
-    if (!signerSignatureUrl || signerSignatureUrl.length <= 10) {
+    // Fallback text signature if no image was rendered
+    if (sigImgY < 0) {
       const profileName = fmtName(directorProfile)
       const fallbackSigText = (profileName || String((loan as any).director_signature_text || "").trim() || "AUTHORISED SIGNATORY").toUpperCase()
       doc.setFont("times", "bolditalic")
