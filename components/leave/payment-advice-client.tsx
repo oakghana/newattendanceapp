@@ -391,20 +391,39 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   }, [isHrLeaveOffice, summaryMonth])
 
   // Group staff by category
+  // Smart rank normalization - consolidate similar officer ranks
+  const normalizeRank = (rank: string): string => {
+    if (!rank) return "Other"
+    const normalized = rank.toLowerCase().trim()
+    
+    // Consolidate all officer ranks
+    if (normalized.includes("officer")) {
+      return "Officer"
+    }
+    // Consolidate all manager ranks
+    if (normalized.includes("manager") || normalized.includes("director")) {
+      return "Manager"
+    }
+    // Consolidate all senior ranks
+    if (normalized.includes("senior") || normalized.includes("principal")) {
+      return "Senior Staff"
+    }
+    // Consolidate all junior ranks
+    if (normalized.includes("junior") || normalized.includes("staff")) {
+      return "Junior Staff"
+    }
+    
+    return rank
+  }
+
   const staffByCategory = useMemo(() => {
-    return staffList.reduce(
-      (acc, staff) => {
-        const category = staff.staff_category || "Junior"
-        if (!acc[category]) acc[category] = []
-        acc[category].push(staff)
-        return acc
-      },
-      {
-        Manager: [] as StaffOnLeave[],
-        Senior: [] as StaffOnLeave[],
-        Junior: [] as StaffOnLeave[],
-      } as Record<string, StaffOnLeave[]>
-    )
+    const categories: Record<string, any[]> = {}
+    staffList.forEach((staff) => {
+      const category = normalizeRank(staff.staff_category || "Junior")
+      if (!categories[category]) categories[category] = []
+      categories[category].push(staff)
+    })
+    return categories
   }, [staffList])
 
   // Detect staff on leave
@@ -721,6 +740,51 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
   }
 
   // Download memo as professional PDF - traditional memo format
+  // Download all approved memos for selected month as a batch
+  const handleDownloadAllForMonth = async () => {
+    if (!approvedFilterMonth) {
+      toast({ title: "Please select a month first", variant: "destructive" })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const memosByMonth = approvedMemos.filter((m) => {
+        const subjectMatch = m.memo_subject?.match(/\(\d{4}-\d{2}\)/)
+        const monthInSubject = m.memo_subject?.match(/\d{4}-\d{2}/)
+        return monthInSubject?.[0] === approvedFilterMonth
+      })
+
+      if (memosByMonth.length === 0) {
+        toast({ title: "No memos found for this month", variant: "default" })
+        return
+      }
+
+      // Download each memo in the batch
+      for (let i = 0; i < memosByMonth.length; i++) {
+        const m = memosByMonth[i]
+        // Add small delay between downloads to avoid browser throttling
+        if (i > 0) await new Promise((resolve) => setTimeout(resolve, 500))
+
+        try {
+          await downloadMemoPDF(m, `${m.staff_name}_${approvedFilterMonth}_payment_advice.pdf`)
+        } catch (err) {
+          console.error(`[v0] Failed to download memo for ${m.staff_name}:`, err)
+        }
+      }
+
+      toast({
+        title: "Download Complete",
+        description: `Successfully downloaded ${memosByMonth.length} memo${memosByMonth.length > 1 ? "s" : ""} for ${approvedFilterMonth}`,
+      })
+    } catch (err) {
+      console.error("[v0] Error downloading batch:", err)
+      toast({ title: "Download failed", description: String(err), variant: "destructive" })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleDownloadMemo = async (category: string) => {
     const memo = memos[category]
     if (!memo) return
@@ -1183,12 +1247,14 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                   <div className="space-y-4">
                     {/* Group memos by month and category for batch approval */}
                     {(() => {
-                      // Group by month-category key
+                      // Group by month-category key with smart rank normalization
                       const grouped = pendingMemos.reduce((acc: Record<string, any[]>, memo) => {
                         // Extract month from memo_subject like "Payment of Leave Allowance (Junior Staff) - 2026-07"
                         const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
-                        const category = subjectMatch?.[1] || "Unknown"
+                        let category = subjectMatch?.[1] || "Unknown"
                         const month = subjectMatch?.[2] || "Unknown"
+                        // Apply smart rank normalization to consolidate similar ranks
+                        category = normalizeRank(category)
                         const key = `${month}|${category}`
                         if (!acc[key]) acc[key] = []
                         acc[key].push(memo)
@@ -1416,8 +1482,8 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
             {/* APPROVED TAB */}
             {activePaymentTab === "approved" && (
               <>
-                {/* Month filter */}
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                {/* Month filter with download all button */}
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg flex-wrap">
                   <Filter className="h-4 w-4 text-gray-500" />
                   <label className="text-sm font-medium text-gray-700">Filter by Month:</label>
                   <input
@@ -1427,15 +1493,34 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                     className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
                   />
                   {approvedFilterMonth && (
-                    <button
-                      onClick={() => {
-                        setApprovedFilterMonth("")
-                        setApprovedPage(1)
-                      }}
-                      className="text-xs text-gray-500 hover:text-gray-700 underline"
-                    >
-                      Clear
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          setApprovedFilterMonth("")
+                          setApprovedPage(1)
+                        }}
+                        className="text-xs text-gray-500 hover:text-gray-700 underline"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleDownloadAllForMonth}
+                        disabled={isLoading || approvedMemos.length === 0}
+                        className="ml-auto px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4" />
+                            Download All for {approvedFilterMonth}
+                          </>
+                        )}
+                      </button>
+                    </>
                   )}
                 </div>
 
@@ -1458,11 +1543,13 @@ export function PaymentAdviceClient({ userRole = "hr_leave_office" }: { userRole
                   <div className="space-y-4">
                     {/* Group approved memos by month and category for batch download */}
                     {(() => {
-                      // Group by month-category key
+                      // Group by month-category key with smart rank normalization
                       const grouped = approvedMemos.reduce((acc: Record<string, any[]>, memo) => {
                         const subjectMatch = memo.memo_subject?.match(/\(([^)]+)\)\s*-\s*(\d{4}-\d{2})/)
-                        const category = subjectMatch?.[1] || "Unknown"
+                        let category = subjectMatch?.[1] || "Unknown"
                         const month = subjectMatch?.[2] || "Unknown"
+                        // Apply smart rank normalization to consolidate similar ranks
+                        category = normalizeRank(category)
                         const key = `${month}|${category}`
                         if (!acc[key]) acc[key] = []
                         acc[key].push(memo)
@@ -2060,66 +2147,10 @@ We count on your co-operation.`,
                               }`}
                             >
                               <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <Label className="block font-semibold text-slate-700">Payment Advice Reference Numbers (by Staff Category)</Label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Pull reference numbers from the staff list's memo reference numbers
-                    const staffByRef: Record<string, string> = {}
-                    staffList.forEach((staff) => {
-                      const category = staff.staff_category || "Junior"
-                      const refFromMemo = staff.memo_reference || ""
-                      if (refFromMemo && !staffByRef[category]) {
-                        // Use the first memo reference from this category
-                        staffByRef[category] = refFromMemo
-                      }
-                    })
-                    if (Object.keys(staffByRef).length > 0) {
-                      setReferenceNumbers((prev) => ({ ...prev, ...staffByRef }))
-                      toast({ title: "Reference Numbers Populated", description: "Reference numbers from memos have been auto-populated." })
-                    } else {
-                      toast({ title: "Info", description: "No memo reference numbers found to populate.", variant: "default" })
-                    }
-                  }}
-                  className="text-xs px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded border border-blue-300 font-medium transition-colors"
-                >
-                  Auto-Populate from Memos
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {["Manager", "Senior", "Junior"].map((category) => {
-                  const count = staffByCategory[category as keyof typeof staffByCategory]?.length || 0
-                  if (count === 0) return null
-                  
-                  return (
-                    <div key={category}>
-                      <Label htmlFor={`ref-${category}`} className="mb-2 block text-sm font-medium">
-                        {category} Staff ({count})
-                      </Label>
-                      <Input
-                        id={`ref-${category}`}
-                        type="text"
-                        placeholder={`e.g., QCC/HRD/ANL/2025/2026/01`}
-                        value={referenceNumbers[category] || ""}
-                        onChange={(e) =>
-                          setReferenceNumbers((prev) => ({
-                            ...prev,
-                            [category]: e.target.value,
-                          }))
-                        }
-                        className="text-sm"
-                      />
-                      {referenceNumbers[category]?.trim() && (
-                        <p className="text-xs text-green-600 mt-1">✓ Reference set</p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-slate-600 mt-3">These reference numbers will appear on the payment advice memos. Click "Auto-Populate from Memos" to use memo reference numbers from the leave approvals.</p>
-            </div>
+                                <div>
+                                  <div className="font-semibold text-xs text-gray-800">{s.full_name}</div>
+                                  <div className="text-xs text-gray-600">{s.employee_id}</div>
+                                </div>
                                 {hasApprovedMemo && (
                                   <Badge className="bg-green-600 text-white text-xs" title="Payment advice memo already approved">
                                     ✓ Approved
@@ -2134,6 +2165,47 @@ We count on your co-operation.`,
                   )
                 ))}
               </div>
+
+              {/* Payment Advice Reference Numbers - Manual Entry Only */}
+              <Card className="bg-slate-50 border-2 border-slate-200">
+                <CardHeader>
+                  <CardTitle className="text-lg">Payment Advice Reference Numbers</CardTitle>
+                  <CardDescription>Enter reference numbers for each staff category - these will appear on payment advice memos</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {["Manager", "Senior", "Junior"].map((category) => {
+                      const count = staffByCategory[category as keyof typeof staffByCategory]?.length || 0
+                      if (count === 0) return null
+                      
+                      const currentRef = referenceNumbers[category] || ""
+                      const isFilled = currentRef.trim().length > 0
+                      
+                      return (
+                        <div key={category} className="space-y-2">
+                          <Label className="font-semibold text-gray-800">
+                            {category} Staff
+                            <span className="text-sm font-normal text-gray-600 ml-1">({count})</span>
+                          </Label>
+                          <Input
+                            id={`payref-${category}`}
+                            type="text"
+                            placeholder={`e.g., QCC/HRD/PA/2026/07`}
+                            value={currentRef}
+                            onChange={(e) =>
+                              setReferenceNumbers((prev) => ({
+                                ...prev,
+                                [category]: e.target.value,
+                              }))
+                            }
+                            className={`text-sm font-mono ${isFilled ? "border-green-400 bg-green-50" : "border-gray-300"}`}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Generate Button */}
               <Button
