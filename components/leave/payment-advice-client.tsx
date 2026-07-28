@@ -2060,10 +2060,66 @@ We count on your co-operation.`,
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="font-medium text-gray-900">{s.full_name}</div>
-                                  <div className="text-gray-600">{s.employee_id} • {s.department_name}</div>
-                                </div>
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <Label className="block font-semibold text-slate-700">Payment Advice Reference Numbers (by Staff Category)</Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Pull reference numbers from the staff list's memo reference numbers
+                    const staffByRef: Record<string, string> = {}
+                    staffList.forEach((staff) => {
+                      const category = staff.staff_category || "Junior"
+                      const refFromMemo = staff.memo_reference || ""
+                      if (refFromMemo && !staffByRef[category]) {
+                        // Use the first memo reference from this category
+                        staffByRef[category] = refFromMemo
+                      }
+                    })
+                    if (Object.keys(staffByRef).length > 0) {
+                      setReferenceNumbers((prev) => ({ ...prev, ...staffByRef }))
+                      toast({ title: "Reference Numbers Populated", description: "Reference numbers from memos have been auto-populated." })
+                    } else {
+                      toast({ title: "Info", description: "No memo reference numbers found to populate.", variant: "default" })
+                    }
+                  }}
+                  className="text-xs px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded border border-blue-300 font-medium transition-colors"
+                >
+                  Auto-Populate from Memos
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {["Manager", "Senior", "Junior"].map((category) => {
+                  const count = staffByCategory[category as keyof typeof staffByCategory]?.length || 0
+                  if (count === 0) return null
+                  
+                  return (
+                    <div key={category}>
+                      <Label htmlFor={`ref-${category}`} className="mb-2 block text-sm font-medium">
+                        {category} Staff ({count})
+                      </Label>
+                      <Input
+                        id={`ref-${category}`}
+                        type="text"
+                        placeholder={`e.g., QCC/HRD/ANL/2025/2026/01`}
+                        value={referenceNumbers[category] || ""}
+                        onChange={(e) =>
+                          setReferenceNumbers((prev) => ({
+                            ...prev,
+                            [category]: e.target.value,
+                          }))
+                        }
+                        className="text-sm"
+                      />
+                      {referenceNumbers[category]?.trim() && (
+                        <p className="text-xs text-green-600 mt-1">✓ Reference set</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-slate-600 mt-3">These reference numbers will appear on the payment advice memos. Click "Auto-Populate from Memos" to use memo reference numbers from the leave approvals.</p>
+            </div>
                                 {hasApprovedMemo && (
                                   <Badge className="bg-green-600 text-white text-xs" title="Payment advice memo already approved">
                                     ✓ Approved

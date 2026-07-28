@@ -51,7 +51,12 @@ export async function GET(request: NextRequest) {
         payment_currency,
         signature_data_url,
         signer_id,
-        signer_name
+        signer_name,
+        leave_plan_request_id,
+        leave_plan_requests!inner(
+          memo_reference,
+          staff_category
+        )
       `
       )
       // HR executives see ALL memos regardless of status — no stage-based restriction
@@ -142,12 +147,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Merge location + signer into memo_body where missing
+    // Merge location + signer + memo_reference into memo_body where missing
     const enrichedMemos = memoList.map((memo: any) => {
       let memoBody: any = {}
       try {
         memoBody = typeof memo.memo_body === "string" ? JSON.parse(memo.memo_body) : (memo.memo_body || {})
       } catch { memoBody = {} }
+      
+      // Extract memo_reference from joined leave_plan_requests
+      const memoReference = memo.leave_plan_requests?.[0]?.memo_reference || null
+      const staffCategory = memo.leave_plan_requests?.[0]?.staff_category || "junior"
 
       let changed = false
 
@@ -174,8 +183,12 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (changed) return { ...memo, memo_body: JSON.stringify(memoBody) }
-      return memo
+      return {
+        ...memo,
+        memo_reference: memoReference,
+        staff_category: staffCategory,
+        memo_body: changed ? JSON.stringify(memoBody) : memo.memo_body,
+      }
     })
 
     return NextResponse.json({
