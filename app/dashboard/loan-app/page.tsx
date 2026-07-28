@@ -1037,7 +1037,14 @@ export default function LoanAppPage() {
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
-    const canAccessLoanOfficeWorkspace = isAdmin || ["loan_office", "manager_hr"].includes(normalizedRole)
+    // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
+  // Accounts-dept loan_office users get Accounts tab, not Loan Office tab
+  const userDeptName = data?.profile?.departmentName || ""
+  const userDeptIsAccounts = /account|finance/i.test(userDeptName)
+  const canAccessLoanOfficeWorkspace =
+    isAdmin ||
+    (["loan_office", "manager_hr"].includes(normalizedRole) && !userDeptIsAccounts) ||
+    (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(

@@ -10,6 +10,7 @@ import {
   isSchemaIssue,
   normalizeRole,
 } from "@/lib/loan-workflow"
+import { deriveStaffCategoryFromPosition } from "@/lib/annual-leave-entitlement"
 
 const HOD_AUTO_ADVANCE_DAYS = 3
 const POST_LOAN_OFFICE_DELAY_DAYS = 5
@@ -222,6 +223,23 @@ export async function GET() {
       staffCategory = (welfareFields as any)?.staff_category ?? null
       yearsOfService = (welfareFields as any)?.years_of_service ?? null
       dateOfAppointment = (welfareFields as any)?.date_of_appointment ?? null
+    }
+
+    // Auto-derive staff category from rank/position if not explicitly stored
+    // "Accounts Officer", "HR Officer" etc. → "Senior"; unrecognised titles → keep null
+    if (!staffCategory || staffCategory === "junior") {
+      const position = (profile as any)?.position || null
+      const rank = (profile as any)?.rank || null
+      const derived = deriveStaffCategoryFromPosition(position, rank)
+      if (derived) {
+        // Capitalise for display: "senior" → "Senior"
+        staffCategory = derived.charAt(0).toUpperCase() + derived.slice(1)
+      }
+    } else {
+      // Normalise stored value to Title Case for display ("senior" → "Senior", "Senior Staff" → "Senior")
+      const raw = staffCategory.toLowerCase().trim()
+      if (raw === "senior" || raw === "senior staff") staffCategory = "Senior"
+      else if (raw === "junior" || raw === "junior staff") staffCategory = "Junior"
     }
 
     const role = normalizeRole((profile as any).role)

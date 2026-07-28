@@ -344,10 +344,36 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     ])
 
     // Merge signatures: user_profiles > approval_signature_registry > loan stored columns
-    const directorSignature = (directorUserProfile as any)?.signature_data_url
-      ? directorUserProfile
-      : (directorRegistrySignature as any)?.signature_data_url || (directorRegistrySignature as any)?.signature_text
-      ? directorRegistrySignature
+    // user_profiles has signature_data_url and signature_mode (not signature_text)
+    // approval_signature_registry has all three fields
+    const upSig = directorUserProfile as any
+    const regSig = directorRegistrySignature as any
+    const loanSig = loan as any
+
+    const resolvedSignatureDataUrl =
+      upSig?.signature_data_url ||
+      regSig?.signature_data_url ||
+      loanSig?.director_signature_data_url ||
+      null
+
+    const resolvedSignatureText =
+      regSig?.signature_text ||
+      loanSig?.director_signature_text ||
+      null
+
+    const resolvedSignatureMode =
+      upSig?.signature_mode ||
+      regSig?.signature_mode ||
+      loanSig?.director_signature_mode ||
+      (resolvedSignatureDataUrl ? "drawn" : "typed")
+
+    // Build a unified signature object for rendering
+    const directorSignature = (resolvedSignatureDataUrl || resolvedSignatureText)
+      ? {
+          signature_data_url: resolvedSignatureDataUrl,
+          signature_text: resolvedSignatureText,
+          signature_mode: resolvedSignatureMode,
+        }
       : null
 
     if (signatureError) {
@@ -498,41 +524,31 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y = 24
     }
 
-    // Resolve signature: prefer registry record, fall back to stored columns on the loan record
-    const sigRecord = directorSignature as any
-    const resolvedSigDataUrl =
-      sigRecord?.signature_data_url || (loan as any).director_signature_data_url || null
-    const resolvedSigText =
-      sigRecord?.signature_text ||
-      (loan as any).director_signature_text ||
-      null
-    const resolvedSigMode =
-      sigRecord?.signature_mode || (loan as any).director_signature_mode || "typed"
-
+    const sig = directorSignature as any
     let sigImgY = -1
 
-    if (resolvedSigDataUrl) {
+    if (sig?.signature_data_url) {
       try {
         sigImgY = y
-        doc.addImage(resolvedSigDataUrl, "PNG", marginLeft, y, 50, 18)
+        doc.addImage(sig.signature_data_url, "PNG", marginLeft, y, 50, 18)
         y += 20
       } catch {
         y += 20
       }
-    } else if (resolvedSigText) {
+    } else if (sig?.signature_text) {
       doc.setFont("times", "italic")
       doc.setFontSize(12)
       doc.setTextColor(30, 60, 100)
-      doc.text(resolvedSigText, marginLeft, y + 14)
+      doc.text(sig.signature_text, marginLeft, y + 14)
       y += 20
       doc.setTextColor(0, 0, 0)
     } else {
-      // Last resort: use director's name from profile as typed signature
-      const fallbackSigName = fmtName(directorProfile).toUpperCase()
+      // Last resort: director's full name in italic blue — never blank
+      const fallbackName = fmtName(directorProfile) || "AUTHORISED SIGNATORY"
       doc.setFont("times", "italic")
       doc.setFontSize(12)
       doc.setTextColor(30, 60, 100)
-      doc.text(fallbackSigName || "AUTHORISED SIGNATORY", marginLeft, y + 14)
+      doc.text(fallbackName.toUpperCase(), marginLeft, y + 14)
       y += 20
       doc.setTextColor(0, 0, 0)
     }
