@@ -525,6 +525,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
 
     const sig = directorSignature as any
+    // Guaranteed name text: director profile name > stored loan text > "AUTHORISED SIGNATORY"
+    const guaranteedName = (
+      fmtName(directorProfile) ||
+      String((loan as any).director_signature_text || "").trim() ||
+      "AUTHORISED SIGNATORY"
+    ).toUpperCase()
     let sigImgY = -1
 
     if (sig?.signature_data_url) {
@@ -533,22 +539,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         doc.addImage(sig.signature_data_url, "PNG", marginLeft, y, 50, 18)
         y += 20
       } catch {
+        // Image failed to load — fall through to text
+        doc.setFont("times", "italic")
+        doc.setFontSize(12)
+        doc.setTextColor(30, 60, 100)
+        doc.text(sig?.signature_text || guaranteedName, marginLeft, y + 14)
         y += 20
+        doc.setTextColor(0, 0, 0)
       }
-    } else if (sig?.signature_text) {
-      doc.setFont("times", "italic")
-      doc.setFontSize(12)
-      doc.setTextColor(30, 60, 100)
-      doc.text(sig.signature_text, marginLeft, y + 14)
-      y += 20
-      doc.setTextColor(0, 0, 0)
     } else {
-      // Last resort: director's full name in italic blue — never blank
-      const fallbackName = fmtName(directorProfile) || "AUTHORISED SIGNATORY"
+      // Always render a text signature — either from registry/loan columns or director name
+      const sigText = sig?.signature_text || guaranteedName
       doc.setFont("times", "italic")
       doc.setFontSize(12)
       doc.setTextColor(30, 60, 100)
-      doc.text(fallbackName.toUpperCase(), marginLeft, y + 14)
+      doc.text(sigText, marginLeft, y + 14)
       y += 20
       doc.setTextColor(0, 0, 0)
     }

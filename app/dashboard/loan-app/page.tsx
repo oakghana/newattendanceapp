@@ -2706,6 +2706,30 @@ export default function LoanAppPage() {
                       </div>
                     )}
 
+                    {/* Download memo for approved loans */}
+                    {isApproved && (
+                      <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">✅</span>
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-800">Your loan has been fully approved</p>
+                            {req.director_signature_text && (
+                              <p className="text-xs text-emerald-700 mt-0.5">
+                                Signed by: <span className="font-semibold">{req.director_signature_text}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shrink-0"
+                          onClick={() => void openSecureMemo(req.id)}
+                        >
+                          <Download className="h-4 w-4" /> Download Signed Memo
+                        </Button>
+                      </div>
+                    )}
+
                     {isRejected && (
                       <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-3">
                         <span className="text-3xl">❌</span>
