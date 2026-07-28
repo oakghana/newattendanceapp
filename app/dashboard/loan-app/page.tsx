@@ -3426,11 +3426,8 @@ export default function LoanAppPage() {
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)} | Disbursement: {row.disbursement_date || "TBD"} | Recovery: {row.recovery_start_date || "TBD"} ({row.recovery_months || "?"} months)</div>
                   <div>Status: <strong>{statusText(row.status)}</strong></div>
                   <div className="flex gap-2 flex-wrap pt-1">
-                    <Button variant="outline" size="sm" onClick={() => void generateMemoPdf(row, row.director_letter || buildDirectorAutoMemoDraft(row, hrInputs[row.id], data?.profile.currentHodProfile), row.director_signature_text || "")}>
-                      <Download className="h-4 w-4 mr-1" /> Download Approval Letter
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>
-                      <FileText className="h-4 w-4 mr-1" /> Secure Memo PDF
+                    <Button variant="outline" size="sm" onClick={() => void openSecureMemo(row.id)}>
+                      <Download className="h-4 w-4 mr-1" /> Download Signed Memo
                     </Button>
                   </div>
                 </div>

@@ -480,33 +480,43 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y = 24
     }
 
+    // Resolve signature: prefer registry record, fall back to stored columns on the loan record
     const sigRecord = directorSignature as any
+    const resolvedSigDataUrl =
+      sigRecord?.signature_data_url || (loan as any).director_signature_data_url || null
+    const resolvedSigText =
+      sigRecord?.signature_text ||
+      (loan as any).director_signature_text ||
+      null
+    const resolvedSigMode =
+      sigRecord?.signature_mode || (loan as any).director_signature_mode || "typed"
+
     let sigImgY = -1
-    const hasSavedSignature = sigRecord?.signature_data_url || sigRecord?.signature_text
-    
-    if (sigRecord?.signature_data_url) {
+
+    if (resolvedSigDataUrl) {
       try {
         sigImgY = y
-        doc.addImage(sigRecord.signature_data_url, "PNG", marginLeft, y, 50, 18)
+        doc.addImage(resolvedSigDataUrl, "PNG", marginLeft, y, 50, 18)
         y += 20
       } catch {
         y += 20
       }
-    } else if (sigRecord?.signature_text) {
+    } else if (resolvedSigText) {
       doc.setFont("times", "italic")
       doc.setFontSize(12)
       doc.setTextColor(30, 60, 100)
-      doc.text(sigRecord.signature_text, marginLeft, y + 14)
+      doc.text(resolvedSigText, marginLeft, y + 14)
       y += 20
       doc.setTextColor(0, 0, 0)
     } else {
-      // If no saved signature, show [DIGITALLY SIGNED] marker
-      doc.setFont("times", "bold")
-      doc.setFontSize(10)
-      doc.setTextColor(100, 100, 100)
-      doc.text("[DIGITALLY SIGNED]", marginLeft, y + 14)
-      doc.setTextColor(0, 0, 0)
+      // Last resort: use director's name from profile as typed signature
+      const fallbackSigName = fmtName(directorProfile).toUpperCase()
+      doc.setFont("times", "italic")
+      doc.setFontSize(12)
+      doc.setTextColor(30, 60, 100)
+      doc.text(fallbackSigName || "AUTHORISED SIGNATORY", marginLeft, y + 14)
       y += 20
+      doc.setTextColor(0, 0, 0)
     }
 
     // Signature line
