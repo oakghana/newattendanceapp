@@ -6171,7 +6171,7 @@ export default function LoanAppPage() {
                     description: "Your payment evidence has been submitted and is awaiting HR Executive approval.",
                   })
 
-                  // Reset modal and reload data
+                  // Reset modal
                   setPaymentEvidenceModal({
                     open: false,
                     paymentDate: new Date().toISOString().split("T")[0],
@@ -6182,9 +6182,6 @@ export default function LoanAppPage() {
                     evidenceFile: null,
                     isSubmitting: false,
                   })
-
-                  // Reload loan data
-                  await loadData()
                 } catch (err) {
                   console.error("[v0] Payment evidence submission error:", err)
                   const errorMessage = err instanceof Error ? err.message : "Failed to submit payment evidence"
@@ -6196,6 +6193,12 @@ export default function LoanAppPage() {
                   setPaymentEvidenceModal((prev) => ({ ...prev, isSubmitting: false }))
                 } finally {
                   setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: false }))
+                  // Reload loan data after submission completes (success or failure)
+                  try {
+                    await loadData({ silent: true })
+                  } catch (_e) {
+                    console.error("[v0] Failed to reload loan data after payment evidence submission")
+                  }
                 }
               }}
             >
