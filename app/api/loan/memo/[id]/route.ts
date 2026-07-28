@@ -531,17 +531,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       String((loan as any).director_signature_text || "").trim() ||
       "AUTHORISED SIGNATORY"
     ).toUpperCase()
-    console.log("[v0] memo signature debug:", {
-      directorHrId,
-      directorProfileName: fmtName(directorProfile),
-      upSigDataUrl: !!(upSig?.signature_data_url),
-      regSigText: regSig?.signature_text,
-      loanSigText: (loan as any)?.director_signature_text,
-      resolvedDataUrl: !!resolvedSignatureDataUrl,
-      resolvedText: resolvedSignatureText,
-      directorSignatureIsNull: directorSignature === null,
-      guaranteedName,
-    })
     let sigImgY = -1
 
     if (sig?.signature_data_url) {
@@ -551,22 +540,20 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         y += 20
       } catch {
         // Image failed to load — fall through to text
-        doc.setFont("times", "italic")
-        doc.setFontSize(12)
-        doc.setTextColor(30, 60, 100)
+        doc.setFont("times", "bolditalic")
+        doc.setFontSize(13)
+        doc.setTextColor(0, 0, 0)
         doc.text(sig?.signature_text || guaranteedName, marginLeft, y + 14)
         y += 20
-        doc.setTextColor(0, 0, 0)
       }
     } else {
       // Always render a text signature — either from registry/loan columns or director name
       const sigText = sig?.signature_text || guaranteedName
-      doc.setFont("times", "italic")
-      doc.setFontSize(12)
-      doc.setTextColor(30, 60, 100)
+      doc.setFont("times", "bolditalic")
+      doc.setFontSize(13)
+      doc.setTextColor(0, 0, 0)
       doc.text(sigText, marginLeft, y + 14)
       y += 20
-      doc.setTextColor(0, 0, 0)
     }
 
     // Signature line
