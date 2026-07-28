@@ -6193,12 +6193,15 @@ export default function LoanAppPage() {
                   })
                   setPaymentEvidenceModal((prev) => ({ ...prev, isSubmitting: false }))
                 } finally {
+                  console.log("[v0] Payment evidence submission complete, reloading data...")
                   setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: false }))
                   // Reload loan data after submission completes (success or failure)
                   try {
+                    console.log("[v0] Calling loadData with silent mode...")
                     await loadData({ silent: true })
+                    console.log("[v0] loadData completed successfully")
                   } catch (_e) {
-                    console.error("[v0] Failed to reload loan data after payment evidence submission")
+                    console.error("[v0] Failed to reload loan data after payment evidence submission:", _e)
                   }
                 }
               }}
