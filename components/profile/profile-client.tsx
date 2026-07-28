@@ -782,7 +782,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
               </div>
 
               {/* Signature Display and Editor */}
-              {signatureDataUrl ? (
+              {signatureDataUrl && !signatureMode ? (
                 // EXISTING SIGNATURE - Show and allow update
                 <div className="space-y-4">
                   <div className="p-4 bg-white border-2 border-green-200 rounded-lg">
@@ -817,7 +817,9 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                               throw new Error(result.error || "Failed to clear signature")
                             }
                             setSignatureDataUrl(null)
-                            toast.success("Signature cleared successfully")
+                            // Reset to draw mode so user can create new signature
+                            setSignatureMode("draw")
+                            toast.success("Signature cleared successfully. You can now create a new one.")
                           } catch (err) {
                             toast.error(err instanceof Error ? err.message : "Failed to clear signature")
                           } finally {
@@ -827,8 +829,9 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       }}
                       variant="destructive"
                       className="flex-1"
+                      disabled={isSavingSignature}
                     >
-                      Clear Signature
+                      {isSavingSignature ? "Clearing..." : "Clear Signature"}
                     </Button>
                   </div>
                 </div>
@@ -872,8 +875,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 </>
               )}
 
-              {/* Preview and Save - Only show if signature is being created/edited */}
-              {!signatureDataUrl || signatureMode === "draw" || signatureMode === "upload" ? (
+              {/* Preview and Save - Only show if signature is being created/edited and no saved signature yet */}
+              {(signatureMode === "draw" || signatureMode === "upload") && signatureDataUrl ? (
                 <div className="space-y-3 pt-4 border-t border-green-200">
                 <Button
                   onClick={async () => {
@@ -904,8 +907,9 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                       }
 
                       toast.success("Signature saved successfully! You can now use it to sign documents.")
-                      // Keep the saved signature displayed instead of clearing it
+                      // Keep the saved signature displayed and reset mode to null to show it
                       setSignatureDataUrl(result.signature?.signature_data_url || signatureDataUrl)
+                      setSignatureMode(null as any)
                     } catch (err) {
                       const errorMsg = err instanceof Error ? err.message : String(err)
                       console.error("[v0] Error saving signature:", errorMsg)

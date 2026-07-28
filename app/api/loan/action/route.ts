@@ -455,8 +455,14 @@ export async function POST(request: NextRequest) {
 
       const fdGood = fdScore >= GOOD_FD_THRESHOLD
       const isCarLoan = Boolean(req.committee_required)
+      
+      // Check if this is a Funeral, Repair, or Issuance loan with FD >= 0
+      const loanKey = String(req.loan_type_key || "").toLowerCase()
+      const isFuneralRepairIssuanceLoan = /funeral|repair|issuance/.test(loanKey)
+      const isFdPositive = fdScore > 0
+      const shouldForwardToHrOffice = isFuneralRepairIssuanceLoan && !fdGood && isFdPositive
 
-      if (!fdGood && !note) {
+      if (!fdGood && !shouldForwardToHrOffice && !note) {
         return NextResponse.json({ error: `Provide Accounts response note for FD below ${GOOD_FD_THRESHOLD}.` }, { status: 400 })
       }
 
@@ -467,7 +473,12 @@ export async function POST(request: NextRequest) {
       update.fd_good = fdGood
 
       if (!fdGood) {
-        toStatus = "rejected_fd"
+        if (shouldForwardToHrOffice) {
+          // Forward to HR Loan Office for processing instead of automatic rejection
+          toStatus = "sent_to_hr_office"
+        } else {
+          toStatus = "rejected_fd"
+        }
       } else if (isCarLoan) {
         toStatus = "awaiting_committee"
       } else {
@@ -490,7 +501,8 @@ export async function POST(request: NextRequest) {
           isCarLoan ? "loan_committee_hold" : "loan_fd_good",
           { request_id: req.id, fd_score: fdScore, memo: staffMemo, memo_path: memoPath },
         )
-      } else {
+      } else if (toStatus === "rejected_fd") {
+        // FD rejection for loans that don't qualify for HR Office processing
         const rejectionMemo = buildFdRejectionMemo(req, fdScore, note)
         const memoPath = buildMemoPath(req.id, req.user_id)
         await notifyUsers(
@@ -516,6 +528,35 @@ export async function POST(request: NextRequest) {
             { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo_path: memoPath },
           )
         }
+      } else if (toStatus === "sent_to_hr_office") {
+        // Forward to HR Loan Office for processing (for Funeral, Repair, Issuance loans with positive FD below threshold)
+        const forwardMemo = `Your ${req.loan_type_label} request (${req.request_number}) has been forwarded to the HR Loan Office for processing. Your Fixed Deposit (FD) score of ${fdScore} is being processed further.${note ? ` Note: ${note}` : ""}`
+        const memoPath = buildMemoPath(req.id, req.user_id)
+        
+        await notifyUsers(
+          admin,
+          [req.user_id],
+          "Loan Request Forwarded to HR Loan Office",
+          forwardMemo,
+          "loan_forwarded_to_hr_office",
+          { request_id: req.id, fd_score: fdScore, memo: forwardMemo, memo_path: memoPath },
+        )
+
+        // Notify HR Office staff about the forwarded request
+        const { data: hrOfficeUsers } = await admin
+          .from("user_profiles")
+          .select("id")
+          .in("role", ["loan_office", "hr_officer", "manager_hr", "admin"])
+          .eq("is_active", true)
+
+        await notifyUsers(
+          admin,
+          (hrOfficeUsers || []).map((u: any) => u.id),
+          "Low FD Loan Request Forwarded",
+          `Request ${req.request_number} (${req.loan_type_label}) has FD ${fdScore} and has been forwarded from Accounts for your processing.${note ? ` Account Note: ${note}` : ""}`,
+          "loan_low_fd_forwarded",
+          { request_id: req.id, fd_score: fdScore, loan_type: req.loan_type_label, note },
+        )
       }
 
       const { data: loanOfficeUsers } = await admin
