@@ -16,14 +16,14 @@ export type LoanWorkflowStatus =
 export const GOOD_FD_THRESHOLD = 39
 
 /**
- * Funeral, Repair, and Issuance loans are FD-exempt:
+ * Funeral, Insurance, and Repair loans are FD-exempt:
  * they proceed to HR Loan Office as long as FD score >= 0.
  * They must NEVER receive a rejection memo for sub-threshold FD.
  */
 export function isFdExemptLoanType(loanTypeKey: string | null | undefined, loanTypeLabel?: string | null): boolean {
   const key = String(loanTypeKey || "").toLowerCase()
   const label = String(loanTypeLabel || "").toLowerCase()
-  const EXEMPT = /funeral|repair|issuance/
+  const EXEMPT = /funeral|repair|insurance/
   return EXEMPT.test(key) || EXEMPT.test(label)
 }
 

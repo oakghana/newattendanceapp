@@ -6184,7 +6184,7 @@ export default function LoanAppPage() {
                   })
 
                   // Reload loan data
-                  await data && refetch?.()
+                  await loadData()
                 } catch (err) {
                   console.error("[v0] Payment evidence submission error:", err)
                   const errorMessage = err instanceof Error ? err.message : "Failed to submit payment evidence"
