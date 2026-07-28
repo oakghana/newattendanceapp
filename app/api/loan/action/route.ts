@@ -9,6 +9,7 @@ import {
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   GOOD_FD_THRESHOLD,
+  isFdExemptLoanType,
   canDoAccounts,
   canDoCommittee,
   canDoDirectorHr,
@@ -28,6 +29,7 @@ type ActionKey =
   | "hr_set_terms"
   | "director_finalize"
   | "save_memo_draft"
+  | "mark_payment_completed"
 
 function normalizeReferenceNumber(value: string | null | undefined): string | null {
   const raw = String(value || "").trim()
@@ -456,7 +458,12 @@ export async function POST(request: NextRequest) {
       const fdGood = fdScore >= GOOD_FD_THRESHOLD
       const isCarLoan = Boolean(req.committee_required)
 
-      if (!fdGood && !note) {
+      // Funeral, Repair, and Issuance loans bypass FD rejection when score >= 0
+      const isExemptLoanType = isFdExemptLoanType(req.loan_type_key, req.loan_type_label)
+      const isFdNonNegative = fdScore >= 0
+      const shouldForwardToHrOffice = isExemptLoanType && !fdGood && isFdNonNegative
+
+      if (!fdGood && !shouldForwardToHrOffice && !note) {
         return NextResponse.json({ error: `Provide Accounts response note for FD below ${GOOD_FD_THRESHOLD}.` }, { status: 400 })
       }
 
@@ -465,9 +472,17 @@ export async function POST(request: NextRequest) {
       update.fd_note = note
       update.fd_checked_at = new Date().toISOString()
       update.fd_good = fdGood
+      // Save the FD proof document URL if provided so staff/HR can view it
+      const fdDocumentUrl = String(body.fd_document_url || "").trim() || null
+      if (fdDocumentUrl) update.fd_document_url = fdDocumentUrl
 
       if (!fdGood) {
-        toStatus = "rejected_fd"
+        if (shouldForwardToHrOffice) {
+          // Forward to HR Loan Office for processing instead of automatic rejection
+          toStatus = "sent_to_hr_office"
+        } else {
+          toStatus = "rejected_fd"
+        }
       } else if (isCarLoan) {
         toStatus = "awaiting_committee"
       } else {
@@ -490,7 +505,8 @@ export async function POST(request: NextRequest) {
           isCarLoan ? "loan_committee_hold" : "loan_fd_good",
           { request_id: req.id, fd_score: fdScore, memo: staffMemo, memo_path: memoPath },
         )
-      } else {
+      } else if (toStatus === "rejected_fd") {
+        // FD rejection for loans that don't qualify for HR Office processing
         const rejectionMemo = buildFdRejectionMemo(req, fdScore, note)
         const memoPath = buildMemoPath(req.id, req.user_id)
         await notifyUsers(
@@ -516,6 +532,35 @@ export async function POST(request: NextRequest) {
             { request_id: req.id, fd_score: fdScore, threshold: GOOD_FD_THRESHOLD, reason: note || null, memo_path: memoPath },
           )
         }
+      } else if (toStatus === "sent_to_hr_office") {
+        // Forward to HR Loan Office for processing (for Funeral, Repair, Issuance loans with positive FD below threshold)
+        const forwardMemo = `Your ${req.loan_type_label} request (${req.request_number}) has been forwarded to the HR Loan Office for processing. Your Fixed Deposit (FD) score of ${fdScore} is being processed further.${note ? ` Note: ${note}` : ""}`
+        const memoPath = buildMemoPath(req.id, req.user_id)
+        
+        await notifyUsers(
+          admin,
+          [req.user_id],
+          "Loan Request Forwarded to HR Loan Office",
+          forwardMemo,
+          "loan_forwarded_to_hr_office",
+          { request_id: req.id, fd_score: fdScore, memo: forwardMemo, memo_path: memoPath },
+        )
+
+        // Notify HR Office staff about the forwarded request
+        const { data: hrOfficeUsers } = await admin
+          .from("user_profiles")
+          .select("id")
+          .in("role", ["loan_office", "hr_officer", "manager_hr", "admin"])
+          .eq("is_active", true)
+
+        await notifyUsers(
+          admin,
+          (hrOfficeUsers || []).map((u: any) => u.id),
+          "Low FD Loan Request Forwarded",
+          `Request ${req.request_number} (${req.loan_type_label}) has FD ${fdScore} and has been forwarded from Accounts for your processing.${note ? ` Account Note: ${note}` : ""}`,
+          "loan_low_fd_forwarded",
+          { request_id: req.id, fd_score: fdScore, loan_type: req.loan_type_label, note },
+        )
       }
 
       const { data: loanOfficeUsers } = await admin
@@ -579,7 +624,10 @@ export async function POST(request: NextRequest) {
       if (!canDoHrOffice(role, deptName, deptCode)) {
         return NextResponse.json({ error: "Only HR Office/Admin can set terms" }, { status: 403 })
       }
-      if (req.status !== "awaiting_hr_terms") return NextResponse.json({ error: "Request is not at HR terms stage" }, { status: 400 })
+      // Accept both normal flow (awaiting_hr_terms) and FD-exempt loans (sent_to_hr_office like Funeral, Insurance, Repair with FD >= 0%)
+      if (!["awaiting_hr_terms", "sent_to_hr_office"].includes(req.status)) {
+        return NextResponse.json({ error: "Request is not at HR terms stage" }, { status: 400 })
+      }
 
       const disbursementDate = String(body.disbursement_date || "")
       const recoveryStartDate = String(body.recovery_start_date || "")
@@ -854,6 +902,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request was already processed by another approver. Refresh queue." }, { status: 409 })
       }
       throw updateError
+    }
+
+    if (action === "mark_payment_completed") {
+      actionHandled = true
+      if (!canDoLoanOffice(role, deptName, deptCode)) {
+        return NextResponse.json({ error: "Only Loan Office staff can mark payments as completed" }, { status: 403 })
+      }
+      
+      // Allow marking as completed from any status where the loan was approved
+      if (!["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered"].includes(req.status)) {
+        return NextResponse.json({ error: `Cannot mark loan as payment completed from status: ${req.status}` }, { status: 400 })
+      }
+
+      update.loan_office_payment_completed_by = user.id
+      update.loan_office_payment_completed_at = new Date().toISOString()
+      toStatus = "payment_completed"
+      update.status = toStatus
+
+      const completionMemo = `${req.staff_full_name || "Staff"} has completed repayment of their ${req.loan_type_label} loan (${req.request_number}). Total amount: GHc ${req.fixed_amount || req.requested_amount || 0}`
+      
+      await notifyUsers(
+        admin,
+        [req.user_id],
+        "Loan Repayment Completed",
+        completionMemo,
+        "loan_payment_completed_notification",
+        { request_id: req.id, loan_type: req.loan_type_label, amount: req.fixed_amount || req.requested_amount },
+      )
     }
 
     if (requestedStaffFullName !== null) {

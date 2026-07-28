@@ -1,3 +1,4 @@
+import { DashboardOverviewClient } from "./overview/dashboard-overview-client"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,8 +44,49 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
+  // Fetch profile to check role
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("*, departments(name, code)")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  // MD and Secretary: fetch executive data and render their dedicated dashboard
+  if (profile?.role === "managing_director" || profile?.role === "secretary") {
+    const today = new Date().toISOString().split("T")[0]
+    const [{ data: todayData }, { count: monthCount }, { count: mdCount }] = await Promise.all([
+      supabase
+        .from("attendance_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("check_in_time", `${today}T00:00:00`)
+        .lt("check_in_time", `${today}T23:59:59`)
+        .maybeSingle(),
+      supabase
+        .from("attendance_records")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("check_in_time", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+      supabase
+        .from("loan_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "approved_director")
+        .is("md_approved_at", null),
+    ])
+    return (
+      <DashboardOverviewClient
+        user={user}
+        profile={profile}
+        todayAttendance={todayData}
+        monthlyAttendance={monthCount || 0}
+        pendingApprovals={0}
+        pendingMdApprovals={mdCount || 0}
+      />
+    )
+  }
+
   try {
-    // Get current date info
+    // Get current date info (staff dashboard only)
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
     const startOfYear = new Date(today.getFullYear(), 0, 1)
@@ -461,6 +503,14 @@ export default async function DashboardPage() {
     )
   } catch (error) {
     console.error("[v0] Dashboard error:", error)
-    redirect("/auth/login")
+    // Do not redirect to /auth/login on error — that creates an infinite loop
+    // for roles not handled by this page. Render a safe fallback instead.
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4">
+        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Unable to load dashboard</h2>
+        <p className="text-slate-500 text-sm max-w-sm">There was a problem loading your dashboard data. Please refresh the page or contact IT support.</p>
+        <a href="/dashboard" className="text-sm text-blue-600 underline">Refresh</a>
+      </div>
+    )
   }
 }

@@ -10,8 +10,22 @@ export type LoanWorkflowStatus =
   | "awaiting_director_hr"
   | "approved_director"
   | "director_rejected"
+  // Managing Director final stamp — set when md_approved_at is populated
+  | "md_final_approved"
 
 export const GOOD_FD_THRESHOLD = 39
+
+/**
+ * Funeral, Insurance, and Repair loans are FD-exempt:
+ * they proceed to HR Loan Office as long as FD score >= 0.
+ * They must NEVER receive a rejection memo for sub-threshold FD.
+ */
+export function isFdExemptLoanType(loanTypeKey: string | null | undefined, loanTypeLabel?: string | null): boolean {
+  const key = String(loanTypeKey || "").toLowerCase()
+  const label = String(loanTypeLabel || "").toLowerCase()
+  const EXEMPT = /funeral|repair|insurance/
+  return EXEMPT.test(key) || EXEMPT.test(label)
+}
 
 export const SCHEMA_MISSING_CODES = new Set(["PGRST200", "PGRST204", "PGRST205", "42P01", "42703"])
 

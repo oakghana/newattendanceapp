@@ -55,6 +55,41 @@ function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boo
   return true
 }
 
+async function checkForActiveLoanOfSameType(
+  admin: any,
+  userId: string,
+  loanType: string,
+  excludeId?: string,
+) {
+  // Check for active loan of the SAME type (not any type)
+  // This allows staff to request different loan types while having an active loan
+  let query = admin
+    .from("loan_requests")
+    .select("id, status, request_number, loan_type_label, loan_type")
+    .eq("user_id", userId)
+    .eq("loan_type", loanType)
+    .in("status", ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "approved_director", "hod_approved", "sent_to_accounts"])
+    .order("created_at", { ascending: false })
+
+  if (excludeId) query = query.neq("id", excludeId)
+
+  const { data, error } = await query.limit(5)
+  if (error) return null
+
+  const rows = data || []
+  if (rows.length === 0) return null
+
+  const activeLoan = rows[0]
+  if (activeLoan) {
+    return {
+      error:
+        `You already have an active ${activeLoan.loan_type_label} loan. Complete payment on your existing loan (Ref: ${activeLoan.request_number || activeLoan.id}) before requesting another ${activeLoan.loan_type_label} loan.`,
+    }
+  }
+
+  return null
+}
+
 async function findYearlyDuplicateLoanRequest(
   admin: any,
   userId: string,
@@ -228,6 +263,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (role !== "admin") {
+      // Check for active loan of the SAME type (allow different loan types while one is active)
+      const activeLoanCheck = await checkForActiveLoanOfSameType(admin, user.id, loanType.loan_key)
+      if (activeLoanCheck) {
+        return NextResponse.json({ error: activeLoanCheck.error }, { status: 409 })
+      }
+
+      // Check for same loan type in the current year (duplicate requests in same calendar year)
       const duplicateLoan = await findYearlyDuplicateLoanRequest(admin, user.id, loanType.loan_key)
       if (duplicateLoan) {
         return NextResponse.json({ error: duplicateLoan.error }, { status: 409 })
@@ -558,6 +600,14 @@ export async function PUT(request: NextRequest) {
 
       if (loanType) {
         if (role !== "admin") {
+          // Only check for active loans if this is a new loan type change
+          if (loanType.loan_key !== existing.loan_type_key) {
+            const activeLoanCheck = await checkForActiveLoanOfSameType(admin, user.id, loanType.loan_key, id)
+            if (activeLoanCheck) {
+              return NextResponse.json({ error: activeLoanCheck.error }, { status: 409 })
+            }
+          }
+
           const duplicateLoan = await findYearlyDuplicateLoanRequest(admin, user.id, loanType.loan_key, id)
           if (duplicateLoan) {
             return NextResponse.json({ error: duplicateLoan.error }, { status: 409 })

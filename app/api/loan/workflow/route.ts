@@ -420,13 +420,14 @@ export async function GET() {
     const showDirectorHr = permissions.directorHr || viewAllTabs
 
     // HR loan office (loan_officer + viewAllTabs) sees all non-terminal loans
+    // Includes: awaiting_hr_terms (normal flow) + sent_to_hr_office (FD-exempt loans like Funeral, Insurance, Repair with FD >= 0%)
     const hrOfficeQ: any = !showHrOffice
       ? Promise.resolve({ data: [], error: null })
       : (viewAllTabs && role === "loan_officer")
         ? admin.from("loan_requests").select("*")
             .not("status", "in", '("hod_rejected","director_rejected","rejected_fd","committee_rejected")')
             .order("created_at", { ascending: false })
-        : admin.from("loan_requests").select("*").eq("status", "awaiting_hr_terms").order("created_at", { ascending: false })
+        : admin.from("loan_requests").select("*").in("status", ["awaiting_hr_terms", "sent_to_hr_office"]).order("created_at", { ascending: false })
 
     const myRequestIds = (myRes.data || []).map((r: any) => r.id)
 

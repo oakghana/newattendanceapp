@@ -1,4 +1,5 @@
 "use client"
+// Payment evidence fix: loadData moved to finally block
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Image from "next/image"
@@ -18,7 +19,7 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Users, Wallet } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -76,6 +77,7 @@ type LoanRequest = {
   director_signature_text: string | null
   director_decision_at: string | null
   supporting_document_url: string | null
+  fd_document_url?: string | null
   hod_reviewer_id?: string | null
   accounts_reviewer_id?: string | null
   accounts_reviewer_name?: string | null
@@ -863,7 +865,7 @@ export default function LoanAppPage() {
   const [memoPreviewLoanId, setMemoPreviewLoanId] = useState<string | null>(null)
 
   // ── Action modal state ──────────────────────────────────────────────
-  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director"
+  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
@@ -898,6 +900,10 @@ export default function LoanAppPage() {
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [isSignatureMissing, setIsSignatureMissing] = useState(false)
   const [isEditingSignature, setIsEditingSignature] = useState(false)
+  const [modalLengthOfService, setModalLengthOfService] = useState("")
+  const [modalLastCarLoanDate, setModalLastCarLoanDate] = useState("")
+  const [modalNeverHadCarLoan, setModalNeverHadCarLoan] = useState(false)
+  const [modalAdditionalInfo, setModalAdditionalInfo] = useState("")
 
   const [lookupData, setLookupData] = useState<LookupPayload | null>(null)
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -992,6 +998,35 @@ export default function LoanAppPage() {
 
   const [tasksSearch, setTasksSearch] = useState("")
   const [tasksStatus, setTasksStatus] = useState("all")
+
+  const [staffLoanRecordsSearch, setStaffLoanRecordsSearch] = useState("")
+  const [staffLoanRecordsPage, setStaffLoanRecordsPage] = useState(1)
+  const [staffLoanRecordsSort, setStaffLoanRecordsSort] = useState<"name" | "status">("name")
+
+  // Payment Evidence Upload Modal State
+  const [paymentEvidenceModal, setPaymentEvidenceModal] = useState({
+    open: false,
+    paymentDate: new Date().toISOString().split("T")[0],
+    paymentAmount: "",
+    paymentMethod: "bank_transfer",
+    referenceNumber: "",
+    description: "",
+    evidenceFile: null as File | null,
+    isSubmitting: false,
+  })
+
+  // Payment Approvals Tab State
+  const [paymentApprovalsSearch, setPaymentApprovalsSearch] = useState("")
+  const [paymentApprovalsFilter, setPaymentApprovalsFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending")
+  const [paymentApprovalsSort, setPaymentApprovalsSort] = useState<"date" | "amount">("date")
+  const [selectedPaymentEvidence, setSelectedPaymentEvidence] = useState<any | null>(null)
+  const [paymentApprovalModal, setPaymentApprovalModal] = useState({
+    open: false,
+    action: null as "approve" | "reject" | null,
+    approvalNotes: "",
+    rejectionReason: "",
+    isSubmitting: false,
+  })
   const [tasksSort, setTasksSort] = useState<"newest" | "oldest">("newest")
   const [tasksPage, setTasksPage] = useState(1)
   const [tasksViewMode, setTasksViewMode] = useState<"table" | "card">("table")
@@ -1033,6 +1068,24 @@ export default function LoanAppPage() {
       setSalaryAdvanceMonths(null)
     }
   }, [isSalaryAdvanceRequest])
+
+  // Auto-populate Length of Service and reset car loan fields when committee modal opens
+  useEffect(() => {
+    if (actionModal.open && actionModal.actionType === "committee" && actionModal.row) {
+      // Auto-calculate Length of Service from hire_date if available
+      if (actionModal.row.hire_date) {
+        const hireDate = new Date(actionModal.row.hire_date)
+        const today = new Date()
+        const yearsOfService = (today.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25)
+        setModalLengthOfService(yearsOfService.toFixed(1))
+      } else {
+        setModalLengthOfService("")
+      }
+      setModalLastCarLoanDate("")
+      setModalNeverHadCarLoan(false)
+      setModalAdditionalInfo("")
+    }
+  }, [actionModal.open, actionModal.actionType, actionModal.row])
 
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
@@ -1096,10 +1149,12 @@ export default function LoanAppPage() {
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
+    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
     // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
     if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
@@ -2193,6 +2248,9 @@ export default function LoanAppPage() {
           setMemoReviewModal({ open: true, row })
           return
         }
+        if (actionType === "payment_completed") {
+          setModalNote(`Mark ${row.staff_full_name} loan (${row.request_number}) as payment completed.`)
+        }
         setActionModal({ open: true, row, actionType })
       }
 
@@ -2617,6 +2675,11 @@ export default function LoanAppPage() {
                       Attachment: <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="underline">View supporting document</a>
                     </div>
                   )}
+                  {row.fd_document_url && (
+                    <div className="text-sm">
+                      FD Proof Document: <a href={row.fd_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 underline">View FD document</a>
+                    </div>
+                  )}
                   <div className="flex gap-2 flex-wrap">
                     {["pending_hod", "hod_rejected"].includes(row.status) && (
                       <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
@@ -2721,6 +2784,27 @@ export default function LoanAppPage() {
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Supporting Document */}
+                    {req.supporting_document_url && (
+                      <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">📎</span>
+                          <div>
+                            <p className="text-sm font-semibold text-blue-900">Supporting Document</p>
+                            <p className="text-xs text-blue-700">View your attached supporting document</p>
+                          </div>
+                        </div>
+                        <a
+                          href={req.supporting_document_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+                        >
+                          <Download className="h-4 w-4" /> Download
+                        </a>
                       </div>
                     )}
 
@@ -3072,6 +3156,7 @@ export default function LoanAppPage() {
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
                       {canSeeFdReviewerName && <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>}
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Submitted</th>
                       {p?.loanOffice && <th className="px-4 py-2.5 whitespace-nowrap">Action</th>}
                     </tr>
@@ -3105,6 +3190,13 @@ export default function LoanAppPage() {
                           </span>
                           {String(row.hod_review_note || "").toLowerCase().includes("auto-approved") && (
                             <span className="ml-1 inline-flex items-center rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">Auto</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.supporting_document_url ? (
+                            <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">View</a>
+                          ) : (
+                            <span className="text-slate-300">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
@@ -3201,6 +3293,7 @@ export default function LoanAppPage() {
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
                       {p?.hrOffice && <th className="px-4 py-2.5 whitespace-nowrap">Action</th>}
                     </tr>
                   </thead>
@@ -3227,6 +3320,14 @@ export default function LoanAppPage() {
                             {statusText(row.status)}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.supporting_document_url ? (
+                            <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">Download</a>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap text-slate-500">{fmtDate(row.submitted_at || row.created_at)}</td>
                         {p?.hrOffice && (
                           <td className="px-4 py-3 whitespace-nowrap">
                             <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "hr_terms")}>
@@ -3259,6 +3360,44 @@ export default function LoanAppPage() {
               </div>
             )}
           </div>
+
+          {/* ── Payment Completion Queue ── */}
+          {p?.hrOffice && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-5 py-3.5">
+                <p className="text-sm font-semibold text-slate-900">Mark Payment Completed</p>
+                <p className="text-xs text-slate-500">Record staff loan repayment completion</p>
+              </div>
+              {(() => {
+                const paymentReadyLoans = (data?.inbox?.hrOffice || []).filter(
+                  (row) => ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered"].includes(row.status) && row.recovery_months
+                )
+                if (paymentReadyLoans.length === 0) {
+                  return (
+                    <div className="px-5 py-8">
+                      <p className="text-sm text-slate-500 text-center">No loans ready for payment completion marking</p>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="divide-y divide-slate-100">
+                    {paymentReadyLoans.slice(0, 5).map((row) => (
+                      <div key={row.id} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-slate-900">{row.staff_full_name || row.staff_number}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{row.request_number} — {row.loan_type_label}</p>
+                          <p className="text-xs text-slate-400 mt-1">Recovery: {row.recovery_start_date || "TBD"} ({row.recovery_months} months)</p>
+                        </div>
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap" onClick={() => openActionModal(row, "payment_completed")}>
+                          Mark Completed
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
 
           {/* ── Loan type breakdown ── */}
           {loanOfficeTypeSummary.length > 0 && (
@@ -3412,6 +3551,7 @@ export default function LoanAppPage() {
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Attachment</TableHead>
                       <TableHead className="whitespace-nowrap">Submitted</TableHead>
                       {p?.accounts && <TableHead className="whitespace-nowrap">FD Action</TableHead>}
                     </TableRow>
@@ -3430,6 +3570,13 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {row.supporting_document_url ? (
+                              <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">View</a>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                           {p?.accounts && (
                             <TableCell>
@@ -3482,6 +3629,287 @@ export default function LoanAppPage() {
                 </div>
               ))}
               {(data?.inbox.accountsSigned || []).length === 0 && <p className="text-sm text-muted-foreground">No approved records yet.</p>}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Staff Loan Records Tab ── */}
+        <TabsContent value="staff-loan-records" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                Staff Loan Records
+              </CardTitle>
+              <CardDescription>
+                Manage all staff loan records. View approved loans, mark as completed, and track loan eligibility for future requests.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Search and filters */}
+              <div className="space-y-4 mb-6">
+                <div className="flex gap-3 items-center">
+                  <input
+                    type="text"
+                    placeholder="Search staff name or number..."
+                    value={staffLoanRecordsSearch}
+                    onChange={(e) => {
+                      setStaffLoanRecordsSearch(e.target.value)
+                      setStaffLoanRecordsPage(1)
+                    }}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  />
+                  <select
+                    value={staffLoanRecordsSort}
+                    onChange={(e) => setStaffLoanRecordsSort(e.target.value as "name" | "status")}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="name">Sort by Name</option>
+                    <option value="status">Sort by Loan Status</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Staff loan records table */}
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff Name</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff No.</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Current Loan</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Loan Amount</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Mark Completed</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Eligible for New</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      // Compile all loans from all sources (not just allLoans, as staff may be viewing their own loans too)
+                      const allSourceLoans = [
+                        ...(data?.inbox?.allLoans || []),
+                        ...(data?.inbox?.loanOffice || []),
+                        ...(data?.inbox?.accounts || []),
+                        ...(data?.inbox?.accountsSigned || []),
+                        ...(data?.inbox?.hrOffice || []),
+                        ...(data?.inbox?.directorHr || []),
+                        ...(data?.myTasks || []),
+                      ]
+
+                      // Remove duplicates by id
+                      const uniqueLoansMap = new Map<string, LoanRequest>()
+                      allSourceLoans.forEach((loan) => {
+                        if (!uniqueLoansMap.has(loan.id)) {
+                          uniqueLoansMap.set(loan.id, loan)
+                        }
+                      })
+                      const allLoans = Array.from(uniqueLoansMap.values())
+
+                      // Get all approved or active loans (any status that means the loan has been formally approved)
+                      // NOTE: awaiting_committee is NOT an approval — it means pending committee decision, so exclude it
+                      const approvedLoans = allLoans.filter((r) => {
+                        const activeStatuses = [
+                          "approved_director",
+                          "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                          "payment_completed",
+                        ]
+                        return activeStatuses.includes(r.status)
+                      })
+
+                      // Group by staff member
+                      const staffMap = new Map<string, LoanRequest[]>()
+                      approvedLoans.forEach((loan) => {
+                        const key = loan.user_id
+                        if (!staffMap.has(key)) staffMap.set(key, [])
+                        staffMap.get(key)!.push(loan)
+                      })
+
+                      // Convert to array and filter by search
+                      let staffRecords = Array.from(staffMap.entries())
+                        .map(([staffId, loans]) => ({
+                          staffId,
+                          name: loans[0]?.staff_full_name || "Unknown",
+                          staffNo: loans[0]?.staff_number || "—",
+                          loans,
+                          // Current loan = any director-approved or post-approval active loan
+                          currentLoan: loans.find(l => {
+                            const activeStatuses = ["approved_director", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"]
+                            return activeStatuses.includes(l.status)
+                          }),
+                          completedLoans: loans.filter(l => l.status === "payment_completed")
+                        }))
+
+                      // Filter by search
+                      if (staffLoanRecordsSearch) {
+                        staffRecords = staffRecords.filter((r) =>
+                          r.name.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase()) ||
+                          r.staffNo.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase())
+                        )
+                      }
+
+                      // Sort
+                      if (staffLoanRecordsSort === "status") {
+                        staffRecords.sort((a, b) => {
+                          const aHasActive = a.currentLoan ? 1 : 0
+                          const bHasActive = b.currentLoan ? 1 : 0
+                          return bHasActive - aHasActive
+                        })
+                      } else {
+                        staffRecords.sort((a, b) => a.name.localeCompare(b.name))
+                      }
+
+                      // Paginate
+                      const itemsPerPage = 10
+                      const totalPages = Math.ceil(staffRecords.length / itemsPerPage)
+                      const paged = staffRecords.slice((staffLoanRecordsPage - 1) * itemsPerPage, staffLoanRecordsPage * itemsPerPage)
+
+                      if (paged.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                              {staffRecords.length === 0 ? "No staff records found" : "No results match your search"}
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                      return paged.map((record) => {
+                        const currentLoan = record.currentLoan
+                        const isCompleted = currentLoan?.status === "payment_completed"
+                        const canMarkCompleted = currentLoan && !isCompleted
+
+                        return (
+                          <tr key={record.staffId} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="px-4 py-3 font-medium text-slate-900">{record.name}</td>
+                            <td className="px-4 py-3 text-slate-600">{record.staffNo}</td>
+                            <td className="px-4 py-3">
+                              {currentLoan ? (
+                                <span className="text-slate-900 font-medium">{currentLoan.loan_type_label}</span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {currentLoan ? (
+                                <span className="text-slate-900">GHc {Number(currentLoan.fixed_amount || currentLoan.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {currentLoan ? (
+                                <Badge className={statusBadgeClass(currentLoan.status, "solid")}>
+                                  {statusText(currentLoan.status)}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400 text-xs">No Active Loan</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {canMarkCompleted && (
+                                <Button
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700 text-white text-xs"
+                                  onClick={() => openActionModal(currentLoan!, "payment_completed")}
+                                >
+                                  Mark Completed
+                                </Button>
+                              )}
+                              {isCompleted && (
+                                <Badge className="bg-green-100 text-green-800">Completed</Badge>
+                              )}
+                              {!currentLoan && (
+                                <span className="text-slate-300 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {!currentLoan || isCompleted ? (
+                                <Badge className="bg-blue-100 text-blue-800">✓ Eligible</Badge>
+                              ) : (
+                                <Badge className="bg-slate-100 text-slate-700">Not Eligible</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {(() => {
+                // Recalculate total pages using same logic as table
+                const allSourceLoans = [
+                  ...(data?.inbox?.allLoans || []),
+                  ...(data?.inbox?.loanOffice || []),
+                  ...(data?.inbox?.accounts || []),
+                  ...(data?.inbox?.accountsSigned || []),
+                  ...(data?.inbox?.hrOffice || []),
+                  ...(data?.inbox?.directorHr || []),
+                  ...(data?.myTasks || []),
+                ]
+                const uniqueLoansMap = new Map<string, LoanRequest>()
+                allSourceLoans.forEach((loan) => {
+                  if (!uniqueLoansMap.has(loan.id)) {
+                    uniqueLoansMap.set(loan.id, loan)
+                  }
+                })
+                const allLoans = Array.from(uniqueLoansMap.values())
+                
+                const approvedLoans = allLoans.filter((r) => {
+                  const activeStatuses = [
+                    "hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee",
+                    "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                    "payment_completed", "awaiting_committee"
+                  ]
+                  return activeStatuses.includes(r.status)
+                })
+
+                const staffMap = new Map<string, LoanRequest[]>()
+                approvedLoans.forEach((loan) => {
+                  const key = loan.user_id
+                  if (!staffMap.has(key)) staffMap.set(key, [])
+                  staffMap.get(key)!.push(loan)
+                })
+
+                let staffRecords = Array.from(staffMap.entries()).map(([staffId, loans]) => ({
+                  staffId,
+                  name: loans[0]?.staff_full_name || "Unknown",
+                  staffNo: loans[0]?.staff_number || "—",
+                }))
+                if (staffLoanRecordsSearch) {
+                  staffRecords = staffRecords.filter((r) =>
+                    r.name.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase()) ||
+                    r.staffNo.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase())
+                  )
+                }
+                const totalPages = Math.ceil(staffRecords.length / 10)
+                return totalPages > 1 ? (
+                  <div className="flex justify-between items-center mt-4">
+                    <p className="text-sm text-slate-600">Page {staffLoanRecordsPage} of {totalPages}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={staffLoanRecordsPage === 1}
+                        onClick={() => setStaffLoanRecordsPage(Math.max(1, staffLoanRecordsPage - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={staffLoanRecordsPage === totalPages}
+                        onClick={() => setStaffLoanRecordsPage(Math.min(totalPages, staffLoanRecordsPage + 1))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                ) : null
+              })()} 
             </CardContent>
           </Card>
         </TabsContent>
@@ -3715,6 +4143,7 @@ export default function LoanAppPage() {
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Attachment</TableHead>
                       <TableHead className="whitespace-nowrap">Submitted</TableHead>
                       {p?.committee && <TableHead className="whitespace-nowrap">Action</TableHead>}
                     </TableRow>
@@ -3731,6 +4160,13 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {row.supporting_document_url ? (
+                            <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">Download</a>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.committee && (
                           <TableCell>
@@ -3755,6 +4191,62 @@ export default function LoanAppPage() {
             <span className="text-xs text-muted-foreground">Page {committeePage} of {totalCommitteePages}</span>
             <Button variant="outline" size="sm" onClick={() => setCommitteePage((n) => Math.min(totalCommitteePages, n + 1))} disabled={committeePage >= totalCommitteePages}>Next</Button>
           </div>
+        </TabsContent>
+
+        {/* ── Payment Approvals Tab (HR Executive) ── */}
+        <TabsContent value="payment-approvals" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-blue-600" />
+                Payment Evidence Approvals
+              </CardTitle>
+              <CardDescription>
+                Review and approve payment evidence submitted by HR/Accounts staff. Only approve evidence that has complete and valid payment documentation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Search and Filters */}
+              <div className="space-y-4 mb-6">
+                <div className="flex gap-3 items-center flex-wrap">
+                  <input
+                    type="text"
+                    placeholder="Search staff name or reference..."
+                    value={paymentApprovalsSearch}
+                    onChange={(e) => setPaymentApprovalsSearch(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  />
+                  <select
+                    value={paymentApprovalsFilter}
+                    onChange={(e) => setPaymentApprovalsFilter(e.target.value as any)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="pending">Pending Approval</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="all">All</option>
+                  </select>
+                  <select
+                    value={paymentApprovalsSort}
+                    onChange={(e) => setPaymentApprovalsSort(e.target.value as any)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="date">Sort by Date (Newest)</option>
+                    <option value="amount">Sort by Amount</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Payment Evidence List */}
+              <div className="space-y-3">
+                {/* TODO: Fetch and display payment evidence from API */}
+                <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
+                  <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm">No payment evidence records to display. Connect the Payment Evidence API to load pending approvals.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
@@ -3978,6 +4470,7 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
                         <TableHead className="whitespace-nowrap">Status</TableHead>
                         <TableHead className="whitespace-nowrap">Location</TableHead>
+                        <TableHead className="whitespace-nowrap">Attachment</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
                         <TableHead className="whitespace-nowrap">Memo</TableHead>
                       </TableRow>
@@ -3993,6 +4486,13 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.staff_location_name || "—"}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {row.supporting_document_url ? (
+                              <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Download</a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{fmtDate(row.updated_at || row.created_at)}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">
                             {(row.director_hr_name || row.director_signature_text) && (
@@ -4021,6 +4521,16 @@ export default function LoanAppPage() {
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                  {row.supporting_document_url && (
+                    <div className="text-xs pt-1">
+                      Attachment: <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Download</a>
+                    </div>
+                  )}
+                  {row.fd_document_url && (
+                    <div className="text-xs pt-1">
+                      FD Proof: <a href={row.fd_document_url} target="_blank" rel="noreferrer" className="text-emerald-700 hover:text-emerald-900 hover:underline font-medium">View FD Document</a>
+                    </div>
+                  )}
                   <div className="text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
                   {(row.director_hr_name || row.director_signature_text) && (
                     <div className="text-xs text-slate-600">Signed by: <span className="font-semibold">{row.director_hr_name || row.director_signature_text}</span></div>
@@ -4934,7 +5444,7 @@ export default function LoanAppPage() {
           </Card>
         </TabsContent>
 
-      {/* ── Action Modal ────────────────────────────────────────────── */}
+      {/* ── Action Modal ──────────────────────��─────────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -4944,6 +5454,7 @@ export default function LoanAppPage() {
               {actionModal.actionType === "accounts" && "Set FD Score"}
               {actionModal.actionType === "committee" && "Employee Further Information"}
               {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Executive HR"}
+              {actionModal.actionType === "payment_completed" && "Mark Loan Payment Completed"}
             </DialogTitle>
             {actionModal.row && (
               <DialogDescription>
@@ -5062,19 +5573,19 @@ export default function LoanAppPage() {
                   </div>
                   <div>
                     <Label className="text-xs">Length of Service (Years)</Label>
-                    <Input type="number" placeholder="e.g. 5" min="0" step="0.5" className="h-7 text-xs" />
+                    <Input type="number" value={modalLengthOfService} onChange={(e) => setModalLengthOfService(e.target.value)} placeholder="e.g. 5" min="0" step="0.5" className="h-7 text-xs" />
                   </div>
                   <div>
                     <Label className="text-xs">Last Car Loan Date</Label>
-                    <Input type="date" className="h-7 text-xs" />
+                    <Input type="date" value={modalLastCarLoanDate} onChange={(e) => setModalLastCarLoanDate(e.target.value)} className="h-7 text-xs" />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Checkbox id="never_car_loan" />
+                  <Checkbox id="never_car_loan" checked={modalNeverHadCarLoan} onCheckedChange={(checked) => setModalNeverHadCarLoan(checked === true)} />
                   <Label htmlFor="never_car_loan" className="font-normal cursor-pointer text-xs">Never had a car loan</Label>
                 </div>
                 <Label className="text-xs">Additional Employee Information</Label>
-                <Textarea placeholder="Add any relevant employment history, loan history, or service information..." rows={2} className="text-xs" />
+                <Textarea value={modalAdditionalInfo} onChange={(e) => setModalAdditionalInfo(e.target.value)} placeholder="Add any relevant employment history, loan history, or service information..." rows={2} className="text-xs" />
               </>
             )}
             {/* HR Terms */}
@@ -5185,12 +5696,36 @@ export default function LoanAppPage() {
             {actionModal.actionType === "accounts" && actionModal.row && (
               <Button 
                 disabled={!modalFdProof}
-                onClick={() => {
+                onClick={async () => {
                   if (!modalFdProof) {
                     toast({ title: "Missing Attachment", description: "Please upload a proof document before saving the FD score.", variant: "destructive" })
                     return
                   }
-                  runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null })
+                  // Upload FD proof document to storage first
+                  let fdDocumentUrl: string | null = null
+                  try {
+                    const formData = new FormData()
+                    formData.append("file", modalFdProof)
+                    formData.append("folder", "fd-documents")
+                    const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
+                    if (uploadRes.ok) {
+                      const uploadData = await uploadRes.json()
+                      fdDocumentUrl = uploadData.url || null
+                    } else {
+                      const uploadErr = await uploadRes.json()
+                      if (uploadErr.code === "BLOB_NOT_CONFIGURED") {
+                        // Blob not configured — proceed without URL, note will still be saved
+                        fdDocumentUrl = null
+                      } else {
+                        toast({ title: "Upload Failed", description: uploadErr.error || "Could not upload FD document.", variant: "destructive" })
+                        return
+                      }
+                    }
+                  } catch {
+                    toast({ title: "Upload Error", description: "Failed to upload FD document.", variant: "destructive" })
+                    return
+                  }
+                  await runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null, fd_document_url: fdDocumentUrl })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save FD Score</Button>
             )}
@@ -5241,6 +5776,22 @@ export default function LoanAppPage() {
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Set Terms &amp; Forward to Executive HR</Button>
+              </>
+            )}
+            {actionModal.actionType === "payment_completed" && actionModal.row && (
+              <>
+                <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>
+                  Cancel
+                </Button>
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700" 
+                  onClick={() => {
+                    setPaymentEvidenceModal((s) => ({ ...s, open: true }))
+                    setActionModal((s) => ({ ...s, open: false }))
+                  }}
+                >
+                  Submit Payment Evidence
+                </Button>
               </>
             )}
           </DialogFooter>
@@ -5401,6 +5952,265 @@ export default function LoanAppPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Payment Evidence Upload Modal ────────────────────────────── */}
+      <Dialog open={paymentEvidenceModal.open} onOpenChange={(o) => setPaymentEvidenceModal((s) => ({ ...s, open: o }))}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-green-600" />
+              Submit Payment Evidence
+            </DialogTitle>
+            <DialogDescription>
+              Upload supporting evidence of payment (receipt, bank transfer confirmation, etc.) for HR Executive approval.
+              Once approved, the loan will be marked as fully repaid.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Loan Summary */}
+            {actionModal.row && (
+              <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
+                <div className="text-sm font-semibold text-slate-700 mb-3">Loan Details</div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-slate-600">Reference:</span>
+                    <div className="font-semibold text-slate-900">{actionModal.row.request_number}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Type:</span>
+                    <div className="font-semibold text-slate-900">{actionModal.row.loan_type_label}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Staff:</span>
+                    <div className="font-semibold text-slate-900">{actionModal.row.staff_full_name || actionModal.row.staff_number}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Loan Amount:</span>
+                    <div className="font-semibold text-green-700">GHc {fmtAmount(actionModal.row.fixed_amount || actionModal.row.requested_amount)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Payment Details Form */}
+            <div className="space-y-4 border-t pt-4">
+              <div>
+                <Label htmlFor="paymentDate" className="text-sm font-semibold">Payment Date *</Label>
+                <Input
+                  id="paymentDate"
+                  type="date"
+                  value={paymentEvidenceModal.paymentDate}
+                  onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, paymentDate: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="paymentAmount" className="text-sm font-semibold">Payment Amount (GHc) *</Label>
+                  <Input
+                    id="paymentAmount"
+                    type="number"
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    value={paymentEvidenceModal.paymentAmount}
+                    onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, paymentAmount: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="paymentMethod" className="text-sm font-semibold">Payment Method *</Label>
+                  <Select 
+                    value={paymentEvidenceModal.paymentMethod}
+                    onValueChange={(value) => setPaymentEvidenceModal((s) => ({ ...s, paymentMethod: value }))}
+                  >
+                    <SelectTrigger id="paymentMethod" className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="referenceNumber" className="text-sm font-semibold">Reference Number *</Label>
+                <Input
+                  id="referenceNumber"
+                  placeholder="e.g., Bank ref, cheque no, transaction ID"
+                  value={paymentEvidenceModal.referenceNumber}
+                  onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, referenceNumber: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="description" className="text-sm font-semibold">Additional Details (optional)</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Add any additional notes or context about this payment..."
+                  value={paymentEvidenceModal.description}
+                  onChange={(e) => setPaymentEvidenceModal((s) => ({ ...s, description: e.target.value }))}
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
+                <div className="flex justify-center mb-3">
+                  <Upload className="h-8 w-8 text-slate-400" />
+                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-2">Upload Payment Evidence</p>
+                <p className="text-xs text-slate-600 mb-3">Receipt, bank transfer confirmation, screenshot, etc.</p>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file && file.size <= 5 * 1024 * 1024) { // 5MB limit
+                      setPaymentEvidenceModal((s) => ({ ...s, evidenceFile: file }))
+                    } else {
+                      toast({ title: "File too large", description: "Maximum file size is 5MB" })
+                    }
+                  }}
+                  className="hidden"
+                  id="evidenceFile"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById("evidenceFile")?.click()}
+                >
+                  Choose File
+                </Button>
+                {paymentEvidenceModal.evidenceFile && (
+                  <div className="mt-3 text-sm text-green-700 font-semibold">
+                    ✓ {paymentEvidenceModal.evidenceFile.name}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                <p className="text-xs text-blue-900">
+                  <strong>Note:</strong> After submission, the HR Executive will review your payment evidence. 
+                  Once approved, your loan will be marked as fully repaid and you'll be able to request the same loan type again in the future.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPaymentEvidenceModal((s) => ({ ...s, open: false }))}
+              disabled={paymentEvidenceModal.isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              disabled={
+                !paymentEvidenceModal.paymentDate ||
+                !paymentEvidenceModal.paymentAmount ||
+                !paymentEvidenceModal.referenceNumber ||
+                !paymentEvidenceModal.evidenceFile ||
+                paymentEvidenceModal.isSubmitting
+              }
+              onClick={async () => {
+                if (!actionModal.row || !paymentEvidenceModal.paymentAmount) return
+
+                setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: true }))
+                try {
+                  setPaymentEvidenceModal((prev) => ({ ...prev, isSubmitting: true }))
+                  
+                  // Validate required fields before submission
+                  if (!actionModal.row?.id) {
+                    throw new Error("Loan request ID is missing")
+                  }
+                  if (!paymentEvidenceModal.paymentDate) {
+                    throw new Error("Payment date is required")
+                  }
+                  if (!paymentEvidenceModal.paymentAmount || parseFloat(paymentEvidenceModal.paymentAmount) <= 0) {
+                    throw new Error("Payment amount must be greater than 0")
+                  }
+
+                  const response = await fetch("/api/loan/payment-evidence", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      loanRequestId: actionModal.row.id,
+                      paymentDate: paymentEvidenceModal.paymentDate,
+                      paymentAmount: parseFloat(paymentEvidenceModal.paymentAmount),
+                      paymentMethod: paymentEvidenceModal.paymentMethod,
+                      referenceNumber: paymentEvidenceModal.referenceNumber,
+                      description: paymentEvidenceModal.description || null,
+                      evidenceFileUrl: null,
+                    }),
+                  })
+
+                  if (!response.ok) {
+                    let errorMessage = "Failed to submit payment evidence"
+                    try {
+                      const errorData = await response.json()
+                      errorMessage = errorData.error || errorMessage
+                    } catch (e) {
+                      errorMessage = `Server error (${response.status}): ${response.statusText}`
+                    }
+                    throw new Error(errorMessage)
+                  }
+
+                  const result = await response.json()
+
+                  toast({
+                    title: "Payment Evidence Submitted",
+                    description: "Your payment evidence has been submitted and is awaiting HR Executive approval.",
+                  })
+
+                  // Reset modal
+                  setPaymentEvidenceModal({
+                    open: false,
+                    paymentDate: new Date().toISOString().split("T")[0],
+                    paymentAmount: "",
+                    paymentMethod: "bank_transfer",
+                    referenceNumber: "",
+                    description: "",
+                    evidenceFile: null,
+                    isSubmitting: false,
+                  })
+                } catch (err) {
+                  console.error("[v0] Payment evidence submission error:", err)
+                  const errorMessage = err instanceof Error ? err.message : "Failed to submit payment evidence"
+                  toast({
+                    title: "Submission Failed",
+                    description: errorMessage,
+                    variant: "destructive",
+                  })
+                  setPaymentEvidenceModal((prev) => ({ ...prev, isSubmitting: false }))
+                } finally {
+                  setPaymentEvidenceModal((s) => ({ ...s, isSubmitting: false }))
+                  // Fire off data reload without awaiting (silent reload in background)
+                  void (async () => {
+                    try {
+                      await loadData({ silent: true })
+                    } catch {
+                      // Silently ignore reload errors to not affect submission status
+                    }
+                  })()
+                }
+              }}
+            >
+              {paymentEvidenceModal.isSubmitting ? "Submitting..." : "Submit for Approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       </Tabs>
     </div>
   )
@@ -5454,6 +6264,11 @@ function StageCard({ row, children }: { row: LoanRequest; children: React.ReactN
         {row.supporting_document_url && (
           <p className="text-sm">
             Attachment: <a href={row.supporting_document_url} className="underline" target="_blank" rel="noreferrer">Open document</a>
+          </p>
+        )}
+        {row.fd_document_url && (
+          <p className="text-sm">
+            FD Proof Document: <a href={row.fd_document_url} className="text-emerald-700 underline font-medium" target="_blank" rel="noreferrer">View FD document</a>
           </p>
         )}
         <div className="flex gap-2 flex-wrap">{children}</div>

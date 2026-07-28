@@ -33,7 +33,55 @@ const nextConfig = {
       'recharts',
       'date-fns',
     ],
-    optimizeCss: false, // Disabled to avoid critters dependency
+    optimizeCss: false,
+  },
+  onDemandEntries: {
+    maxInactiveAge: 60 * 1000,
+    pagesBufferLength: 5,
+  },
+  headers: async () => {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=3600, stale-while-revalidate=86400'
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN'
+          }
+        ],
+      },
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable'
+          }
+        ],
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'private, no-store'
+          }
+        ],
+      }
+    ]
+  },
+  compress: true,
+  swcMinify: true,
+  eslint: {
+    ignoreDuringBuilds: true,
   },
 }
 
