@@ -9,6 +9,7 @@ import {
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
   GOOD_FD_THRESHOLD,
+  isFdExemptLoanType,
   canDoAccounts,
   canDoCommittee,
   canDoDirectorHr,
@@ -456,12 +457,11 @@ export async function POST(request: NextRequest) {
 
       const fdGood = fdScore >= GOOD_FD_THRESHOLD
       const isCarLoan = Boolean(req.committee_required)
-      
-      // Check if this is a Funeral, Repair, or Issuance loan with FD >= 0
-      const loanKey = String(req.loan_type_key || "").toLowerCase()
-      const isFuneralRepairIssuanceLoan = /funeral|repair|issuance/.test(loanKey)
-      const isFdPositive = fdScore > 0
-      const shouldForwardToHrOffice = isFuneralRepairIssuanceLoan && !fdGood && isFdPositive
+
+      // Funeral, Repair, and Issuance loans bypass FD rejection when score >= 0
+      const isExemptLoanType = isFdExemptLoanType(req.loan_type_key, req.loan_type_label)
+      const isFdNonNegative = fdScore >= 0
+      const shouldForwardToHrOffice = isExemptLoanType && !fdGood && isFdNonNegative
 
       if (!fdGood && !shouldForwardToHrOffice && !note) {
         return NextResponse.json({ error: `Provide Accounts response note for FD below ${GOOD_FD_THRESHOLD}.` }, { status: 400 })

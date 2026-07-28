@@ -4,6 +4,7 @@ import fs from "fs"
 import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import {
+  isFdExemptLoanType,
   canDoAccounts,
   canDoCommittee,
   canDoDirectorHr,
@@ -144,6 +145,20 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
   const amount = `GHc ${fmtAmount(loan.fixed_amount || loan.requested_amount)}`
 
   if (loan.status === "rejected_fd") {
+    // Funeral, Repair, and Issuance loans must never receive a rejection memo —
+    // they are forwarded to HR Loan Office whenever FD >= 0, regardless of threshold.
+    if (isFdExemptLoanType(loan.loan_type_key, loan.loan_type_label)) {
+      return {
+        subject: `APPLICATION FOR ${String(loan.loan_type_label || "LOAN").toUpperCase()} — FD REVIEW UPDATE`,
+        paragraphs: [
+          `We refer to your ${loan.loan_type_label || "loan"} application dated ${fmtDate(loan.fd_checked_at)} and wish to inform you that your request has been reviewed by Accounts.`,
+          `FD Score: ${loan.fd_score ?? "N/A"}`,
+          `Your application has been forwarded to the HR Loan Office for further processing.`,
+          ...(loan.fd_note ? [`Accounts Note: ${loan.fd_note}`] : []),
+          "You can count on our co-operation.",
+        ],
+      }
+    }
     return {
       subject: "APPLICATION FOR LOAN — FD REVIEW FEEDBACK",
       paragraphs: [
