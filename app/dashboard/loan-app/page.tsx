@@ -3978,6 +3978,7 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
                         <TableHead className="whitespace-nowrap">Status</TableHead>
                         <TableHead className="whitespace-nowrap">Location</TableHead>
+                        <TableHead className="whitespace-nowrap">Attachment</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
                         <TableHead className="whitespace-nowrap">Memo</TableHead>
                       </TableRow>
@@ -3993,6 +3994,13 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.staff_location_name || "—"}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {row.supporting_document_url ? (
+                              <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Download</a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{fmtDate(row.updated_at || row.created_at)}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">
                             {(row.director_hr_name || row.director_signature_text) && (
@@ -4021,6 +4029,11 @@ export default function LoanAppPage() {
                   <div>Staff No: {row.staff_number || "N/A"} | Rank: {row.staff_rank || "N/A"}</div>
                   <div>Location: {row.staff_location_name || "N/A"} | District: {row.staff_district_name || "N/A"}</div>
                   <div>Amount: GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                  {row.supporting_document_url && (
+                    <div className="text-xs pt-1">
+                      Attachment: <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Download</a>
+                    </div>
+                  )}
                   <div className="text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
                   {(row.director_hr_name || row.director_signature_text) && (
                     <div className="text-xs text-slate-600">Signed by: <span className="font-semibold">{row.director_hr_name || row.director_signature_text}</span></div>

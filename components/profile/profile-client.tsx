@@ -91,7 +91,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
     confirmPassword: "",
   })
   const [showPasswordChange, setShowPasswordChange] = useState(false)
-  const [signatureMode, setSignatureMode] = useState<"draw" | "upload">("draw")
+  const [signatureMode, setSignatureMode] = useState<"draw" | "upload" | null>(null)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [isSavingSignature, setIsSavingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
@@ -132,11 +132,21 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
         const data = await res.json()
         if (data.signature?.signature_data_url) {
           setSignatureDataUrl(data.signature.signature_data_url)
+          // Set mode to null to show the saved signature display
+          setSignatureMode(null as any)
           console.log("[v0] Loaded existing signature from database")
+        } else {
+          // No saved signature, start in draw mode
+          setSignatureMode("draw")
         }
+      } else {
+        // API error, start in draw mode
+        setSignatureMode("draw")
       }
     } catch (err) {
       console.error("[v0] Error loading existing signature:", err)
+      // On error, start in draw mode
+      setSignatureMode("draw")
     }
   }
 
@@ -765,21 +775,23 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 </CardDescription>
               </CardHeader>
             <CardContent className="space-y-6">
-              {/* Signature Mode Selection: Draw & Upload Only */}
-              <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
-                <button
-                  onClick={() => setSignatureMode("draw")}
-                  className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                >
-                  Draw
-                </button>
-                <button
-                  onClick={() => setSignatureMode("upload")}
-                  className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "upload" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                >
-                  Upload
-                </button>
-              </div>
+              {/* Signature Mode Selection: Draw & Upload Only - Hide if saved signature exists */}
+              {!signatureDataUrl || signatureMode ? (
+                <div className="flex gap-3 rounded-lg bg-white p-3 border border-green-200">
+                  <button
+                    onClick={() => setSignatureMode("draw")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "draw" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Draw
+                  </button>
+                  <button
+                    onClick={() => setSignatureMode("upload")}
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${signatureMode === "upload" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    Upload
+                  </button>
+                </div>
+              ) : null}
 
               {/* Signature Display and Editor */}
               {signatureDataUrl && !signatureMode ? (
