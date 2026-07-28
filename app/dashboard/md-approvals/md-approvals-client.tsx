@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import {
   CheckCircle2,
@@ -258,6 +259,23 @@ export function MdApprovalsClient({ profile }: Props) {
   const [showApprovedRecently, setShowApprovedRecently] = useState(false)
   const [recentlyApprovedLoans, setRecentlyApprovedLoans] = useState<Loan[]>([])
   const [downloadingMemoId, setDownloadingMemoId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("pending")
+  const [approvedLoans, setApprovedLoans] = useState<Loan[]>([])
+  const [loadingApproved, setLoadingApproved] = useState(false)
+
+  const fetchApprovedLoans = useCallback(async () => {
+    setLoadingApproved(true)
+    try {
+      const res = await fetch("/api/loan/md-approve?view=approved")
+      if (!res.ok) throw new Error("Failed to fetch approved loans")
+      const data = await res.json()
+      setApprovedLoans(data.loans || [])
+    } catch (err) {
+      toast({ title: "Error loading approved loans", variant: "destructive" })
+    } finally {
+      setLoadingApproved(false)
+    }
+  }, [toast])
 
   const downloadMemo = useCallback(async (loan: Loan) => {
     setDownloadingMemoId(loan.id)
