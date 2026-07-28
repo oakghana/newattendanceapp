@@ -1069,7 +1069,16 @@ export function HrApprovalsTab() {
         fetchRequests()
       }
     } catch (err: any) {
-      toast({ title: 'Error', description: String(err.message || err), variant: 'destructive' })
+      let errorMsg = 'Approval failed'
+      if (err?.message) {
+        errorMsg = err.message
+      } else if (typeof err === 'string') {
+        errorMsg = err
+      } else if (err && typeof err === 'object') {
+        errorMsg = JSON.stringify(err)
+      }
+      console.error('[v0] handleApprove error:', err)
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' })
     } finally {
       setProcessingId(null)
     }

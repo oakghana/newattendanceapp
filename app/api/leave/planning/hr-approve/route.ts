@@ -550,31 +550,35 @@ export async function POST(request: NextRequest) {
     const finalSigText = resolvedSigText.length > 0 ? resolvedSigText : null
     const finalSigDataUrl = resolvedSigDataUrl.length > 0 ? resolvedSigDataUrl : null
 
+    // Build update object — only include hr_approved_* fields if they have values
+    const updatePayload: any = {
+      status: "hr_approved",
+      hr_approver_id: user.id,
+      hr_approver_name: approverName,
+      hr_approved_at: now,
+      hr_approval_note: note || null,
+      ...memoDraftPatch,
+      memo_draft_subject: resolvedSubject,
+      memo_draft_body: resolvedBody,
+      memo_draft_cc: resolvedCc,
+      memo_token: memoToken,
+      memo_generated_at: now,
+      hr_signature_mode: resolvedSigMode,
+      hr_signature_text: finalSigText,
+      hr_signature_image_url: null,
+      hr_signature_data_url: finalSigDataUrl,
+      hr_signature_hologram_code: buildHologramCode("HR"),
+      updated_at: now,
+    }
+    
+    // Add HR executive date overrides if provided (safe to omit if columns don't exist yet)
+    if (hr_approved_start_date) updatePayload.hr_approved_start_date = String(hr_approved_start_date).slice(0, 10)
+    if (hr_approved_end_date) updatePayload.hr_approved_end_date = String(hr_approved_end_date).slice(0, 10)
+    if (hr_approved_days !== null && hr_approved_days !== undefined) updatePayload.hr_approved_days = Number(hr_approved_days)
+
     const { error: approveError } = await admin
       .from("leave_plan_requests")
-      .update({
-        status: "hr_approved",
-        hr_approver_id: user.id,
-        hr_approver_name: approverName,
-        hr_approved_at: now,
-        hr_approval_note: note || null,
-        // HR executive date override — if set, these replace the HR office adjusted dates
-        hr_approved_start_date: hr_approved_start_date ? String(hr_approved_start_date).slice(0, 10) : null,
-        hr_approved_end_date: hr_approved_end_date ? String(hr_approved_end_date).slice(0, 10) : null,
-        hr_approved_days: hr_approved_days ? Number(hr_approved_days) : null,
-        ...memoDraftPatch,
-        memo_draft_subject: resolvedSubject,
-        memo_draft_body: resolvedBody,
-        memo_draft_cc: resolvedCc,
-        memo_token: memoToken,
-        memo_generated_at: now,
-        hr_signature_mode: resolvedSigMode,
-        hr_signature_text: finalSigText,
-        hr_signature_image_url: null,
-        hr_signature_data_url: finalSigDataUrl,
-        hr_signature_hologram_code: buildHologramCode("HR"),
-        updated_at: now,
-      })
+      .update(updatePayload)
       .eq("id", leave_plan_request_id)
 
     if (approveError) {
@@ -657,7 +661,14 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[hr-approve] POST error:", error)
-    const msg = error instanceof Error ? error.message : String(error)
+    let msg = "Unknown error"
+    if (error instanceof Error) {
+      msg = error.message
+    } else if (typeof error === "string") {
+      msg = error
+    } else if (error && typeof error === "object") {
+      msg = JSON.stringify(error)
+    }
     return NextResponse.json({ error: `Failed to finalize leave approval: ${msg}` }, { status: 500 })
   }
 }
