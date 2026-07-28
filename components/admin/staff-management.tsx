@@ -871,6 +871,8 @@ export function StaffManagement() {
                                   <SelectItem value="it-admin">IT Admin</SelectItem>
                                 )}
                                 {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="secretary">Secretary</SelectItem>}
                                 <SelectItem value="nsp">NSP</SelectItem>
                                 <SelectItem value="intern">Intern</SelectItem>
                                 <SelectItem value="contract">Contract</SelectItem>
@@ -1133,6 +1135,8 @@ export function StaffManagement() {
                               <SelectItem value="it-admin">IT Admin</SelectItem>
                             )}
                             {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                            {currentUserRole === "admin" && <SelectItem value="secretary">Secretary</SelectItem>}
                             <SelectItem value="nsp">NSP</SelectItem>
                             <SelectItem value="intern">Intern</SelectItem>
                             <SelectItem value="contract">Contract</SelectItem>
