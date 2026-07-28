@@ -992,6 +992,10 @@ export default function LoanAppPage() {
 
   const [tasksSearch, setTasksSearch] = useState("")
   const [tasksStatus, setTasksStatus] = useState("all")
+
+  const [staffLoanRecordsSearch, setStaffLoanRecordsSearch] = useState("")
+  const [staffLoanRecordsPage, setStaffLoanRecordsPage] = useState(1)
+  const [staffLoanRecordsSort, setStaffLoanRecordsSort] = useState<"name" | "status">("name")
   const [tasksSort, setTasksSort] = useState<"newest" | "oldest">("newest")
   const [tasksPage, setTasksPage] = useState(1)
   const [tasksViewMode, setTasksViewMode] = useState<"table" | "card">("table")
@@ -1096,6 +1100,7 @@ export default function LoanAppPage() {
     if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
@@ -3554,6 +3559,234 @@ export default function LoanAppPage() {
                 </div>
               ))}
               {(data?.inbox.accountsSigned || []).length === 0 && <p className="text-sm text-muted-foreground">No approved records yet.</p>}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Staff Loan Records Tab ── */}
+        <TabsContent value="staff-loan-records" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                Staff Loan Records
+              </CardTitle>
+              <CardDescription>
+                Manage all staff loan records. View approved loans, mark as completed, and track loan eligibility for future requests.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Search and filters */}
+              <div className="space-y-4 mb-6">
+                <div className="flex gap-3 items-center">
+                  <input
+                    type="text"
+                    placeholder="Search staff name or number..."
+                    value={staffLoanRecordsSearch}
+                    onChange={(e) => {
+                      setStaffLoanRecordsSearch(e.target.value)
+                      setStaffLoanRecordsPage(1)
+                    }}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  />
+                  <select
+                    value={staffLoanRecordsSort}
+                    onChange={(e) => setStaffLoanRecordsSort(e.target.value as "name" | "status")}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="name">Sort by Name</option>
+                    <option value="status">Sort by Loan Status</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Staff loan records table */}
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff Name</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff No.</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Current Loan</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Loan Amount</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Mark Completed</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Eligible for New</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      // Compile all approved loans with staff info
+                      const allLoans = data?.inbox?.allLoans || []
+                      const approvedLoans = allLoans.filter((r) => 
+                        ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "payment_completed", "approved_director"].includes(r.status)
+                      )
+
+                      // Group by staff member
+                      const staffMap = new Map<string, LoanRequest[]>()
+                      approvedLoans.forEach((loan) => {
+                        const key = loan.user_id
+                        if (!staffMap.has(key)) staffMap.set(key, [])
+                        staffMap.get(key)!.push(loan)
+                      })
+
+                      // Convert to array and filter by search
+                      let staffRecords = Array.from(staffMap.entries())
+                        .map(([staffId, loans]) => ({
+                          staffId,
+                          name: loans[0]?.staff_full_name || "Unknown",
+                          staffNo: loans[0]?.staff_number || "—",
+                          loans,
+                          currentLoan: loans.find(l => ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered"].includes(l.status)),
+                          completedLoans: loans.filter(l => l.status === "payment_completed")
+                        }))
+
+                      // Filter by search
+                      if (staffLoanRecordsSearch) {
+                        staffRecords = staffRecords.filter((r) =>
+                          r.name.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase()) ||
+                          r.staffNo.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase())
+                        )
+                      }
+
+                      // Sort
+                      if (staffLoanRecordsSort === "status") {
+                        staffRecords.sort((a, b) => {
+                          const aHasActive = a.currentLoan ? 1 : 0
+                          const bHasActive = b.currentLoan ? 1 : 0
+                          return bHasActive - aHasActive
+                        })
+                      } else {
+                        staffRecords.sort((a, b) => a.name.localeCompare(b.name))
+                      }
+
+                      // Paginate
+                      const itemsPerPage = 10
+                      const totalPages = Math.ceil(staffRecords.length / itemsPerPage)
+                      const paged = staffRecords.slice((staffLoanRecordsPage - 1) * itemsPerPage, staffLoanRecordsPage * itemsPerPage)
+
+                      if (paged.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                              {staffRecords.length === 0 ? "No staff records found" : "No results match your search"}
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                      return paged.map((record) => {
+                        const currentLoan = record.currentLoan
+                        const isCompleted = currentLoan?.status === "payment_completed"
+                        const canMarkCompleted = currentLoan && !isCompleted
+
+                        return (
+                          <tr key={record.staffId} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="px-4 py-3 font-medium text-slate-900">{record.name}</td>
+                            <td className="px-4 py-3 text-slate-600">{record.staffNo}</td>
+                            <td className="px-4 py-3">
+                              {currentLoan ? (
+                                <span className="text-slate-900 font-medium">{currentLoan.loan_type_label}</span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {currentLoan ? (
+                                <span className="text-slate-900">GHc {Number(currentLoan.fixed_amount || currentLoan.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {currentLoan ? (
+                                <Badge className={statusBadgeClass(currentLoan.status, "solid")}>
+                                  {statusText(currentLoan.status)}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400 text-xs">No Active Loan</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {canMarkCompleted && (
+                                <Button
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700 text-white text-xs"
+                                  onClick={() => openActionModal(currentLoan!, "payment_completed")}
+                                >
+                                  Mark Completed
+                                </Button>
+                              )}
+                              {isCompleted && (
+                                <Badge className="bg-green-100 text-green-800">Completed</Badge>
+                              )}
+                              {!currentLoan && (
+                                <span className="text-slate-300 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {!currentLoan || isCompleted ? (
+                                <Badge className="bg-blue-100 text-blue-800">✓ Eligible</Badge>
+                              ) : (
+                                <Badge className="bg-slate-100 text-slate-700">Not Eligible</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {(() => {
+                const allLoans = data?.inbox?.allLoans || []
+                const approvedLoans = allLoans.filter((r) => 
+                  ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "payment_completed", "approved_director"].includes(r.status)
+                )
+                const staffMap = new Map<string, LoanRequest[]>()
+                approvedLoans.forEach((loan) => {
+                  const key = loan.user_id
+                  if (!staffMap.has(key)) staffMap.set(key, [])
+                  staffMap.get(key)!.push(loan)
+                })
+                let staffRecords = Array.from(staffMap.entries()).map(([staffId, loans]) => ({
+                  staffId,
+                  name: loans[0]?.staff_full_name || "Unknown",
+                  staffNo: loans[0]?.staff_number || "—",
+                }))
+                if (staffLoanRecordsSearch) {
+                  staffRecords = staffRecords.filter((r) =>
+                    r.name.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase()) ||
+                    r.staffNo.toLowerCase().includes(staffLoanRecordsSearch.toLowerCase())
+                  )
+                }
+                const totalPages = Math.ceil(staffRecords.length / 10)
+                return totalPages > 1 ? (
+                  <div className="flex justify-between items-center mt-4">
+                    <p className="text-sm text-slate-600">Page {staffLoanRecordsPage} of {totalPages}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={staffLoanRecordsPage === 1}
+                        onClick={() => setStaffLoanRecordsPage(Math.max(1, staffLoanRecordsPage - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={staffLoanRecordsPage === totalPages}
+                        onClick={() => setStaffLoanRecordsPage(Math.min(totalPages, staffLoanRecordsPage + 1))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                ) : null
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
