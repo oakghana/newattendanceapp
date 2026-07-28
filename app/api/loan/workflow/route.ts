@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createAdminClient, createClient } from "@/lib/supabase/server"
+import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import {
   canDoAccounts,
   canDoCommittee,
@@ -188,13 +188,11 @@ async function broadcastDelayedPostLoanOfficeRequests(admin: any) {
 
 export async function GET() {
   try {
-    const supabase = await createClient()
     const admin = await createAdminClient()
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    // Use createClientAndGetUser so stale refresh tokens are cleared gracefully
+    // instead of returning a hard 401 that breaks the whole loan dashboard
+    const { user, authError } = await createClientAndGetUser()
 
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -214,19 +212,16 @@ export async function GET() {
     let staffCategory: string | null = null
     let yearsOfService: number | null = null
     let dateOfAppointment: string | null = null
-    try {
-      const { data: welfareFields } = await admin
-        .from("user_profiles")
-        .select("staff_category, years_of_service, date_of_appointment")
-        .eq("id", user.id)
-        .maybeSingle()
-      if (welfareFields) {
-        staffCategory = (welfareFields as any).staff_category ?? null
-        yearsOfService = (welfareFields as any).years_of_service ?? null
-        dateOfAppointment = (welfareFields as any).date_of_appointment ?? null
-      }
-    } catch {
-      // columns may not exist yet — silently ignore
+    const { data: welfareFields, error: welfareError } = await admin
+      .from("user_profiles")
+      .select("staff_category, years_of_service, date_of_appointment")
+      .eq("id", user.id)
+      .maybeSingle()
+    // Only skip on genuine missing-column schema errors; populate if the query succeeded
+    if (!welfareError || isSchemaIssue(welfareError)) {
+      staffCategory = (welfareFields as any)?.staff_category ?? null
+      yearsOfService = (welfareFields as any)?.years_of_service ?? null
+      dateOfAppointment = (welfareFields as any)?.date_of_appointment ?? null
     }
 
     const role = normalizeRole((profile as any).role)
