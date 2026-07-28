@@ -307,7 +307,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const [
       { data: applicantProfile },
       { data: directorProfile },
-      { data: directorSignature, error: signatureError },
+      { data: directorUserProfile },
+      { data: directorRegistrySignature, error: signatureError },
     ] = await Promise.all([
       admin
         .from("user_profiles")
@@ -321,16 +322,33 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             .eq("id", directorHrId)
             .single()
         : Promise.resolve({ data: null } as any),
+      // Check user_profiles for signature (PRIMARY source - saved via Profile > Signature)
+      directorHrId
+        ? admin
+            .from("user_profiles")
+            .select("id, signature_data_url, signature_text, signature_mode")
+            .eq("id", directorHrId)
+            .single()
+        : Promise.resolve({ data: null } as any),
+      // Check approval_signature_registry as secondary source
       directorHrId
         ? admin
             .from("approval_signature_registry")
             .select("user_id, approval_stage, signature_mode, signature_text, signature_data_url")
-            .eq("workflow_domain", "loan")
             .eq("user_id", directorHrId)
-            .eq("approval_stage", "director_hr")
+            .eq("is_active", true)
+            .order("updated_at", { ascending: false })
+            .limit(1)
             .maybeSingle()
         : Promise.resolve({ data: null } as any),
     ])
+
+    // Merge signatures: user_profiles > approval_signature_registry > loan stored columns
+    const directorSignature = (directorUserProfile as any)?.signature_data_url
+      ? directorUserProfile
+      : (directorRegistrySignature as any)?.signature_data_url || (directorRegistrySignature as any)?.signature_text
+      ? directorRegistrySignature
+      : null
 
     if (signatureError) {
       const signatureMessage = String(signatureError.message || "")
