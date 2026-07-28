@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { SecretaryMemosClient } from "./secretary-memos-client"
 
@@ -35,7 +35,7 @@ export default async function SecretaryMemosPage() {
       md_approved_by_name,
       staff_full_name,
       staff_number,
-      user_profiles!loan_requests_user_id_fkey (
+      user_profiles!user_id (
         first_name,
         last_name,
         employee_id,
@@ -59,7 +59,7 @@ export default async function SecretaryMemosPage() {
       reason,
       created_at,
       user_id,
-      user_profiles!leave_requests_user_id_fkey (
+      user_profiles!user_id (
         first_name,
         last_name,
         employee_id,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createAdminClient } from "@/lib/supabase/server"
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
       user_id,
       staff_full_name,
       staff_number,
-      user_profiles!loan_requests_user_id_fkey (
+      user_profiles!user_id (
         first_name,
         last_name,
         employee_id,
