@@ -1,3 +1,4 @@
+import { DashboardOverviewClient } from "./overview/dashboard-overview-client"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,8 +44,20 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
+  // Check user role — if MD or Secretary, render executive dashboard instead
+  const { data: roleData } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  if (roleData?.role === "managing_director" || roleData?.role === "secretary") {
+    // Render executive dashboard for MD and Secretary
+    return <DashboardOverviewClient />
+  }
+
   try {
-    // Get current date info
+    // Get current date info (staff dashboard only)
     const today = new Date()
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
     const startOfYear = new Date(today.getFullYear(), 0, 1)
