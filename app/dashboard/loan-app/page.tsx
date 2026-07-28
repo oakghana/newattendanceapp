@@ -1477,7 +1477,11 @@ export default function LoanAppPage() {
     try {
       const res = await fetch("/api/loan/workflow", { cache: "no-store" })
       const result = await res.json()
-      if (!res.ok) throw new Error(result.error || "Failed to load loan workflow")
+      
+      // Check if result is an error object (has only error/code/message) rather than valid WorkflowResponse
+      if (!res.ok || (result && typeof result === "object" && result.error && !result.inbox)) {
+        throw new Error(result?.error || "Failed to load loan workflow")
+      }
 
       const currentHodCount = Number(result?.inbox?.hod?.length || 0)
       const shouldQueueAlert = Boolean(result?.permissions?.hod || result?.permissions?.viewAllTabs)
@@ -1500,6 +1504,7 @@ export default function LoanAppPage() {
       // Don't auto-set loan type - let user select with placeholder hint
     } catch (e: any) {
       toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
+      setData(null) // Ensure data is cleared on error
     } finally {
       if (shouldShowLoader) setLoading(false)
     }
@@ -2378,6 +2383,18 @@ export default function LoanAppPage() {
       <div className="flex items-center justify-center p-16">
         <Loader2 className="h-8 w-8 animate-spin text-fuchsia-700" />
         <span className="ml-3 text-muted-foreground">Loading loan module...</span>
+      </div>
+    )
+  }
+
+  // Safety check: ensure data is valid WorkflowResponse structure, not an error object
+  if (data && typeof data === "object" && data.error && !data.inbox) {
+    return (
+      <div className="flex items-center justify-center p-16">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold text-red-600 mb-2">Module Error</h2>
+          <p className="text-sm text-muted-foreground">{(data as any).error || "Failed to load loan module"}</p>
+        </div>
       </div>
     )
   }
