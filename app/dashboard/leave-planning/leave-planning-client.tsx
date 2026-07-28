@@ -1866,15 +1866,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // ─����� Derived lists ──���─────────────────────────────────────────────────
   const myRequests: any[] = useMemo(() => {
     if (!data) return []
-    // For loan_office role, show all staff leave requests (requests) instead of myRequests
-    // For other roles, show their own requests (myRequests)
-    const requests = (isLoanOffice ? (data.requests || []) : (data.myRequests || data.requests || []))
-    
-    // Role-based visibility filtering
-    // All roles can see: requests that are theirs or for review/approval
-    // The backend already filters based on the user, so just return the data
-    return requests
-  }, [data, isLoanOffice])
+    // For loan_office role, the backend now returns mode:"loan_office" with myRequests populated
+    // with the user's own requests. Fall back to data.requests for backwards compatibility.
+    return data.myRequests || data.requests || []
+  }, [data])
 
   const hodAssignedReviews: any[] = useMemo(() => {
     if (!data) return []
@@ -2243,9 +2238,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const priorDeducted = Number(officePriorDays[requestId] || 0)
     const travelAdded = Number(officeTravelDays[requestId] || 0)
     const outstandingAdded = Number(officeOutstandingDays[requestId] || 0)
-    // Use calendar days (total days including weekends) as base, consistent with the UI breakdown
-    const baseDays = adjStart && adjEnd 
-      ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
+    // Base days = working days only (excluding weekends and public holidays) from from-date to to-date
+    const holidayDatesForCalc = holidays.map((h) => h.holiday_date)
+    const baseDays = adjStart && adjEnd
+      ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForCalc).workingDays
       : 0
     const finalDays = Math.max(0, baseDays + outstandingAdded - holidayDeducted - priorDeducted + travelAdded)
 
@@ -2393,7 +2389,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // ── Render ────��──────��──────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
-      {/* ─��� Header Banner ──────�����──────────��────────────────────────── */}
+      {/* ─��� Header Banner ──────�����──────────��──────��─────────────────── */}
       <div className="rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 text-white p-6 shadow-lg">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -3568,9 +3564,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                   const travelD = Number(officeTravelDays[req.id] || 0)
                                   const priorD = Number(officePriorDays[req.id] || 0)
                                   const outstandingD = Number(officeOutstandingDays[req.id] || 0)
+                                  // Base days = working days (excl. weekends & holidays) from from-date to to-date
+                                  const holidayDatesForRender = holidays.map((h) => h.holiday_date)
                                   const baseDays = adjStart && adjEnd
-                                    ? Math.max(0, Math.floor((new Date(adjEnd).getTime() - new Date(adjStart).getTime()) / 86400000) + 1)
-                                    : req.requested_days
+                                    ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
+                                    : Number(req.requested_days || 0)
                                   const finalDays = Math.max(0, baseDays + outstandingD - holidayD - priorD + travelD)
                                   const generatedReason = [
                                     outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
@@ -3599,6 +3597,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                           <InfoPill label="Requested Days" value={String(req.requested_days)} highlight />
                           <InfoPill label="Entitlement" value={req.entitlement_days ? `${req.entitlement_days}d` : "—"} />
                         </div>
+
+                        {/* Staff leave history — guides the HR office on prior leave taken */}
+                        <StaffHistoryPanel
+                          history={staffHistoryByUser[String(req.user?.id || "")] || []}
+                          currentRequestId={req.id}
+                        />
 
                         {/* Annual Leave Entitlement Summary — shown only for annual leave requests */}
                         {String(req.leave_type_key || "").toLowerCase() === "annual" && (
@@ -3872,22 +3876,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               </div>
                             </div>
 
-                            {/* Annual Leave Entitlement Reference Guide — Only for annual leave */}
+                            {/* Annual Leave Entitlement Quick Reference — for annual leave only */}
                             {String(req.leave_type_key || "").toLowerCase() === "annual" && (
-                              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 space-y-2">
-                                <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">Annual Leave Entitlement Reference</p>
-                                <div className="space-y-1.5 text-xs text-amber-900">
-                                  <div className="font-medium">Senior Staff:</div>
-                                  <div className="ml-2">36 days + 2 travelling days = 38 total</div>
-                                  
-                                  <div className="font-medium mt-2">Junior Staff (by years of service):</div>
-                                  <div className="ml-2 space-y-0.5">
-                                    <div>1–3 years: 24 days + 2 travelling days = 26 total</div>
-                                    <div>4–5 years: 28 days + 2 travelling days = 30 total</div>
-                                    <div>6–10 years: 32 days + 2 travelling days = 34 total</div>
-                                    <div>11+ years: 36 days + 2 travelling days = 38 total</div>
-                                  </div>
-                                </div>
+                              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+                                <p className="text-[10px] font-semibold text-amber-900 uppercase tracking-wide mb-1">Entitlement Reference <span className="font-normal normal-case text-amber-700">(for guidance only — use HR-saved values below)</span></p>
+                                <p className="text-xs text-amber-900">
+                                  <span className="font-medium">Senior:</span> 36 + 2 travel = 38 &nbsp;|&nbsp;
+                                  <span className="font-medium">Junior:</span> 1–3 yr: 26 · 4–5 yr: 30 · 6–10 yr: 34 · 11+ yr: 38
+                                </p>
                               </div>
                             )}
 

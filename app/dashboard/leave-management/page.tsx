@@ -46,7 +46,7 @@ export default async function LeaveManagementPage() {
   {
     const { data: requests } = await admin
       .from("leave_plan_requests")
-      .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, adjusted_start_date, adjusted_end_date, hod_decision")
+      .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
@@ -62,6 +62,7 @@ export default async function LeaveManagementPage() {
       adjusted_start_date: request.adjusted_start_date,
       adjusted_end_date: request.adjusted_end_date,
       hod_decision: request.hod_decision,
+      memo_token: request.memo_token || null,
     }))
   }
 
@@ -200,7 +201,8 @@ export default async function LeaveManagementPage() {
           status,
           created_at,
           hr_signature_image_url,
-          hr_approved_at
+          hr_approved_at,
+          memo_token
         `)
         // No user_id filter - get ALL approved leaves
         .order("preferred_start_date", { ascending: true })
@@ -295,6 +297,7 @@ export default async function LeaveManagementPage() {
               location_id: staffProfile.assigned_location_id || undefined,
               department: departmentName || undefined,
               department_id: staffProfile.department_id || undefined,
+              memo_token: req.memo_token || null,
             }
           })
       }

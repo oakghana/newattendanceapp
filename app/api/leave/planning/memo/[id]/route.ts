@@ -314,20 +314,47 @@ export async function GET(
     const supabase = await createClient()
     const admin = await createAdminClient()
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const params = await context.params
     const leaveId = params.id
 
     // Token-based verification (memo_token stored on the request)
     const token = request.nextUrl.searchParams.get("token") || ""
+
+    // Determine the current user. When a valid memo token is provided we allow
+    // access without an active browser session (supports new-tab downloads).
+    let user: any = null
+    const {
+      data: { user: sessionUser },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (!authError && sessionUser) {
+      user = sessionUser
+    }
+
+    // If no session but a token was supplied, validate the token against the
+    // leave request before proceeding so we can serve the PDF unauthenticated.
+    if (!user && token) {
+      const { data: tokenCheck } = await admin
+        .from("leave_plan_requests")
+        .select("user_id, memo_token, status")
+        .eq("id", leaveId)
+        .single()
+
+      if (!tokenCheck) {
+        return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
+      }
+      const storedToken = String((tokenCheck as any).memo_token || "")
+      if (!storedToken || token !== storedToken) {
+        return NextResponse.json({ error: "Invalid or expired memo token." }, { status: 401 })
+      }
+      // Use a synthetic user object that identifies the applicant
+      user = { id: (tokenCheck as any).user_id }
+    }
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     const [{ data: currentProfile }, { data: leaveRequest, error: leaveError }] = await Promise.all([
       admin
@@ -396,11 +423,12 @@ export async function GET(
       console.warn("[v0] Failed to parse payment memo_body:", parseErr)
     }
 
-    // Access control: applicant, HR approver, HR leave office, HOD, admin
+    // Access control: applicant, HR approver, HR leave office, HOD, admin, loan_office
     const isApplicant = (leaveRequest as any).user_id === user.id
     const canAccess =
       isApplicant ||
       role === "admin" ||
+      role === "loan_office" ||
       isHrApproverRole(role, deptName, deptCode) ||
       isHrLeaveOfficeRole(role) ||
       isManagerRole(role) ||
@@ -412,16 +440,15 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Verify token if provided
+    // Verify token if provided (already pre-validated above when no session exists)
     if (token) {
       const storedToken = String((leaveRequest as any).memo_token || "")
       if (!storedToken || token !== storedToken) {
         return NextResponse.json({ error: "Invalid or expired memo token." }, { status: 401 })
       }
     } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin") {
-      // No token provided — allow the applicant to download their own memo, or HOD/manager.
-      // For other users without a token, reject.
-      if (!isApplicant && !isManagerRole(role)) {
+      // No token provided — allow the applicant or loan_office to download their own memo, or HOD/manager.
+      if (!isApplicant && role !== "loan_office" && !isManagerRole(role)) {
         return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
       }
     }

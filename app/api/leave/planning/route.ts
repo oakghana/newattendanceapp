@@ -754,6 +754,10 @@ export async function GET(request: NextRequest) {
 
       const analytics = await fetchHrOfficeAnalytics(admin)
 
+      // Fetch staff leave history so HR office can review prior leave taken
+      const requestUserIds = Array.from(new Set((requests || []).map((r: any) => String(r.user_id || r.user?.id || "")).filter(Boolean)))
+      const staffHistoryByUser = await fetchStaffLeaveHistory(admin, requestUserIds)
+
       // Fetch outstanding leave balances for all staff with pending requests
       // Get current and previous leave year periods
       const { data: policyData } = await admin
@@ -797,6 +801,27 @@ export async function GET(request: NextRequest) {
         myRequests: myRequests || [],
         analytics,
         outstandingLeaveMap: Object.fromEntries(outstandingLeaveMap),
+        staffHistoryByUser,
+      })
+    }
+
+    // ── Loan Office role: sees and manages their own leave requests ─────────────
+    if (role === "loan_office") {
+      const { data: myReqs, error: myReqsErr } = await admin
+        .from("leave_plan_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+
+      if (myReqsErr) {
+        if (isSchemaIssue(myReqsErr)) return buildDegradedModeResponse("loan_office", getSchemaIssueMessage(myReqsErr))
+        throw myReqsErr
+      }
+
+      return NextResponse.json({
+        mode: "loan_office",
+        myRequests: myReqs || [],
+        requests: myReqs || [],
       })
     }
 
