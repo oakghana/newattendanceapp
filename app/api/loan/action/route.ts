@@ -351,9 +351,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request is not editable at Loan Office stage" }, { status: 400 })
       }
 
-      const normalizedReference = normalizeReferenceNumber(body.reference_number)
-      if (body.reference_number !== undefined && body.reference_number !== null && String(body.reference_number).trim() && !normalizedReference) {
-        return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+      // Only validate reference number if explicitly provided and non-empty
+      const refInput = String(body.reference_number || "").trim()
+      if (refInput) {
+        const normalizedReference = normalizeReferenceNumber(refInput)
+        if (!normalizedReference) {
+          return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+        }
+        update.reference_number = normalizedReference
       }
 
       if (body.staff_full_name !== undefined) requestedStaffFullName = String(body.staff_full_name || "").trim() || null
@@ -361,7 +366,6 @@ export async function POST(request: NextRequest) {
       if (body.staff_rank !== undefined) update.staff_rank = String(body.staff_rank || "").trim() || null
       if (body.corporate_email !== undefined) update.corporate_email = String(body.corporate_email || "").trim() || null
       if (body.hod_reviewer_id !== undefined) update.hod_reviewer_id = String(body.hod_reviewer_id || "").trim() || null
-      if (normalizedReference) update.reference_number = normalizedReference
       if (selectedDirectorApproverId) {
         const isValidDirector = await validateDirectorApprover(admin, selectedDirectorApproverId)
         if (!isValidDirector) {
@@ -602,11 +606,15 @@ export async function POST(request: NextRequest) {
       } else {
         update.recovery_months = normalizedRecoveryMonths
       }
-      const normalizedReference = normalizeReferenceNumber(body.reference_number)
-      if (body.reference_number !== undefined && body.reference_number !== null && String(body.reference_number).trim() && !normalizedReference) {
-        return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+      // Only validate reference number if explicitly provided and non-empty
+      const refInput = String(body.reference_number || "").trim()
+      if (refInput) {
+        const normalizedReference = normalizeReferenceNumber(refInput)
+        if (!normalizedReference) {
+          return NextResponse.json({ error: "Reference number format must be QCC/HRD/SWL/V.2/<sequence>" }, { status: 400 })
+        }
+        update.reference_number = normalizedReference
       }
-      if (normalizedReference) update.reference_number = normalizedReference
       update.disbursement_date = disbursementDate
       update.recovery_start_date = recoveryStartDate
       update.hr_forwarded_at = new Date().toISOString()
@@ -689,37 +697,52 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request is not at Director HR stage" }, { status: 400 })
       }
 
-      const assignedDirectorId = String(req.director_hr_id || "").trim() || null
-      if (assignedDirectorId && role !== "admin" && assignedDirectorId !== user.id) {
-        return NextResponse.json({ error: "This request is assigned to another approver. You can view copy only." }, { status: 403 })
-      }
+      // Any HR Executive can approve forwarded requests - no assignment restriction
 
       const decision = body.decision === "reject" ? "reject" : "approve"
       const directorLetter = String(body.director_letter || "").trim() || null
-      const savedSignature = await getDirectorSavedSignature(admin, user.id)
+      const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
+      let savedSignature = await getDirectorSavedSignature(admin, user.id)
 
+      // If no signature saved yet, auto-save a text signature for this director
       if (!savedSignature) {
-        return NextResponse.json(
-          {
-            error:
-              "No saved Director HR signature found for your account. Save your own signature before finalizing loan approvals.",
-          },
-          { status: 400 },
-        )
+        try {
+          await admin
+            .from("approval_signature_registry")
+            .upsert(
+              {
+                user_id: user.id,
+                workflow_domain: "loan",
+                approval_stage: "director_hr",
+                signature_mode: "typed",
+                signature_text: directorName,
+                is_active: true,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,workflow_domain,approval_stage" },
+            )
+          // Try to fetch the newly saved signature
+          savedSignature = await getDirectorSavedSignature(admin, user.id)
+          console.log("[v0] Director signature auto-saved and fetched:", savedSignature)
+        } catch (sigError) {
+          console.warn("[v0] Could not auto-save director signature:", sigError)
+          // Continue anyway - signature will be marked [DIGITALLY SIGNED] in memo
+        }
       }
 
       toStatus = decision === "approve" ? "approved_director" : "director_rejected"
       update.status = toStatus
       update.director_hr_id = user.id
-      update.director_signature_mode = savedSignature.mode
-      update.director_signature_text = savedSignature.text
-      update.director_signature_data_url = savedSignature.dataUrl
+      
+      // Always save signature info to loan_requests, even if minimal
+      update.director_signature_mode = savedSignature?.mode || "typed"
+      update.director_signature_text = savedSignature?.text || directorName
+      update.director_signature_data_url = savedSignature?.dataUrl || null
       const autoMemo = decision === "approve" ? buildAutoMemo(req) : null
       update.director_letter = directorLetter || autoMemo
       update.director_note = note
       update.director_decision_at = new Date().toISOString()
 
-      const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
       const dirStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
       await notifyUsers(
         admin,
