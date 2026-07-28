@@ -181,10 +181,8 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
     ? Number(lr.hr_approved_days)
     : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
 
-  // Set effective dates for use throughout memo generation
-  const effectiveStart = finalStartDate
-  const effectiveEnd = finalEndDate
-  const effectiveDays = baseLeaveDays
+  // Note: effectiveStart, effectiveEnd, effectiveDays are parameters passed to buildBuiltinBody()
+  // They're already set by the caller with finalStartDate, finalEndDate, and baseLeaveDays
 
   const adjustmentParagraph = lr.adjustment_reason
     ? `Adjustment Details: ${String(lr.adjustment_reason).trim()}`
