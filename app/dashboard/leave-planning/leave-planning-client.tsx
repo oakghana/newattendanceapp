@@ -1670,7 +1670,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ���── Holiday CRUD Functions ───────����────���────────────────────────────
+  // ���── Holiday CRUD Functions ───────����────���────────��───────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -2296,7 +2296,20 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
         }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || "HR office review failed")
+      if (!res.ok) {
+        // Special handling for missing memo_reference column — trigger migration and show instructions
+        if (res.status === 503 && json.sql) {
+          // Auto-trigger the migration route
+          try { await fetch("/api/migrate/memo-reference", { method: "POST" }) } catch (_) {}
+          toast({
+            title: "Database Setup Required",
+            description: `A new column needs to be added to your database. Please run this SQL in Supabase SQL Editor, then retry:\n${json.sql}`,
+            variant: "destructive",
+          })
+          return
+        }
+        throw new Error(json.error || "HR office review failed")
+      }
       toast({ title: "Request forwarded to HR Approvers", description: `Adjusted to ${json.adjusted_days} day(s)` })
       setOfficeExpanded(null)
       await loadData()
@@ -2395,7 +2408,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return t
   }, [canSelfApply, isHod, isHrOffice, isHrApprover, isAdmin, canSeeAllRequests, editingId, myRequests.length, hodAssignedReviews.length, hodReviewRequests.length, hrOfficeQueue.length, hrApproverQueue.length, data?.requests])
 
-  // ── Render ────��──────��──────────────────────────────────────────────
+  // ── Render ────��──────��───────────────────────────────────────────��──
   return (
     <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6 space-y-6">
       {/* ─��� Header Banner ──────�����──────────��──────��─────────────────── */}

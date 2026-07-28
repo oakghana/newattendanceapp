@@ -201,6 +201,26 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error("[hr-office] update error:", updateError)
+      // Handle missing column gracefully — trigger the migration automatically
+      const errMsg = String(updateError.message || "")
+      if (errMsg.includes("memo_reference") && (errMsg.includes("schema cache") || errMsg.includes("Could not find"))) {
+        // Attempt auto-migration
+        try {
+          const origin = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+          await fetch(`${origin}/api/migrate/memo-reference`, { method: "POST" })
+        } catch (_) {}
+        return NextResponse.json(
+          {
+            error:
+              "A required database column (memo_reference) is missing. The system has triggered an automatic migration. " +
+              "Please run this SQL in your Supabase SQL Editor, then retry: " +
+              "ALTER TABLE public.leave_plan_requests ADD COLUMN IF NOT EXISTS memo_reference TEXT;",
+            sql: "ALTER TABLE public.leave_plan_requests ADD COLUMN IF NOT EXISTS memo_reference TEXT;",
+            retryable: true,
+          },
+          { status: 503 },
+        )
+      }
       throw updateError
     }
 
