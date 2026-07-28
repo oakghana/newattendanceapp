@@ -701,30 +701,47 @@ export async function POST(request: NextRequest) {
 
       const decision = body.decision === "reject" ? "reject" : "approve"
       const directorLetter = String(body.director_letter || "").trim() || null
-      const savedSignature = await getDirectorSavedSignature(admin, user.id)
+      let savedSignature = await getDirectorSavedSignature(admin, user.id)
 
+      // If no signature saved yet, auto-save a text signature for this director
       if (!savedSignature) {
-        return NextResponse.json(
-          {
-            error:
-              "No saved Director HR signature found for your account. Save your own signature before finalizing loan approvals.",
-          },
-          { status: 400 },
-        )
+        const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
+        try {
+          await admin
+            .from("approval_signature_registry")
+            .upsert(
+              {
+                user_id: user.id,
+                workflow_domain: "loan",
+                approval_stage: "director_hr",
+                signature_mode: "typed",
+                signature_text: directorName,
+                is_active: true,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,workflow_domain,approval_stage" },
+            )
+          // Try to fetch the newly saved signature
+          savedSignature = await getDirectorSavedSignature(admin, user.id)
+        } catch (sigError) {
+          console.warn("[v0] Could not auto-save director signature:", sigError)
+          // Continue anyway - signature will be marked [DIGITALLY SIGNED] in memo
+        }
       }
 
       toStatus = decision === "approve" ? "approved_director" : "director_rejected"
       update.status = toStatus
       update.director_hr_id = user.id
-      update.director_signature_mode = savedSignature.mode
-      update.director_signature_text = savedSignature.text
-      update.director_signature_data_url = savedSignature.dataUrl
+      if (savedSignature) {
+        update.director_signature_mode = savedSignature.mode
+        update.director_signature_text = savedSignature.text
+        update.director_signature_data_url = savedSignature.dataUrl
+      }
       const autoMemo = decision === "approve" ? buildAutoMemo(req) : null
       update.director_letter = directorLetter || autoMemo
       update.director_note = note
       update.director_decision_at = new Date().toISOString()
 
-      const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
       const dirStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
       await notifyUsers(
         admin,

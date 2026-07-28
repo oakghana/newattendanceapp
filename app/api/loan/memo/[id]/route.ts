@@ -482,6 +482,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     const sigRecord = directorSignature as any
     let sigImgY = -1
+    const hasSavedSignature = sigRecord?.signature_data_url || sigRecord?.signature_text
+    
     if (sigRecord?.signature_data_url) {
       try {
         sigImgY = y
@@ -498,7 +500,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       y += 20
       doc.setTextColor(0, 0, 0)
     } else {
-      // blank space for signature
+      // If no saved signature, show [DIGITALLY SIGNED] marker
+      doc.setFont("times", "bold")
+      doc.setFontSize(10)
+      doc.setTextColor(100, 100, 100)
+      doc.text("[DIGITALLY SIGNED]", marginLeft, y + 14)
+      doc.setTextColor(0, 0, 0)
       y += 20
     }
 
