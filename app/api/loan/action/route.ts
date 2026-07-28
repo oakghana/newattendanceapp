@@ -701,11 +701,11 @@ export async function POST(request: NextRequest) {
 
       const decision = body.decision === "reject" ? "reject" : "approve"
       const directorLetter = String(body.director_letter || "").trim() || null
+      const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
       let savedSignature = await getDirectorSavedSignature(admin, user.id)
 
       // If no signature saved yet, auto-save a text signature for this director
       if (!savedSignature) {
-        const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
         try {
           await admin
             .from("approval_signature_registry")
@@ -723,6 +723,7 @@ export async function POST(request: NextRequest) {
             )
           // Try to fetch the newly saved signature
           savedSignature = await getDirectorSavedSignature(admin, user.id)
+          console.log("[v0] Director signature auto-saved and fetched:", savedSignature)
         } catch (sigError) {
           console.warn("[v0] Could not auto-save director signature:", sigError)
           // Continue anyway - signature will be marked [DIGITALLY SIGNED] in memo
@@ -732,11 +733,11 @@ export async function POST(request: NextRequest) {
       toStatus = decision === "approve" ? "approved_director" : "director_rejected"
       update.status = toStatus
       update.director_hr_id = user.id
-      if (savedSignature) {
-        update.director_signature_mode = savedSignature.mode
-        update.director_signature_text = savedSignature.text
-        update.director_signature_data_url = savedSignature.dataUrl
-      }
+      
+      // Always save signature info to loan_requests, even if minimal
+      update.director_signature_mode = savedSignature?.mode || "typed"
+      update.director_signature_text = savedSignature?.text || directorName
+      update.director_signature_data_url = savedSignature?.dataUrl || null
       const autoMemo = decision === "approve" ? buildAutoMemo(req) : null
       update.director_letter = directorLetter || autoMemo
       update.director_note = note
