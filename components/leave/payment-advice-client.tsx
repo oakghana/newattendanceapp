@@ -2102,37 +2102,11 @@ We count on your co-operation.`,
                 ))}
               </div>
 
-              {/* Payment Advice Reference Numbers - Smart Entry */}
-              <Card className="bg-blue-50 border-2 border-blue-200">
+              {/* Payment Advice Reference Numbers - Manual Entry Only */}
+              <Card className="bg-slate-50 border-2 border-slate-200">
                 <CardHeader>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-lg">Payment Advice Reference Numbers</CardTitle>
-                      <CardDescription>Set reference numbers for each staff category - these appear on payment advice memos</CardDescription>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const staffByRef: Record<string, string> = {}
-                        staffList.forEach((staff) => {
-                          const category = staff.staff_category || "Junior"
-                          const refFromMemo = staff.memo_reference || ""
-                          if (refFromMemo && !staffByRef[category]) {
-                            staffByRef[category] = refFromMemo
-                          }
-                        })
-                        if (Object.keys(staffByRef).length > 0) {
-                          setReferenceNumbers((prev) => ({ ...prev, ...staffByRef }))
-                          toast({ title: "✓ Auto-Populated", description: "Reference numbers from memos loaded successfully." })
-                        } else {
-                          toast({ title: "Info", description: "No memo reference numbers found to populate.", variant: "default" })
-                        }
-                      }}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors whitespace-nowrap"
-                    >
-                      📋 Load from Memos
-                    </button>
-                  </div>
+                  <CardTitle className="text-lg">Payment Advice Reference Numbers</CardTitle>
+                  <CardDescription>Enter reference numbers for each staff category - these will appear on payment advice memos</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2141,57 +2115,31 @@ We count on your co-operation.`,
                       if (count === 0) return null
                       
                       const currentRef = referenceNumbers[category] || ""
-                      const isPopulated = currentRef.trim().length > 0
+                      const isFilled = currentRef.trim().length > 0
                       
                       return (
                         <div key={category} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="font-semibold text-gray-800">
-                              {category} Staff
-                              <span className="text-sm font-normal text-gray-600 ml-1">({count})</span>
-                            </Label>
-                            {isPopulated && <span className="text-green-600 text-sm">✓</span>}
-                          </div>
-                          <div className="relative">
-                            <Input
-                              id={`payref-${category}`}
-                              type="text"
-                              placeholder={`e.g., QCC/HRD/PA/2026/07`}
-                              value={currentRef}
-                              onChange={(e) =>
-                                setReferenceNumbers((prev) => ({
-                                  ...prev,
-                                  [category]: e.target.value,
-                                }))
-                              }
-                              className={`text-sm font-mono ${isPopulated ? "border-green-400 bg-green-50" : "border-gray-300"}`}
-                            />
-                            {isPopulated && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setReferenceNumbers((prev) => ({
-                                    ...prev,
-                                    [category]: "",
-                                  }))
-                                }
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 text-sm"
-                                title="Clear"
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                          {isPopulated && (
-                            <p className="text-xs text-gray-600">Reference: {currentRef}</p>
-                          )}
+                          <Label className="font-semibold text-gray-800">
+                            {category} Staff
+                            <span className="text-sm font-normal text-gray-600 ml-1">({count})</span>
+                          </Label>
+                          <Input
+                            id={`payref-${category}`}
+                            type="text"
+                            placeholder={`e.g., QCC/HRD/PA/2026/07`}
+                            value={currentRef}
+                            onChange={(e) =>
+                              setReferenceNumbers((prev) => ({
+                                ...prev,
+                                [category]: e.target.value,
+                              }))
+                            }
+                            className={`text-sm font-mono ${isFilled ? "border-green-400 bg-green-50" : "border-gray-300"}`}
+                          />
                         </div>
                       )
                     })}
                   </div>
-                  <p className="text-xs text-gray-600 mt-4 p-3 bg-white rounded border border-gray-200">
-                    💡 <strong>Tip:</strong> Click "Load from Memos" to automatically populate reference numbers from approved leave memos. You can also manually enter or edit each reference number.
-                  </p>
                 </CardContent>
               </Card>
 
