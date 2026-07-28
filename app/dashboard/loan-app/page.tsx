@@ -4060,19 +4060,62 @@ export default function LoanAppPage() {
             </Card>
           )}
           <Card>
-            <CardHeader>
-              <CardTitle>All Loan Requests</CardTitle>
-              <CardDescription>Full cross-organization visibility for admin, HR loan office, and Director HR.</CardDescription>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold text-slate-900">All Loan Requests</CardTitle>
+                  <CardDescription className="text-slate-500">Full cross-organization visibility for admin, HR loan office, and Director HR.</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredAllLoans, "all-loan-requests.csv")} className="shrink-0">
+                  <Download className="h-4 w-4 mr-1" /> Export
+                </Button>
+              </div>
+
+              {/* Summary stats bar */}
+              {(() => {
+                const allRows = data?.inbox?.allLoans || []
+                const totalAmt = allRows.reduce((s: number, r: any) => s + Number(r.fixed_amount || r.requested_amount || 0), 0)
+                const approved = allRows.filter((r: any) => r.status === "approved_director").length
+                const pending = allRows.filter((r: any) => !["approved_director","director_rejected","rejected_fd"].includes(r.status)).length
+                const rejected = allRows.filter((r: any) => ["director_rejected","rejected_fd"].includes(r.status)).length
+                const signed = allRows.filter((r: any) => r.status === "approved_director" && (r.director_hr_name || r.director_signature_text)).length
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+                      <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Value</div>
+                      <div className="text-lg font-bold text-slate-900 mt-0.5">GHc {fmtAmount(totalAmt)}</div>
+                      <div className="text-xs text-slate-500">{allRows.length} request{allRows.length !== 1 ? "s" : ""}</div>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+                      <div className="text-xs font-medium text-emerald-600 uppercase tracking-wide">Approved</div>
+                      <div className="text-lg font-bold text-emerald-700 mt-0.5">{approved}</div>
+                      <div className="text-xs text-emerald-600">{signed} with signed memo</div>
+                    </div>
+                    <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                      <div className="text-xs font-medium text-amber-600 uppercase tracking-wide">In Progress</div>
+                      <div className="text-lg font-bold text-amber-700 mt-0.5">{pending}</div>
+                      <div className="text-xs text-amber-600">awaiting action</div>
+                    </div>
+                    <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+                      <div className="text-xs font-medium text-red-500 uppercase tracking-wide">Rejected</div>
+                      <div className="text-lg font-bold text-red-600 mt-0.5">{rejected}</div>
+                      <div className="text-xs text-red-500">not approved</div>
+                    </div>
+                  </div>
+                )
+              })()}
             </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
+            <CardContent className="space-y-3 pt-2">
+              {/* Filters row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-center bg-slate-50 rounded-lg p-3 border">
                 <Input
                   value={allSearch}
                   onChange={(e) => setAllSearch(e.target.value)}
-                  placeholder="Search by request/staff/rank/location"
+                  placeholder="Search by request / staff / rank..."
+                  className="bg-white"
                 />
                 <Select value={allStatus} onValueChange={setAllStatus}>
-                  <SelectTrigger><SelectValue placeholder="Filter status" /></SelectTrigger>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All statuses" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All statuses</SelectItem>
                     {Object.keys(STATUS_LABELS).map((status) => (
@@ -4081,35 +4124,29 @@ export default function LoanAppPage() {
                   </SelectContent>
                 </Select>
                 <Select value={allSort} onValueChange={(v: "newest" | "oldest") => setAllSort(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="newest">Newest first</SelectItem>
                     <SelectItem value="oldest">Oldest first</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={allLocation} onValueChange={setAllLocation}>
-                  <SelectTrigger><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All locations" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All locations</SelectItem>
                     {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={allDept} onValueChange={setAllDept}>
-                  <SelectTrigger><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All departments" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All departments</SelectItem>
                     {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <div className="text-xs text-muted-foreground flex items-center md:justify-end">
-                  Showing {pagedAllLoans.length} of {filteredAllLoans.length}
-                </div>
               </div>
-
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={() => downloadCsv(filteredAllLoans, "all-loan-requests.csv")}>
-                  <Download className="h-4 w-4 mr-1" /> Export All Loans
-                </Button>
+              <div className="text-xs text-muted-foreground text-right">
+                Showing {pagedAllLoans.length} of {filteredAllLoans.length} results
               </div>
 
               {pagedAllLoans.map((row) => (
@@ -4123,7 +4160,7 @@ export default function LoanAppPage() {
                       <Button variant="destructive" size="sm" onClick={() => void deleteLoanRequestById(row.id)}>Delete</Button>
                     </div>
                   )}
-                  
+
                   {/* Header: Request Number & Status Badge */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
@@ -4132,13 +4169,44 @@ export default function LoanAppPage() {
                     </div>
                     <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
                       row.status === "approved_director" ? "bg-emerald-100 text-emerald-700" :
-                      row.status === "director_rejected" ? "bg-red-100 text-red-700" :
-                      row.status === "rejected_fd" ? "bg-red-100 text-red-700" :
-                      "bg-slate-100 text-slate-700"
+                      ["director_rejected","rejected_fd"].includes(row.status) ? "bg-red-100 text-red-700" :
+                      "bg-amber-100 text-amber-700"
                     }`}>
                       {statusText(row.status)}
                     </div>
                   </div>
+
+                  {/* Approval pipeline progress */}
+                  {(() => {
+                    const steps = [
+                      { label: "HOD", statuses: ["submitted","hod_review","hod_approved","sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "Loan Office", statuses: ["sent_to_loan_office","loan_office_review","loan_approved","sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "FD", statuses: ["sent_to_accounts","accounts_review","accounts_approved","sent_to_committee","committee_approved","sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director","director_rejected"] },
+                      { label: "HR Office", statuses: ["sent_to_hr","hr_office_review","hr_office_approved","awaiting_director_hr","approved_director"] },
+                      { label: "Director", statuses: ["awaiting_director_hr","approved_director"] },
+                    ]
+                    const isRejected = ["director_rejected","rejected_fd","hod_rejected","loan_office_rejected","committee_rejected"].includes(row.status)
+                    return (
+                      <div className="flex items-center gap-1 mb-3">
+                        {steps.map((step, i) => {
+                          const done = step.statuses.includes(row.status)
+                          const isFinal = row.status === "approved_director" && i === steps.length - 1
+                          return (
+                            <div key={step.label} className="flex items-center flex-1">
+                              <div className={`h-1.5 flex-1 rounded-full transition-colors ${
+                                isRejected && i === 0 ? "bg-red-400" :
+                                isFinal ? "bg-emerald-500" :
+                                done ? "bg-violet-500" : "bg-slate-200"
+                              }`} />
+                              <div className={`text-[10px] whitespace-nowrap px-1 font-medium ${
+                                done && !isRejected ? "text-violet-700" : isRejected ? "text-red-400" : "text-slate-400"
+                              }`}>{step.label}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
 
                   {/* Staff Information */}
                   <div className="space-y-2 mb-3 pb-3 border-b">
