@@ -2724,6 +2724,27 @@ export default function LoanAppPage() {
                       </div>
                     )}
 
+                    {/* Supporting Document */}
+                    {req.supporting_document_url && (
+                      <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">📎</span>
+                          <div>
+                            <p className="text-sm font-semibold text-blue-900">Supporting Document</p>
+                            <p className="text-xs text-blue-700">View your attached supporting document</p>
+                          </div>
+                        </div>
+                        <a
+                          href={req.supporting_document_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+                        >
+                          <Download className="h-4 w-4" /> Download
+                        </a>
+                      </div>
+                    )}
+
                     {/* Download memo for approved loans */}
                     {isApproved && (
                       <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -3072,6 +3093,7 @@ export default function LoanAppPage() {
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
                       {canSeeFdReviewerName && <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>}
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Submitted</th>
                       {p?.loanOffice && <th className="px-4 py-2.5 whitespace-nowrap">Action</th>}
                     </tr>
@@ -3201,6 +3223,7 @@ export default function LoanAppPage() {
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Score</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">FD Reviewer</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                      <th className="px-4 py-2.5 whitespace-nowrap">Attachment</th>
                       {p?.hrOffice && <th className="px-4 py-2.5 whitespace-nowrap">Action</th>}
                     </tr>
                   </thead>
@@ -3227,6 +3250,14 @@ export default function LoanAppPage() {
                             {statusText(row.status)}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.supporting_document_url ? (
+                            <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">Download</a>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap text-slate-500">{fmtDate(row.submitted_at || row.created_at)}</td>
                         {p?.hrOffice && (
                           <td className="px-4 py-3 whitespace-nowrap">
                             <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "hr_terms")}>
@@ -3715,6 +3746,7 @@ export default function LoanAppPage() {
                       <TableHead className="whitespace-nowrap">FD Score</TableHead>
                       <TableHead className="whitespace-nowrap">FD Reviewer</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Attachment</TableHead>
                       <TableHead className="whitespace-nowrap">Submitted</TableHead>
                       {p?.committee && <TableHead className="whitespace-nowrap">Action</TableHead>}
                     </TableRow>
@@ -3731,6 +3763,13 @@ export default function LoanAppPage() {
                         <TableCell className="text-xs whitespace-nowrap">{row.fd_score ?? "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.accounts_reviewer_name || "—"}</TableCell>
                         <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {row.supporting_document_url ? (
+                            <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">Download</a>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString("en-GB") : "—"}</TableCell>
                         {p?.committee && (
                           <TableCell>
