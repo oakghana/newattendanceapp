@@ -3616,11 +3616,36 @@ export default function LoanAppPage() {
                   </thead>
                   <tbody>
                     {(() => {
-                      // Compile all approved loans with staff info
-                      const allLoans = data?.inbox?.allLoans || []
-                      const approvedLoans = allLoans.filter((r) => 
-                        ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "payment_completed", "approved_director"].includes(r.status)
-                      )
+                      // Compile all loans from all sources (not just allLoans, as staff may be viewing their own loans too)
+                      const allSourceLoans = [
+                        ...(data?.inbox?.allLoans || []),
+                        ...(data?.inbox?.loanOffice || []),
+                        ...(data?.inbox?.accounts || []),
+                        ...(data?.inbox?.accountsSigned || []),
+                        ...(data?.inbox?.hrOffice || []),
+                        ...(data?.inbox?.directorHr || []),
+                        ...(data?.myTasks || []),
+                      ]
+
+                      // Remove duplicates by id
+                      const uniqueLoansMap = new Map<string, LoanRequest>()
+                      allSourceLoans.forEach((loan) => {
+                        if (!uniqueLoansMap.has(loan.id)) {
+                          uniqueLoansMap.set(loan.id, loan)
+                        }
+                      })
+                      const allLoans = Array.from(uniqueLoansMap.values())
+
+                      // Get all approved or active loans (any status that means the loan is active)
+                      const approvedLoans = allLoans.filter((r) => {
+                        // Include loans that have been approved by director or are in workflow
+                        const activeStatuses = [
+                          "hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee",
+                          "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                          "payment_completed", "awaiting_committee"
+                        ]
+                        return activeStatuses.includes(r.status)
+                      })
 
                       // Group by staff member
                       const staffMap = new Map<string, LoanRequest[]>()
@@ -3637,7 +3662,11 @@ export default function LoanAppPage() {
                           name: loans[0]?.staff_full_name || "Unknown",
                           staffNo: loans[0]?.staff_number || "—",
                           loans,
-                          currentLoan: loans.find(l => ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered"].includes(l.status)),
+                          // Current loan = any approved or in-progress loan (not rejected)
+                          currentLoan: loans.find(l => {
+                            const activeStatuses = ["hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"]
+                            return activeStatuses.includes(l.status)
+                          }),
                           completedLoans: loans.filter(l => l.status === "payment_completed")
                         }))
 
@@ -3741,16 +3770,40 @@ export default function LoanAppPage() {
 
               {/* Pagination */}
               {(() => {
-                const allLoans = data?.inbox?.allLoans || []
-                const approvedLoans = allLoans.filter((r) => 
-                  ["awaiting_hr_terms", "awaiting_committee", "staff_receiving_funds", "partially_recovered", "payment_completed", "approved_director"].includes(r.status)
-                )
+                // Recalculate total pages using same logic as table
+                const allSourceLoans = [
+                  ...(data?.inbox?.allLoans || []),
+                  ...(data?.inbox?.loanOffice || []),
+                  ...(data?.inbox?.accounts || []),
+                  ...(data?.inbox?.accountsSigned || []),
+                  ...(data?.inbox?.hrOffice || []),
+                  ...(data?.inbox?.directorHr || []),
+                  ...(data?.myTasks || []),
+                ]
+                const uniqueLoansMap = new Map<string, LoanRequest>()
+                allSourceLoans.forEach((loan) => {
+                  if (!uniqueLoansMap.has(loan.id)) {
+                    uniqueLoansMap.set(loan.id, loan)
+                  }
+                })
+                const allLoans = Array.from(uniqueLoansMap.values())
+                
+                const approvedLoans = allLoans.filter((r) => {
+                  const activeStatuses = [
+                    "hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee",
+                    "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
+                    "payment_completed", "awaiting_committee"
+                  ]
+                  return activeStatuses.includes(r.status)
+                })
+
                 const staffMap = new Map<string, LoanRequest[]>()
                 approvedLoans.forEach((loan) => {
                   const key = loan.user_id
                   if (!staffMap.has(key)) staffMap.set(key, [])
                   staffMap.get(key)!.push(loan)
                 })
+
                 let staffRecords = Array.from(staffMap.entries()).map(([staffId, loans]) => ({
                   staffId,
                   name: loans[0]?.staff_full_name || "Unknown",
@@ -3786,7 +3839,7 @@ export default function LoanAppPage() {
                     </div>
                   </div>
                 ) : null
-              })()}
+              })()} 
             </CardContent>
           </Card>
         </TabsContent>
