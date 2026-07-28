@@ -472,6 +472,9 @@ export async function POST(request: NextRequest) {
       update.fd_note = note
       update.fd_checked_at = new Date().toISOString()
       update.fd_good = fdGood
+      // Save the FD proof document URL if provided so staff/HR can view it
+      const fdDocumentUrl = String(body.fd_document_url || "").trim() || null
+      if (fdDocumentUrl) update.fd_document_url = fdDocumentUrl
 
       if (!fdGood) {
         if (shouldForwardToHrOffice) {

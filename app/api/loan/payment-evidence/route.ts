@@ -1,34 +1,26 @@
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const admin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-})
+// Roles permitted to submit payment evidence
+const ALLOWED_ROLES = ["admin", "accounts", "loan_office", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "it-admin"]
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization") || ""
-    const token = authHeader.replace("Bearer ", "")
-
-    const {
-      data: { user },
-    } = await admin.auth.getUser(token)
+    const admin = await createAdminClient()
+    const { user } = await createClientAndGetUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    // Check user role
-    const { data: roleData } = await admin
-      .from("user_roles")
+    // Check user role from user_profiles (not user_roles)
+    const { data: profileData } = await admin
+      .from("user_profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("id", user.id)
       .single()
 
-    const role = roleData?.role
-    if (!role || !["hr", "accounts", "admin"].includes(role)) {
+    const role = profileData?.role
+    if (!role || !ALLOWED_ROLES.includes(role)) {
       return NextResponse.json(
-        { error: "Only HR/Accounts staff can submit payment evidence" },
+        { error: "Only Accounts/HR staff can submit payment evidence" },
         { status: 403 }
       )
     }
@@ -108,27 +100,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create payment evidence" }, { status: 500 })
     }
 
-    // Get HR Executive staff to notify
-    const { data: hrExecutives } = await admin
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "hr_executive")
+    // Notify HR directors/executives about the new payment evidence
+    const { data: hrDirectors } = await admin
+      .from("user_profiles")
+      .select("id")
+      .in("role", ["director_hr", "manager_hr", "admin"])
+      .eq("is_active", true)
       .limit(10)
 
-    // Create notification for HR Executives (basic - can be enhanced with actual notification service)
-    if (hrExecutives && hrExecutives.length > 0) {
-      const notificationData = hrExecutives.map((hr) => ({
-        user_id: hr.user_id,
-        type: "payment_evidence_pending_approval",
-        title: "New Payment Evidence Requires Approval",
-        message: `Payment evidence submitted for loan - Amount: GHc ${paymentAmount}`,
-        related_id: evidenceData.id,
-        is_read: false,
-      }))
-
-      await admin.from("notifications").insert(notificationData).catch(() => {
-        // Notifications table might not exist, silently fail
-      })
+    if (hrDirectors && hrDirectors.length > 0) {
+      await admin.from("staff_notifications").insert(
+        hrDirectors.map((hr) => ({
+          recipient_id: hr.id,
+          type: "payment_evidence_pending_approval",
+          title: "New Payment Evidence Requires Approval",
+          message: `Payment evidence submitted for loan - Amount: GHc ${paymentAmount}`,
+          data: { evidenceId: evidenceData.id },
+          is_read: false,
+        }))
+      ).catch(() => {})
     }
 
     return NextResponse.json(
@@ -148,12 +138,8 @@ export async function POST(request: NextRequest) {
 // GET - Retrieve payment evidence records
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization") || ""
-    const token = authHeader.replace("Bearer ", "")
-
-    const {
-      data: { user },
-    } = await admin.auth.getUser(token)
+    const admin = await createAdminClient()
+    const { user } = await createClientAndGetUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { searchParams } = new URL(request.url)

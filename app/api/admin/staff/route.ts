@@ -390,6 +390,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Managing Director and Secretary can only be created by an Administrator
+    if ((role === "managing_director" || role === "secretary") && profile.role !== "admin") {
+      console.error("[v0] Staff API - Non-admin tried to create managing_director or secretary user")
+      return createJsonResponse(
+        {
+          success: false,
+          error: "Only administrators can create Managing Director or Secretary accounts",
+        },
+        403,
+      )
+    }
+
     const { data: existingAuthUser } = await adminSupabase.auth.admin.listUsers()
     const userExists = existingAuthUser.users.find((u) => u.email === email)
 

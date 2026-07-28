@@ -350,6 +350,13 @@ export default function UserManagementClient({
                     <SelectItem value="nsp">NSP</SelectItem>
                     <SelectItem value="intern">Intern</SelectItem>
                     <SelectItem value="contract">Contract</SelectItem>
+                    {/* Managing Director and Secretary — only visible to Admin role */}
+                    {currentUserRole === "admin" && (
+                      <>
+                        <SelectItem value="managing_director">Managing Director</SelectItem>
+                        <SelectItem value="secretary">Secretary</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

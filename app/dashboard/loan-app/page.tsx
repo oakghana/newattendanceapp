@@ -76,6 +76,7 @@ type LoanRequest = {
   director_signature_text: string | null
   director_decision_at: string | null
   supporting_document_url: string | null
+  fd_document_url?: string | null
   hod_reviewer_id?: string | null
   accounts_reviewer_id?: string | null
   accounts_reviewer_name?: string | null
@@ -2651,6 +2652,11 @@ export default function LoanAppPage() {
                       Attachment: <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="underline">View supporting document</a>
                     </div>
                   )}
+                  {row.fd_document_url && (
+                    <div className="text-sm">
+                      FD Proof Document: <a href={row.fd_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 underline">View FD document</a>
+                    </div>
+                  )}
                   <div className="flex gap-2 flex-wrap">
                     {["pending_hod", "hod_rejected"].includes(row.status) && (
                       <Button variant="outline" size="sm" onClick={() => beginEdit(row)}>
@@ -3662,13 +3668,13 @@ export default function LoanAppPage() {
                       })
                       const allLoans = Array.from(uniqueLoansMap.values())
 
-                      // Get all approved or active loans (any status that means the loan is active)
+                      // Get all approved or active loans (any status that means the loan has been formally approved)
+                      // NOTE: awaiting_committee is NOT an approval — it means pending committee decision, so exclude it
                       const approvedLoans = allLoans.filter((r) => {
-                        // Include loans that have been approved by director or are in workflow
                         const activeStatuses = [
-                          "hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee",
+                          "approved_director",
                           "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered",
-                          "payment_completed", "awaiting_committee"
+                          "payment_completed",
                         ]
                         return activeStatuses.includes(r.status)
                       })
@@ -3688,9 +3694,9 @@ export default function LoanAppPage() {
                           name: loans[0]?.staff_full_name || "Unknown",
                           staffNo: loans[0]?.staff_number || "—",
                           loans,
-                          // Current loan = any approved or in-progress loan (not rejected)
+                          // Current loan = any director-approved or post-approval active loan
                           currentLoan: loans.find(l => {
-                            const activeStatuses = ["hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"]
+                            const activeStatuses = ["approved_director", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"]
                             return activeStatuses.includes(l.status)
                           }),
                           completedLoans: loans.filter(l => l.status === "payment_completed")
@@ -4480,6 +4486,11 @@ export default function LoanAppPage() {
                   {row.supporting_document_url && (
                     <div className="text-xs pt-1">
                       Attachment: <a href={row.supporting_document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Download</a>
+                    </div>
+                  )}
+                  {row.fd_document_url && (
+                    <div className="text-xs pt-1">
+                      FD Proof: <a href={row.fd_document_url} target="_blank" rel="noreferrer" className="text-emerald-700 hover:text-emerald-900 hover:underline font-medium">View FD Document</a>
                     </div>
                   )}
                   <div className="text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
@@ -5395,7 +5406,7 @@ export default function LoanAppPage() {
           </Card>
         </TabsContent>
 
-      {/* ── Action Modal ────────────────────────────────────────────── */}
+      {/* ── Action Modal ──────────────────────��─────────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -5647,12 +5658,36 @@ export default function LoanAppPage() {
             {actionModal.actionType === "accounts" && actionModal.row && (
               <Button 
                 disabled={!modalFdProof}
-                onClick={() => {
+                onClick={async () => {
                   if (!modalFdProof) {
                     toast({ title: "Missing Attachment", description: "Please upload a proof document before saving the FD score.", variant: "destructive" })
                     return
                   }
-                  runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null })
+                  // Upload FD proof document to storage first
+                  let fdDocumentUrl: string | null = null
+                  try {
+                    const formData = new FormData()
+                    formData.append("file", modalFdProof)
+                    formData.append("folder", "fd-documents")
+                    const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
+                    if (uploadRes.ok) {
+                      const uploadData = await uploadRes.json()
+                      fdDocumentUrl = uploadData.url || null
+                    } else {
+                      const uploadErr = await uploadRes.json()
+                      if (uploadErr.code === "BLOB_NOT_CONFIGURED") {
+                        // Blob not configured — proceed without URL, note will still be saved
+                        fdDocumentUrl = null
+                      } else {
+                        toast({ title: "Upload Failed", description: uploadErr.error || "Could not upload FD document.", variant: "destructive" })
+                        return
+                      }
+                    }
+                  } catch {
+                    toast({ title: "Upload Error", description: "Failed to upload FD document.", variant: "destructive" })
+                    return
+                  }
+                  await runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null, fd_document_url: fdDocumentUrl })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>Save FD Score</Button>
             )}
@@ -6166,6 +6201,11 @@ function StageCard({ row, children }: { row: LoanRequest; children: React.ReactN
         {row.supporting_document_url && (
           <p className="text-sm">
             Attachment: <a href={row.supporting_document_url} className="underline" target="_blank" rel="noreferrer">Open document</a>
+          </p>
+        )}
+        {row.fd_document_url && (
+          <p className="text-sm">
+            FD Proof Document: <a href={row.fd_document_url} className="text-emerald-700 underline font-medium" target="_blank" rel="noreferrer">View FD document</a>
           </p>
         )}
         <div className="flex gap-2 flex-wrap">{children}</div>
