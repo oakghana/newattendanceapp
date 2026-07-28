@@ -13,8 +13,8 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .maybeSingle()
 
-  if (!profile || profile.role !== "managing_director") {
-    return NextResponse.json({ error: "Only the Managing Director can approve loans via this endpoint." }, { status: 403 })
+  if (!profile || !["managing_director", "admin", "it-admin"].includes(profile.role)) {
+    return NextResponse.json({ error: "Insufficient permissions to approve loans." }, { status: 403 })
   }
 
   const body = await req.json()
