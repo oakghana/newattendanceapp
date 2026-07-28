@@ -181,6 +181,11 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
     ? Number(lr.hr_approved_days)
     : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
 
+  // Set effective dates for use throughout memo generation
+  const effectiveStart = finalStartDate
+  const effectiveEnd = finalEndDate
+  const effectiveDays = baseLeaveDays
+
   const adjustmentParagraph = lr.adjustment_reason
     ? `Adjustment Details: ${String(lr.adjustment_reason).trim()}`
     : ""
@@ -590,10 +595,7 @@ export async function GET(
     const lr = leaveRequest as any
     const ap = applicantProfile as any
 
-    // Use final dates set by HR executor (if they overrode during approval), or fall back to HR office dates
-    const effectiveStart = finalStartDate
-    const effectiveEnd   = finalEndDate
-    const effectiveDays  = baseLeaveDays
+    // effectiveStart, effectiveEnd, effectiveDays already set above
     const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
 
     // Adjust end date if outstanding leave days are added
