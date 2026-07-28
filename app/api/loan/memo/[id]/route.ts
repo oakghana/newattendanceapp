@@ -531,6 +531,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       String((loan as any).director_signature_text || "").trim() ||
       "AUTHORISED SIGNATORY"
     ).toUpperCase()
+    console.log("[v0] memo signature debug:", {
+      directorHrId,
+      directorProfileName: fmtName(directorProfile),
+      upSigDataUrl: !!(upSig?.signature_data_url),
+      regSigText: regSig?.signature_text,
+      loanSigText: (loan as any)?.director_signature_text,
+      resolvedDataUrl: !!resolvedSignatureDataUrl,
+      resolvedText: resolvedSignatureText,
+      directorSignatureIsNull: directorSignature === null,
+      guaranteedName,
+    })
     let sigImgY = -1
 
     if (sig?.signature_data_url) {
