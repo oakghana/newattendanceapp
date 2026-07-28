@@ -593,7 +593,14 @@ export async function GET(
     const lr = leaveRequest as any
     const ap = applicantProfile as any
 
-    // effectiveStart, effectiveEnd, effectiveDays already set above
+    // Compute effective dates/days for memo generation
+    // Use HR executor's final dates/days if set; otherwise fall back to HR office dates, then requested dates
+    const effectiveStart = lr.hr_approved_start_date || lr.adjusted_start_date || lr.preferred_start_date
+    const effectiveEnd = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
+    const effectiveDays = lr.hr_approved_days !== null && lr.hr_approved_days !== undefined
+      ? Number(lr.hr_approved_days)
+      : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
+
     const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
 
     // Adjust end date if outstanding leave days are added
@@ -644,7 +651,7 @@ export async function GET(
     // Stored draftBody values are stale and may contain wrong leave-type content
     // (e.g. a casual leave record with annual leave body text from old data entry).
     {
-      const built = buildBuiltinBody(lr, finalStartDate, finalEndDate, baseLeaveDays, returnDateIso, holidayDatesForMemo)
+      const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso, holidayDatesForMemo)
       paragraphs          = built.paragraphs
       closingLine         = built.closing
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
