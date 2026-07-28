@@ -10,6 +10,8 @@ export type LoanWorkflowStatus =
   | "awaiting_director_hr"
   | "approved_director"
   | "director_rejected"
+  // Managing Director final stamp — set when md_approved_at is populated
+  | "md_final_approved"
 
 export const GOOD_FD_THRESHOLD = 39
 

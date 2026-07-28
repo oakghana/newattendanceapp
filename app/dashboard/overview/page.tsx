@@ -53,6 +53,17 @@ export default async function DashboardOverviewPage() {
     pendingApprovals = count || 0
   }
 
+  // Get pending MD approvals (HR-approved loan memos awaiting MD stamp)
+  let pendingMdApprovals = 0
+  if (profile?.role === "managing_director" || profile?.role === "admin") {
+    const { count } = await supabase
+      .from("loan_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "approved_director")
+      .is("md_approved_at", null)
+    pendingMdApprovals = count || 0
+  }
+
   return (
     <DashboardOverviewClient
       user={user}
@@ -60,6 +71,7 @@ export default async function DashboardOverviewPage() {
       todayAttendance={todayData}
       monthlyAttendance={monthCount || 0}
       pendingApprovals={pendingApprovals}
+      pendingMdApprovals={pendingMdApprovals}
     />
   )
 }

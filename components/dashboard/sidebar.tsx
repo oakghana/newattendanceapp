@@ -44,6 +44,8 @@ import {
   CheckCircle2,
   Banknote,
   Mail,
+  Stamp,
+  ScrollText,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -66,19 +68,27 @@ interface SidebarProps {
   setIsCollapsed: (value: boolean) => void
 }
 
+const EXEC_ROLES = ["managing_director", "secretary"] as const
+const ALL_STAFF_ROLES = [
+  "admin", "it-admin", "regional_manager", "department_head",
+  "staff", "loan_office", "accounts", "director_hr", "manager_hr",
+  "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
+  "contract", "managing_director", "secretary",
+]
+
 const navigationItems = [
   {
     title: "Home Dashboard",
     href: "/dashboard/overview",
     icon: Home,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+    roles: ALL_STAFF_ROLES,
     category: "main",
   },
   {
     title: "E-Circulars",
     href: "https://engage.cloud.microsoft/main/org/qccgh.onmicrosoft.com/users/eyJfdHlwZSI6IlVzZXIiLCJpZCI6IjUwMjc4NTE1NTA3MyJ9/storyline",
     icon: Mail,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+    roles: ALL_STAFF_ROLES,
     category: "main",
     external: true,
   },
@@ -86,7 +96,7 @@ const navigationItems = [
     title: "Attendance Check",
     href: "/dashboard/attendance",
     icon: Clock,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+    roles: ALL_STAFF_ROLES,
     category: "main",
   },
   {
@@ -101,14 +111,14 @@ const navigationItems = [
     title: "Excuse Duty",
     href: "/dashboard/excuse-duty",
     icon: FileText,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+    roles: ALL_STAFF_ROLES,
     category: "main",
   },
   {
     title: "Leave Administration",
     href: "/dashboard/leave-management",
     icon: Calendar,
-    roles: ["admin", "regional_manager", "department_head", "staff", "it-admin", "nsp", "intern", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "contract"],
+    roles: ALL_STAFF_ROLES,
     category: "admin",
   },
   {
@@ -124,8 +134,26 @@ const navigationItems = [
     title: "Loan Administration",
     href: "/dashboard/loan-app",
     icon: Banknote,
-    roles: ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract"],
+    roles: ALL_STAFF_ROLES,
     category: "main",
+  },
+  // ── MD-exclusive ─────────────────────────────────────────────────────────
+  {
+    title: "MD Approval Hub",
+    href: "/dashboard/md-approvals",
+    icon: Stamp,
+    roles: ["managing_director", "admin"],
+    category: "main",
+    executive: true,
+  },
+  // ── Secretary-exclusive ──────────────────────────────────────────────────
+  {
+    title: "Memo Console",
+    href: "/dashboard/secretary-memos",
+    icon: ScrollText,
+    roles: ["secretary", "admin"],
+    category: "main",
+    executive: true,
   },
   {
     title: "Reports & Trends",
@@ -377,8 +405,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
     : navigationItems
 
   // Support role hierarchy: map 'audit_staff' to behave like 'staff' for base permissions
+  // managing_director and secretary keep their own role names for exclusive menu items.
   const normalizedRole = (profile?.role || "staff").toLowerCase().trim()
-  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
+  const effectiveRole =
+    normalizedRole === "audit_staff" ? "staff" :
+    normalizedRole
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
@@ -457,6 +488,9 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 const Icon = item.icon
                 const isActive = pathname === item.href
                 const isExternal = (item as any).external
+                const isExecutive = (item as any).executive
+                const isMdExec = isExecutive && item.href === "/dashboard/md-approvals"
+                const isSecExec = isExecutive && item.href === "/dashboard/secretary-memos"
                 
                 if (isExternal) {
                   return (
@@ -475,16 +509,8 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                         setIsMobileMenuOpen(false)
                       }}
                     >
-                      <Icon
-                        className={cn(
-                          "h-4.5 w-4.5 flex-shrink-0",
-                        )}
-                      />
-                      {!isCollapsed && (
-                        <>
-                          <span className="flex-1">{item.title}</span>
-                        </>
-                      )}
+                      <Icon className="h-4.5 w-4.5 flex-shrink-0" />
+                      {!isCollapsed && <span className="flex-1">{item.title}</span>}
                     </a>
                   )
                 }
@@ -497,8 +523,16 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     className={cn(
                     "group flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative touch-manipulation min-h-[38px] border",
                     isCollapsed ? "gap-0 px-0 py-2 justify-center" : "gap-2.5 px-3 py-2",
-                      isActive
+                      isActive && isMdExec
+                        ? "bg-amber-500/15 border-amber-400/40 text-amber-700 dark:text-amber-400"
+                        : isActive && isSecExec
+                        ? "bg-teal-500/15 border-teal-400/40 text-teal-700 dark:text-teal-400"
+                        : isActive
                         ? "bg-primary/12 border-primary/30 text-primary"
+                        : isMdExec
+                        ? "border-amber-200/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50/60 dark:hover:bg-amber-900/20 hover:border-amber-300"
+                        : isSecExec
+                        ? "border-teal-200/50 text-teal-700 dark:text-teal-400 hover:bg-teal-50/60 dark:hover:bg-teal-900/20 hover:border-teal-300"
                         : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border hover:text-foreground",
                     )}
                     onClick={() => {
@@ -508,6 +542,8 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     <Icon
                       className={cn(
                         "h-4.5 w-4.5 flex-shrink-0",
+                        isMdExec && !isActive && "text-amber-600 dark:text-amber-400",
+                        isSecExec && !isActive && "text-teal-600 dark:text-teal-400",
                       )}
                     />
                     {!isCollapsed && (
@@ -771,9 +807,15 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     <p className="text-sm font-semibold text-sidebar-foreground leading-tight">
                       {profile ? `${profile.first_name} ${profile.last_name}` : "Loading..."}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {profile?.departments?.name || "No department"}
-                    </p>
+                    {profile?.role === "managing_director" ? (
+                      <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Managing Director</p>
+                    ) : profile?.role === "secretary" ? (
+                      <p className="text-xs font-semibold text-teal-600 dark:text-teal-400">Secretary</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {profile?.departments?.name || "No department"}
+                      </p>
+                    )}
                     <p className="text-xs text-primary font-mono flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {ghanaTime} (GMT)
