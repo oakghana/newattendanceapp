@@ -44,16 +44,45 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  // Check user role — if MD or Secretary, render executive dashboard instead
-  const { data: roleData } = await supabase
+  // Fetch profile to check role
+  const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role")
+    .select("*, departments(name, code)")
     .eq("id", user.id)
-    .single()
+    .maybeSingle()
 
-  if (roleData?.role === "managing_director" || roleData?.role === "secretary") {
-    // Render executive dashboard for MD and Secretary
-    return <DashboardOverviewClient />
+  // MD and Secretary: fetch executive data and render their dedicated dashboard
+  if (profile?.role === "managing_director" || profile?.role === "secretary") {
+    const today = new Date().toISOString().split("T")[0]
+    const [{ data: todayData }, { count: monthCount }, { count: mdCount }] = await Promise.all([
+      supabase
+        .from("attendance_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("check_in_time", `${today}T00:00:00`)
+        .lt("check_in_time", `${today}T23:59:59`)
+        .maybeSingle(),
+      supabase
+        .from("attendance_records")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("check_in_time", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+      supabase
+        .from("loan_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "approved_director")
+        .is("md_approved_at", null),
+    ])
+    return (
+      <DashboardOverviewClient
+        user={user}
+        profile={profile}
+        todayAttendance={todayData}
+        monthlyAttendance={monthCount || 0}
+        pendingApprovals={0}
+        pendingMdApprovals={mdCount || 0}
+      />
+    )
   }
 
   try {
