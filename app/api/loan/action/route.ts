@@ -68,7 +68,7 @@ async function getDirectorApprovers(admin: any) {
   const { data } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["director_hr", "manager_hr"])
+    .in("role", ["director_hr", "manager_hr", "hr_director", "hr_executive", "hr", "hr_manager"])
     .eq("is_active", true)
   return (data || []).map((row: any) => String(row.id))
 }
@@ -82,7 +82,10 @@ async function validateDirectorApprover(admin: any, approverId: string) {
 
   if (!data) return false
   const role = normalizeRole((data as any).role)
-  return Boolean((data as any).is_active) && ["director_hr", "manager_hr"].includes(role)
+  return (
+    Boolean((data as any).is_active) &&
+    ["director_hr", "manager_hr", "hr_director", "hr_executive", "hr", "hr_manager", "admin"].includes(role)
+  )
 }
 
 async function getDirectorSavedSignature(admin: any, userId: string) {
@@ -739,13 +742,20 @@ export async function POST(request: NextRequest) {
     if (action === "director_finalize") {
       actionHandled = true
       
-      // Allow HR Executives at "awaiting_hr_executives" stage OR Director HR at "awaiting_director_hr" stage
-      const isHrExecutive = ["hr_executive", "accounts", "loan_office", "admin"].includes(role)
-      const isDirectorHr = ["director_hr", "admin"].includes(role)
-      
+      // Allow HR Executives / HR staff at "awaiting_hr_executives" stage
+      // Allow Director HR / MD / Admin at "awaiting_director_hr" stage
+      // "hr" is the generic role used for HR Executives in the system
+      const isHrExecutive = [
+        "hr_executive", "hr", "hr_manager", "manager_hr", "director_hr",
+        "hr_director", "accounts", "loan_office", "admin",
+      ].includes(role)
+      const isDirectorHr = [
+        "director_hr", "manager_hr", "hr_director", "managing_director", "admin",
+      ].includes(role)
+
       if (req.status === "awaiting_hr_executives") {
         if (!isHrExecutive) {
-          return NextResponse.json({ error: "Only HR staff can approve at this stage" }, { status: 403 })
+          return NextResponse.json({ error: "Only HR Executive staff can approve at this stage" }, { status: 403 })
         }
       } else if (req.status === "awaiting_director_hr") {
         if (!isDirectorHr) {
@@ -788,11 +798,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      toStatus = decision === "approve" ? "approved_director" : "director_rejected"
+      // ─── STAGE-AWARE status transition ───────────────────────────────
+      // Stage 1: HR Executive signs at "awaiting_hr_executives"
+      //          → approve pushes to "awaiting_director_hr" (MD queue)
+      //          → reject closes as "director_rejected"
+      // Stage 2: Director HR / MD stamps at "awaiting_director_hr"
+      //          → approve = "approved_director"  |  reject = "director_rejected"
+      const isHrExecutiveStage = req.status === "awaiting_hr_executives"
+
+      if (isHrExecutiveStage) {
+        toStatus = decision === "approve" ? "awaiting_director_hr" : "director_rejected"
+      } else {
+        toStatus = decision === "approve" ? "approved_director" : "director_rejected"
+      }
+
       update.status = toStatus
       update.director_hr_id = user.id
-      
-      // Always save signature info to loan_requests, even if minimal
+
+      // Always save HR Executive signature info to loan_requests
       update.director_signature_mode = savedSignature?.mode || "typed"
       update.director_signature_text = savedSignature?.text || directorName
       update.director_signature_data_url = savedSignature?.dataUrl || null
@@ -802,22 +825,50 @@ export async function POST(request: NextRequest) {
       update.director_decision_at = new Date().toISOString()
 
       const dirStaffName = String(req.staff_full_name || "").trim() || "Staff Member"
-      await notifyUsers(
-        admin,
-        [req.user_id],
-        decision === "approve" ? "Final Loan Approval from Director HR" : "Loan Request Declined by Director HR",
-        decision === "approve"
-          ? `Your request ${req.request_number} is fully approved. Disbursement: ${req.disbursement_date || "TBD"}; Recovery starts: ${req.recovery_start_date || "TBD"}; Duration: ${req.recovery_months || "TBD"} months.`
-          : `Your request ${req.request_number} was declined by Director HR.${note ? ` Reason: ${note}` : ""}`,
-        decision === "approve" ? "loan_final_approved" : "loan_final_rejected",
-        {
-          request_id: req.id,
-          auto_memo: decision === "approve" ? (directorLetter || autoMemo) : buildDirectorRejectionMemo(req, note),
-          memo_path: buildMemoPath(req.id, req.user_id),
-        },
-      )
 
-      if (decision === "approve") {
+      if (isHrExecutiveStage && decision === "approve") {
+        // HR Executive signed — notify the MD that a memo is ready for their stamp
+        const { data: mdUsers } = await admin
+          .from("user_profiles")
+          .select("id")
+          .in("role", ["managing_director", "director_hr", "admin"])
+          .eq("is_active", true)
+        await notifyUsers(
+          admin,
+          (mdUsers || []).map((r: any) => r.id),
+          "Loan Memo Ready for MD Approval",
+          `${req.request_number} has been signed by HR Executive ${directorName} and is awaiting your approval stamp.`,
+          "loan_awaiting_md",
+          { request_id: req.id },
+        )
+        // Also notify the staff member their loan is progressing
+        await notifyUsers(
+          admin,
+          [req.user_id],
+          "Loan Signed by HR Executive",
+          `Your loan request ${req.request_number} has been signed by the HR Executive and is now with the Managing Director for final approval.`,
+          "loan_hr_executive_signed",
+          { request_id: req.id },
+        )
+      } else if (!isHrExecutiveStage || decision === "reject") {
+        // Final approval or rejection — notify the staff member
+        await notifyUsers(
+          admin,
+          [req.user_id],
+          decision === "approve" ? "Final Loan Approval" : "Loan Request Declined",
+          decision === "approve"
+            ? `Your request ${req.request_number} is fully approved. Disbursement: ${req.disbursement_date || "TBD"}; Recovery starts: ${req.recovery_start_date || "TBD"}; Duration: ${req.recovery_months || "TBD"} months.`
+            : `Your request ${req.request_number} was declined.${note ? ` Reason: ${note}` : ""}`,
+          decision === "approve" ? "loan_final_approved" : "loan_final_rejected",
+          {
+            request_id: req.id,
+            auto_memo: decision === "approve" ? (directorLetter || autoMemo) : buildDirectorRejectionMemo(req, note),
+            memo_path: buildMemoPath(req.id, req.user_id),
+          },
+        )
+      }
+
+      if (!isHrExecutiveStage && decision === "approve") {
         const memoUrl = `${process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || ""}${buildMemoPath(req.id, req.user_id)}`
         notifyLoanApproved(admin, {
           staffUserId: req.user_id,
@@ -828,19 +879,20 @@ export async function POST(request: NextRequest) {
           amount: req.amount ?? null,
           memoUrl,
         }).catch(() => {})
-      } else {
+      } else if (decision === "reject") {
         notifyLoanRejected(admin, {
           staffUserId: req.user_id,
           staffName: dirStaffName,
           loanType: String(req.loan_type_label || req.loan_type_key || ""),
           requestNumber: String(req.request_number || req.id),
           rejectedBy: directorName,
-          stage: "Director HR",
+          stage: isHrExecutiveStage ? "HR Executive" : "Director HR",
           note: note || "",
         }).catch(() => {})
       }
 
-      if (decision === "approve") {
+      // Only notify accounts on FINAL approval (MD stamp stage), not after HR Executive sign
+      if (!isHrExecutiveStage && decision === "approve") {
         const { data: accountsUsers } = await admin
           .from("user_profiles")
           .select("id")
@@ -855,7 +907,7 @@ export async function POST(request: NextRequest) {
           "loan_signed_letter_copy",
           { request_id: req.id },
         )
-      } else {
+      } else if (decision === "reject") {
         const approverIds = [req.hod_reviewer_id, req.loan_office_reviewer_id, req.hr_officer_id]
           .filter((id: any) => Boolean(id))
           .map((id: any) => String(id))

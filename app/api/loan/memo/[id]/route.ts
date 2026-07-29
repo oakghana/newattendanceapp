@@ -672,40 +672,47 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     })
     y += (ccList.length + 1) * 4.5 + 4
 
-    // ─── MD Approval Stamp — SQUARE, violet/blue border, red text/sig ─
-    const isMdApproved = ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
+    // ─── MD Approval Stamp — Professional Square Stamp with MD Signature ─
+    // Only show if MD has ACTUALLY approved (md_approved_at is populated)
+    // Don't show at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
+    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
     if (isMdApproved) {
-      const stampW = 46  // square width mm
-      const stampH = 46  // square height mm
-      // Right-align beside cc list, vertically centred with it
-      const stampX = pageWidth - marginRight - stampW  // left edge of stamp
-      const ccMidY = ccStartY + ((ccList.length + 1) * 4.5) / 2
-      const stampTopY = ccMidY - stampH / 2
+      const stampW = 48  // square width mm
+      const stampH = 48  // square height mm
+      // Right-align beside cc list
+      const stampX = pageWidth - marginRight - stampW
+      const ccMidY = y - 8
+      const stampTopY = ccMidY
 
-      // Outer square — violet/blue (indigo-700)
+      // Outer square — indigo-700 border
       doc.setDrawColor(67, 56, 202)    // indigo-700
-      doc.setLineWidth(2.5)
+      doc.setLineWidth(2.2)
       doc.rect(stampX, stampTopY, stampW, stampH, "S")
 
-      // Inner square inset 2mm — blue (blue-500)
+      // Inner square inset — blue-500
       doc.setDrawColor(59, 130, 246)   // blue-500
       doc.setLineWidth(0.8)
       doc.rect(stampX + 2, stampTopY + 2, stampW - 4, stampH - 4, "S")
 
       const cx = stampX + stampW / 2  // horizontal centre
 
-      // "APPROVED" — bold red, top of stamp
+      // "APPROVED" — bold red text
       doc.setFont("times", "bold")
       doc.setFontSize(10)
       doc.setTextColor(185, 28, 28)    // red-700
       doc.text("APPROVED", cx, stampTopY + 8, { align: "center" })
 
-      // Thin red divider line under APPROVED text
+      // Thin red divider line
       doc.setDrawColor(185, 28, 28)
       doc.setLineWidth(0.4)
       doc.line(stampX + 4, stampTopY + 10, stampX + stampW - 4, stampTopY + 10)
 
-      // MD signature image — fetched from mdStampSignatureUrl (MD's own signature)
+      // MD signature image — magnified
+      const sigAreaX = stampX + 3
+      const sigAreaY = stampTopY + 12
+      const sigAreaW = stampW - 6
+      const sigAreaH = 16
+
       let mdSigRendered = false
       if (mdStampSignatureUrl) {
         try {
@@ -715,15 +722,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             const sigB64 = Buffer.from(sigBuf).toString("base64")
             const ct = sigResp.headers.get("content-type") || "image/png"
             const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
-            // Centre signature image within stamp
-            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 5, stampTopY + 12, stampW - 10, 11)
+            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, sigAreaX, sigAreaY, sigAreaW, sigAreaH)
             mdSigRendered = true
           }
         } catch { /* fall through */ }
       }
       if (!mdSigRendered && mdStampSignatureText) {
         doc.setFont("times", "bolditalic")
-        doc.setFontSize(8)
+        doc.setFontSize(10)
         doc.setTextColor(185, 28, 28)
         doc.text(mdStampSignatureText, cx, stampTopY + 20, { align: "center" })
         mdSigRendered = true
@@ -732,26 +738,26 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       // Thin red divider after signature
       doc.setDrawColor(185, 28, 28)
       doc.setLineWidth(0.4)
-      doc.line(stampX + 4, stampTopY + 25, stampX + stampW - 4, stampTopY + 25)
+      doc.line(stampX + 4, stampTopY + 29, stampX + stampW - 4, stampTopY + 29)
 
-      // MD full name — from mdProfile (actual MD who approved, NOT HR Executive)
+      // MD name
       const mdFullName = fmtName(mdProfile) || (loan as any).md_approved_by_name || "MANAGING DIRECTOR"
       doc.setFont("times", "bold")
       doc.setFontSize(7)
       doc.setTextColor(185, 28, 28)
-      doc.text(mdFullName.toUpperCase(), cx, stampTopY + 30, { align: "center" })
+      doc.text(mdFullName.toUpperCase(), cx, stampTopY + 33, { align: "center" })
 
       // "MANAGING DIRECTOR" title
       doc.setFont("times", "normal")
       doc.setFontSize(6.5)
       doc.setTextColor(67, 56, 202)   // indigo-700
-      doc.text("MANAGING DIRECTOR", cx, stampTopY + 35, { align: "center" })
+      doc.text("MANAGING DIRECTOR", cx, stampTopY + 37, { align: "center" })
 
       // Approval date
       const approvalDateStr = fmtDate(loan.md_approved_at || new Date())
       doc.setFontSize(6)
       doc.setTextColor(100, 100, 100)
-      doc.text(approvalDateStr, cx, stampTopY + 40, { align: "center" })
+      doc.text(approvalDateStr, cx, stampTopY + 41, { align: "center" })
     }
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)

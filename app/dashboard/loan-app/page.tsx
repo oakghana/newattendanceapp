@@ -19,7 +19,7 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -5900,70 +5900,139 @@ export default function LoanAppPage() {
             )}
           </div>
 
-          {/* Signature setup inside memo review modal */}
+          {/* Signature & Decision Setup — Modern Card Layout */}
           {memoReviewModal.row && (
-            <div className="space-y-2 border rounded p-4">
-              <Label className="font-semibold">Director Signature</Label>
-              <Select value={modalSignatureMode} onValueChange={(v: "typed" | "draw" | "upload") => setModalSignatureMode(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="typed">Type name</SelectItem>
-                  <SelectItem value="draw">Draw signature</SelectItem>
-                  <SelectItem value="upload">Upload image</SelectItem>
-                </SelectContent>
-              </Select>
-              {modalSignatureMode === "typed" && (
-                <Input value={modalSignatureText} onChange={(e) => setModalSignatureText(e.target.value)} placeholder="Director full name (e.g. OHENEBA BOAMAH)" />
-              )}
-              {modalSignatureMode === "upload" && (
-                <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  const reader = new FileReader()
-                  reader.onload = (ev) => setModalSignatureDataUrl(ev.target?.result as string)
-                  reader.readAsDataURL(file)
-                }} />
-              )}
-              {modalSignatureMode === "draw" && (
-                <SignaturePad value={modalSignatureDataUrl} onChange={setModalSignatureDataUrl} />
-              )}
-              <div className="pt-2">
-                <Label className="font-semibold">Final Decision</Label>
-                <Select value={modalDecision} onValueChange={(v: "approve" | "reject") => setModalDecision(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+            <div className="space-y-6 border-t border-slate-200 pt-6">
+              {/* Signature Section */}
+              <div className="rounded-lg border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold">1</div>
+                  <Label className="text-base font-semibold text-slate-900">Your Signature</Label>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">Select how you'd like to sign this approval</p>
+                <Select value={modalSignatureMode} onValueChange={(v: "typed" | "draw" | "upload") => setModalSignatureMode(v)}>
+                  <SelectTrigger className="border-slate-300 bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="approve">Approve</SelectItem>
-                    <SelectItem value="reject">Reject</SelectItem>
+                    <SelectItem value="typed">Type your name</SelectItem>
+                    <SelectItem value="draw">Draw your signature</SelectItem>
+                    <SelectItem value="upload">Upload signature image</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="mt-4 space-y-3">
+                  {modalSignatureMode === "typed" && (
+                    <Input 
+                      value={modalSignatureText} 
+                      onChange={(e) => setModalSignatureText(e.target.value)} 
+                      placeholder="Your full name (e.g. OHENEBA BOAMAH)"
+                      className="border-slate-300"
+                    />
+                  )}
+                  {modalSignatureMode === "upload" && (
+                    <div className="rounded-lg border-2 border-dashed border-slate-300 p-4 hover:border-slate-400 transition-colors">
+                      <Input 
+                        type="file" 
+                        accept="image/png,image/jpeg,image/webp" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const reader = new FileReader()
+                          reader.onload = (ev) => setModalSignatureDataUrl(ev.target?.result as string)
+                          reader.readAsDataURL(file)
+                        }}
+                        className="cursor-pointer"
+                      />
+                      <p className="text-xs text-slate-500 mt-2">PNG, JPEG, or WebP (max 5MB)</p>
+                    </div>
+                  )}
+                  {modalSignatureMode === "draw" && (
+                    <div className="rounded-lg border border-slate-300 overflow-hidden bg-white">
+                      <SignaturePad value={modalSignatureDataUrl} onChange={setModalSignatureDataUrl} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Decision Section */}
+              <div className="rounded-lg border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold">2</div>
+                  <Label className="text-base font-semibold text-slate-900">Final Decision</Label>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">Choose to approve or reject this loan request</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setModalDecision("approve")}
+                    className={`relative p-4 rounded-lg border-2 transition-all ${
+                      modalDecision === "approve"
+                        ? "border-green-500 bg-green-50 shadow-lg"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <CheckCircle2 className={`h-5 w-5 ${modalDecision === "approve" ? "text-green-600" : "text-slate-400"}`} />
+                      <span className={`font-semibold ${modalDecision === "approve" ? "text-green-700" : "text-slate-700"}`}>Approve</span>
+                    </div>
+                    <p className={`text-xs ${modalDecision === "approve" ? "text-green-600" : "text-slate-500"}`}>Grant the loan request</p>
+                  </button>
+                  <button
+                    onClick={() => setModalDecision("reject")}
+                    className={`relative p-4 rounded-lg border-2 transition-all ${
+                      modalDecision === "reject"
+                        ? "border-red-500 bg-red-50 shadow-lg"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <XCircle className={`h-5 w-5 ${modalDecision === "reject" ? "text-red-600" : "text-slate-400"}`} />
+                      <span className={`font-semibold ${modalDecision === "reject" ? "text-red-700" : "text-slate-700"}`}>Reject</span>
+                    </div>
+                    <p className={`text-xs ${modalDecision === "reject" ? "text-red-600" : "text-slate-500"}`}>Deny the request</p>
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2 flex-wrap">
-            <Button variant="outline" onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}>Close</Button>
-            {memoReviewModal.row && (
+          {/* Modern Footer with Clear Action Hierarchy */}
+          <DialogFooter className="gap-2 flex-wrap border-t border-slate-200 pt-6">
+            <div className="flex gap-2 flex-1 flex-wrap">
               <Button 
-                variant="secondary"
-                onClick={() => saveMemoChanges()}
-                disabled={isSavingMemo}
-                className="gap-2"
+                variant="outline" 
+                onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
+                className="border-slate-300 text-slate-700 hover:bg-slate-50"
               >
-                {isSavingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                {isSavingMemo ? "Saving..." : "Save Memo Changes"}
+                Cancel
               </Button>
-            )}
-            {memoReviewModal.row && (
-              <Button variant="outline" onClick={() => {
-                if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText)
-              }}>
-                <Download className="h-4 w-4 mr-1" /> Download PDF
-              </Button>
-            )}
+              {memoReviewModal.row && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText)
+                  }}
+                  className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2"
+                >
+                  <Download className="h-4 w-4" /> Download PDF
+                </Button>
+              )}
+              {memoReviewModal.row && (
+                <Button 
+                  variant="outline"
+                  onClick={() => saveMemoChanges()}
+                  disabled={isSavingMemo}
+                  className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2 flex-1 min-w-fit"
+                >
+                  {isSavingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {isSavingMemo ? "Saving..." : "Save Memo Changes"}
+                </Button>
+              )}
+            </div>
             {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr") && (
               <Button
-                variant={modalDecision === "reject" ? "destructive" : "default"}
-                className="bg-green-700 hover:bg-green-800 text-white"
+                className={`gap-2 font-semibold text-base py-5 px-6 flex-1 min-w-fit ${
+                  modalDecision === "approve"
+                    ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
+                    : "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-lg"
+                }`}
                 disabled={isSignatureMissing && modalDecision === "approve"}
                 title={isSignatureMissing && modalDecision === "approve" ? "Please save your signature in Setup & Linkage before approving" : ""}
                 onClick={() => {
@@ -5982,7 +6051,17 @@ export default function LoanAppPage() {
                   setMemoReviewModal((s) => ({ ...s, open: false }))
                 }}
               >
-                {modalDecision === "approve" ? "✓ Approve & Send Letter" : "✗ Reject Request"}
+                {modalDecision === "approve" ? (
+                  <>
+                    <CheckCircle2 className="h-5 w-5" />
+                    Approve & Send Letter
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-5 w-5" />
+                    Reject Request
+                  </>
+                )}
               </Button>
             )}
           </DialogFooter>
