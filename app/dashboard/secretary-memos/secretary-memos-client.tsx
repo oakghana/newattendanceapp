@@ -31,7 +31,6 @@ interface LoanMemo {
     first_name: string
     last_name: string
     employee_id: string
-    rank_position: string | null
     profile_image_url: string | null
   } | null
 }
@@ -49,7 +48,6 @@ interface LeaveMemo {
     first_name: string
     last_name: string
     employee_id: string
-    rank_position: string | null
     profile_image_url: string | null
     departments: { name: string } | null
   } | null
@@ -61,7 +59,6 @@ interface Props {
     role: string
     first_name: string
     last_name: string
-    rank_position: string | null
     profile_image_url: string | null
     departments: { name: string } | null
   }

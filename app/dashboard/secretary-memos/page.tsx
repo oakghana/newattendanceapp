@@ -10,7 +10,7 @@ export default async function SecretaryMemosPage() {
 
   const { data: profile } = await admin
     .from("user_profiles")
-    .select("id, role, first_name, last_name, rank_position, profile_image_url, departments(name)")
+    .select("id, role, first_name, last_name, profile_image_url, departments(name)")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -36,7 +36,6 @@ export default async function SecretaryMemosPage() {
         first_name,
         last_name,
         employee_id,
-        rank_position,
         profile_image_url
       )
     `)
@@ -60,7 +59,6 @@ export default async function SecretaryMemosPage() {
         first_name,
         last_name,
         employee_id,
-        rank_position,
         profile_image_url,
         departments(name)
       )
