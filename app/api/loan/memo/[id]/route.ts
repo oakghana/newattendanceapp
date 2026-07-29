@@ -675,8 +675,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // ─── MD Approval Stamp — SQUARE, violet/blue border, red text/sig ─
     const isMdApproved = ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
     if (isMdApproved) {
-      const stampW = 46  // square width mm
-      const stampH = 46  // square height mm
+      const stampW = 52  // square width mm — wider for large signature
+      const stampH = 52  // square height mm — taller to accommodate magnified signature
       // Right-align beside cc list, vertically centred with it
       const stampX = pageWidth - marginRight - stampW  // left edge of stamp
       const ccMidY = ccStartY + ((ccList.length + 1) * 4.5) / 2
@@ -705,7 +705,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.setLineWidth(0.4)
       doc.line(stampX + 4, stampTopY + 10, stampX + stampW - 4, stampTopY + 10)
 
-      // MD signature image — fetched from mdStampSignatureUrl (MD's own signature)
+      // MD signature image — MAGNIFIED to fill most of the stamp area
+      // Stamp area after "APPROVED" divider: from stampTopY+12 to stampTopY+34 (22mm tall)
+      const sigAreaX = stampX + 3
+      const sigAreaY = stampTopY + 12
+      const sigAreaW = stampW - 6   // 40mm wide
+      const sigAreaH = 18           // 18mm tall — large and clearly visible
+
       let mdSigRendered = false
       if (mdStampSignatureUrl) {
         try {
@@ -715,43 +721,43 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             const sigB64 = Buffer.from(sigBuf).toString("base64")
             const ct = sigResp.headers.get("content-type") || "image/png"
             const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
-            // Centre signature image within stamp
-            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 5, stampTopY + 12, stampW - 10, 11)
+            // Fill the full designated signature area — large and clearly visible
+            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, sigAreaX, sigAreaY, sigAreaW, sigAreaH)
             mdSigRendered = true
           }
         } catch { /* fall through */ }
       }
       if (!mdSigRendered && mdStampSignatureText) {
         doc.setFont("times", "bolditalic")
-        doc.setFontSize(8)
+        doc.setFontSize(11)
         doc.setTextColor(185, 28, 28)
-        doc.text(mdStampSignatureText, cx, stampTopY + 20, { align: "center" })
+        doc.text(mdStampSignatureText, cx, stampTopY + 22, { align: "center" })
         mdSigRendered = true
       }
 
-      // Thin red divider after signature
+      // Thin red divider after signature area
       doc.setDrawColor(185, 28, 28)
       doc.setLineWidth(0.4)
-      doc.line(stampX + 4, stampTopY + 25, stampX + stampW - 4, stampTopY + 25)
+      doc.line(stampX + 4, stampTopY + 31, stampX + stampW - 4, stampTopY + 31)
 
       // MD full name — from mdProfile (actual MD who approved, NOT HR Executive)
       const mdFullName = fmtName(mdProfile) || (loan as any).md_approved_by_name || "MANAGING DIRECTOR"
       doc.setFont("times", "bold")
-      doc.setFontSize(7)
+      doc.setFontSize(7.5)
       doc.setTextColor(185, 28, 28)
-      doc.text(mdFullName.toUpperCase(), cx, stampTopY + 30, { align: "center" })
+      doc.text(mdFullName.toUpperCase(), cx, stampTopY + 36, { align: "center" })
 
       // "MANAGING DIRECTOR" title
       doc.setFont("times", "normal")
       doc.setFontSize(6.5)
       doc.setTextColor(67, 56, 202)   // indigo-700
-      doc.text("MANAGING DIRECTOR", cx, stampTopY + 35, { align: "center" })
+      doc.text("MANAGING DIRECTOR", cx, stampTopY + 40, { align: "center" })
 
       // Approval date
       const approvalDateStr = fmtDate(loan.md_approved_at || new Date())
       doc.setFontSize(6)
       doc.setTextColor(100, 100, 100)
-      doc.text(approvalDateStr, cx, stampTopY + 40, { align: "center" })
+      doc.text(approvalDateStr, cx, stampTopY + 44, { align: "center" })
     }
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)

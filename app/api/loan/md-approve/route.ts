@@ -91,6 +91,7 @@ export async function GET(req: NextRequest) {
       id,
       request_number,
       loan_type_label,
+      loan_type_key,
       fixed_amount,
       requested_amount,
       status,
@@ -100,11 +101,18 @@ export async function GET(req: NextRequest) {
       user_id,
       staff_full_name,
       staff_number,
+      staff_location_name,
+      staff_district_name,
+      department_id,
+      departments!department_id (
+        name
+      ),
       user_profiles!user_id (
         first_name,
         last_name,
         employee_id,
-        profile_image_url
+        profile_image_url,
+        assigned_location_id
       )
     `)
     .order("created_at", { ascending: false })
