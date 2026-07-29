@@ -226,6 +226,12 @@ export async function GET() {
     let yearsOfService: number | null = welfareRow.years_of_service ?? null
     let dateOfAppointment: string | null = welfareRow.date_of_appointment ?? null
 
+    console.log("[v0] Workflow API - Welfare row data:", {
+      years_of_service: welfareRow.years_of_service,
+      date_of_appointment: welfareRow.date_of_appointment,
+      staff_category: welfareRow.staff_category,
+    })
+
     // If DB has no years_of_service (null or 0) but has date_of_appointment, auto-calculate it
     if ((!yearsOfService || yearsOfService === 0) && dateOfAppointment) {
       const apptDate = new Date(dateOfAppointment)
@@ -233,6 +239,7 @@ export async function GET() {
         const calculated = Math.floor(
           (Date.now() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
         )
+        console.log("[v0] Workflow API - Calculated YoS from date:", { dateOfAppointment, calculated })
         // Only use calculated value if it's reasonable (> 0 and < 100 years)
         if (calculated > 0 && calculated < 100) {
           yearsOfService = calculated
@@ -248,9 +255,14 @@ export async function GET() {
         const calculated = Math.floor(
           (now.getTime() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
         )
+        console.log("[v0] Workflow API - Fallback YoS calculation:", { calculated })
         if (calculated > 0) yearsOfService = calculated
-      } catch (_) { /* ignore */ }
+      } catch (e) { 
+        console.log("[v0] Workflow API - Fallback calc error:", e)
+      }
     }
+    
+    console.log("[v0] Workflow API - Final yearsOfService:", yearsOfService)
 
     // Normalise staffCategory to Title Case and only derive from position when NOT explicitly set in DB
     if (staffCategory) {

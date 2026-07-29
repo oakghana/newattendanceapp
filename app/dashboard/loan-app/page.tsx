@@ -2505,7 +2505,8 @@ export default function LoanAppPage() {
                             : data?.profile.dateOfAppointment
                               ? Math.floor((Date.now() - new Date(data.profile.dateOfAppointment).getTime()) / (365.25 * 24 * 3600 * 1000))
                               : 0
-                          return <span className="text-slate-600">{yrs}v{data?.profile.dateOfAppointment && !data?.profile.yearsOfService ? <span className="text-slate-400 text-xs"> (since {fmtDate(data.profile.dateOfAppointment)})</span> : null}</span>
+                          console.log("[v0] Loan Admin YoS - yearsOfService:", data?.profile.yearsOfService, "dateOfAppointment:", data?.profile.dateOfAppointment, "calculated yrs:", yrs)
+                          return <span className="text-slate-600">{yrs}y{data?.profile.dateOfAppointment && !data?.profile.yearsOfService ? <span className="text-slate-400 text-xs"> (since {fmtDate(data.profile.dateOfAppointment)})</span> : null}</span>
                         })()}
                   </div>
                   <div><strong>Assigned Location:</strong>{" "}
