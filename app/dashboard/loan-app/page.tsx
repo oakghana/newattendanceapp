@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LoanOfficeEnhancedModule } from "@/components/loan/loan-office-enhanced-module"
+import { SetupLinkagePanel } from "@/components/loan/setup-linkage-panel"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -1098,8 +1099,8 @@ export default function LoanAppPage() {
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
-    (["loan_office", "manager_hr"].includes(normalizedRole) && !userDeptIsAccounts) ||
-    (normalizedRole === "manager_hr" && !userDeptIsAccounts)
+    p?.hrOffice ||
+    (["loan_office", "manager_hr", "hr_officer"].includes(normalizedRole) && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
@@ -3304,7 +3305,7 @@ export default function LoanAppPage() {
                       <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
+                          <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "��"}</p>
                           <p className="text-[11px] text-slate-400">{row.staff_number || ""}{row.staff_rank ? ` · ${row.staff_rank}` : ""}</p>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{row.loan_type_label || row.loan_type_key}</td>
@@ -4954,538 +4955,98 @@ export default function LoanAppPage() {
             </Card>
           )}
 
-          {/* Setup & Linkage Studio */}
-          <Card className="border-0 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-2xl">Setup & Linkage Studio</CardTitle>
-              <CardDescription className="text-emerald-100">
-                Manage loan type rules, staff-to-HOD linkage, bulk mapping, and grade updates in one dedicated workspace.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">Loan Types</p>
-                  <p className="mt-2 text-2xl font-semibold">{lookupData?.loanTypes?.length || 0}</p>
-                  <p className="mt-1 text-sm text-emerald-50/80">Configured welfare products</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">HOD Linkages</p>
-                  <p className="mt-2 text-2xl font-semibold">{lookupData?.linkages?.length || 0}</p>
-                  <p className="mt-1 text-sm text-emerald-50/80">Active staff-to-HOD relationships</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">Available Staff</p>
-                  <p className="mt-2 text-2xl font-semibold">{lookupData?.staff?.length || 0}</p>
-                  <p className="mt-1 text-sm text-emerald-50/80">Ready for linkage and rank updates</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-              onClick={() => runLookupAction({ action: "auto_link_by_location" }, "Auto-link by location completed")}
-              disabled={lookupLoading || !canDirectLinkageUpdate}
-            >
-              Auto-link Staff to HOD by Location
-            </Button>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader>
-                <CardTitle>Loan Type Setup</CardTitle>
-                <CardDescription>Maintain fixed amount, cap, and qualification note for each loan type.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Loan Type</Label>
-                    <SearchableSelect
-                      value={selectedLoanType}
-                      onChange={(v) => {
-                        setSelectedLoanType(v)
-                        const found = (lookupData?.loanTypes || []).find((t) => t.loan_key === v)
-                        setSetupLoanLabel(found?.loan_label || "")
-                        setSetupIsActive(found?.is_active ?? true)
-                        setSetupFixedAmount(String(found?.fixed_amount || ""))
-                        setSetupMaxAmount(String(found?.max_amount || found?.fixed_amount || ""))
-                        setSetupQualification(String(found?.min_qualification_note || ""))
-                        setSetupLoanTerms(String(found?.loan_terms || ""))
-                        setSetupDefaultRecoveryMonths(String(found?.default_recovery_months || ""))
-                      }}
-                      placeholder="Choose loan type"
-                      searchPlaceholder="Search loan type..."
-                      options={(lookupData?.loanTypes || []).map((lt) => ({ value: lt.loan_key, label: normalizeLoanTypeLabel(lt, lookupData?.loanTypes || []) }))}
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Loan Label</Label>
-                    <Input
-                      value={setupLoanLabel}
-                      onChange={(e) => setSetupLoanLabel(e.target.value)}
-                      placeholder="Update loan label"
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Active</Label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        id="setup-is-active"
-                        type="checkbox"
-                        checked={setupIsActive}
-                        onChange={(e) => setSetupIsActive(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                      />
-                      <label htmlFor="setup-is-active" className="text-sm text-slate-700">
-                        Enable this product for new requests
-                      </label>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Fixed Amount (GHc)</Label>
-                    <Input value={setupFixedAmount} onChange={(e) => setSetupFixedAmount(e.target.value)} type="number" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Limit Amount (GHc)</Label>
-                    <Input value={setupMaxAmount} onChange={(e) => setSetupMaxAmount(e.target.value)} type="number" />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Qualification Note</Label>
-                    <Input value={setupQualification} onChange={(e) => setSetupQualification(e.target.value)} placeholder="e.g. Senior and above" />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Loan Terms (Default HR Note)</Label>
-                    <Textarea
-                      value={setupLoanTerms}
-                      onChange={(e) => setSetupLoanTerms(e.target.value)}
-                      placeholder="e.g. Recovery in equal monthly instalments from salary"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Default Recovery Months</Label>
-                    <Input
-                      value={setupDefaultRecoveryMonths}
-                      onChange={(e) => setSetupDefaultRecoveryMonths(e.target.value)}
-                      type="number"
-                      min={1}
-                    />
-                  </div>
-                </div>
-                <Button
-                  onClick={() => runLookupAction({
-                    action: "update_loan_type",
-                    loan_key: selectedLoanType,
-                    loan_label: setupLoanLabel,
-                    is_active: setupIsActive,
-                    fixed_amount: Number(setupFixedAmount || 0),
-                    max_amount: Number(setupMaxAmount || 0),
-                    min_qualification_note: setupQualification,
-                    loan_terms: setupLoanTerms,
-                    default_recovery_months: Number(setupDefaultRecoveryMonths || 0),
-                  }, "Loan type setup saved")}
-                  disabled={!selectedLoanType}
-                >
-                  Save Loan Type Setup
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader>
-                <CardTitle>Single Staff HOD Linkage</CardTitle>
-                <CardDescription>
-                  {canDirectLinkageUpdate
-                    ? "Attach one staff member to one or more HOD or regional manager profiles."
-                    : "Select a staff member and preferred HOD; your request will be sent to Admin for approval."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Staff for HOD Linkage</Label>
-                  <SearchableSelect
-                    value={selectedStaffForLink}
-                    onChange={setSelectedStaffForLink}
-                    placeholder="Select staff"
-                    searchPlaceholder="Search staff..."
-                    options={filteredStaffCandidates.map((s) => ({
-                      value: s.id,
-                      label: `${s.first_name} ${s.last_name} (${s.employee_id || "N/A"})`,
-                      keywords: `${s.position || ""} ${(s as any)?.departments?.name || ""}`,
-                    }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Select One or More HOD / Regional Managers</Label>
-                  <div className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    {(lookupData?.hods || []).map((h) => {
-                      const checked = selectedHodsForLink.includes(h.id)
-                      return (
-                        <label key={h.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm">
-                          <span>{`${h.first_name} ${h.last_name} (${h.role})`}</span>
-                          <input type="checkbox" checked={checked} onChange={() => toggleHodSelection(h.id)} />
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-                {!canDirectLinkageUpdate && (
-                  <div className="space-y-2">
-                    <Label>Reason / Note for Admin (optional)</Label>
-                    <Textarea
-                      value={linkageRequestNote}
-                      onChange={(e) => setLinkageRequestNote(e.target.value)}
-                      rows={3}
-                      placeholder="Tell Admin why this linkage is needed"
-                    />
-                  </div>
-                )}
-                {canDirectLinkageUpdate ? (
-                  <Button
-                    onClick={() => runLookupAction({ action: "upsert_hod_linkage_batch", staff_user_id: selectedStaffForLink, hod_user_ids: selectedHodsForLink }, "Staff-to-HOD linkages updated")}
-                    disabled={!selectedStaffForLink || selectedHodsForLink.length === 0}
-                  >
-                    Save Staff-HOD Linkages
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    onClick={requestLinkageApproval}
-                    disabled={!selectedStaffForLink || selectedHodsForLink.length === 0}
-                  >
-                    Request Linkage Approval
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {isAdmin && (
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader>
-                <CardTitle>Linkage Request Approval Queue</CardTitle>
-                <CardDescription>Approve or reject requested staff-to-HOD linkages and keep the full decision history in one queue.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <Select value={linkageRequestStatusFilter} onValueChange={(value: "all" | "pending" | "approved" | "rejected") => setLinkageRequestStatusFilter(value)}>
-                    <SelectTrigger className="md:w-[220px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending only</SelectItem>
-                      <SelectItem value="approved">Approved only</SelectItem>
-                      <SelectItem value="rejected">Rejected only</SelectItem>
-                      <SelectItem value="all">All requests</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="text-xs text-muted-foreground">Showing {filteredLinkageRequests.length} linkage request(s)</div>
-                </div>
-
-                {filteredLinkageRequests.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No linkage requests match the selected status.</p>
-                )}
-
-                <div className="grid gap-3 xl:grid-cols-2">
-                  {filteredLinkageRequests.map((request) => (
-                    <div key={request.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <div className="font-semibold text-slate-900">{`${request.staff?.full_name || "Staff"} -> ${request.requested_hod?.full_name || "HOD"}`}</div>
-                          <div className="text-xs text-muted-foreground">Requested by {request.requester?.full_name || "Unknown requester"} on {fmtDate(request.created_at)}</div>
-                        </div>
-                        <Badge className={request.request_status === "pending" ? "bg-amber-600 text-white" : request.request_status === "approved" ? "bg-emerald-700 text-white" : "bg-red-700 text-white"}>
-                          {request.request_status === "pending" ? "Pending Review" : request.request_status === "approved" ? "Approved" : "Rejected"}
-                        </Badge>
-                      </div>
-
-                      <div className="mt-3 space-y-1 text-sm">
-                        <div><strong>Staff ID:</strong> {request.staff?.employee_id || "N/A"}</div>
-                        <div><strong>Requested HOD Role:</strong> {request.requested_hod?.role || request.requested_hod?.position || "N/A"}</div>
-                        <div><strong>Requester Note:</strong> {request.request_note || "No note added."}</div>
-                        <div><strong>System Message:</strong> {request.message}</div>
-                        {request.resolved_at && (
-                          <div><strong>Audit Trail:</strong> {request.request_status} by {request.resolved_by?.full_name || "Admin"} on {fmtDate(request.resolved_at)}{request.resolution_note ? ` | Note: ${request.resolution_note}` : ""}</div>
-                        )}
-                      </div>
-
-                      <div className="mt-3 space-y-2">
-                        <Textarea
-                          value={linkageResolutionNotes[request.id] || ""}
-                          onChange={(e) => setLinkageResolutionNotes((prev) => ({ ...prev, [request.id]: e.target.value }))}
-                          rows={2}
-                          placeholder={request.request_status === "pending" ? "Optional admin note for approval or rejection" : "Existing resolution note"}
-                          disabled={request.request_status !== "pending"}
-                        />
-
-                        {request.request_status === "pending" ? (
-                          <div className="flex flex-wrap gap-2">
-                            <Button size="sm" onClick={() => resolveLinkageRequest(request.id, "approve")}>Approve Linkage</Button>
-                            <Button size="sm" variant="destructive" onClick={() => resolveLinkageRequest(request.id, "reject")}>Reject Linkage</Button>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">This request is closed and retained here as audit history.</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader>
-                <CardTitle>Bulk Staff to HOD Linkage</CardTitle>
-                <CardDescription>Filter staff, select many, and assign them to one HOD in a single action.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <Select value={staffLocationFilter} onValueChange={setStaffLocationFilter}>
-                    <SelectTrigger><SelectValue placeholder="Filter by location" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All locations</SelectItem>
-                      {staffLocationOptions.map((loc) => (
-                        <SelectItem key={`filter-loc-${loc.id}`} value={loc.id}>{loc.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={staffDepartmentFilter} onValueChange={setStaffDepartmentFilter}>
-                    <SelectTrigger><SelectValue placeholder="Filter by department" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All departments</SelectItem>
-                      {staffDepartmentOptions.map((dept) => (
-                        <SelectItem key={`filter-dept-${dept.id}`} value={dept.id}>{dept.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input value={staffSearchFilter} onChange={(e) => setStaffSearchFilter(e.target.value)} placeholder="Search staff" />
-                </div>
-
-                <div className="max-h-72 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                  {filteredStaffCandidates.map((staff) => (
-                    <label key={`batch-staff-${staff.id}`} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm">
-                      <span>{`${staff.first_name} ${staff.last_name} (${staff.employee_id || "N/A"})`}</span>
-                      <input
-                        type="checkbox"
-                        checked={selectedStaffsForBatchLink.includes(staff.id)}
-                        onChange={() => toggleStaffBatchSelection(staff.id)}
-                      />
-                    </label>
-                  ))}
-                  {filteredStaffCandidates.length === 0 && <p className="text-xs text-muted-foreground">No staff match the selected filters.</p>}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedStaffsForBatchLink(filteredStaffCandidates.map((staff) => staff.id))}
-                    disabled={filteredStaffCandidates.length === 0}
-                  >
-                    Select All Filtered Staff
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedStaffsForBatchLink([])}
-                    disabled={selectedStaffsForBatchLink.length === 0}
-                  >
-                    Clear All Selected Staff
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader>
-                  <CardTitle>Assign One HOD</CardTitle>
-                  <CardDescription>Apply one HOD to all selected staff in the filtered list.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Select HOD</Label>
-                    <SearchableSelect
-                      value={selectedHodForBatchLink}
-                      onChange={setSelectedHodForBatchLink}
-                      placeholder="Select HOD"
-                      searchPlaceholder="Search HOD..."
-                      options={(lookupData?.hods || []).map((h) => ({
-                        value: h.id,
-                        label: `${h.first_name} ${h.last_name} (${h.role})`,
-                        keywords: `${h.position || ""}`,
-                      }))}
-                    />
-                  </div>
-                  <p className="text-sm text-muted-foreground">Selected staff: {selectedStaffsForBatchLink.length}</p>
-                  <Button
-                    onClick={() => runLookupAction({ action: "upsert_hod_linkage_staff_batch", staff_user_ids: selectedStaffsForBatchLink, hod_user_id: selectedHodForBatchLink }, "Bulk staff-to-HOD linkage updated")}
-                    disabled={selectedStaffsForBatchLink.length === 0 || !selectedHodForBatchLink || !canDirectLinkageUpdate}
-                  >
-                    Link Selected Staff to HOD
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="border-slate-200 shadow-sm">
-                <CardHeader>
-                  <CardTitle>Staff Grade Update</CardTitle>
-                  <CardDescription>Keep the staff grade levels aligned with loan qualification rules.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Staff Member</Label>
-                    <SearchableSelect
-                      value={selectedStaffForRank}
-                      onChange={setSelectedStaffForRank}
-                      placeholder="Select staff"
-                      searchPlaceholder="Search staff..."
-                      options={(lookupData?.staff || []).map((s) => ({
-                        value: s.id,
-                        label: `${s.first_name} ${s.last_name} (${s.position || "N/A"})`,
-                        keywords: `${s.employee_id || ""}`,
-                      }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Rank Level</Label>
-                    <Select value={selectedRankLevel} onValueChange={(v: "junior" | "senior" | "manager") => setSelectedRankLevel(v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="junior">Junior</SelectItem>
-                        <SelectItem value="senior">Senior</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    onClick={() => runLookupAction({ action: "update_staff_rank", staff_user_id: selectedStaffForRank, rank_level: selectedRankLevel }, "Staff rank updated")}
-                    disabled={!selectedStaffForRank || !canDirectLinkageUpdate}
-                  >
-                    Update Staff Rank
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader>
-              <CardTitle>Current Linkage Data</CardTitle>
-              <CardDescription>Review the active staff-to-HOD mapping records currently available in the system. {filteredLinkageRows.length > 0 && <span className="ml-1 font-medium text-slate-600">({filteredLinkageRows.length} record{filteredLinkageRows.length !== 1 ? "s" : ""})</span>}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Search + Filters */}
-              <div className="mb-4 space-y-3">
-                <Input
-                  value={linkageSearch}
-                  onChange={(e) => { setLinkageSearch(e.target.value); setLinkagePage(1) }}
-                  placeholder="Search by staff name, employee ID, HOD, rank, location, or district"
-                />
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Select value={linkageLocationFilter} onValueChange={(v) => { setLinkageLocationFilter(v); setLinkagePage(1) }}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="All Locations" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Locations</SelectItem>
-                      {linkageLocationOptions.map((loc) => (
-                        <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={linkageDepartmentFilter} onValueChange={(v) => { setLinkageDepartmentFilter(v); setLinkagePage(1) }}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="All Departments" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Departments</SelectItem>
-                      {linkageDeptOptions.map((dept) => (
-                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={linkageRankFilter} onValueChange={(v) => { setLinkageRankFilter(v); setLinkagePage(1) }}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="All Ranks" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Ranks</SelectItem>
-                      {linkageRankOptions.map((rank) => (
-                        <SelectItem key={rank} value={rank}>{rank}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {(linkageSearch || linkageLocationFilter !== "all" || linkageDepartmentFilter !== "all" || linkageRankFilter !== "all") && (
-                  <button
-                    className="text-xs text-blue-600 hover:underline"
-                    onClick={() => { setLinkageSearch(""); setLinkageLocationFilter("all"); setLinkageDepartmentFilter("all"); setLinkageRankFilter("all"); setLinkagePage(1) }}
-                  >
-                    Clear all filters
-                  </button>
-                )}
-              </div>
-
-              {/* Cards Grid */}
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {paginatedLinkageRows.map((link) => {
-                  const staff = (lookupData?.staff || []).find((s) => s.id === link.staff_user_id)
-                  const hod = (lookupData?.hods || []).find((h) => h.id === link.hod_user_id)
-                  return (
-                    <div key={link.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-900 shadow-sm hover:border-slate-300 transition-colors">
-                      <div className="flex items-start justify-between gap-1 mb-2">
-                        <div>
-                          <p className="font-semibold text-sm text-slate-900">{staff ? `${staff.first_name} ${staff.last_name}` : link.staff_user_id}</p>
-                          <p className="text-slate-500">{staff?.employee_id || "No ID"} · <span className="capitalize">{staff?.position || "N/A"}</span></p>
-                        </div>
-                        {staff?.position && (
-                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 capitalize">{staff.position}</span>
-                        )}
-                      </div>
-                      <div className="mt-1 space-y-0.5 border-t border-slate-100 pt-2">
-                        <div><strong>HOD:</strong> {hod ? `${hod.first_name} ${hod.last_name}` : link.hod_user_id} <span className="text-slate-400">({hod?.position || "N/A"})</span></div>
-                        <div><strong>Location:</strong> {staff?.geofence_locations?.name || "N/A"}</div>
-                        <div><strong>District:</strong> {staff?.geofence_locations?.districts?.name || "N/A"}</div>
-                        <div><strong>Address:</strong> {staff?.geofence_locations?.address || "N/A"}</div>
-                        {(staff as any)?.departments?.name && <div><strong>Dept:</strong> {(staff as any).departments.name}</div>}
-                      </div>
-                      {canDirectLinkageUpdate && (
-                        <div className="mt-3">
-                          <Button size="sm" variant="outline" onClick={() => editLinkageFromCard(link.staff_user_id, link.hod_user_id)}>
-                            Edit This Linkage
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                {filteredLinkageRows.length === 0 && (
-                  <p className="col-span-3 text-sm text-muted-foreground py-8 text-center">No staff-to-HOD linkages match your filters.</p>
-                )}
-              </div>
-
-              {/* Pagination */}
-              {linkageTotalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between">
-                  <p className="text-xs text-slate-500">
-                    Showing {((linkagePage - 1) * LINKAGE_PAGE_SIZE) + 1}–{Math.min(linkagePage * LINKAGE_PAGE_SIZE, filteredLinkageRows.length)} of {filteredLinkageRows.length}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" disabled={linkagePage <= 1} onClick={() => setLinkagePage((p) => p - 1)} className="h-7 text-xs px-3">Prev</Button>
-                    <span className="text-xs text-slate-600">Page {linkagePage} of {linkageTotalPages}</span>
-                    <Button size="sm" variant="outline" disabled={linkagePage >= linkageTotalPages} onClick={() => setLinkagePage((p) => p + 1)} className="h-7 text-xs px-3">Next</Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <SetupLinkagePanel
+            canDirectLinkageUpdate={canDirectLinkageUpdate}
+            isAdmin={isAdmin}
+            loanTypes={lookupData?.loanTypes || []}
+            staff={lookupData?.staff || []}
+            hods={lookupData?.hods || []}
+            linkages={lookupData?.linkages || []}
+            linkageRequests={lookupData?.linkageRequests || []}
+            selectedLoanType={selectedLoanType}
+            setSelectedLoanType={setSelectedLoanType}
+            setupLoanLabel={setupLoanLabel}
+            setSetupLoanLabel={setSetupLoanLabel}
+            setupIsActive={setupIsActive}
+            setSetupIsActive={setSetupIsActive}
+            setupFixedAmount={setupFixedAmount}
+            setSetupFixedAmount={setSetupFixedAmount}
+            setupMaxAmount={setupMaxAmount}
+            setSetupMaxAmount={setSetupMaxAmount}
+            setupQualification={setupQualification}
+            setSetupQualification={setSetupQualification}
+            setupLoanTerms={setupLoanTerms}
+            setSetupLoanTerms={setSetupLoanTerms}
+            setupDefaultRecoveryMonths={setupDefaultRecoveryMonths}
+            setSetupDefaultRecoveryMonths={setSetupDefaultRecoveryMonths}
+            onSaveLoanType={() => runLookupAction({
+              action: "update_loan_type",
+              loan_key: selectedLoanType,
+              loan_label: setupLoanLabel,
+              is_active: setupIsActive,
+              fixed_amount: Number(setupFixedAmount || 0),
+              max_amount: Number(setupMaxAmount || 0),
+              min_qualification_note: setupQualification,
+              loan_terms: setupLoanTerms,
+              default_recovery_months: Number(setupDefaultRecoveryMonths || 0),
+            }, "Loan type setup saved")}
+            selectedStaffForLink={selectedStaffForLink}
+            setSelectedStaffForLink={setSelectedStaffForLink}
+            selectedHodsForLink={selectedHodsForLink}
+            toggleHodSelection={toggleHodSelection}
+            linkageRequestNote={linkageRequestNote}
+            setLinkageRequestNote={setLinkageRequestNote}
+            onSaveSingleLinkage={() => runLookupAction({ action: "upsert_hod_linkage_batch", staff_user_id: selectedStaffForLink, hod_user_ids: selectedHodsForLink }, "Staff-to-HOD linkages updated")}
+            onRequestLinkageApproval={requestLinkageApproval}
+            staffLocationFilter={staffLocationFilter}
+            setStaffLocationFilter={setStaffLocationFilter}
+            staffDepartmentFilter={staffDepartmentFilter}
+            setStaffDepartmentFilter={setStaffDepartmentFilter}
+            staffSearchFilter={staffSearchFilter}
+            setStaffSearchFilter={setStaffSearchFilter}
+            filteredStaffCandidates={filteredStaffCandidates}
+            staffLocationOptions={staffLocationOptions}
+            staffDepartmentOptions={staffDepartmentOptions}
+            selectedStaffsForBatchLink={selectedStaffsForBatchLink}
+            toggleStaffBatchSelection={toggleStaffBatchSelection}
+            setSelectedStaffsForBatchLink={setSelectedStaffsForBatchLink}
+            selectedHodForBatchLink={selectedHodForBatchLink}
+            setSelectedHodForBatchLink={setSelectedHodForBatchLink}
+            onBulkLink={() => runLookupAction({ action: "upsert_hod_linkage_staff_batch", staff_user_ids: selectedStaffsForBatchLink, hod_user_id: selectedHodForBatchLink }, "Bulk staff-to-HOD linkage updated")}
+            onAutoLinkByLocation={() => runLookupAction({ action: "auto_link_by_location" }, "Auto-link by location completed")}
+            selectedStaffForRank={selectedStaffForRank}
+            setSelectedStaffForRank={setSelectedStaffForRank}
+            selectedRankLevel={selectedRankLevel}
+            setSelectedRankLevel={setSelectedRankLevel}
+            onUpdateStaffRank={() => runLookupAction({ action: "update_staff_rank", staff_user_id: selectedStaffForRank, rank_level: selectedRankLevel }, "Staff rank updated")}
+            linkageSearch={linkageSearch}
+            setLinkageSearch={setLinkageSearch}
+            linkageLocationFilter={linkageLocationFilter}
+            setLinkageLocationFilter={setLinkageLocationFilter}
+            linkageDepartmentFilter={linkageDepartmentFilter}
+            setLinkageDepartmentFilter={setLinkageDepartmentFilter}
+            linkageRankFilter={linkageRankFilter}
+            setLinkageRankFilter={setLinkageRankFilter}
+            linkagePage={linkagePage}
+            setLinkagePage={setLinkagePage}
+            filteredLinkageRows={filteredLinkageRows}
+            paginatedLinkageRows={paginatedLinkageRows}
+            linkageTotalPages={linkageTotalPages}
+            linkageLocationOptions={linkageLocationOptions}
+            linkageDeptOptions={linkageDeptOptions}
+            linkageRankOptions={linkageRankOptions}
+            editLinkageFromCard={editLinkageFromCard}
+            LINKAGE_PAGE_SIZE={LINKAGE_PAGE_SIZE}
+            linkageRequestStatusFilter={linkageRequestStatusFilter}
+            setLinkageRequestStatusFilter={setLinkageRequestStatusFilter}
+            filteredLinkageRequests={filteredLinkageRequests}
+            linkageResolutionNotes={linkageResolutionNotes}
+            setLinkageResolutionNotes={setLinkageResolutionNotes}
+            onResolveLinkageRequest={resolveLinkageRequest}
+            normalizeLoanTypeLabel={normalizeLoanTypeLabel}
+            fmtDate={fmtDate}
+            lookupLoading={lookupLoading}
+          />
         </TabsContent>
 
       {/* ── Action Modal ──────────────────────��─────────────────────── */}
