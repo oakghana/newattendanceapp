@@ -18,19 +18,15 @@ interface DisbursedLoan {
   staff_receiving_funds_confirmed_at: string | null
   staff_receiving_funds_confirmed_by: string | null
   created_at: string
-  user_id: string | null
-  user_profiles?: {
-    departments?: {
-      name: string
-    } | null
-  } | null
+  department_name?: string
 }
 
 interface DisbursementConfirmationClientProps {
   loans: DisbursedLoan[]
+  userProfile?: any
 }
 
-export function DisbursementConfirmationClient({ loans: initialLoans }: DisbursementConfirmationClientProps) {
+export function DisbursementConfirmationClient({ loans: initialLoans, userProfile }: DisbursementConfirmationClientProps) {
   const [loans, setLoans] = useState(initialLoans)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const supabase = createClient()
@@ -162,7 +158,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans }: Disburse
                         </div>
                         <div>
                           <h3 className="font-bold text-slate-900">{loan.staff_full_name || "Unknown"}</h3>
-                          <p className="text-xs text-slate-500">{loan.staff_number} • {loan.user_profiles?.departments?.name || "N/A"}</p>
+                          <p className="text-xs text-slate-500">{loan.staff_number} • {loan.department_name || "N/A"}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
