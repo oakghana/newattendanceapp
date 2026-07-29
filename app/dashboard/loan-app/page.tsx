@@ -4744,11 +4744,42 @@ export default function LoanAppPage() {
                     </div>
                   </div>
 
-                  {/* Approver Information */}
+                  {/* Approval Stamp with Signature */}
                   {(row.director_hr_name || row.director_signature_text) && (
-                    <div className="mb-3 pb-3 border-b bg-blue-50 rounded px-2 py-1.5">
-                      <div className="text-xs text-blue-700">
-                        <span className="font-semibold">Approved & Signed by:</span> {row.director_hr_name || row.director_signature_text}
+                    <div className="mb-4 flex items-center justify-center">
+                      <div className="relative w-40 h-40 border-4 border-green-500 rounded-full flex flex-col items-center justify-center bg-green-50">
+                        {/* Outer circle for stamp effect */}
+                        <div className="absolute w-40 h-40 border-2 border-green-400 rounded-full opacity-50"></div>
+                        
+                        {/* Stamp content */}
+                        <div className="relative z-10 text-center">
+                          <div className="text-2xl font-bold text-green-600 mb-2">APPROVED</div>
+                          
+                          {/* MD Signature Image or Text */}
+                          {row.director_signature_data_url ? (
+                            <img 
+                              src={row.director_signature_data_url} 
+                              alt="Director Signature"
+                              className="h-12 mx-auto mb-1 max-w-full"
+                            />
+                          ) : row.director_signature_text ? (
+                            <div className="text-sm font-handwriting text-green-700 italic mb-1">
+                              {row.director_signature_text}
+                            </div>
+                          ) : null}
+                          
+                          {/* Approver Name */}
+                          <div className="text-xs text-green-600 font-semibold mt-1">
+                            {row.director_hr_name}
+                          </div>
+                          
+                          {/* Approval Date */}
+                          {row.md_approved_at && (
+                            <div className="text-xs text-green-500 mt-1">
+                              {new Date(row.md_approved_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

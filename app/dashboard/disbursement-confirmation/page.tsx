@@ -41,13 +41,13 @@ export default async function DisbursementConfirmationPage() {
     redirect("/auth/login")
   }
 
-  // Fetch loans in staff_receiving_funds status
-  // Use a simpler query without nested relationships to avoid issues
+  // Fetch loans that have been approved by MD or Director HR (ready for disbursement confirmation)
+  // Include both md_approved and awaiting_director_hr statuses as these are the ones ready to disburse
   const { data: loans, error: loansError } = await admin
     .from("loan_requests")
     .select("*")
-    .eq("status", "staff_receiving_funds")
-    .order("created_at", { ascending: false })
+    .in("status", ["md_approved", "awaiting_director_hr"])
+    .order("md_approved_at", { ascending: false })
     .limit(500)
 
   if (loansError) {
