@@ -201,7 +201,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, staff_category, years_of_service, date_of_appointment, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -209,37 +209,36 @@ export async function GET() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    // Fetch optional welfare fields separately so a missing column never breaks the main query
-    let staffCategory: string | null = null
-    let yearsOfService: number | null = null
-    let dateOfAppointment: string | null = null
-    const { data: welfareFields, error: welfareError } = await admin
-      .from("user_profiles")
-      .select("staff_category, years_of_service, date_of_appointment")
-      .eq("id", user.id)
-      .maybeSingle()
-    // Only skip on genuine missing-column schema errors; populate if the query succeeded
-    if (!welfareError || isSchemaIssue(welfareError)) {
-      staffCategory = (welfareFields as any)?.staff_category ?? null
-      yearsOfService = (welfareFields as any)?.years_of_service ?? null
-      dateOfAppointment = (welfareFields as any)?.date_of_appointment ?? null
+    // Pull welfare fields directly from the already-fetched profile row
+    // (staff_category, years_of_service, date_of_appointment are on user_profiles)
+    let staffCategory: string | null = (profile as any)?.staff_category ?? null
+    let yearsOfService: number | null = (profile as any)?.years_of_service ?? null
+    let dateOfAppointment: string | null = (profile as any)?.date_of_appointment ?? null
+
+    // If DB has no years_of_service but has date_of_appointment, auto-calculate it
+    if ((yearsOfService === null || yearsOfService === undefined) && dateOfAppointment) {
+      const apptDate = new Date(dateOfAppointment)
+      if (!isNaN(apptDate.getTime())) {
+        yearsOfService = Math.floor(
+          (Date.now() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
+        )
+      }
     }
 
-    // Auto-derive staff category from rank/position if not explicitly stored
-    // "Accounts Officer", "HR Officer" etc. → "Senior"; unrecognised titles → keep null
-    if (!staffCategory || staffCategory === "junior") {
+    // Normalise staffCategory to Title Case and only derive from position when NOT explicitly set in DB
+    if (staffCategory) {
+      const raw = staffCategory.toLowerCase().trim()
+      if (raw === "senior" || raw === "senior staff") staffCategory = "Senior"
+      else if (raw === "junior" || raw === "junior staff") staffCategory = "Junior"
+      else staffCategory = staffCategory.charAt(0).toUpperCase() + staffCategory.slice(1).toLowerCase()
+    } else {
+      // Nothing stored — try to derive from position/rank
       const position = (profile as any)?.position || null
       const rank = (profile as any)?.rank || null
       const derived = deriveStaffCategoryFromPosition(position, rank)
       if (derived) {
-        // Capitalise for display: "senior" → "Senior"
         staffCategory = derived.charAt(0).toUpperCase() + derived.slice(1)
       }
-    } else {
-      // Normalise stored value to Title Case for display ("senior" → "Senior", "Senior Staff" → "Senior")
-      const raw = staffCategory.toLowerCase().trim()
-      if (raw === "senior" || raw === "senior staff") staffCategory = "Senior"
-      else if (raw === "junior" || raw === "junior staff") staffCategory = "Junior"
     }
 
     const role = normalizeRole((profile as any).role)
