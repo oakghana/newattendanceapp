@@ -18,6 +18,7 @@ export default async function SecretaryMemosPage() {
   if (!profile || profile.role !== "secretary") redirect("/auth/login")
 
   // Fetch approved loan memos (HR Executive approved stage and above)
+  // Includes: awaiting_director_hr (HR signed, awaiting MD), approved_director (MD approved), staff_receiving_funds, partially_recovered
   const { data: loanMemos } = await admin
     .from("loan_requests")
     .select(`
@@ -42,7 +43,7 @@ export default async function SecretaryMemosPage() {
         geofence_locations(name)
       )
     `)
-    .in("status", ["approved_director", "staff_receiving_funds", "partially_recovered"])
+    .in("status", ["awaiting_director_hr", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
     .order("created_at", { ascending: false })
     .limit(300)
 
