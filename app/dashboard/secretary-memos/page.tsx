@@ -47,29 +47,39 @@ export default async function SecretaryMemosPage() {
     .order("created_at", { ascending: false })
     .limit(300)
 
-  // Fetch approved leave memos
-  const { data: leaveMemos } = await admin
-    .from("leave_requests")
-    .select(`
-      id,
-      leave_type,
-      status,
-      start_date,
-      end_date,
-      reason,
-      created_at,
-      user_id,
-      user_profiles!user_id (
-        first_name,
-        last_name,
-        employee_id,
-        profile_image_url,
-        departments(name)
-      )
-    `)
-    .in("status", ["approved", "hr_approved", "hod_approved"])
+  // Fetch approved leave memos from leave_plan_requests (the correct table)
+  const { data: rawLeaveMemos } = await admin
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, status, preferred_start_date, preferred_end_date, reason, created_at, hr_approved_at, memo_token, user_id")
+    .in("status", ["hr_approved", "approved"])
     .order("created_at", { ascending: false })
     .limit(300)
+
+  // Fetch user profiles for those leave memos separately
+  const leaveUserIds = [...new Set((rawLeaveMemos || []).map((l: any) => l.user_id).filter(Boolean))]
+  const { data: leaveProfiles } = leaveUserIds.length > 0
+    ? await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, profile_image_url, department_id, departments(name)")
+        .in("id", leaveUserIds)
+    : { data: [] }
+
+  const leaveProfileMap = new Map((leaveProfiles || []).map((p: any) => [p.id, p]))
+
+  // Normalise to the shape the client expects
+  const leaveMemos = (rawLeaveMemos || []).map((leave: any) => ({
+    id: leave.id,
+    leave_type: leave.leave_type_key,
+    status: leave.status,
+    start_date: leave.preferred_start_date,
+    end_date: leave.preferred_end_date,
+    reason: leave.reason,
+    created_at: leave.created_at,
+    hr_approved_at: leave.hr_approved_at,
+    memo_token: leave.memo_token,
+    user_id: leave.user_id,
+    user_profiles: leaveProfileMap.get(leave.user_id) || null,
+  }))
 
   // Fetch all MD-stamped/approved loan memos (any post-MD-approval status)
   // Include user_profiles join to resolve staff names when staff_full_name is missing
@@ -99,61 +109,28 @@ export default async function SecretaryMemosPage() {
     .order("md_approved_at", { ascending: false })
     .limit(300)
 
-  // Fetch MD approved leave memos (all final approved leave)
-  const { data: approvedLeaveMemos } = await admin
-    .from("leave_requests")
-    .select(`
-      id,
-      leave_type,
-      status,
-      start_date,
-      end_date,
-      created_at,
-      user_id,
-      user_profiles!user_id (
-        first_name,
-        last_name,
-        employee_id
-      )
-    `)
-    .eq("status", "approved")
-    .order("created_at", { ascending: false })
-    .limit(300)
-
-  // Combine approved memos
-  const approvedMemos = [
-    ...(approvedLoanMemos || []).map((loan: any) => {
-      const profile = loan.user_profiles
-      const resolvedName =
-        loan.staff_full_name?.trim() ||
-        (`${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()) ||
-        "Unknown Staff"
-      const resolvedStaffNo = loan.staff_number || profile?.employee_id || "—"
-      return {
-        id: loan.id,
-        request_number: loan.request_number,
-        type: "loan" as const,
-        loan_type_label: loan.loan_type_label,
-        staff_full_name: resolvedName,
-        staff_number: resolvedStaffNo,
-        fixed_amount: loan.fixed_amount,
-        md_approved_at: loan.md_approved_at,
-        md_approved_by_name: loan.md_approved_by_name,
-      }
-    }),
-    ...(approvedLeaveMemos || []).map((leave: any) => ({
-      id: leave.id,
-      request_number: leave.id.slice(0, 8),
-      type: "leave" as const,
-      leave_type: leave.leave_type,
-      staff_full_name: `${leave.user_profiles?.first_name} ${leave.user_profiles?.last_name}`.trim(),
-      staff_number: leave.user_profiles?.employee_id,
-      start_date: leave.start_date,
-      end_date: leave.end_date,
-      md_approved_at: leave.created_at,
-      md_approved_by_name: null,
-    })),
-  ]
+  // MD Approved tab: ONLY loans that the MD has actually stamped (md_approved_at set)
+  // and leave payment advice that the MD has approved (md_approved payment_advice_memos)
+  // Do NOT include regular leave memos here — those belong in the Leave Memos tab only
+  const approvedMemos = (approvedLoanMemos || []).map((loan: any) => {
+    const profile = loan.user_profiles
+    const resolvedName =
+      loan.staff_full_name?.trim() ||
+      (`${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()) ||
+      "Unknown Staff"
+    const resolvedStaffNo = loan.staff_number || profile?.employee_id || "—"
+    return {
+      id: loan.id,
+      request_number: loan.request_number,
+      type: "loan" as const,
+      loan_type_label: loan.loan_type_label,
+      staff_full_name: resolvedName,
+      staff_number: resolvedStaffNo,
+      fixed_amount: loan.fixed_amount,
+      md_approved_at: loan.md_approved_at,
+      md_approved_by_name: loan.md_approved_by_name,
+    }
+  })
 
   return (
     <SecretaryMemosClient

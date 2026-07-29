@@ -112,7 +112,7 @@ async function generateMemoHandler(context: any, isPublic = false) {
     } else if (memoType === "payment-advice") {
       const { data: memo } = await admin
         .from("payment_advice_memos")
-        .select("*")
+        .select("*, md_approved_by_id")
         .eq("id", memoId)
         .single()
 
@@ -396,7 +396,118 @@ Yours faithfully,
     doc.setFont(undefined, "normal")
     doc.setFontSize(9)
     doc.text(memoData.signer_position || "HR Executive", marginLeft, y)
-    y += 8
+    y += 12
+
+    // ─── MD APPROVAL STAMP for payment advice (QCC official rubber-stamp style) ─
+    if (memoType === "payment-advice" && memoData?.md_approved_by_id) {
+      // Fetch MD profile and signature
+      const { data: mdProfile } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("user_id", memoData.md_approved_by_id)
+        .single()
+
+      const { data: mdSignRegistry } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url, signature_mode, signature_text, is_active")
+        .eq("user_id", memoData.md_approved_by_id)
+
+      const mdBestSig = pickBestSignature(mdSignRegistry || [])
+      const mdSignatureUrl = mdBestSig?.signature_data_url || ""
+
+      // ── Stamp dimensions — rounded-rect, positioned bottom-right of memo body
+      const stampW  = 68
+      const stampH  = 52
+      const stampX  = pageWidth - marginRight - stampW
+      const stampY  = y
+      const cx      = stampX + stampW / 2
+      const radius  = 4
+
+      // Official QCC blue ink colour (#1E5FA8 — matches physical stamp)
+      const inkR = 30, inkG = 95, inkB = 168
+
+      // ── Outer rounded rectangle border (thick, double-line style)
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(1.8)
+      doc.roundedRect(stampX, stampY, stampW, stampH, radius, radius, "S")
+
+      // Inner rounded rectangle (thin inset, 1.5 mm inside)
+      doc.setLineWidth(0.5)
+      doc.roundedRect(stampX + 2, stampY + 2, stampW - 4, stampH - 4, radius - 1, radius - 1, "S")
+
+      // ── Top band: "QUALITY CONTROL CO. LTD. (COCOBOD)"
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(5.2)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text("QUALITY CONTROL CO. LTD. (COCOBOD)", cx, stampY + 7.5, { align: "center" })
+
+      // Thin separator under top band
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(0.35)
+      doc.line(stampX + 4, stampY + 9.5, stampX + stampW - 4, stampY + 9.5)
+
+      // ── "APPROVED" — large, bold, centred
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(15)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text("APPROVED", cx, stampY + 20, { align: "center" })
+
+      // ── MD Signature image (overlaps "APPROVED" text — authentic look)
+      if (mdSignatureUrl && mdSignatureUrl.length > 10) {
+        try {
+          if (mdSignatureUrl.startsWith("data:image/")) {
+            const b64Match = mdSignatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
+            if (b64Match) {
+              const imgType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+              // Centred, slightly overlapping APPROVED text for realism
+              doc.addImage(mdSignatureUrl, imgType, stampX + 8, stampY + 11, stampW - 16, 14)
+            }
+          }
+        } catch (_) { /* signature optional */ }
+      }
+
+      // ── Approval date (e.g. "29 JUL 2026")
+      const approvalDateStr = memoData?.md_approved_at
+        ? new Date(memoData.md_approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()
+        : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(7)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text(approvalDateStr, cx, stampY + 32, { align: "center" })
+
+      // ── Dotted separator above "MANAGING DIRECTOR" band (matches physical stamp)
+      const dotY = stampY + 35.5
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(0.3)
+      // Draw dotted line manually using small segments
+      let dx = stampX + 4
+      while (dx < stampX + stampW - 4) {
+        doc.line(dx, dotY, dx + 0.8, dotY)
+        dx += 2
+      }
+
+      // ── Bottom band: "MANAGING DIRECTOR"
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(7)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text("MANAGING DIRECTOR", cx, stampY + 41, { align: "center" })
+
+      // ── Bottom thin separator
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(0.35)
+      doc.line(stampX + 4, stampY + 43, stampX + stampW - 4, stampY + 43)
+
+      // ── MD name (small, below separator — optional personalisation)
+      if (mdProfile) {
+        const mdFullName = `${mdProfile.first_name} ${mdProfile.last_name}`.trim().toUpperCase()
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(5.5)
+        doc.setTextColor(inkR, inkG, inkB)
+        doc.text(mdFullName, cx, stampY + 48, { align: "center" })
+      }
+
+      y += stampH + 8
+    }
 
     // Footer
     doc.setFontSize(8)

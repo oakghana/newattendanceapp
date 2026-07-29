@@ -49,6 +49,8 @@ interface LeaveMemo {
   end_date: string
   reason: string | null
   created_at: string
+  hr_approved_at: string | null
+  memo_token: string | null
   user_id: string
   user_profiles: {
     first_name: string
@@ -461,12 +463,39 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <div className="text-right text-xs text-slate-500">
-                          <div>Requested</div>
-                          <div className="font-medium text-slate-700">{fmtDate(memo.created_at)}</div>
+                          <div>{memo.hr_approved_at ? "HR Approved" : "Requested"}</div>
+                          <div className="font-medium text-slate-700">{fmtDate(memo.hr_approved_at || memo.created_at)}</div>
                         </div>
                         <Badge className={cn("text-xs border font-medium", statusInfo.color)}>
                           {statusInfo.label}
                         </Badge>
+                        {memo.memo_token && (
+                          <>
+                            <button
+                              onClick={() => {
+                                const url = `/api/leave/planning/memo/${memo.id}?token=${encodeURIComponent(memo.memo_token || "")}`
+                                window.open(url, "_blank")
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors"
+                              title="Download leave memo PDF"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              Download
+                            </button>
+                            <button
+                              onClick={() => {
+                                const url = `/api/leave/planning/memo/${memo.id}?token=${encodeURIComponent(memo.memo_token || "")}`
+                                const win = window.open(url, "_blank")
+                                win?.addEventListener("load", () => win.print())
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+                              title="Print leave memo"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                              Print
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   )
