@@ -100,7 +100,18 @@ export function canDoHrOffice(role: string, deptName?: string | null, deptCode?:
 }
 
 export function canDoDirectorHr(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return isAdminRole(role) || role === "director_hr" || role === "manager_hr" || role === "hr_director" || (role === "department_head" && isHrDepartment(deptName, deptCode))
+  // Includes hr_executive, hr, manager_hr, director_hr, hr_director roles so all HR Executive-level
+  // users can access the Executive HR approval queue and sign memos
+  return (
+    isAdminRole(role) ||
+    role === "director_hr" ||
+    role === "manager_hr" ||
+    role === "hr_director" ||
+    role === "hr_executive" ||
+    role === "hr" ||
+    role === "hr_manager" ||
+    (role === "department_head" && isHrDepartment(deptName, deptCode))
+  )
 }
 
 export function requestIsEditable(status: string): boolean {

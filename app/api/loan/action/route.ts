@@ -68,7 +68,7 @@ async function getDirectorApprovers(admin: any) {
   const { data } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["director_hr", "manager_hr"])
+    .in("role", ["director_hr", "manager_hr", "hr_director", "hr_executive", "hr", "hr_manager"])
     .eq("is_active", true)
   return (data || []).map((row: any) => String(row.id))
 }
@@ -82,7 +82,10 @@ async function validateDirectorApprover(admin: any, approverId: string) {
 
   if (!data) return false
   const role = normalizeRole((data as any).role)
-  return Boolean((data as any).is_active) && ["director_hr", "manager_hr"].includes(role)
+  return (
+    Boolean((data as any).is_active) &&
+    ["director_hr", "manager_hr", "hr_director", "hr_executive", "hr", "hr_manager", "admin"].includes(role)
+  )
 }
 
 async function getDirectorSavedSignature(admin: any, userId: string) {
@@ -739,13 +742,20 @@ export async function POST(request: NextRequest) {
     if (action === "director_finalize") {
       actionHandled = true
       
-      // Allow HR Executives at "awaiting_hr_executives" stage OR Director HR at "awaiting_director_hr" stage
-      const isHrExecutive = ["hr_executive", "accounts", "loan_office", "admin"].includes(role)
-      const isDirectorHr = ["director_hr", "admin"].includes(role)
-      
+      // Allow HR Executives / HR staff at "awaiting_hr_executives" stage
+      // Allow Director HR / MD / Admin at "awaiting_director_hr" stage
+      // "hr" is the generic role used for HR Executives in the system
+      const isHrExecutive = [
+        "hr_executive", "hr", "hr_manager", "manager_hr", "director_hr",
+        "hr_director", "accounts", "loan_office", "admin",
+      ].includes(role)
+      const isDirectorHr = [
+        "director_hr", "manager_hr", "hr_director", "managing_director", "admin",
+      ].includes(role)
+
       if (req.status === "awaiting_hr_executives") {
         if (!isHrExecutive) {
-          return NextResponse.json({ error: "Only HR staff can approve at this stage" }, { status: 403 })
+          return NextResponse.json({ error: "Only HR Executive staff can approve at this stage" }, { status: 403 })
         }
       } else if (req.status === "awaiting_director_hr") {
         if (!isDirectorHr) {
