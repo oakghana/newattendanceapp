@@ -33,8 +33,28 @@ export default function AttendancePage() {
       try {
         const supabase = createClient()
 
-        // Check authentication
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+        // Check authentication with retry logic (session might not be available immediately after redirect)
+        let authUser = null
+        let authError = null
+        let retryCount = 0
+        const maxRetries = 3
+
+        while (retryCount < maxRetries) {
+          const result = await supabase.auth.getUser()
+          authUser = result.data?.user
+          authError = result.error
+
+          if (authUser) break // Success, exit retry loop
+          
+          if (retryCount < maxRetries - 1) {
+            // Wait before retrying (exponential backoff: 100ms, 300ms, 500ms)
+            await new Promise(resolve => setTimeout(resolve, 100 * (retryCount + 1)))
+            retryCount++
+          } else {
+            retryCount++
+            break
+          }
+        }
 
         if (!isMounted) return
 
@@ -110,19 +130,16 @@ export default function AttendancePage() {
     }
   }, [router])
 
-  if (isLoading) {
+  if (isLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center space-y-4">
           <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
           <h1 className="text-2xl font-bold text-slate-900">Loading dashboard...</h1>
+          <p className="text-sm text-slate-600">Authenticating your session...</p>
         </div>
       </div>
     )
-  }
-
-  if (!user) {
-    return null
   }
 
   const assignedLocation = locations.find((loc) => loc.id === userProfile?.assigned_location_id) || null
