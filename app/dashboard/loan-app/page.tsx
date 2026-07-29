@@ -2815,11 +2815,9 @@ export default function LoanAppPage() {
                           <span className="text-2xl">✅</span>
                           <div>
                             <p className="text-sm font-semibold text-emerald-800">Your loan has been fully approved</p>
-                            {req.director_signature_text && (
-                              <p className="text-xs text-emerald-700 mt-0.5">
-                                Signed by: <span className="font-semibold">{req.director_signature_text}</span>
-                              </p>
-                            )}
+                            <p className="text-xs text-emerald-700 mt-0.5">
+                              Signed by: <span className="font-semibold">Director</span>
+                            </p>
                           </div>
                         </div>
                         <Button
@@ -4533,7 +4531,7 @@ export default function LoanAppPage() {
                   )}
                   <div className="text-xs text-muted-foreground">Updated: {fmtDate(row.updated_at || row.created_at)}</div>
                   {(row.director_hr_name || row.director_signature_text) && (
-                    <div className="text-xs text-slate-600">Signed by: <span className="font-semibold">{row.director_hr_name || row.director_signature_text}</span></div>
+                    <div className="text-xs text-slate-600">Signed by: <span className="font-semibold">Director</span></div>
                   )}
                   {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
                     <div className="pt-2">
