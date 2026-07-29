@@ -613,63 +613,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.text("FOR:  MANAGING DIRECTOR", marginLeft, y)
     y += 12
 
-    // ─── MD APPROVAL STAMP (if approved) ──────────────────────────────
-    if (loan.status === "md_approved" && directorProfile) {
-      if (y + 60 > pageHeight - 16) {
-        doc.addPage()
-        y = 24
-      }
-      
-      const stampX = pageWidth / 2
-      const stampY = y + 15
-      const stampRadius = 22 // mm
-      
-      // Draw circular stamp border
-      doc.setDrawColor(34, 197, 94) // green-600
-      doc.setLineWidth(1.5)
-      doc.circle(stampX, stampY, stampRadius, "S")
-      
-      // Draw inner decorative circle
-      doc.setLineWidth(0.5)
-      doc.setDrawColor(134, 239, 172) // green-300
-      doc.circle(stampX, stampY, stampRadius - 2, "S")
-      
-      // Add APPROVED text
-      doc.setFont("times", "bold")
-      doc.setFontSize(18)
-      doc.setTextColor(34, 197, 94) // green-600
-      doc.textAlign = "center"
-      doc.text("APPROVED", stampX, stampY - 6)
-      
-      // Add MD signature if available
-      if (signerSignatureUrl) {
-        try {
-          doc.addImage(signerSignatureUrl, "PNG", stampX - 8, stampY, 16, 6)
-        } catch (e) {
-          // Skip if signature image fails
-        }
-      }
-      
-      // Add MD name
-      doc.setFont("times", "normal")
-      doc.setFontSize(9)
-      doc.setTextColor(34, 197, 94)
-      const mdName = `${directorProfile?.first_name || ""} ${directorProfile?.last_name || ""}`.trim()
-      doc.text(mdName, stampX, stampY + 8)
-      
-      // Add approval date
-      doc.setFontSize(8)
-      const approvalDate = fmtDate(loan.md_approved_at || new Date())
-      doc.text(approvalDate, stampX, stampY + 11)
-      
-      y += 40
-    }
-
-    // ─── cc section ───────────────────────────────────────────────────
+    // ─── cc section + MD Approval Stamp ──────────────────────────────
     if (y + 40 > pageHeight - 16) {
       doc.addPage()
       y = 24
     }
+
+    const ccStartY = y
+
     doc.setFont("times", "normal")
     doc.setFontSize(8.5)
     doc.setTextColor(60, 60, 60)
@@ -682,14 +633,86 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       "Registry Unit",
       "Records Unit",
     ]
-    const ccList = loan.memo_cc 
-      ? loan.memo_cc.split('\n').filter((line: string) => line.trim()) 
+    const ccList = loan.memo_cc
+      ? loan.memo_cc.split('\n').filter((line: string) => line.trim())
       : defaultCcList
     doc.text("cc:", marginLeft, y)
     ccList.forEach((entry: string, i: number) => {
       doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
     })
     y += (ccList.length + 1) * 4.5 + 4
+
+    // ─── MD Approval Stamp — drawn to the RIGHT of the cc list ────────
+    const isMdApproved = ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
+    if (isMdApproved) {
+      const stampRadius = 22
+      // Centre the stamp in the right half of the page, vertically aligned with cc block
+      const stampX = pageWidth - marginRight - stampRadius - 4
+      const ccMidY = ccStartY + ((ccList.length + 1) * 4.5) / 2
+      const stampY = ccMidY
+
+      // Outer ring — dark green
+      doc.setDrawColor(21, 128, 61)    // green-700
+      doc.setLineWidth(2)
+      doc.circle(stampX, stampY, stampRadius, "S")
+
+      // Inner ring — lighter green
+      doc.setDrawColor(74, 222, 128)   // green-400
+      doc.setLineWidth(0.6)
+      doc.circle(stampX, stampY, stampRadius - 3, "S")
+
+      // APPROVED text — bold, uppercase
+      doc.setFont("times", "bold")
+      doc.setFontSize(10)
+      doc.setTextColor(21, 128, 61)
+      doc.text("APPROVED", stampX, stampY - 9, { align: "center" })
+
+      // MD signature image (fetched earlier as signerSignatureUrl)
+      let sigRendered = false
+      if (signerSignatureUrl) {
+        try {
+          const sigResp = await fetch(signerSignatureUrl)
+          if (sigResp.ok) {
+            const sigBuf = await sigResp.arrayBuffer()
+            const sigB64 = Buffer.from(sigBuf).toString("base64")
+            const ct = sigResp.headers.get("content-type") || "image/png"
+            const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
+            // Fit signature inside stamp — centred horizontally
+            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX - 10, stampY - 7, 20, 9)
+            sigRendered = true
+          }
+        } catch {
+          // fall through to text
+        }
+      }
+      if (!sigRendered) {
+        // Text fallback for signature
+        const sigFallback = (loan as any).director_signature_text || fmtName(directorProfile)
+        if (sigFallback) {
+          doc.setFont("times", "bolditalic")
+          doc.setFontSize(7)
+          doc.setTextColor(21, 128, 61)
+          doc.text(sigFallback, stampX, stampY + 1, { align: "center" })
+        }
+      }
+
+      // MD name below signature
+      const mdDisplayName = fmtName(directorProfile) || (loan as any).md_approved_by_name || "MANAGING DIRECTOR"
+      doc.setFont("times", "bold")
+      doc.setFontSize(7)
+      doc.setTextColor(21, 128, 61)
+      doc.text(mdDisplayName.toUpperCase(), stampX, stampY + 6, { align: "center" })
+
+      // "MANAGING DIRECTOR" title
+      doc.setFont("times", "normal")
+      doc.setFontSize(6.5)
+      doc.text("MANAGING DIRECTOR", stampX, stampY + 10, { align: "center" })
+
+      // Approval date at bottom of stamp
+      const approvalDateStr = fmtDate(loan.md_approved_at || loan.director_decision_at || new Date())
+      doc.setFontSize(6)
+      doc.text(approvalDateStr, stampX, stampY + 14, { align: "center" })
+    }
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)
 

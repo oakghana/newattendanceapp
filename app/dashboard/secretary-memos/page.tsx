@@ -71,6 +71,7 @@ export default async function SecretaryMemosPage() {
     .limit(300)
 
   // Fetch all MD-stamped/approved loan memos (any post-MD-approval status)
+  // Include user_profiles join to resolve staff names when staff_full_name is missing
   const { data: approvedLoanMemos } = await admin
     .from("loan_requests")
     .select(`
@@ -83,7 +84,14 @@ export default async function SecretaryMemosPage() {
       md_approved_at,
       md_approved_by_name,
       staff_full_name,
-      staff_number
+      staff_number,
+      user_id,
+      user_profiles!user_id (
+        first_name,
+        last_name,
+        employee_id,
+        profile_image_url
+      )
     `)
     .in("status", ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
     .not("md_approved_at", "is", null)
@@ -113,17 +121,25 @@ export default async function SecretaryMemosPage() {
 
   // Combine approved memos
   const approvedMemos = [
-    ...(approvedLoanMemos || []).map((loan: any) => ({
-      id: loan.id,
-      request_number: loan.request_number,
-      type: "loan" as const,
-      loan_type_label: loan.loan_type_label,
-      staff_full_name: loan.staff_full_name,
-      staff_number: loan.staff_number,
-      fixed_amount: loan.fixed_amount,
-      md_approved_at: loan.md_approved_at,
-      md_approved_by_name: loan.md_approved_by_name,
-    })),
+    ...(approvedLoanMemos || []).map((loan: any) => {
+      const profile = loan.user_profiles
+      const resolvedName =
+        loan.staff_full_name?.trim() ||
+        (`${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()) ||
+        "Unknown Staff"
+      const resolvedStaffNo = loan.staff_number || profile?.employee_id || "—"
+      return {
+        id: loan.id,
+        request_number: loan.request_number,
+        type: "loan" as const,
+        loan_type_label: loan.loan_type_label,
+        staff_full_name: resolvedName,
+        staff_number: resolvedStaffNo,
+        fixed_amount: loan.fixed_amount,
+        md_approved_at: loan.md_approved_at,
+        md_approved_by_name: loan.md_approved_by_name,
+      }
+    }),
     ...(approvedLeaveMemos || []).map((leave: any) => ({
       id: leave.id,
       request_number: leave.id.slice(0, 8),
