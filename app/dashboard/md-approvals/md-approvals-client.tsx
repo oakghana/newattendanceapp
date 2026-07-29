@@ -534,17 +534,27 @@ export function MdApprovalsClient({ profile }: Props) {
                 {allStampedMemos.map((memo: any) => {
                   const approvedDate = memo.md_approved_at ? new Date(memo.md_approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"
                   const amount = memo.fixed_amount ? `GHc ${Number(memo.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}` : null
+                  // Resolve staff name from direct field first, then joined user_profiles
+                  const memoProfile = memo.user_profiles
+                  const memoStaffName =
+                    memo.staff_full_name?.trim() ||
+                    (`${memoProfile?.first_name || ""} ${memoProfile?.last_name || ""}`.trim()) ||
+                    "Unknown Staff"
+                  const memoStaffNo = memo.staff_number || memoProfile?.employee_id || memo.request_number || "—"
+                  const memoInitials = memoStaffName !== "Unknown Staff"
+                    ? memoStaffName.split(" ").map((p: string) => p[0]).join("").toUpperCase().slice(0, 2)
+                    : "?"
                   return (
                     <div key={memo.id} className="rounded-xl border border-emerald-200 bg-gradient-to-r from-white to-emerald-50 p-4 hover:border-emerald-300 transition-all">
                       <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div className="flex-1 min-w-[200px]">
                           <div className="flex items-center gap-3 mb-2">
                             <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm flex-shrink-0">
-                              {String(memo.staff_full_name || "?").split(" ").map((p: string) => p[0]).join("").toUpperCase().slice(0, 2)}
+                              {memoInitials}
                             </div>
                             <div>
-                              <h3 className="font-bold text-slate-900 text-sm">{memo.staff_full_name || "Unknown Staff"}</h3>
-                              <p className="text-xs text-slate-500">{memo.staff_number || memo.request_number || "—"}</p>
+                              <h3 className="font-bold text-slate-900 text-sm">{memoStaffName}</h3>
+                              <p className="text-xs text-slate-500">{memoStaffNo}</p>
                             </div>
                             <div className="ml-2 flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5">
                               <CheckCircle2 className="h-3 w-3 text-emerald-600" />
