@@ -112,7 +112,7 @@ async function generateMemoHandler(context: any, isPublic = false) {
     } else if (memoType === "payment-advice") {
       const { data: memo } = await admin
         .from("payment_advice_memos")
-        .select("*")
+        .select("*, md_approved_by_id")
         .eq("id", memoId)
         .single()
 
@@ -396,7 +396,89 @@ Yours faithfully,
     doc.setFont(undefined, "normal")
     doc.setFontSize(9)
     doc.text(memoData.signer_position || "HR Executive", marginLeft, y)
-    y += 8
+    y += 12
+
+    // ─── MD APPROVAL STAMP for payment advice (if md_approved_by_id exists) ─
+    if (memoType === "payment-advice" && memoData?.md_approved_by_id) {
+      // Fetch MD profile and signature
+      const { data: mdProfile } = await admin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("user_id", memoData.md_approved_by_id)
+        .single()
+      
+      const { data: mdSignRegistry } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url, signature_mode, signature_text, is_active")
+        .eq("user_id", memoData.md_approved_by_id)
+      
+      const mdBestSig = pickBestSignature(mdSignRegistry || [])
+      let mdSignatureUrl = mdBestSig?.signature_data_url || ""
+
+      // Draw MD approval stamp square (indigo/blue with red "APPROVED")
+      const stampW = 48
+      const stampH = 48
+      const stampX = pageWidth - marginRight - stampW
+      const stampTopY = y
+
+      // Outer square — indigo-700 border
+      doc.setDrawColor(67, 56, 202)
+      doc.setLineWidth(2.2)
+      doc.rect(stampX, stampTopY, stampW, stampH, "S")
+
+      // Inner square inset — blue-500
+      doc.setDrawColor(59, 130, 246)
+      doc.setLineWidth(0.8)
+      doc.rect(stampX + 2, stampTopY + 2, stampW - 4, stampH - 4, "S")
+
+      const cx = stampX + stampW / 2
+
+      // "APPROVED" text in red
+      doc.setFont("times", "bold")
+      doc.setFontSize(10)
+      doc.setTextColor(185, 28, 28)
+      doc.text("APPROVED", cx, stampTopY + 8, { align: "center" })
+
+      // Red divider
+      doc.setDrawColor(185, 28, 28)
+      doc.setLineWidth(0.4)
+      doc.line(stampX + 4, stampTopY + 10, stampX + stampW - 4, stampTopY + 10)
+
+      // MD signature (if available)
+      if (mdSignatureUrl && mdSignatureUrl.length > 10) {
+        try {
+          if (mdSignatureUrl.startsWith("data:image/")) {
+            const b64Match = mdSignatureUrl.match(/^data:image\/([^;]+);base64,(.+)$/)
+            if (b64Match) {
+              const imageType = b64Match[1].toUpperCase() === "JPEG" ? "JPEG" : "PNG"
+              doc.addImage(mdSignatureUrl, imageType, stampX + 3, stampTopY + 12, stampW - 6, 14)
+            }
+          }
+        } catch (err) {
+          console.warn("[v0] MD signature not available:", err)
+        }
+      }
+
+      // Red divider after signature
+      doc.setDrawColor(185, 28, 28)
+      doc.setLineWidth(0.4)
+      doc.line(stampX + 4, stampTopY + 29, stampX + stampW - 4, stampTopY + 29)
+
+      // MD name
+      const mdFullName = mdProfile ? `${mdProfile.first_name} ${mdProfile.last_name}`.trim() : "MANAGING DIRECTOR"
+      doc.setFont("times", "bold")
+      doc.setFontSize(7)
+      doc.setTextColor(185, 28, 28)
+      doc.text(mdFullName.toUpperCase(), cx, stampTopY + 33, { align: "center" })
+
+      // Title
+      doc.setFont("times", "normal")
+      doc.setFontSize(6.5)
+      doc.setTextColor(67, 56, 202)
+      doc.text("MANAGING DIRECTOR", cx, stampTopY + 37, { align: "center" })
+
+      y += 50
+    }
 
     // Footer
     doc.setFontSize(8)
