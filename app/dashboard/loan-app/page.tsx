@@ -2492,22 +2492,21 @@ export default function LoanAppPage() {
                         ? <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                             data.profile.staffCategory === "Manager" ? "bg-indigo-100 text-indigo-800" :
                             data.profile.staffCategory === "Senior" ? "bg-blue-100 text-blue-800" :
-                            data.profile.staffCategory === "Officer" ? "bg-teal-100 text-teal-800" :
                             "bg-slate-100 text-slate-700"
-                          }`}>{data.profile.staffCategory}</span>
-                        : <span className="text-xs text-slate-400 italic">Set via Staff Management</span>}
+                          }`}>{data.profile.staffCategory?.charAt(0).toUpperCase()}{data.profile.staffCategory?.slice(1)}</span>
+                        : <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700">Junior</span>}
                   </div>
                   <div><strong>Length of Service:</strong>{" "}
                     {loading
                       ? <span className="inline-block h-4 w-20 animate-pulse rounded bg-slate-200 align-middle" />
-                      : data?.profile.yearsOfService != null
-                        ? <span className="text-slate-600">{data.profile.yearsOfService} yr{data.profile.yearsOfService !== 1 ? "s" : ""}</span>
-                        : data?.profile.dateOfAppointment
-                          ? (() => {
-                              const yrs = Math.floor((Date.now() - new Date(data.profile.dateOfAppointment!).getTime()) / (365.25 * 24 * 3600 * 1000))
-                              return <span className="text-slate-600">{yrs} yr{yrs !== 1 ? "s" : ""} <span className="text-slate-400 text-xs">(since {fmtDate(data.profile.dateOfAppointment)})</span></span>
-                            })()
-                          : <span className="text-xs text-slate-400 italic">Set via Staff Management</span>}
+                      : (() => {
+                          const yrs = data?.profile.yearsOfService != null 
+                            ? data.profile.yearsOfService
+                            : data?.profile.dateOfAppointment
+                              ? Math.floor((Date.now() - new Date(data.profile.dateOfAppointment).getTime()) / (365.25 * 24 * 3600 * 1000))
+                              : 0
+                          return <span className="text-slate-600">{yrs} yr{yrs !== 1 ? "s" : ""}{data?.profile.dateOfAppointment && !data?.profile.yearsOfService ? <span className="text-slate-400 text-xs"> (since {fmtDate(data.profile.dateOfAppointment)})</span> : null}</span>
+                        })()}
                   </div>
                   <div><strong>Assigned Location:</strong>{" "}
                     {loading ? <span className="inline-block h-4 w-32 animate-pulse rounded bg-slate-200 align-middle" /> : <span className="text-slate-600">{data?.profile.assignedLocationName || <span className="text-slate-400">Not assigned</span>}</span>}

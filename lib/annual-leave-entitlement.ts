@@ -99,13 +99,13 @@ export function computeAnnualLeaveEntitlement(
  * Rules (in order):
  * 1. If contains "MANAGER" → "Manager"
  * 2. If contains "OFFICER" and does NOT start with "ASSISTANT" → "Senior"
- * 3. If starts with "ASSISTANT" → "Junior"
- * Otherwise → null
+ * 3. If contains "DIRECTOR" → "Senior"
+ * 4. Anything else → "Junior" (default fallback)
  */
 export function deriveStaffCategoryFromPosition(
   position?: string | null,
   rank?: string | null,
-): StaffCategory | null {
+): StaffCategory {
   const combined = `${position || ""} ${rank || ""}`.toLowerCase().trim()
   
   // 1. Manager category: any position containing "manager"
@@ -117,13 +117,11 @@ export function deriveStaffCategoryFromPosition(
     else return "junior"
   }
   
-  // 3. Junior category: starts with "assistant"
-  if (combined.startsWith("assistant")) return "junior"
-  
-  // 4. Senior category: contains "director"
+  // 3. Senior category: contains "director"
   if (combined.includes("director")) return "senior"
   
-  return null
+  // 4. Default: anything else is Junior
+  return "junior"
 }
 
 /**
@@ -148,13 +146,15 @@ export function resolveEntitlementFromProfile(
 ): AnnualLeaveEntitlement {
   // Normalise staff category — prefer stored value, then derive from position/rank
   const rawCategory = String(profile.staff_category || "").toLowerCase().trim()
-  let staffCategory: StaffCategory =
-    rawCategory === "senior" || rawCategory === "senior staff" ? "senior" : "junior"
+  let staffCategory: StaffCategory = "junior" // default fallback
 
-  // If no explicit category is stored, derive it from position / rank
-  if (!rawCategory || rawCategory === "junior") {
-    const derivedCategory = deriveStaffCategoryFromPosition(profile.position, profile.rank)
-    if (derivedCategory) staffCategory = derivedCategory
+  if (rawCategory === "senior" || rawCategory === "senior staff") {
+    staffCategory = "senior"
+  } else if (rawCategory === "manager") {
+    staffCategory = "manager"
+  } else if (!rawCategory) {
+    // No explicit category stored — derive from position / rank
+    staffCategory = deriveStaffCategoryFromPosition(profile.position, profile.rank)
   }
 
   // Years of service — prefer stored value, then calculate from appointment date
