@@ -551,8 +551,6 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
             )}
           </div>
         )}
-          </div>
-        )}
       </div>
     </div>
   )
