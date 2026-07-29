@@ -58,14 +58,17 @@ interface Loan {
   staff_number: string | null
   staff_location_name?: string | null
   staff_district_name?: string | null
+  staff_rank?: string | null
   department_id?: string | null
   departments?: { name: string } | null
+  loan_types?: { category: string } | null
   user_profiles: {
     first_name: string
     last_name: string
     employee_id: string
     profile_image_url: string | null
     assigned_location_id?: string | null
+    position?: string | null
   } | null
 }
 
@@ -292,13 +295,79 @@ const CHART_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444", "#0
 function AnalyticsTab({ loans }: { loans: Loan[] }) {
   const [analyticsView, setAnalyticsView] = useState<"month" | "quarter" | "location" | "type">("month")
 
-  const totalApproved = loans.length
-  const totalAmount = loans.reduce((s, l) => s + (l.fixed_amount || l.requested_amount || 0), 0)
+  // ── Filter state ──────────────────────────────────────────────────────────
+  const [filterLocation, setFilterLocation] = useState("")
+  const [filterDepartment, setFilterDepartment] = useState("")
+  const [filterLoanType, setFilterLoanType] = useState("")
+  const [filterCategory, setFilterCategory] = useState("")
+  const [filterPosition, setFilterPosition] = useState("")
+
+  // ── Derive unique filter options from data ────────────────────────────────
+  const locationOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.staff_location_name) s.add(l.staff_location_name) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const departmentOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.departments?.name) s.add(l.departments.name) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const loanTypeOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.loan_type_label) s.add(l.loan_type_label) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const categoryOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.loan_types?.category) s.add(l.loan_types.category) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const positionOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => {
+      const pos = l.user_profiles?.position || l.staff_rank
+      if (pos) s.add(pos)
+    })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const activeFilterCount = [filterLocation, filterDepartment, filterLoanType, filterCategory, filterPosition].filter(Boolean).length
+
+  const clearFilters = () => {
+    setFilterLocation("")
+    setFilterDepartment("")
+    setFilterLoanType("")
+    setFilterCategory("")
+    setFilterPosition("")
+  }
+
+  // ── Apply filters to base dataset ────────────────────────────────────────
+  const filteredLoans = useMemo(() => {
+    return loans.filter((l) => {
+      if (filterLocation && l.staff_location_name !== filterLocation) return false
+      if (filterDepartment && l.departments?.name !== filterDepartment) return false
+      if (filterLoanType && l.loan_type_label !== filterLoanType) return false
+      if (filterCategory && l.loan_types?.category !== filterCategory) return false
+      if (filterPosition) {
+        const pos = l.user_profiles?.position || l.staff_rank || ""
+        if (pos !== filterPosition) return false
+      }
+      return true
+    })
+  }, [loans, filterLocation, filterDepartment, filterLoanType, filterCategory, filterPosition])
+
+  const totalApproved = filteredLoans.length
+  const totalAmount = filteredLoans.reduce((s, l) => s + (l.fixed_amount || l.requested_amount || 0), 0)
 
   // By month
   const byMonth = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       if (!l.md_approved_at) return
       const key = getMonthKey(l.md_approved_at)
       const existing = map.get(key) || { count: 0, amount: 0 }
@@ -307,12 +376,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => ({ name: getMonthLabel(k), count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   // By quarter
   const byQuarter = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       if (!l.md_approved_at) return
       const key = getQuarter(l.md_approved_at)
       const existing = map.get(key) || { count: 0, amount: 0 }
@@ -321,12 +390,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => ({ name: k, count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   // By location
   const byLocation = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       const loc = l.staff_location_name || "Unknown"
       const existing = map.get(loc) || { count: 0, amount: 0 }
       map.set(loc, { count: existing.count + 1, amount: existing.amount + (l.fixed_amount || l.requested_amount || 0) })
@@ -334,12 +403,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([, a], [, b]) => b.count - a.count)
       .map(([k, v]) => ({ name: k, count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   // By loan type
   const byType = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       const type = l.loan_type_label || "Other"
       const existing = map.get(type) || { count: 0, amount: 0 }
       map.set(type, { count: existing.count + 1, amount: existing.amount + (l.fixed_amount || l.requested_amount || 0) })
@@ -347,13 +416,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([, a], [, b]) => b.count - a.count)
       .map(([k, v]) => ({ name: k, count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   const chartData = analyticsView === "month" ? byMonth : analyticsView === "quarter" ? byQuarter : analyticsView === "location" ? byLocation : byType
 
   const topLocation = byLocation[0]?.name || "—"
   const topType = byType[0]?.name || "—"
-  const thisMonthKey = getMonthKey(new Date().toISOString())
   const thisMonthCount = byMonth.find((m) => {
     const now = new Date()
     const label = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("en-GH", { month: "short", year: "numeric" })
@@ -362,6 +430,137 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Filter Bar ──────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-500" />
+            <span className="text-sm font-semibold text-slate-700">Filter Analytics</span>
+            {activeFilterCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </div>
+          {activeFilterCount > 0 && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 transition-colors font-medium"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
+          {/* Location */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <MapPin className="h-3 w-3" /> Location
+            </label>
+            <select
+              value={filterLocation}
+              onChange={(e) => setFilterLocation(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Locations</option>
+              {locationOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Department */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <Building2 className="h-3 w-3" /> Department
+            </label>
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Departments</option>
+              {departmentOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Loan Type */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <FileText className="h-3 w-3" /> Loan Type
+            </label>
+            <select
+              value={filterLoanType}
+              onChange={(e) => setFilterLoanType(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Loan Types</option>
+              {loanTypeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Category */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <Star className="h-3 w-3" /> Category
+            </label>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Categories</option>
+              {categoryOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Position / Rank */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" /> Position
+            </label>
+            <select
+              value={filterPosition}
+              onChange={(e) => setFilterPosition(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Positions</option>
+              {positionOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+        {activeFilterCount > 0 && (
+          <div className="px-4 pb-3 flex flex-wrap gap-2">
+            {filterLocation && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
+                <MapPin className="h-2.5 w-2.5" />{filterLocation}
+                <button onClick={() => setFilterLocation("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterDepartment && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+                <Building2 className="h-2.5 w-2.5" />{filterDepartment}
+                <button onClick={() => setFilterDepartment("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterLoanType && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-700">
+                <FileText className="h-2.5 w-2.5" />{filterLoanType}
+                <button onClick={() => setFilterLoanType("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterCategory && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-violet-50 border border-violet-200 text-xs font-semibold text-violet-700">
+                <Star className="h-2.5 w-2.5" />{filterCategory}
+                <button onClick={() => setFilterCategory("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterPosition && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-700">
+                <CheckCircle2 className="h-2.5 w-2.5" />{filterPosition}
+                <button onClick={() => setFilterPosition("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -425,7 +624,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
           size="sm"
           variant="outline"
           className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2"
-          onClick={() => exportToCSV(loans, `md-approved-loans-analytics-${new Date().toISOString().slice(0, 10)}.csv`)}
+          onClick={() => exportToCSV(filteredLoans, `md-approved-loans-analytics-${new Date().toISOString().slice(0, 10)}.csv`)}
         >
           <FileDown className="h-4 w-4" />
           Export Data

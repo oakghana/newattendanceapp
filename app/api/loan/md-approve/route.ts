@@ -103,16 +103,21 @@ export async function GET(req: NextRequest) {
       staff_number,
       staff_location_name,
       staff_district_name,
+      staff_rank,
       department_id,
       departments!department_id (
         name
+      ),
+      loan_types!loan_type_key (
+        category
       ),
       user_profiles!user_id (
         first_name,
         last_name,
         employee_id,
         profile_image_url,
-        assigned_location_id
+        assigned_location_id,
+        position
       )
     `)
     .order("created_at", { ascending: false })
