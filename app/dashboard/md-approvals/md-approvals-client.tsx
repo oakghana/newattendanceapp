@@ -555,6 +555,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 export function MdApprovalsClient({ profile }: Props) {
   const { toast } = useToast()
+  console.log("[v0] MdApprovalsClient rendered - MD Approvals page loaded")
   const [loans, setLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -805,7 +806,7 @@ export function MdApprovalsClient({ profile }: Props) {
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
 
         {/* Tab switcher */}
-        <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm flex-wrap">
+        <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm flex-wrap max-w-full">
           <button
             onClick={() => setActiveTab("pending")}
             className={cn(
@@ -843,11 +844,15 @@ export function MdApprovalsClient({ profile }: Props) {
             )}
           </button>
           <button
-            onClick={() => setActiveTab("analytics")}
+            onClick={() => {
+              console.log("[v0] Analytics tab clicked")
+              setActiveTab("analytics")
+            }}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap",
               activeTab === "analytics" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"
             )}
+            title="View analytics dashboard"
           >
             <BarChart3 className="h-4 w-4" />
             Executive Analytics
