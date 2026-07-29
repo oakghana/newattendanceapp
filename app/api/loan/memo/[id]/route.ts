@@ -613,6 +613,58 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.text("FOR:  MANAGING DIRECTOR", marginLeft, y)
     y += 12
 
+    // ─── MD APPROVAL STAMP (if approved) ──────────────────────────────
+    if (loan.status === "md_approved" && directorProfile) {
+      if (y + 60 > pageHeight - 16) {
+        doc.addPage()
+        y = 24
+      }
+      
+      const stampX = pageWidth / 2
+      const stampY = y + 15
+      const stampRadius = 22 // mm
+      
+      // Draw circular stamp border
+      doc.setDrawColor(34, 197, 94) // green-600
+      doc.setLineWidth(1.5)
+      doc.circle(stampX, stampY, stampRadius, "S")
+      
+      // Draw inner decorative circle
+      doc.setLineWidth(0.5)
+      doc.setDrawColor(134, 239, 172) // green-300
+      doc.circle(stampX, stampY, stampRadius - 2, "S")
+      
+      // Add APPROVED text
+      doc.setFont("times", "bold")
+      doc.setFontSize(18)
+      doc.setTextColor(34, 197, 94) // green-600
+      doc.textAlign = "center"
+      doc.text("APPROVED", stampX, stampY - 6)
+      
+      // Add MD signature if available
+      if (signerSignatureUrl) {
+        try {
+          doc.addImage(signerSignatureUrl, "PNG", stampX - 8, stampY, 16, 6)
+        } catch (e) {
+          // Skip if signature image fails
+        }
+      }
+      
+      // Add MD name
+      doc.setFont("times", "normal")
+      doc.setFontSize(9)
+      doc.setTextColor(34, 197, 94)
+      const mdName = `${directorProfile?.first_name || ""} ${directorProfile?.last_name || ""}`.trim()
+      doc.text(mdName, stampX, stampY + 8)
+      
+      // Add approval date
+      doc.setFontSize(8)
+      const approvalDate = fmtDate(loan.md_approved_at || new Date())
+      doc.text(approvalDate, stampX, stampY + 11)
+      
+      y += 40
+    }
+
     // ─── cc section ───────────────────────────────────────────────────
     if (y + 40 > pageHeight - 16) {
       doc.addPage()
