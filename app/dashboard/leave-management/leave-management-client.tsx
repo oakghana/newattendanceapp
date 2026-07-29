@@ -759,7 +759,7 @@ export function LeaveManagementClient({
 
   const normalizedRole = String(userRole || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const isAdmin = normalizedRole === "admin"
-  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee", "secretary"].includes(normalizedRole)
+  const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee", "secretary", "managing_director"].includes(normalizedRole)
   const isManagerView = ["admin", "regional_manager", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr"].includes(normalizedRole)
   const isAdminView = isAdmin
   const canViewHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
