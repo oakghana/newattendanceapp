@@ -104,9 +104,11 @@ function leaveDays(start: string, end: string) {
 }
 
 const LOAN_STATUS_MAP: Record<string, { label: string; color: string }> = {
-  approved_director: { label: "HR Exec Approved", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  awaiting_director_hr: { label: "HR Exec Approved (Pending MD)", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  approved_director: { label: "MD Approved", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   staff_receiving_funds: { label: "Funds Disbursed", color: "bg-violet-100 text-violet-800 border-violet-200" },
   partially_recovered: { label: "Partially Recovered", color: "bg-amber-100 text-amber-800 border-amber-200" },
+  fully_recovered: { label: "Fully Recovered", color: "bg-slate-100 text-slate-800 border-slate-200" },
 }
 
 const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -338,9 +340,11 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
             <option value="all">All Statuses</option>
             {tab === "loans" ? (
               <>
-                <option value="approved_director">HR Exec Approved</option>
+                <option value="awaiting_director_hr">HR Exec Approved (Pending MD)</option>
+                <option value="approved_director">MD Approved</option>
                 <option value="staff_receiving_funds">Funds Disbursed</option>
                 <option value="partially_recovered">Partially Recovered</option>
+                <option value="fully_recovered">Fully Recovered</option>
               </>
             ) : (
               <>
