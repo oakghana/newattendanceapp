@@ -32,6 +32,8 @@ export default async function SecretaryMemosPage() {
       md_approved_by_name,
       staff_full_name,
       staff_number,
+      staff_department,
+      staff_location_name,
       user_profiles!user_id (
         first_name,
         last_name,

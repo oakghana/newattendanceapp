@@ -201,7 +201,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, staff_category, years_of_service, date_of_appointment, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -209,11 +209,22 @@ export async function GET() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    // Pull welfare fields directly from the already-fetched profile row
-    // (staff_category, years_of_service, date_of_appointment are on user_profiles)
-    let staffCategory: string | null = (profile as any)?.staff_category ?? null
-    let yearsOfService: number | null = (profile as any)?.years_of_service ?? null
-    let dateOfAppointment: string | null = (profile as any)?.date_of_appointment ?? null
+    // Fetch welfare fields separately — these columns may not yet exist in all deployments,
+    // so we isolate this query so a missing column never breaks the main profile load.
+    let welfareRow: { staff_category?: string | null; years_of_service?: number | null; date_of_appointment?: string | null } = {}
+    try {
+      const { data: wData } = await admin
+        .from("user_profiles")
+        .select("staff_category, years_of_service, date_of_appointment")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (wData) welfareRow = wData as typeof welfareRow
+    } catch (_) { /* columns not yet in schema — gracefully continue */ }
+
+    // Pull welfare fields from the isolated welfare query result
+    let staffCategory: string | null = welfareRow.staff_category ?? null
+    let yearsOfService: number | null = welfareRow.years_of_service ?? null
+    let dateOfAppointment: string | null = welfareRow.date_of_appointment ?? null
 
     // If DB has no years_of_service but has date_of_appointment, auto-calculate it
     if ((yearsOfService === null || yearsOfService === undefined) && dateOfAppointment) {

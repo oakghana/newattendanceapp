@@ -1240,13 +1240,31 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Location:</span>
-                    <span className="text-sm font-medium">{profile.districts?.name || "N/A"}</span>
+                    <span className="text-sm font-medium">{profile.districts?.name || (profile.assigned_location as any)?.name || "N/A"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Role:</span>
                     <Badge variant={profile.role === "admin" ? "default" : "secondary"} className="text-xs">
                       {profile.role.replace("_", " ").toUpperCase()}
                     </Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Category:</span>
+                    <span className="text-sm font-medium">
+                      {(profile as any).staff_category
+                        ? String((profile as any).staff_category).charAt(0).toUpperCase() + String((profile as any).staff_category).slice(1).toLowerCase()
+                        : "Not assigned"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Length of Service:</span>
+                    <span className="text-sm font-medium">
+                      {(profile as any).years_of_service != null
+                        ? `${(profile as any).years_of_service} year${(profile as any).years_of_service !== 1 ? "s" : ""}`
+                        : (profile as any).date_of_appointment
+                          ? `${Math.floor((Date.now() - new Date((profile as any).date_of_appointment).getTime()) / (365.25 * 24 * 3600 * 1000))} yrs`
+                          : "Not set"}
+                    </span>
                   </div>
                 </div>
               </CardContent>
