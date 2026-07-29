@@ -1,7 +1,7 @@
 "use client"
 // Payment evidence fix: loadData moved to finally block
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -75,6 +75,7 @@ type LoanRequest = {
   recovery_start_date: string | null
   disbursement_date: string | null
   recovery_months: number | null
+  expected_completion_date?: string | null
   director_letter: string | null
   director_signature_text: string | null
   director_decision_at: string | null
@@ -577,6 +578,14 @@ function fmtMemoMonth(dateStr: string | null | undefined): string {
   const d = new Date(dateStr + (dateStr.length === 7 ? "-01" : ""))
   if (isNaN(d.getTime())) return dateStr
   return d.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+}
+
+function calculateExpectedCompletionDate(disbursementDate: string | null, recoveryMonths: number | null): string | null {
+  if (!disbursementDate || !recoveryMonths || recoveryMonths <= 0) return null
+  const d = new Date(disbursementDate)
+  if (isNaN(d.getTime())) return null
+  d.setMonth(d.getMonth() + recoveryMonths)
+  return toIsoDate(d)
 }
 
 function deriveMemoRef(requestNumber: string | null | undefined): string {
@@ -3683,12 +3692,13 @@ export default function LoanAppPage() {
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Current Loan</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Loan Amount</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Expected Completion</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Mark Completed</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Eligible for New</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(() => {
+                    {useMemo(() => {
                       // Compile all loans from all sources (not just allLoans, as staff may be viewing their own loans too)
                       const allSourceLoans = [
                         ...(data?.inbox?.allLoans || []),
@@ -3770,7 +3780,7 @@ export default function LoanAppPage() {
                       if (paged.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                            <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
                               {staffRecords.length === 0 ? "No staff records found" : "No results match your search"}
                             </td>
                           </tr>
@@ -3810,6 +3820,19 @@ export default function LoanAppPage() {
                               )}
                             </td>
                             <td className="px-4 py-3">
+                              {currentLoan ? (
+                                <span className="text-slate-700 font-medium">
+                                  {currentLoan.expected_completion_date
+                                    ? fmtDate(currentLoan.expected_completion_date)
+                                    : calculateExpectedCompletionDate(currentLoan.disbursement_date, currentLoan.recovery_months)
+                                    ? fmtDate(calculateExpectedCompletionDate(currentLoan.disbursement_date, currentLoan.recovery_months))
+                                    : "TBD"}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
                               {canMarkCompleted && (
                                 <Button
                                   size="sm"
@@ -3836,13 +3859,13 @@ export default function LoanAppPage() {
                           </tr>
                         )
                       })
-                    })()}
+                    }, [data, staffLoanRecordsSearch, staffLoanRecordsSort, staffLoanRecordsPage])}
                   </tbody>
                 </table>
               </div>
 
               {/* Pagination */}
-              {(() => {
+              {useMemo(() => {
                 // Recalculate total pages using same logic as table
                 const allSourceLoans = [
                   ...(data?.inbox?.allLoans || []),
@@ -3912,7 +3935,7 @@ export default function LoanAppPage() {
                     </div>
                   </div>
                 ) : null
-              })()} 
+              }, [data, staffLoanRecordsSearch, staffLoanRecordsPage])}
             </CardContent>
           </Card>
         </TabsContent>
@@ -5631,7 +5654,7 @@ export default function LoanAppPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Payment Evidence Upload Modal ────────────────────────────── */}
+      {/* ── Payment Evidence Upload Modal ────────────────────────��───── */}
       <Dialog open={paymentEvidenceModal.open} onOpenChange={(o) => setPaymentEvidenceModal((s) => ({ ...s, open: o }))}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
