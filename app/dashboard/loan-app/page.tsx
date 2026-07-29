@@ -1043,13 +1043,24 @@ export default function LoanAppPage() {
   const filteredLoanTypes = useMemo(() => {
     const rawTypes = data?.loanTypes || []
     const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
+    const staffCategory = (data?.profile?.staffCategory || "").toLowerCase().trim()
 
     const normalizedTypes = rawTypes.map((type) => ({
       ...type,
       loan_label: normalizeLoanTypeLabel(type, rawTypes),
     }))
 
-    return normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
+    return normalizedTypes.filter((type) => {
+      // First check: if staff has a category, only show loans matching that category
+      if (staffCategory) {
+        const loanCategory = (type.category || "").toLowerCase().trim()
+        if (loanCategory && loanCategory !== staffCategory) {
+          return false
+        }
+      }
+      // Second check: apply the existing tier-based filtering
+      return shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes)
+    })
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
