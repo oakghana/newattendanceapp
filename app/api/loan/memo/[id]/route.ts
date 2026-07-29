@@ -673,7 +673,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     y += (ccList.length + 1) * 4.5 + 4
 
     // ─── MD Approval Stamp — SQUARE, violet/blue border, red text/sig ─
-    const isMdApproved = ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
+    // Only show stamp if MD has ACTUALLY approved (md_approved_at is populated)
+    // Don't show stamp at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
+    const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
     if (isMdApproved) {
       const stampW = 52  // square width mm — wider for large signature
       const stampH = 52  // square height mm — taller to accommodate magnified signature
