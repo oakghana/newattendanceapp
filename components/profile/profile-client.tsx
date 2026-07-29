@@ -34,6 +34,9 @@ interface UserProfile {
   role: string
   is_active: boolean
   profile_image_url?: string
+  staff_category?: string
+  years_of_service?: number
+  date_of_appointment?: string
   departments?: {
     id: string
     name: string
@@ -576,6 +579,27 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     {profile.phone_number || profile.phone || "Not provided"}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">Only admin can change phone number</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Rank / Category</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    {profile.staff_category ? profile.staff_category.charAt(0).toUpperCase() + profile.staff_category.slice(1) : "Not assigned"}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Auto-set from position by system</p>
+                </div>
+                <div>
+                  <Label>Years of Service</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    {profile.years_of_service !== undefined && profile.years_of_service !== null 
+                      ? `${profile.years_of_service} year${profile.years_of_service !== 1 ? 's' : ''}`
+                      : "Not calculated"}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Auto-calculated from hire date</p>
                 </div>
               </div>
 
@@ -1216,13 +1240,31 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Location:</span>
-                    <span className="text-sm font-medium">{profile.districts?.name || "N/A"}</span>
+                    <span className="text-sm font-medium">{profile.districts?.name || (profile.assigned_location as any)?.name || "N/A"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Role:</span>
                     <Badge variant={profile.role === "admin" ? "default" : "secondary"} className="text-xs">
                       {profile.role.replace("_", " ").toUpperCase()}
                     </Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Category:</span>
+                    <span className="text-sm font-medium">
+                      {(profile as any).staff_category
+                        ? String((profile as any).staff_category).charAt(0).toUpperCase() + String((profile as any).staff_category).slice(1).toLowerCase()
+                        : "Not assigned"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Length of Service:</span>
+                    <span className="text-sm font-medium">
+                      {(profile as any).years_of_service != null
+                        ? `${(profile as any).years_of_service}y`
+                        : (profile as any).date_of_appointment
+                          ? `${Math.floor((Date.now() - new Date((profile as any).date_of_appointment).getTime()) / (365.25 * 24 * 3600 * 1000))}y`
+                          : "Not set"}
+                    </span>
                   </div>
                 </div>
               </CardContent>

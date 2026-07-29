@@ -32,11 +32,14 @@ export default async function SecretaryMemosPage() {
       md_approved_by_name,
       staff_full_name,
       staff_number,
+      user_id,
       user_profiles!user_id (
         first_name,
         last_name,
         employee_id,
-        profile_image_url
+        profile_image_url,
+        departments(name),
+        geofence_locations(name)
       )
     `)
     .in("status", ["approved_director", "staff_receiving_funds", "partially_recovered"])
@@ -67,7 +70,7 @@ export default async function SecretaryMemosPage() {
     .order("created_at", { ascending: false })
     .limit(300)
 
-  // Fetch MD approved memos (loans with md_approved status)
+  // Fetch all MD-stamped/approved loan memos (any post-MD-approval status)
   const { data: approvedLoanMemos } = await admin
     .from("loan_requests")
     .select(`
@@ -82,11 +85,12 @@ export default async function SecretaryMemosPage() {
       staff_full_name,
       staff_number
     `)
-    .eq("status", "md_approved")
+    .in("status", ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+    .not("md_approved_at", "is", null)
     .order("md_approved_at", { ascending: false })
     .limit(300)
 
-  // Fetch MD approved leave memos
+  // Fetch MD approved leave memos (all final approved leave)
   const { data: approvedLeaveMemos } = await admin
     .from("leave_requests")
     .select(`
@@ -104,7 +108,6 @@ export default async function SecretaryMemosPage() {
       )
     `)
     .eq("status", "approved")
-    .eq("approved_by_role", "md")
     .order("created_at", { ascending: false })
     .limit(300)
 

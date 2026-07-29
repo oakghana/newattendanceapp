@@ -155,6 +155,14 @@ const navigationItems = [
     category: "main",
     executive: true,
   },
+  // ── Accounts/Loan Office disbursement confirmation ────────────────────────
+  {
+    title: "Disbursement Confirmation",
+    href: "/dashboard/disbursement-confirmation",
+    icon: CheckCircle2,
+    roles: ["accounts", "loan_office", "admin"],
+    category: "main",
+  },
   {
     title: "Reports & Trends",
     href: "/dashboard/reports",

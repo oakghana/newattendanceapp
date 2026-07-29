@@ -13,7 +13,7 @@
 
 export const TRAVEL_DAYS = 2
 
-export type StaffCategory = "senior" | "junior"
+export type StaffCategory = "senior" | "junior" | "manager"
 
 export interface AnnualLeaveEntitlement {
   /** "senior" | "junior" */
@@ -96,24 +96,32 @@ export function computeAnnualLeaveEntitlement(
 
 /**
  * Derive staff category from position / rank title.
- * Any title containing "Officer", "Manager" or "Director" (case-insensitive)
- * is automatically classified as Senior Staff.
+ * Rules (in order):
+ * 1. If contains "MANAGER" → "Manager"
+ * 2. If contains "OFFICER" and does NOT start with "ASSISTANT" → "Senior"
+ * 3. If contains "DIRECTOR" → "Senior"
+ * 4. Anything else → "Junior" (default fallback)
  */
 export function deriveStaffCategoryFromPosition(
   position?: string | null,
   rank?: string | null,
-): StaffCategory | null {
-  const combined = `${position || ""} ${rank || ""}`.toLowerCase()
+): StaffCategory {
+  const combined = `${position || ""} ${rank || ""}`.toLowerCase().trim()
   
-  // Junior tier: any position starting with "Assistant" is Junior regardless of other keywords
-  // E.g., "Assistant Information Technology Officer" is Junior, not Senior
-  if (combined.includes("assistant")) return "junior"
+  // 1. Manager category: any position containing "manager"
+  if (combined.includes("manager")) return "manager"
   
-  // Senior tier: Officer, Manager, Director (but not if "Assistant" prefix was found above)
-  const SENIOR_KEYWORDS = ["officer", "manager", "director"]
-  if (SENIOR_KEYWORDS.some((kw) => combined.includes(kw))) return "senior"
+  // 2. Senior category: contains "officer" but does NOT start with "assistant"
+  if (combined.includes("officer")) {
+    if (!combined.startsWith("assistant")) return "senior"
+    else return "junior"
+  }
   
-  return null
+  // 3. Senior category: contains "director"
+  if (combined.includes("director")) return "senior"
+  
+  // 4. Default: anything else is Junior
+  return "junior"
 }
 
 /**
@@ -138,13 +146,15 @@ export function resolveEntitlementFromProfile(
 ): AnnualLeaveEntitlement {
   // Normalise staff category — prefer stored value, then derive from position/rank
   const rawCategory = String(profile.staff_category || "").toLowerCase().trim()
-  let staffCategory: StaffCategory =
-    rawCategory === "senior" || rawCategory === "senior staff" ? "senior" : "junior"
+  let staffCategory: StaffCategory = "junior" // default fallback
 
-  // If no explicit category is stored, derive it from position / rank
-  if (!rawCategory || rawCategory === "junior") {
-    const derivedCategory = deriveStaffCategoryFromPosition(profile.position, profile.rank)
-    if (derivedCategory) staffCategory = derivedCategory
+  if (rawCategory === "senior" || rawCategory === "senior staff") {
+    staffCategory = "senior"
+  } else if (rawCategory === "manager") {
+    staffCategory = "manager"
+  } else if (!rawCategory) {
+    // No explicit category stored — derive from position / rank
+    staffCategory = deriveStaffCategoryFromPosition(profile.position, profile.rank)
   }
 
   // Years of service — prefer stored value, then calculate from appointment date

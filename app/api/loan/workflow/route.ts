@@ -209,37 +209,94 @@ export async function GET() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    // Fetch optional welfare fields separately so a missing column never breaks the main query
-    let staffCategory: string | null = null
-    let yearsOfService: number | null = null
-    let dateOfAppointment: string | null = null
-    const { data: welfareFields, error: welfareError } = await admin
-      .from("user_profiles")
-      .select("staff_category, years_of_service, date_of_appointment")
-      .eq("id", user.id)
-      .maybeSingle()
-    // Only skip on genuine missing-column schema errors; populate if the query succeeded
-    if (!welfareError || isSchemaIssue(welfareError)) {
-      staffCategory = (welfareFields as any)?.staff_category ?? null
-      yearsOfService = (welfareFields as any)?.years_of_service ?? null
-      dateOfAppointment = (welfareFields as any)?.date_of_appointment ?? null
+    // Fetch welfare fields separately — these columns may not yet exist in all deployments,
+    // so we isolate this query so a missing column never breaks the main profile load.
+    // Extract welfare fields from main profile (since the isolated query might not find columns)
+    // Also try a separate query as fallback in case those fields are in a different table
+    let welfareRow: { staff_category?: string | null; years_of_service?: number | null; date_of_appointment?: string | null } = {}
+    try {
+      // First, extract from the main profile that was already fetched
+      const profileData = profile as any
+      if (profileData) {
+        welfareRow.staff_category = profileData.staff_category
+        welfareRow.years_of_service = profileData.years_of_service
+        welfareRow.date_of_appointment = profileData.date_of_appointment
+      }
+      
+      // If we didn't get them from main profile, try an isolated query
+      if (!welfareRow.staff_category && !welfareRow.years_of_service && !welfareRow.date_of_appointment) {
+        const { data: wData } = await admin
+          .from("user_profiles")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle()
+        if (wData) {
+          welfareRow.staff_category = wData.staff_category
+          welfareRow.years_of_service = wData.years_of_service
+          welfareRow.date_of_appointment = wData.date_of_appointment
+        }
+      }
+    } catch (e) { 
+      console.log("[v0] Welfare fetch fallback error:", e)
     }
 
-    // Auto-derive staff category from rank/position if not explicitly stored
-    // "Accounts Officer", "HR Officer" etc. → "Senior"; unrecognised titles → keep null
-    if (!staffCategory || staffCategory === "junior") {
+    // Pull welfare fields from the isolated welfare query result
+    let staffCategory: string | null = welfareRow.staff_category ?? null
+    let yearsOfService: number | null = welfareRow.years_of_service ?? null
+    let dateOfAppointment: string | null = welfareRow.date_of_appointment ?? null
+
+    console.log("[v0] Workflow API - Welfare row data:", {
+      years_of_service: welfareRow.years_of_service,
+      date_of_appointment: welfareRow.date_of_appointment,
+      staff_category: welfareRow.staff_category,
+    })
+
+    // If DB has no years_of_service (null or 0) but has date_of_appointment, auto-calculate it
+    if ((!yearsOfService || yearsOfService === 0) && dateOfAppointment) {
+      const apptDate = new Date(dateOfAppointment)
+      if (!isNaN(apptDate.getTime())) {
+        const calculated = Math.floor(
+          (Date.now() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
+        )
+        console.log("[v0] Workflow API - Calculated YoS from date:", { dateOfAppointment, calculated })
+        // Only use calculated value if it's reasonable (> 0 and < 100 years)
+        if (calculated > 0 && calculated < 100) {
+          yearsOfService = calculated
+        }
+      }
+    }
+    
+    // If still no value and we have a date_of_appointment but calculation failed, try again
+    if (!yearsOfService && dateOfAppointment) {
+      try {
+        const apptDate = new Date(dateOfAppointment)
+        const now = new Date()
+        const calculated = Math.floor(
+          (now.getTime() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
+        )
+        console.log("[v0] Workflow API - Fallback YoS calculation:", { calculated })
+        if (calculated > 0) yearsOfService = calculated
+      } catch (e) { 
+        console.log("[v0] Workflow API - Fallback calc error:", e)
+      }
+    }
+    
+    console.log("[v0] Workflow API - Final yearsOfService:", yearsOfService)
+
+    // Normalise staffCategory to Title Case and only derive from position when NOT explicitly set in DB
+    if (staffCategory) {
+      const raw = staffCategory.toLowerCase().trim()
+      if (raw === "senior" || raw === "senior staff") staffCategory = "Senior"
+      else if (raw === "junior" || raw === "junior staff") staffCategory = "Junior"
+      else staffCategory = staffCategory.charAt(0).toUpperCase() + staffCategory.slice(1).toLowerCase()
+    } else {
+      // Nothing stored — try to derive from position/rank
       const position = (profile as any)?.position || null
       const rank = (profile as any)?.rank || null
       const derived = deriveStaffCategoryFromPosition(position, rank)
       if (derived) {
-        // Capitalise for display: "senior" → "Senior"
         staffCategory = derived.charAt(0).toUpperCase() + derived.slice(1)
       }
-    } else {
-      // Normalise stored value to Title Case for display ("senior" → "Senior", "Senior Staff" → "Senior")
-      const raw = staffCategory.toLowerCase().trim()
-      if (raw === "senior" || raw === "senior staff") staffCategory = "Senior"
-      else if (raw === "junior" || raw === "junior staff") staffCategory = "Junior"
     }
 
     const role = normalizeRole((profile as any).role)

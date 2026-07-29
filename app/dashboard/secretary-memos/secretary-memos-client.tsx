@@ -30,11 +30,14 @@ interface LoanMemo {
   md_approved_by_name: string | null
   staff_full_name: string | null
   staff_number: string | null
+  user_id: string | null
   user_profiles: {
     first_name: string
     last_name: string
     employee_id: string
     profile_image_url: string | null
+    departments: { name: string } | null
+    geofence_locations: { name: string } | null
   } | null
 }
 
@@ -116,6 +119,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const [tab, setTab] = useState<"loans" | "leave" | "approved">("loans")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [deptFilter, setDeptFilter] = useState("all")
+  const [locationFilter, setLocationFilter] = useState("all")
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
@@ -146,15 +151,35 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     }
   }
 
+  // Derive unique departments and locations from loan memos for filter dropdowns
+  const uniqueDepts = useMemo(() => {
+    const s = new Set<string>()
+    loanMemos.forEach((m) => { 
+      const deptName = m.user_profiles?.departments?.name
+      if (deptName) s.add(deptName) 
+    })
+    return Array.from(s).sort()
+  }, [loanMemos])
+
+  const uniqueLocations = useMemo(() => {
+    const s = new Set<string>()
+    loanMemos.forEach((m) => { 
+      const locName = m.user_profiles?.geofence_locations?.name
+      if (locName) s.add(locName) 
+    })
+    return Array.from(s).sort()
+  }, [loanMemos])
+
   const filteredLoanMemos = useMemo(() => {
     const q = search.toLowerCase()
     return loanMemos.filter((m) => {
-      const name = (m.staff_full_name || `${m.user_profiles?.first_name} ${m.user_profiles?.last_name}`).toLowerCase()
-      const matchesSearch = !q || name.includes(q) || m.request_number?.toLowerCase().includes(q) || m.loan_type_label?.toLowerCase().includes(q)
+      const matchesSearch = !q || (m.staff_full_name?.toLowerCase().includes(q) || m.request_number?.toLowerCase().includes(q))
       const matchesStatus = statusFilter === "all" || m.status === statusFilter
-      return matchesSearch && matchesStatus
+      const matchesDept = deptFilter === "all" || m.user_profiles?.departments?.name === deptFilter
+      const matchesLocation = locationFilter === "all" || m.user_profiles?.geofence_locations?.name === locationFilter
+      return matchesSearch && matchesStatus && matchesDept && matchesLocation
     })
-  }, [loanMemos, search, statusFilter])
+  }, [loanMemos, search, statusFilter, deptFilter, locationFilter])
 
   const filteredLeaveMemos = useMemo(() => {
     const q = search.toLowerCase()
@@ -217,7 +242,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
             <button
-              onClick={() => { setTab("loans"); setStatusFilter("all") }}
+              onClick={() => { setTab("loans"); setStatusFilter("all"); setDeptFilter("all"); setLocationFilter("all") }}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
                 tab === "loans"
@@ -275,6 +300,34 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               className="pl-9 bg-white border-slate-200"
             />
           </div>
+
+          {/* Department filter — only for loan tab */}
+          {tab === "loans" && uniqueDepts.length > 0 && (
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-300"
+            >
+              <option value="all">All Departments</option>
+              {uniqueDepts.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Location filter — only for loan tab */}
+          {tab === "loans" && uniqueLocations.length > 0 && (
+            <select
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-300"
+            >
+              <option value="all">All Locations</option>
+              {uniqueLocations.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          )}
 
           {/* Status filter */}
           <select

@@ -37,6 +37,20 @@ export default async function ProfilePage() {
     .eq("id", user.id)
     .maybeSingle()
 
+  // Ensure welfare fields are fetched for existing profile
+  if (profile && !profile.staff_category && !profile.years_of_service) {
+    const { data: welfareData } = await supabase
+      .from("user_profiles")
+      .select("staff_category, years_of_service, date_of_appointment")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (welfareData) {
+      profile.staff_category = welfareData.staff_category
+      profile.years_of_service = welfareData.years_of_service
+      profile.date_of_appointment = welfareData.date_of_appointment
+    }
+  }
+
   // If profile doesn't exist, create it
   let finalProfile = profile
   if (!profile && !profileError) {
@@ -70,6 +84,20 @@ export default async function ProfilePage() {
         )
       `)
       .single()
+
+    // Ensure welfare fields are fetched if they exist
+    if (!createError && newProfile) {
+      const { data: welfareData } = await supabase
+        .from("user_profiles")
+        .select("staff_category, years_of_service, date_of_appointment")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (welfareData) {
+        newProfile.staff_category = welfareData.staff_category
+        newProfile.years_of_service = welfareData.years_of_service
+        newProfile.date_of_appointment = welfareData.date_of_appointment
+      }
+    }
 
     if (!createError && newProfile) {
       finalProfile = newProfile
