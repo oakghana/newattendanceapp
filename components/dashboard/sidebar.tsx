@@ -425,7 +425,17 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       return effectiveRole === "admin"
     }
 
-    return item.roles.includes(effectiveRole)
+    const isVisible = item.roles.includes(effectiveRole)
+    if (item.href === "/dashboard/disbursement-confirmation") {
+      console.log("[v0] Disbursement visibility check:", {
+        userRole: profile?.role,
+        normalizedRole,
+        effectiveRole,
+        allowedRoles: item.roles,
+        isVisible,
+      })
+    }
+    return isVisible
   })
 
   const mainItems = filteredNavItems.filter((item) => item.category === "main")
