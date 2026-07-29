@@ -290,7 +290,32 @@ export default function LoginPage() {
         clearAttendanceCache()
         clearGeolocationCache()
 
-        showSuccess("Login successful! Redirecting to dashboard...", "Welcome Back")
+        // Check if user is MD or Secretary for executive welcome overlay
+        const checkExecutiveRole = async () => {
+          try {
+            const supabase = createClient()
+            const { data: profile } = await supabase
+              .from("user_profiles")
+              .select("first_name, role")
+              .eq("id", data.user.id)
+              .maybeSingle()
+            
+            const role = String(profile?.role || "").toLowerCase()
+            const isExecutive = role === "managing_director" || role === "secretary"
+            
+            if (isExecutive) {
+              const name = profile?.first_name || "Executive"
+              const title = role === "managing_director" ? "Welcome, Managing Director" : "Welcome, Secretary"
+              showSuccess(`${title}, ${name}!`, "Executive Access")
+            } else {
+              showSuccess("Login successful! Redirecting to dashboard...", "Welcome Back")
+            }
+          } catch (err) {
+            showSuccess("Login successful! Redirecting to dashboard...", "Welcome Back")
+          }
+        }
+        
+        await checkExecutiveRole()
 
         // All roles go to attendance check-in page (same as every other role)
         const dashboardUrl = "/dashboard/attendance"

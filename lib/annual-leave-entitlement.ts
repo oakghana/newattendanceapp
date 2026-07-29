@@ -103,9 +103,16 @@ export function deriveStaffCategoryFromPosition(
   position?: string | null,
   rank?: string | null,
 ): StaffCategory | null {
-  const SENIOR_KEYWORDS = ["officer", "manager", "director"]
   const combined = `${position || ""} ${rank || ""}`.toLowerCase()
+  
+  // Junior tier: any position starting with "Assistant" is Junior regardless of other keywords
+  // E.g., "Assistant Information Technology Officer" is Junior, not Senior
+  if (combined.includes("assistant")) return "junior"
+  
+  // Senior tier: Officer, Manager, Director (but not if "Assistant" prefix was found above)
+  const SENIOR_KEYWORDS = ["officer", "manager", "director"]
   if (SENIOR_KEYWORDS.some((kw) => combined.includes(kw))) return "senior"
+  
   return null
 }
 

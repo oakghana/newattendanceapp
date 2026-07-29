@@ -9,7 +9,10 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  Download,
   FileText,
+  Loader2,
+  Printer,
   Search,
   Star,
 } from "lucide-react"
@@ -31,7 +34,6 @@ interface LoanMemo {
     first_name: string
     last_name: string
     employee_id: string
-    rank_position: string | null
     profile_image_url: string | null
   } | null
 }
@@ -49,10 +51,24 @@ interface LeaveMemo {
     first_name: string
     last_name: string
     employee_id: string
-    rank_position: string | null
     profile_image_url: string | null
     departments: { name: string } | null
   } | null
+}
+
+interface ApprovedMemo {
+  id: string
+  request_number: string
+  type: "loan" | "leave"
+  loan_type_label?: string
+  leave_type?: string
+  staff_full_name: string | null
+  staff_number: string | null
+  fixed_amount?: number | null
+  start_date?: string
+  end_date?: string
+  md_approved_at: string
+  md_approved_by_name: string | null
 }
 
 interface Props {
@@ -61,12 +77,12 @@ interface Props {
     role: string
     first_name: string
     last_name: string
-    rank_position: string | null
     profile_image_url: string | null
     departments: { name: string } | null
   }
   loanMemos: LoanMemo[]
   leaveMemos: LeaveMemo[]
+  approvedMemos?: ApprovedMemo[]
 }
 
 function fmtAmt(n: number | null) {
@@ -96,13 +112,39 @@ const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
   hod_approved: { label: "HOD Approved", color: "bg-teal-100 text-teal-800 border-teal-200" },
 }
 
-export function SecretaryMemosClient({ profile, loanMemos, leaveMemos }: Props) {
-  const [tab, setTab] = useState<"loans" | "leave">("loans")
+export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [] }: Props) {
+  const [tab, setTab] = useState<"loans" | "leave" | "approved">("loans")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
   const initials = [profile.first_name[0], profile.last_name[0]].join("").toUpperCase()
+
+  const downloadMemo = async (memo: ApprovedMemo) => {
+    setDownloadingId(memo.id)
+    try {
+      const linkRes = await fetch("/api/loan/memo-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memo.id }),
+      })
+      const linkData = await linkRes.json()
+      if (!linkRes.ok) throw new Error(linkData.error || "Failed to generate memo link")
+      const a = document.createElement("a")
+      a.href = linkData.path
+      a.download = `${memo.type}-memo-${memo.request_number}.pdf`
+      a.target = "_blank"
+      a.rel = "noopener noreferrer"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (err) {
+      console.error("Download failed:", err)
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   const filteredLoanMemos = useMemo(() => {
     const q = search.toLowerCase()
@@ -161,6 +203,10 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos }: Props) 
                 <div className="text-2xl font-black text-teal-300 tabular-nums">{leaveMemos.length}</div>
                 <div className="text-xs text-slate-400 mt-0.5 font-medium">Leave Memos</div>
               </div>
+              <div className="text-center rounded-xl bg-white/10 border border-white/10 px-4 py-3">
+                <div className="text-2xl font-black text-emerald-300 tabular-nums">{approvedMemos.length}</div>
+                <div className="text-xs text-slate-400 mt-0.5 font-medium">MD Approved</div>
+              </div>
             </div>
           </div>
         </div>
@@ -200,6 +246,22 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos }: Props) 
               <span className={cn("text-xs rounded-full px-2 py-0.5 tabular-nums",
                 tab === "leave" ? "bg-white/20" : "bg-teal-100 text-teal-700")}>
                 {leaveMemos.length}
+              </span>
+            </button>
+            <button
+              onClick={() => { setTab("approved"); setStatusFilter("all") }}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                tab === "approved"
+                  ? "bg-emerald-700 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              MD Approved
+              <span className={cn("text-xs rounded-full px-2 py-0.5 tabular-nums",
+                tab === "approved" ? "bg-white/20" : "bg-emerald-100 text-emerald-700")}>
+                {approvedMemos.length}
               </span>
             </button>
           </div>
@@ -354,6 +416,88 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos }: Props) 
                 })}
               </div>
             )}
+
+        {/* MD Approved Memos Tab */}
+        {tab === "approved" && (
+          <div className="space-y-4">
+            {approvedMemos.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
+                <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500 text-sm">No MD approved memos yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {approvedMemos.map((memo) => {
+                  const staffName = memo.staff_full_name || "Unknown Staff"
+                  const memoType = memo.type === "loan" ? "Loan" : "Leave"
+                  const typeLabel = memo.loan_type_label || memo.leave_type || memoType
+                  return (
+                    <div
+                      key={memo.id}
+                      className="rounded-xl border border-emerald-200 bg-gradient-to-r from-white to-emerald-50 p-4 hover:border-emerald-300 transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div className="flex-1 min-w-[200px]">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">
+                              {staffName.split(" ").map(p => p[0]).join("").toUpperCase().slice(0, 2)}
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-slate-900 text-sm">{staffName}</h3>
+                              <p className="text-xs text-slate-500">{memo.staff_number || "—"}</p>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-center gap-4 text-sm text-slate-600">
+                            <span className="font-medium text-slate-700">{typeLabel}</span>
+                            {memo.type === "loan" && memo.fixed_amount && (
+                              <span className="text-emerald-700 font-semibold">{fmtAmt(memo.fixed_amount)}</span>
+                            )}
+                            {memo.type === "leave" && memo.start_date && memo.end_date && (
+                              <>
+                                <span>{fmtDate(memo.start_date)} → {fmtDate(memo.end_date)}</span>
+                                <span className="text-slate-300">·</span>
+                                <span className="font-semibold">{leaveDays(memo.start_date, memo.end_date)}</span>
+                              </>
+                            )}
+                          </div>
+                          <div className="mt-2 text-xs text-slate-500">
+                            Approved by {memo.md_approved_by_name || "MD"} on{" "}
+                            {fmtDate(memo.md_approved_at)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => downloadMemo(memo)}
+                            disabled={downloadingId === memo.id}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                          >
+                            {downloadingId === memo.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                            Download
+                          </button>
+                          <button
+                            onClick={() => {
+                              downloadMemo(memo).then(() => {
+                                setTimeout(() => window.print(), 500)
+                              })
+                            }}
+                            disabled={downloadingId === memo.id}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors disabled:opacity-50"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
           </div>
         )}
       </div>

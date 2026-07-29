@@ -262,6 +262,8 @@ export function MdApprovalsClient({ profile }: Props) {
   const [activeTab, setActiveTab] = useState("pending")
   const [approvedLoans, setApprovedLoans] = useState<Loan[]>([])
   const [loadingApproved, setLoadingApproved] = useState(false)
+  const [allStampedMemos, setAllStampedMemos] = useState<any[]>([])
+  const [loadingStamped, setLoadingStamped] = useState(false)
 
   const fetchApprovedLoans = useCallback(async () => {
     setLoadingApproved(true)
@@ -274,6 +276,20 @@ export function MdApprovalsClient({ profile }: Props) {
       toast({ title: "Error loading approved loans", variant: "destructive" })
     } finally {
       setLoadingApproved(false)
+    }
+  }, [toast])
+
+  const fetchStampedMemos = useCallback(async () => {
+    setLoadingStamped(true)
+    try {
+      const res = await fetch("/api/loan/md-approve?view=stamped")
+      if (!res.ok) throw new Error("Failed to fetch stamped memos")
+      const data = await res.json()
+      setAllStampedMemos(data.memos || [])
+    } catch (err) {
+      toast({ title: "Error loading stamped memos", variant: "destructive" })
+    } finally {
+      setLoadingStamped(false)
     }
   }, [toast])
 
@@ -321,6 +337,12 @@ export function MdApprovalsClient({ profile }: Props) {
   }, [toast])
 
   useEffect(() => { fetchLoans() }, [fetchLoans])
+
+  useEffect(() => {
+    if (activeTab === "stamped") {
+      fetchStampedMemos()
+    }
+  }, [activeTab, fetchStampedMemos])
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {

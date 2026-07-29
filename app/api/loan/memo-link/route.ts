@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       loan.user_id === user.id ||
       role === "admin" ||
       role === "managing_director" ||
+      role === "secretary" ||
       role === "it-admin" ||
       canDoHodReview(role) ||
       canDoCommittee(role) ||
