@@ -37,6 +37,7 @@ import {
 interface ImportedLoan {
   id: string
   request_number: string
+  user_id?: string
   staff_number: string
   staff_full_name: string
   staff_location_name?: string
@@ -53,6 +54,15 @@ interface ImportedLoan {
   imported_at: string
   notes: string | null
   departments?: { name: string } | null
+}
+
+interface AnalyticsData {
+  active: ImportedLoan[]
+  nearCompletion: ImportedLoan[]
+  overdue: ImportedLoan[]
+  completed: ImportedLoan[]
+  totalOutstanding: number
+  totalMonthly: number
 }
 
 interface ParsedRow {
@@ -182,8 +192,8 @@ export function LoanOfficeEnhancedModule({ canAct }: Props) {
       if (!res.ok) throw new Error((await res.json()).error || "Failed to load")
       const json = await res.json()
       setImportedLoans(json.loans || [])
-    } catch (e: any) {
-      toast({ title: "Error loading imported loans", description: e.message, variant: "destructive" })
+    } catch (e) {
+      toast({ title: "Error loading imported loans", description: e instanceof Error ? e.message : "Please try again.", variant: "destructive" })
     } finally {
       setLoadingLoans(false)
     }
@@ -291,8 +301,8 @@ function ImportWizardTab({ canAct, onImportSuccess }: { canAct: boolean; onImpor
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<null | {
     inserted: number; failedCount: number; duplicateCount: number
-    failed: { row: ParsedRow; reason: string }[]
-    duplicates: { row: ParsedRow; existing_request_number: string }[]
+    failed: { row: { staff_number?: string; loan_type_key?: string }; reason: string }[]
+    duplicates: { row: { staff_number?: string; loan_type_key?: string }; existing_request_number: string }[]
   }>(null)
 
   // ── Parse uploaded file ──────────────────────────────────────────────────
@@ -351,8 +361,8 @@ function ImportWizardTab({ canAct, onImportSuccess }: { canAct: boolean; onImpor
         })
         setParsedRows(rows)
         setStep(2)
-      } catch (err: any) {
-        toast({ title: "Parse error", description: err.message || "Could not read file", variant: "destructive" })
+      } catch (err) {
+        toast({ title: "Parse error", description: err instanceof Error ? err.message : "Could not read file", variant: "destructive" })
       }
     }
     reader.readAsArrayBuffer(file)
@@ -405,8 +415,8 @@ function ImportWizardTab({ canAct, onImportSuccess }: { canAct: boolean; onImpor
         title: `Import complete — ${json.inserted} inserted`,
         description: `${json.failedCount} failed, ${json.duplicateCount} duplicates skipped.`,
       })
-    } catch (e: any) {
-      toast({ title: "Import failed", description: e.message, variant: "destructive" })
+    } catch (e) {
+      toast({ title: "Import failed", description: e instanceof Error ? e.message : "Import failed.", variant: "destructive" })
     } finally {
       setImporting(false)
     }
@@ -894,7 +904,7 @@ function EligibilityTab({ loans, loading }: { loans: ImportedLoan[]; loading: bo
 // Sub-panel: Analytics
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AnalyticsTab({ loans, analytics }: { loans: ImportedLoan[]; analytics: ReturnType<typeof import("react").useMemo<any, any>> }) {
+function AnalyticsTab({ loans, analytics }: { loans: ImportedLoan[]; analytics: AnalyticsData }) {
   // By loan type
   const byType = useMemo(() => {
     const map = new Map<string, { label: string; count: number; total: number }>()
