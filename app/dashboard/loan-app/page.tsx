@@ -1043,34 +1043,13 @@ export default function LoanAppPage() {
   const filteredLoanTypes = useMemo(() => {
     const rawTypes = data?.loanTypes || []
     const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
-    const staffCategoryRaw = data?.profile?.staffCategory
-    const staffCategory = staffCategoryRaw ? staffCategoryRaw.toLowerCase().trim() : null
-
-    console.log("[v0] filteredLoanTypes - rawTypes count:", rawTypes.length, "userTier:", userTier, "staffCategory:", staffCategory)
 
     const normalizedTypes = rawTypes.map((type) => ({
       ...type,
       loan_label: normalizeLoanTypeLabel(type, rawTypes),
     }))
 
-    const result = normalizedTypes.filter((type) => {
-      const tierIncluded = shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes)
-      console.log("[v0]  loan_key:", type.loan_key, "category:", type.category, "tierIncluded:", tierIncluded)
-      
-      // Only filter by category if staff has an explicit category
-      if (staffCategory) {
-        const loanCategory = (type.category || "").toLowerCase().trim()
-        if (loanCategory && loanCategory !== staffCategory) {
-          console.log("[v0]    → filtered out: category mismatch", loanCategory, "!=", staffCategory)
-          return false
-        }
-      }
-      
-      return tierIncluded
-    })
-    
-    console.log("[v0] filtered result count:", result.length)
-    return result
+    return normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
