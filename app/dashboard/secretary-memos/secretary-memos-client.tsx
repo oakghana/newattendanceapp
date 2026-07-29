@@ -469,6 +469,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 })}
               </div>
             )}
+          </div>
+        )}
 
         {/* MD Approved Memos Tab */}
         {tab === "approved" && (
@@ -481,7 +483,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
             ) : (
               <div className="space-y-3">
                 {approvedMemos.map((memo) => {
-                  const staffName = memo.staff_full_name || "Unknown Staff"
+                  const staffName = memo.staff_full_name || `${memo.user_profiles?.first_name ?? ""} ${memo.user_profiles?.last_name ?? ""}`.trim() || "Unknown Staff"
+                  const staffId = memo.staff_number || memo.user_profiles?.employee_id || "—"
                   const memoType = memo.type === "loan" ? "Loan" : "Leave"
                   const typeLabel = memo.loan_type_label || memo.leave_type || memoType
                   return (
@@ -497,7 +500,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                             </div>
                             <div>
                               <h3 className="font-bold text-slate-900 text-sm">{staffName}</h3>
-                              <p className="text-xs text-slate-500">{memo.staff_number || "—"}</p>
+                              <p className="text-xs text-slate-500">{staffId}</p>
                             </div>
                           </div>
                           <div className="mt-2 flex items-center gap-4 text-sm text-slate-600">
@@ -551,8 +554,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
             )}
           </div>
         )}
-          </div>
-        )}
+
       </div>
     </div>
   )

@@ -229,15 +229,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const token = request.nextUrl.searchParams.get("token") || ""
-    const verified = verifyMemoToken(token)
-    if (!verified) return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
-
     const params = await context.params
     const loanId = params.id
 
-    if (verified.loanId !== loanId || verified.userId !== user.id) {
-      return NextResponse.json({ error: "Token does not match request" }, { status: 403 })
+    // Try to verify token if provided, but allow authenticated users who have access
+    if (token) {
+      const verified = verifyMemoToken(token)
+      if (!verified) return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
+
+      if (verified.loanId !== loanId || verified.userId !== user.id) {
+        return NextResponse.json({ error: "Token does not match request" }, { status: 403 })
+      }
     }
+    // If no token, we'll check access permissions below instead
 
     const [{ data: profile, error: profileError }, { data: loan, error: loanError }] = await Promise.all([
       admin
@@ -275,8 +279,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-    // Include md_approved status so MD can view/download the stamped memo after approving
-    const memoEligibleStatuses = ["approved_director", "md_approved", "director_rejected", "rejected_fd", "awaiting_director_hr"]
+    // Include md_approved and all post-approval statuses so download works across the full workflow
+    const memoEligibleStatuses = ["approved_director", "md_approved", "director_rejected", "rejected_fd", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered", "fully_recovered"]
     if (!memoEligibleStatuses.includes(String(loan.status || ""))) {
       return NextResponse.json({ error: "Memo is not available for this current stage" }, { status: 400 })
     }
@@ -328,7 +332,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     const throRecipient = await resolveThroRecipient(admin, loan, applicantId)
 
-    const [{ data: applicantProfile }, { data: directorProfile }] = await Promise.all([
+    // Fetch MD's user ID from the loan — this is who actually approved
+    const mdApproverId = loan.md_approved_by ? String(loan.md_approved_by) : null
+
+    const [{ data: applicantProfile }, { data: directorProfile }, { data: mdProfile }] = await Promise.all([
       admin
         .from("user_profiles")
         .select("*")
@@ -337,26 +344,67 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       directorHrId
         ? admin
             .from("user_profiles")
-            .select("id, first_name, last_name, position, role")
+            .select("id, first_name, last_name, position, role, signature_data_url")
             .eq("id", directorHrId)
             .single()
         : Promise.resolve({ data: null } as any),
+      // Fetch the actual MD profile using md_approved_by — NOT the HR Executive
+      mdApproverId
+        ? admin
+            .from("user_profiles")
+            .select("id, first_name, last_name, position, role, signature_data_url")
+            .eq("id", mdApproverId)
+            .single()
+        : // Fallback: find by role managing_director
+          admin
+            .from("user_profiles")
+            .select("id, first_name, last_name, position, role, signature_data_url")
+            .eq("role", "managing_director")
+            .eq("is_active", true)
+            .limit(1)
+            .maybeSingle() as any,
     ])
 
-    // Smart signature fetching — exactly like leave module (NO is_active filter)
+    // ─── Fetch HR Executive signature (for the letter signatory section) ────
     let signerSignatureUrl = ""
-
-    // Priority 1: Check approval_signature_registry for director (NO is_active filter)
-    if (!signerSignatureUrl && directorHrId) {
+    if (directorHrId) {
       try {
-        const { data: signatureRecords } = await admin
+        const { data: hrSigRecords } = await admin
           .from("approval_signature_registry")
           .select("id, signature_data_url, signature_mode, signature_text")
           .eq("user_id", directorHrId)
+        if (hrSigRecords && hrSigRecords.length > 0) {
+          const best = hrSigRecords
+            .map((r: any) => {
+              const mode = String(r?.signature_mode || "").toLowerCase()
+              const hasImage = (mode === "draw" || mode === "drawn" || mode === "upload") && String(r?.signature_data_url || "").trim().length > 0
+              return { ...r, score: hasImage ? 100 : 10 }
+            })
+            .sort((a: any, b: any) => b.score - a.score)[0]
+          if (best?.signature_data_url) signerSignatureUrl = best.signature_data_url
+        }
+      } catch { /* skip */ }
+      if (!signerSignatureUrl) {
+        try {
+          const { data: hrProf } = await admin.from("user_profiles").select("signature_data_url").eq("id", directorHrId).single()
+          if (hrProf?.signature_data_url) signerSignatureUrl = hrProf.signature_data_url
+        } catch { /* skip */ }
+      }
+    }
 
-        if (signatureRecords && signatureRecords.length > 0) {
-          // Score drawn/upload (100) > typed (10) — same as leave module
-          const bestSig = signatureRecords
+    // ─── Fetch actual MD signature (for the approval stamp) ────────────
+    // Uses mdApproverId (loan.md_approved_by) — NOT the HR Executive
+    let mdStampSignatureUrl = ""
+    let mdStampSignatureText = ""
+    const mdProfileId = (mdProfile as any)?.id || mdApproverId
+    if (mdProfileId) {
+      try {
+        const { data: mdSigRecords } = await admin
+          .from("approval_signature_registry")
+          .select("id, signature_data_url, signature_mode, signature_text")
+          .eq("user_id", mdProfileId)
+        if (mdSigRecords && mdSigRecords.length > 0) {
+          const best = mdSigRecords
             .map((r: any) => {
               const mode = String(r?.signature_mode || "").toLowerCase()
               const hasImage = (mode === "draw" || mode === "drawn" || mode === "upload") && String(r?.signature_data_url || "").trim().length > 0
@@ -364,30 +412,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
               return { ...r, score: hasImage ? 100 : hasTyped ? 10 : 0 }
             })
             .sort((a: any, b: any) => b.score - a.score)[0]
-
-          if (bestSig?.signature_data_url) {
-            signerSignatureUrl = bestSig.signature_data_url
-          }
+          if (best?.signature_data_url) mdStampSignatureUrl = best.signature_data_url
+          else if (best?.signature_text) mdStampSignatureText = best.signature_text
         }
-      } catch (err) {
-        console.log("[v0] approval_signature_registry query failed:", err)
-      }
-    }
-
-    // Priority 2: Check user_profiles for signature (like leave module)
-    if (!signerSignatureUrl && directorHrId) {
-      try {
-        const { data: signerProfile } = await admin
-          .from("user_profiles")
-          .select("signature_data_url")
-          .eq("id", directorHrId)
-          .single()
-
-        if (signerProfile?.signature_data_url) {
-          signerSignatureUrl = signerProfile.signature_data_url
-        }
-      } catch (err) {
-        console.log("[v0] user_profiles signature fetch failed:", err)
+      } catch { /* skip */ }
+      // Fallback: signature_data_url from user_profiles
+      if (!mdStampSignatureUrl) {
+        try {
+          const { data: mdProf2 } = await admin.from("user_profiles").select("signature_data_url").eq("id", mdProfileId).single()
+          if ((mdProf2 as any)?.signature_data_url) mdStampSignatureUrl = (mdProf2 as any).signature_data_url
+        } catch { /* skip */ }
       }
     }
 
@@ -609,11 +643,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     doc.text("FOR:  MANAGING DIRECTOR", marginLeft, y)
     y += 12
 
-    // ─── cc section ───────────────────────────────────────────────────
+    // ─── cc section + MD Approval Stamp ──────────────────────────────
     if (y + 40 > pageHeight - 16) {
       doc.addPage()
       y = 24
     }
+
+    const ccStartY = y
+
     doc.setFont("times", "normal")
     doc.setFontSize(8.5)
     doc.setTextColor(60, 60, 60)
@@ -626,14 +663,96 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       "Registry Unit",
       "Records Unit",
     ]
-    const ccList = loan.memo_cc 
-      ? loan.memo_cc.split('\n').filter((line: string) => line.trim()) 
+    const ccList = loan.memo_cc
+      ? loan.memo_cc.split('\n').filter((line: string) => line.trim())
       : defaultCcList
     doc.text("cc:", marginLeft, y)
     ccList.forEach((entry: string, i: number) => {
       doc.text(entry, marginLeft + 10, y + (i + 1) * 4.5)
     })
     y += (ccList.length + 1) * 4.5 + 4
+
+    // ─── MD Approval Stamp — SQUARE, violet/blue border, red text/sig ─
+    const isMdApproved = ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
+    if (isMdApproved) {
+      const stampW = 46  // square width mm
+      const stampH = 46  // square height mm
+      // Right-align beside cc list, vertically centred with it
+      const stampX = pageWidth - marginRight - stampW  // left edge of stamp
+      const ccMidY = ccStartY + ((ccList.length + 1) * 4.5) / 2
+      const stampTopY = ccMidY - stampH / 2
+
+      // Outer square — violet/blue (indigo-700)
+      doc.setDrawColor(67, 56, 202)    // indigo-700
+      doc.setLineWidth(2.5)
+      doc.rect(stampX, stampTopY, stampW, stampH, "S")
+
+      // Inner square inset 2mm — blue (blue-500)
+      doc.setDrawColor(59, 130, 246)   // blue-500
+      doc.setLineWidth(0.8)
+      doc.rect(stampX + 2, stampTopY + 2, stampW - 4, stampH - 4, "S")
+
+      const cx = stampX + stampW / 2  // horizontal centre
+
+      // "APPROVED" — bold red, top of stamp
+      doc.setFont("times", "bold")
+      doc.setFontSize(10)
+      doc.setTextColor(185, 28, 28)    // red-700
+      doc.text("APPROVED", cx, stampTopY + 8, { align: "center" })
+
+      // Thin red divider line under APPROVED text
+      doc.setDrawColor(185, 28, 28)
+      doc.setLineWidth(0.4)
+      doc.line(stampX + 4, stampTopY + 10, stampX + stampW - 4, stampTopY + 10)
+
+      // MD signature image — fetched from mdStampSignatureUrl (MD's own signature)
+      let mdSigRendered = false
+      if (mdStampSignatureUrl) {
+        try {
+          const sigResp = await fetch(mdStampSignatureUrl)
+          if (sigResp.ok) {
+            const sigBuf = await sigResp.arrayBuffer()
+            const sigB64 = Buffer.from(sigBuf).toString("base64")
+            const ct = sigResp.headers.get("content-type") || "image/png"
+            const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
+            // Centre signature image within stamp
+            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 5, stampTopY + 12, stampW - 10, 11)
+            mdSigRendered = true
+          }
+        } catch { /* fall through */ }
+      }
+      if (!mdSigRendered && mdStampSignatureText) {
+        doc.setFont("times", "bolditalic")
+        doc.setFontSize(8)
+        doc.setTextColor(185, 28, 28)
+        doc.text(mdStampSignatureText, cx, stampTopY + 20, { align: "center" })
+        mdSigRendered = true
+      }
+
+      // Thin red divider after signature
+      doc.setDrawColor(185, 28, 28)
+      doc.setLineWidth(0.4)
+      doc.line(stampX + 4, stampTopY + 25, stampX + stampW - 4, stampTopY + 25)
+
+      // MD full name — from mdProfile (actual MD who approved, NOT HR Executive)
+      const mdFullName = fmtName(mdProfile) || (loan as any).md_approved_by_name || "MANAGING DIRECTOR"
+      doc.setFont("times", "bold")
+      doc.setFontSize(7)
+      doc.setTextColor(185, 28, 28)
+      doc.text(mdFullName.toUpperCase(), cx, stampTopY + 30, { align: "center" })
+
+      // "MANAGING DIRECTOR" title
+      doc.setFont("times", "normal")
+      doc.setFontSize(6.5)
+      doc.setTextColor(67, 56, 202)   // indigo-700
+      doc.text("MANAGING DIRECTOR", cx, stampTopY + 35, { align: "center" })
+
+      // Approval date
+      const approvalDateStr = fmtDate(loan.md_approved_at || new Date())
+      doc.setFontSize(6)
+      doc.setTextColor(100, 100, 100)
+      doc.text(approvalDateStr, cx, stampTopY + 40, { align: "center" })
+    }
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)
 

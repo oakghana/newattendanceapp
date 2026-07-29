@@ -1,16 +1,12 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 import { DisbursementConfirmationClient } from "@/components/disbursement-confirmation-client"
-import { Loader2 } from "lucide-react"
 
 interface DisbursedLoan {
   id: string
   request_number: string
   staff_full_name: string
   staff_number: string
-  staff_department: string
   loan_type_label: string
   fixed_amount: number
   status: string
@@ -18,86 +14,86 @@ interface DisbursedLoan {
   staff_receiving_funds_confirmed_at: string | null
   staff_receiving_funds_confirmed_by: string | null
   created_at: string
+  department_name?: string
 }
 
-export default function DisbursementConfirmationPage() {
-  const [disbursedLoans, setDisbursedLoans] = useState<DisbursedLoan[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export default async function DisbursementConfirmationPage() {
+  const { user, authError } = await createClientAndGetUser()
+  if (authError || !user) redirect("/auth/login")
 
-  useEffect(() => {
-    const fetchDisbursedLoans = async () => {
-      try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (!user) {
-          setError("Not authenticated")
-          return
-        }
+  const admin = await createAdminClient()
 
-        // Get user's department to filter by
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select("department_id, departments(code, name)")
-          .eq("id", user.id)
-          .maybeSingle()
+  // Verify user is in Accounts/Loan Office department
+  const { data: profile } = await admin
+    .from("user_profiles")
+    .select("id, role, first_name, last_name, departments(name)")
+    .eq("id", user.id)
+    .maybeSingle()
 
-        // Check if user is in Accounts/Loan Office
-        const deptName = (profile as any)?.departments?.name || ""
-        const isAccountsOrLoanOffice = 
-          deptName.toLowerCase().includes("account") ||
-          deptName.toLowerCase().includes("finance") ||
-          deptName.toLowerCase().includes("loan") ||
-          deptName.toLowerCase().includes("welfare")
+  const deptName = (profile as any)?.departments?.name || ""
+  const isAccountsOrLoanOffice = 
+    deptName.toLowerCase().includes("account") ||
+    deptName.toLowerCase().includes("finance") ||
+    deptName.toLowerCase().includes("loan") ||
+    deptName.toLowerCase().includes("welfare")
 
-        if (!isAccountsOrLoanOffice) {
-          setError("Only Accounts/Loan Office staff can access this page")
-          setLoading(false)
-          return
-        }
-
-        // Fetch loans in staff_receiving_funds status
-        const { data: loans, error: loansError } = await supabase
-          .from("loan_requests")
-          .select(`
-            id,
-            request_number,
-            staff_full_name,
-            staff_number,
-            staff_department,
-            loan_type_label,
-            fixed_amount,
-            status,
-            md_approved_at,
-            staff_receiving_funds_confirmed_at,
-            staff_receiving_funds_confirmed_by,
-            created_at
-          `)
-          .eq("status", "staff_receiving_funds")
-          .order("created_at", { ascending: false })
-          .limit(500)
-
-        if (loansError) throw loansError
-        setDisbursedLoans(loans as DisbursedLoan[])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load loans")
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchDisbursedLoans()
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-      </div>
-    )
+  if (!profile || !isAccountsOrLoanOffice) {
+    redirect("/auth/login")
   }
-  if (error) return <div className="p-6 text-red-600">{error}</div>
 
-  return <DisbursementConfirmationClient loans={disbursedLoans} />
+  // Fetch loans that have been approved by MD or Director HR (ready for disbursement confirmation)
+  // Include both md_approved and awaiting_director_hr statuses as these are the ones ready to disburse
+  const { data: loans, error: loansError } = await admin
+    .from("loan_requests")
+    .select("*")
+    .in("status", ["md_approved", "awaiting_director_hr"])
+    .order("md_approved_at", { ascending: false })
+    .limit(500)
+
+  if (loansError) {
+    console.error("[v0] Disbursement page - loan fetch error:", loansError)
+  }
+
+  // For each loan, fetch the department name separately if needed
+  const enrichedLoans: DisbursedLoan[] = []
+  
+  if (loans) {
+    for (const loan of loans as any[]) {
+      // Fetch department name for this user
+      let department_name = ""
+      if (loan.user_id) {
+        const { data: userProf } = await admin
+          .from("user_profiles")
+          .select("departments(name)")
+          .eq("id", loan.user_id)
+          .maybeSingle()
+        
+        if (userProf) {
+          department_name = (userProf as any).departments?.name || ""
+        }
+      }
+
+      enrichedLoans.push({
+        id: loan.id,
+        request_number: loan.request_number,
+        staff_full_name: loan.staff_full_name || "",
+        staff_number: loan.staff_number || "",
+        loan_type_label: loan.loan_type_label || "",
+        fixed_amount: loan.fixed_amount || 0,
+        status: loan.status || "",
+        md_approved_at: loan.md_approved_at,
+        staff_receiving_funds_confirmed_at: loan.staff_receiving_funds_confirmed_at,
+        staff_receiving_funds_confirmed_by: loan.staff_receiving_funds_confirmed_by,
+        created_at: loan.created_at,
+        department_name,
+      })
+    }
+  }
+
+  return (
+    <DisbursementConfirmationClient 
+      loans={enrichedLoans} 
+      userProfile={profile}
+    />
+  )
 }

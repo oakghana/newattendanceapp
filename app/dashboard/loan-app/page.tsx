@@ -4744,11 +4744,53 @@ export default function LoanAppPage() {
                     </div>
                   </div>
 
-                  {/* Approver Information */}
+                  {/* MD Approval Stamp with Signature */}
                   {(row.director_hr_name || row.director_signature_text) && (
-                    <div className="mb-3 pb-3 border-b bg-blue-50 rounded px-2 py-1.5">
-                      <div className="text-xs text-blue-700">
-                        <span className="font-semibold">Approved & Signed by:</span> {row.director_hr_name || row.director_signature_text}
+                    <div className="mb-6 flex items-center justify-center py-6 px-4">
+                      <div className="relative w-56 h-56 border-8 border-green-600 rounded-full flex flex-col items-center justify-center bg-gradient-to-b from-green-50 to-green-100 shadow-lg">
+                        {/* Outer decorative circle for stamp effect */}
+                        <div className="absolute w-56 h-56 border-3 border-green-500 rounded-full opacity-40" style={{ transform: 'rotate(15deg)' }}></div>
+                        
+                        {/* Inner decorative circle */}
+                        <div className="absolute w-48 h-48 border-2 border-green-400 rounded-full opacity-30"></div>
+                        
+                        {/* Stamp content */}
+                        <div className="relative z-10 text-center w-full px-4">
+                          {/* APPROVED text */}
+                          <div className="text-4xl font-black text-green-700 mb-3 tracking-wider" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.1)' }}>
+                            APPROVED
+                          </div>
+                          
+                          {/* MD Signature Image or Text */}
+                          {row.director_signature_data_url ? (
+                            <img 
+                              src={row.director_signature_data_url} 
+                              alt="MD Signature"
+                              className="h-16 mx-auto mb-2 max-w-full"
+                            />
+                          ) : row.director_signature_text ? (
+                            <div className="text-lg font-script text-green-800 italic mb-2" style={{ fontStyle: 'italic', fontWeight: '600' }}>
+                              {row.director_signature_text}
+                            </div>
+                          ) : null}
+                          
+                          {/* MD Name Label */}
+                          <div className="text-xs text-gray-600 font-semibold mt-2 mb-1">
+                            MD Approval
+                          </div>
+                          
+                          {/* Approver Name */}
+                          <div className="text-sm text-green-700 font-bold">
+                            {row.director_hr_name}
+                          </div>
+                          
+                          {/* Approval Date */}
+                          {row.md_approved_at && (
+                            <div className="text-xs text-green-600 mt-2 font-semibold">
+                              {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -5918,7 +5960,7 @@ export default function LoanAppPage() {
                 <Download className="h-4 w-4 mr-1" /> Download PDF
               </Button>
             )}
-            {memoReviewModal.row && memoReviewModal.row.status === "awaiting_director_hr" && (
+            {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr") && (
               <Button
                 variant={modalDecision === "reject" ? "destructive" : "default"}
                 className="bg-green-700 hover:bg-green-800 text-white"
@@ -5935,7 +5977,7 @@ export default function LoanAppPage() {
                     signature_text: sigText,
                     signature_data_url: sigUrl,
                     director_letter: modalMemoText,
-                    note: "Director HR final decision via memo review",
+                    note: memoReviewModal.row.status === "awaiting_hr_executives" ? "HR Executive decision via memo review" : "Director HR final decision via memo review",
                   })
                   setMemoReviewModal((s) => ({ ...s, open: false }))
                 }}

@@ -738,11 +738,21 @@ export async function POST(request: NextRequest) {
 
     if (action === "director_finalize") {
       actionHandled = true
-      if (!canDoDirectorHr(role, deptName, deptCode)) {
-        return NextResponse.json({ error: "Only Director HR/Admin can finalize" }, { status: 403 })
-      }
-      if (req.status !== "awaiting_director_hr") {
-        return NextResponse.json({ error: "Request is not at Director HR stage" }, { status: 400 })
+      
+      // Allow HR Executives at "awaiting_hr_executives" stage OR Director HR at "awaiting_director_hr" stage
+      const isHrExecutive = ["hr_executive", "accounts", "loan_office", "admin"].includes(role)
+      const isDirectorHr = ["director_hr", "admin"].includes(role)
+      
+      if (req.status === "awaiting_hr_executives") {
+        if (!isHrExecutive) {
+          return NextResponse.json({ error: "Only HR staff can approve at this stage" }, { status: 403 })
+        }
+      } else if (req.status === "awaiting_director_hr") {
+        if (!isDirectorHr) {
+          return NextResponse.json({ error: "Only Director HR/Admin can finalize" }, { status: 403 })
+        }
+      } else {
+        return NextResponse.json({ error: "Request is not at a valid approval stage (HR Executives or Director HR)" }, { status: 400 })
       }
 
       // Any HR Executive can approve forwarded requests - no assignment restriction
