@@ -52,6 +52,14 @@ export function isAdminRole(role: string | null | undefined): boolean {
   return ADMIN_ROLE_ALIASES.has(normalizeRole(role))
 }
 
+export function isMdRole(role: string | null | undefined): boolean {
+  return normalizeRole(role) === "managing_director"
+}
+
+export function isSecretaryRole(role: string | null | undefined): boolean {
+  return normalizeRole(role) === "secretary"
+}
+
 export function isHrDepartment(name?: string | null, code?: string | null): boolean {
   const n = String(name || "").toLowerCase()
   const c = String(code || "").toLowerCase()
