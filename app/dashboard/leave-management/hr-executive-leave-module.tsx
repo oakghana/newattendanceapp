@@ -4,16 +4,18 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
   CheckCircle2, TrendingUp, Users,
-  BookOpen, Calendar, BarChart,
+  BookOpen, Calendar, BarChart, Plus, CheckSquare,
 } from "lucide-react"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrExecutiveOverviewPanel } from "@/components/leave/hr-executive-overview-panel"
 import { LeaveCenterWithTabs } from "@/components/leave/leave-center-with-tabs"
+import { LeavePlanningClient } from "../leave-planning/leave-planning-client"
+import { LeaveManagementClient } from "./leave-management-client"
 
 // ── Tab type ─────────────────────────────────────────────────────────────────
-type Tab = "overview" | "leave-approvals" | "analytics" | "balance-calendar"
+type Tab = "overview" | "leave-approvals" | "analytics" | "balance-calendar" | "apply-leave" | "my-requests"
 
 // ── Overview panel ────────────────────────────────────────────────────────────
 function OverviewPanel({ onNavigate, userId }: { onNavigate: (tab: Tab) => void; userId: string }) {
@@ -39,6 +41,8 @@ interface HrExecutiveLeaveModuleProps {
 
 const TABS: { id: Tab; label: string; icon: any; activeClass: string }[] = [
   { id: "overview",        label: "Overview",           icon: BookOpen,  activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
+  { id: "apply-leave",     label: "Apply for Leave",    icon: Plus,      activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
+  { id: "my-requests",     label: "My Requests",        icon: CheckSquare, activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
   { id: "leave-approvals", label: "Leave Center",       icon: Calendar,  activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
   { id: "balance-calendar",label: "Balance & Calendar", icon: BarChart,  activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
   { id: "analytics",       label: "Analytics",          icon: TrendingUp,activeClass: "bg-orange-500 text-white shadow-md border-orange-600" },
@@ -97,6 +101,36 @@ export function HrExecutiveLeaveModule({
             <LeaveBalanceWidget />
             <TeamCalendarView />
           </div>
+        )}
+
+        {activeTab === "apply-leave" && (
+          <LeavePlanningClient
+            userId={userId}
+            userRole={userRole || "staff"}
+            userDepartment={userDepartment || ""}
+            userFirstName={userFirstName || ""}
+            userLastName={userLastName || ""}
+            hasHodLinkage={hasHodLinkage}
+            inactivityDays={inactivityDays}
+            initialStaffRequests={initialStaffRequests}
+            initialManagerNotifications={initialManagerNotifications}
+            initialApprovedStaffRequests={initialApprovedStaffRequests}
+          />
+        )}
+
+        {activeTab === "my-requests" && (
+          <LeaveManagementClient
+            userId={userId}
+            userRole={userRole || "staff"}
+            userDepartment={userDepartment || ""}
+            userFirstName={userFirstName || ""}
+            userLastName={userLastName || ""}
+            hasHodLinkage={hasHodLinkage}
+            inactivityDays={inactivityDays}
+            initialStaffRequests={initialStaffRequests}
+            initialManagerNotifications={initialManagerNotifications}
+            initialApprovedStaffRequests={initialApprovedStaffRequests}
+          />
         )}
 
         {activeTab === "analytics" && (
