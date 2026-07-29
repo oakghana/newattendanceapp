@@ -47,27 +47,37 @@ export default async function SecretaryMemosPage() {
     .order("created_at", { ascending: false })
     .limit(300)
 
-  // Fetch approved leave memos (HR Executive approved)
+  // Fetch approved leave memos from leave_plan_requests (the correct table)
   const { data: rawLeaveMemos } = await admin
-    .from("leave_requests")
-    .select("id, leave_type, status, start_date, end_date, reason, created_at, user_id")
-    .eq("status", "hr_approved")
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, status, preferred_start_date, preferred_end_date, reason, created_at, hr_approved_at, memo_token, user_id")
+    .in("status", ["hr_approved", "approved"])
     .order("created_at", { ascending: false })
     .limit(300)
 
-  // Fetch user profiles for those leave memos separately (avoids FK join ambiguity)
+  // Fetch user profiles for those leave memos separately
   const leaveUserIds = [...new Set((rawLeaveMemos || []).map((l: any) => l.user_id).filter(Boolean))]
   const { data: leaveProfiles } = leaveUserIds.length > 0
     ? await admin
         .from("user_profiles")
-        .select("id, first_name, last_name, employee_id, profile_image_url, departments(name)")
+        .select("id, first_name, last_name, employee_id, profile_image_url, department_id, departments(name)")
         .in("id", leaveUserIds)
     : { data: [] }
 
   const leaveProfileMap = new Map((leaveProfiles || []).map((p: any) => [p.id, p]))
 
+  // Normalise to the shape the client expects
   const leaveMemos = (rawLeaveMemos || []).map((leave: any) => ({
-    ...leave,
+    id: leave.id,
+    leave_type: leave.leave_type_key,
+    status: leave.status,
+    start_date: leave.preferred_start_date,
+    end_date: leave.preferred_end_date,
+    reason: leave.reason,
+    created_at: leave.created_at,
+    hr_approved_at: leave.hr_approved_at,
+    memo_token: leave.memo_token,
+    user_id: leave.user_id,
     user_profiles: leaveProfileMap.get(leave.user_id) || null,
   }))
 
@@ -99,10 +109,10 @@ export default async function SecretaryMemosPage() {
     .order("md_approved_at", { ascending: false })
     .limit(300)
 
-  // Fetch MD approved leave memos (all final approved leave with HR sign-off)
+  // Fetch MD approved leave memos from leave_plan_requests (HR sign-off complete)
   const { data: rawApprovedLeaveMemos } = await admin
-    .from("leave_requests")
-    .select("id, leave_type, status, start_date, end_date, created_at, user_id")
+    .from("leave_plan_requests")
+    .select("id, leave_type_key, status, preferred_start_date, preferred_end_date, created_at, hr_approved_at, memo_token, user_id")
     .in("status", ["hr_approved", "approved"])
     .order("created_at", { ascending: false })
     .limit(300)
@@ -117,7 +127,15 @@ export default async function SecretaryMemosPage() {
 
   const approvedLeaveProfileMap = new Map((approvedLeaveProfiles || []).map((p: any) => [p.id, p]))
   const approvedLeaveMemos = (rawApprovedLeaveMemos || []).map((leave: any) => ({
-    ...leave,
+    id: leave.id,
+    leave_type: leave.leave_type_key,
+    status: leave.status,
+    start_date: leave.preferred_start_date,
+    end_date: leave.preferred_end_date,
+    created_at: leave.created_at,
+    hr_approved_at: leave.hr_approved_at,
+    memo_token: leave.memo_token,
+    user_id: leave.user_id,
     user_profiles: approvedLeaveProfileMap.get(leave.user_id) || null,
   }))
 
