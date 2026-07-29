@@ -18,6 +18,9 @@ export default async function ProfilePage() {
     .from("user_profiles")
     .select(`
       *,
+      staff_category,
+      years_of_service,
+      date_of_appointment,
       departments (
         id,
         name,

@@ -14,6 +14,7 @@ import {
   normalizeRole,
 } from "@/lib/loan-workflow"
 import { verifyMemoToken } from "@/lib/secure-memo"
+import { getMemoLocationAddress } from "@/lib/location-mappings"
 
 export const runtime = "nodejs"
 
@@ -132,7 +133,9 @@ async function resolveThroRecipient(admin: any, loan: any, applicantId: string) 
 
   const name = `${(reviewerProfile as any).first_name || ""} ${(reviewerProfile as any).last_name || ""}`.trim()
   const position = String((reviewerProfile as any).position || "").trim()
-  const locationName = String((reviewerProfile as any)?.geofence_locations?.name || loan.staff_location_name || "HEAD OFFICE").trim()
+  const rawLocationName = String((reviewerProfile as any)?.geofence_locations?.name || loan.staff_location_name || "HEAD OFFICE").trim()
+  // Apply location mapping (e.g., SWANZY ARCADE → HEAD OFFICE ACCRA, GHANA)
+  const locationName = getMemoLocationAddress(rawLocationName, "HEAD OFFICE")
 
   return {
     name: name || "",
@@ -479,7 +482,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const parsedHrNote = splitThroTelephoneFromNote(loan.hr_note)
     const parsedLoanOfficeNote = splitThroTelephoneFromNote(loan.loan_office_note)
     const hodRank = String(parsedHrNote.throRank || parsedLoanOfficeNote.throRank || loan.hod_rank || throRecipient?.position || "").toUpperCase().trim()
-    const hodLocation = String(parsedHrNote.throLocation || parsedLoanOfficeNote.throLocation || loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA").toUpperCase()
+    const rawHodLocation = String(parsedHrNote.throLocation || parsedLoanOfficeNote.throLocation || loan.hod_location || throRecipient?.location || loan.staff_location_name || "HEAD OFFICE ACCRA")
+    // Apply location mapping to ensure consistency (e.g., SWANZY ARCADE → HEAD OFFICE ACCRA, GHANA)
+    const hodLocation = getMemoLocationAddress(rawHodLocation, "HEAD OFFICE ACCRA, GHANA").toUpperCase()
     if (hodRank || hodLocation) {
       doc.setFont("times", "normal")
       doc.setFontSize(9.2)

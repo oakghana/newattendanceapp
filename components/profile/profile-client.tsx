@@ -34,6 +34,9 @@ interface UserProfile {
   role: string
   is_active: boolean
   profile_image_url?: string
+  staff_category?: string
+  years_of_service?: number
+  date_of_appointment?: string
   departments?: {
     id: string
     name: string
@@ -576,6 +579,27 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     {profile.phone_number || profile.phone || "Not provided"}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">Only admin can change phone number</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Rank / Category</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    {profile.staff_category ? profile.staff_category.charAt(0).toUpperCase() + profile.staff_category.slice(1) : "Not assigned"}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Auto-set from position by system</p>
+                </div>
+                <div>
+                  <Label>Years of Service</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    {profile.years_of_service !== undefined && profile.years_of_service !== null 
+                      ? `${profile.years_of_service} year${profile.years_of_service !== 1 ? 's' : ''}`
+                      : "Not calculated"}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Auto-calculated from hire date</p>
                 </div>
               </div>
 
