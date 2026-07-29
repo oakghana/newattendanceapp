@@ -1,23 +1,21 @@
-import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/server"
+import { createClientAndGetUser, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { SecretaryMemosClient } from "./secretary-memos-client"
 
 export default async function SecretaryMemosPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
+  const { user, authError } = await createClientAndGetUser()
+  if (authError || !user) redirect("/auth/login")
 
-  const { data: profile } = await supabase
+  const admin = await createAdminClient()
+
+  const { data: profile } = await admin
     .from("user_profiles")
     .select("id, role, first_name, last_name, rank_position, profile_image_url, departments(name)")
     .eq("id", user.id)
     .maybeSingle()
 
   // The proxy has already validated the role — just render the client without redirects
-  if (!profile) redirect("/auth/login")
-
-  const admin = createAdminClient()
+  if (!profile || profile.role !== "secretary") redirect("/auth/login")
 
   // Fetch approved loan memos (HR Executive approved stage and above)
   const { data: loanMemos } = await admin
