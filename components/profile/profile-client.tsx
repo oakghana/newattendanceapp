@@ -1260,9 +1260,9 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     <span className="text-sm">Length of Service:</span>
                     <span className="text-sm font-medium">
                       {(profile as any).years_of_service != null
-                        ? `${(profile as any).years_of_service} year${(profile as any).years_of_service !== 1 ? "s" : ""}`
+                        ? `${(profile as any).years_of_service}v`
                         : (profile as any).date_of_appointment
-                          ? `${Math.floor((Date.now() - new Date((profile as any).date_of_appointment).getTime()) / (365.25 * 24 * 3600 * 1000))} yrs`
+                          ? `${Math.floor((Date.now() - new Date((profile as any).date_of_appointment).getTime()) / (365.25 * 24 * 3600 * 1000))}v`
                           : "Not set"}
                     </span>
                   </div>
