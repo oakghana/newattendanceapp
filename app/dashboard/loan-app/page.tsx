@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
+import { LoanOfficeEnhancedModule } from "@/components/loan/loan-office-enhanced-module"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -3012,6 +3013,9 @@ export default function LoanAppPage() {
 
         <TabsContent value="loan-office" className="space-y-5">
           <ReadOnlyHint canAct={Boolean(p?.loanOffice || p?.hrOffice)} roleLabel="Loan Office / HR Office" />
+
+          {/* ── Enhanced HR Loan Office Module (Import, Tracker, Eligibility, Analytics) ── */}
+          <LoanOfficeEnhancedModule canAct={Boolean(p?.loanOffice || p?.hrOffice)} />
 
           {/* ── Compact metric strip ── */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
