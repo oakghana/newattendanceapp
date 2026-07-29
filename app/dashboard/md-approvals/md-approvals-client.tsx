@@ -805,7 +805,7 @@ export function MdApprovalsClient({ profile }: Props) {
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
 
         {/* Tab switcher */}
-        <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm w-fit flex-wrap">
+        <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm flex-wrap">
           <button
             onClick={() => setActiveTab("pending")}
             className={cn(
