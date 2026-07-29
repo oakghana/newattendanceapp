@@ -85,6 +85,16 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const view = url.searchParams.get("view") || "pending" // "pending" | "approved"
 
+  // Fetch loan types for category mapping (no FK join needed — separate query)
+  const { data: loanTypesRows } = await admin
+    .from("loan_types")
+    .select("loan_key, category")
+
+  const loanTypeCategoryMap: Record<string, string> = {}
+  for (const lt of loanTypesRows || []) {
+    if (lt.loan_key && lt.category) loanTypeCategoryMap[lt.loan_key] = lt.category
+  }
+
   let query = admin
     .from("loan_requests")
     .select(`
@@ -108,9 +118,6 @@ export async function GET(req: NextRequest) {
       departments!department_id (
         name
       ),
-      loan_types!loan_type_key (
-        category
-      ),
       user_profiles!user_id (
         first_name,
         last_name,
@@ -131,5 +138,11 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query.limit(200)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ loans: data || [] })
+  // Attach category to each loan using the map
+  const loans = (data || []).map((l: Record<string, unknown>) => ({
+    ...l,
+    loan_category: l.loan_type_key ? (loanTypeCategoryMap[l.loan_type_key as string] || null) : null,
+  }))
+
+  return NextResponse.json({ loans, loanTypeCategoryMap })
 }

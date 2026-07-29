@@ -61,7 +61,7 @@ interface Loan {
   staff_rank?: string | null
   department_id?: string | null
   departments?: { name: string } | null
-  loan_types?: { category: string } | null
+  loan_category?: string | null
   user_profiles: {
     first_name: string
     last_name: string
@@ -323,7 +323,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
 
   const categoryOptions = useMemo(() => {
     const s = new Set<string>()
-    loans.forEach((l) => { if (l.loan_types?.category) s.add(l.loan_types.category) })
+    loans.forEach((l) => { if (l.loan_category) s.add(l.loan_category) })
     return Array.from(s).sort()
   }, [loans])
 
@@ -352,7 +352,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
       if (filterLocation && l.staff_location_name !== filterLocation) return false
       if (filterDepartment && l.departments?.name !== filterDepartment) return false
       if (filterLoanType && l.loan_type_label !== filterLoanType) return false
-      if (filterCategory && l.loan_types?.category !== filterCategory) return false
+      if (filterCategory && l.loan_category !== filterCategory) return false
       if (filterPosition) {
         const pos = l.user_profiles?.position || l.staff_rank || ""
         if (pos !== filterPosition) return false
@@ -950,7 +950,7 @@ export function MdApprovalsClient({ profile }: Props) {
 
   const categoryOptions = useMemo(() => {
     const set = new Set<string>()
-    allStampedMemos.forEach((l) => { if (l.loan_types?.category) set.add(l.loan_types.category) })
+    allStampedMemos.forEach((l) => { if (l.loan_category) set.add(l.loan_category) })
     return Array.from(set).sort()
   }, [allStampedMemos])
 
@@ -961,7 +961,7 @@ export function MdApprovalsClient({ profile }: Props) {
       if (filterDepartment && l.departments?.name !== filterDepartment) return false
       if (filterMonth && l.md_approved_at && getMonthKey(l.md_approved_at) !== filterMonth) return false
       if (filterLoanType && l.loan_type_label !== filterLoanType) return false
-      if (filterCategory && l.loan_types?.category !== filterCategory) return false
+      if (filterCategory && l.loan_category !== filterCategory) return false
       return true
     })
   }, [allStampedMemos, filterLocation, filterDepartment, filterMonth, filterLoanType, filterCategory])
