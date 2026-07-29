@@ -58,14 +58,17 @@ interface Loan {
   staff_number: string | null
   staff_location_name?: string | null
   staff_district_name?: string | null
+  staff_rank?: string | null
   department_id?: string | null
   departments?: { name: string } | null
+  loan_category?: string | null
   user_profiles: {
     first_name: string
     last_name: string
     employee_id: string
     profile_image_url: string | null
     assigned_location_id?: string | null
+    position?: string | null
   } | null
 }
 
@@ -292,13 +295,79 @@ const CHART_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444", "#0
 function AnalyticsTab({ loans }: { loans: Loan[] }) {
   const [analyticsView, setAnalyticsView] = useState<"month" | "quarter" | "location" | "type">("month")
 
-  const totalApproved = loans.length
-  const totalAmount = loans.reduce((s, l) => s + (l.fixed_amount || l.requested_amount || 0), 0)
+  // ── Filter state ──────────────────────────────────────────────────────────
+  const [filterLocation, setFilterLocation] = useState("")
+  const [filterDepartment, setFilterDepartment] = useState("")
+  const [filterLoanType, setFilterLoanType] = useState("")
+  const [filterCategory, setFilterCategory] = useState("")
+  const [filterPosition, setFilterPosition] = useState("")
+
+  // ── Derive unique filter options from data ────────────────────────────────
+  const locationOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.staff_location_name) s.add(l.staff_location_name) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const departmentOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.departments?.name) s.add(l.departments.name) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const loanTypeOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.loan_type_label) s.add(l.loan_type_label) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const categoryOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => { if (l.loan_category) s.add(l.loan_category) })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const positionOptions = useMemo(() => {
+    const s = new Set<string>()
+    loans.forEach((l) => {
+      const pos = l.user_profiles?.position || l.staff_rank
+      if (pos) s.add(pos)
+    })
+    return Array.from(s).sort()
+  }, [loans])
+
+  const activeFilterCount = [filterLocation, filterDepartment, filterLoanType, filterCategory, filterPosition].filter(Boolean).length
+
+  const clearFilters = () => {
+    setFilterLocation("")
+    setFilterDepartment("")
+    setFilterLoanType("")
+    setFilterCategory("")
+    setFilterPosition("")
+  }
+
+  // ── Apply filters to base dataset ────────────────────────────────────────
+  const filteredLoans = useMemo(() => {
+    return loans.filter((l) => {
+      if (filterLocation && l.staff_location_name !== filterLocation) return false
+      if (filterDepartment && l.departments?.name !== filterDepartment) return false
+      if (filterLoanType && l.loan_type_label !== filterLoanType) return false
+      if (filterCategory && l.loan_category !== filterCategory) return false
+      if (filterPosition) {
+        const pos = l.user_profiles?.position || l.staff_rank || ""
+        if (pos !== filterPosition) return false
+      }
+      return true
+    })
+  }, [loans, filterLocation, filterDepartment, filterLoanType, filterCategory, filterPosition])
+
+  const totalApproved = filteredLoans.length
+  const totalAmount = filteredLoans.reduce((s, l) => s + (l.fixed_amount || l.requested_amount || 0), 0)
 
   // By month
   const byMonth = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       if (!l.md_approved_at) return
       const key = getMonthKey(l.md_approved_at)
       const existing = map.get(key) || { count: 0, amount: 0 }
@@ -307,12 +376,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => ({ name: getMonthLabel(k), count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   // By quarter
   const byQuarter = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       if (!l.md_approved_at) return
       const key = getQuarter(l.md_approved_at)
       const existing = map.get(key) || { count: 0, amount: 0 }
@@ -321,12 +390,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => ({ name: k, count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   // By location
   const byLocation = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       const loc = l.staff_location_name || "Unknown"
       const existing = map.get(loc) || { count: 0, amount: 0 }
       map.set(loc, { count: existing.count + 1, amount: existing.amount + (l.fixed_amount || l.requested_amount || 0) })
@@ -334,12 +403,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([, a], [, b]) => b.count - a.count)
       .map(([k, v]) => ({ name: k, count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   // By loan type
   const byType = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>()
-    loans.forEach((l) => {
+    filteredLoans.forEach((l) => {
       const type = l.loan_type_label || "Other"
       const existing = map.get(type) || { count: 0, amount: 0 }
       map.set(type, { count: existing.count + 1, amount: existing.amount + (l.fixed_amount || l.requested_amount || 0) })
@@ -347,13 +416,12 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
     return Array.from(map.entries())
       .sort(([, a], [, b]) => b.count - a.count)
       .map(([k, v]) => ({ name: k, count: v.count, amount: Number((v.amount / 1000).toFixed(1)) }))
-  }, [loans])
+  }, [filteredLoans])
 
   const chartData = analyticsView === "month" ? byMonth : analyticsView === "quarter" ? byQuarter : analyticsView === "location" ? byLocation : byType
 
   const topLocation = byLocation[0]?.name || "—"
   const topType = byType[0]?.name || "—"
-  const thisMonthKey = getMonthKey(new Date().toISOString())
   const thisMonthCount = byMonth.find((m) => {
     const now = new Date()
     const label = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("en-GH", { month: "short", year: "numeric" })
@@ -362,6 +430,137 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Filter Bar ──────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-500" />
+            <span className="text-sm font-semibold text-slate-700">Filter Analytics</span>
+            {activeFilterCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </div>
+          {activeFilterCount > 0 && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 transition-colors font-medium"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
+          {/* Location */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <MapPin className="h-3 w-3" /> Location
+            </label>
+            <select
+              value={filterLocation}
+              onChange={(e) => setFilterLocation(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Locations</option>
+              {locationOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Department */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <Building2 className="h-3 w-3" /> Department
+            </label>
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Departments</option>
+              {departmentOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Loan Type */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <FileText className="h-3 w-3" /> Loan Type
+            </label>
+            <select
+              value={filterLoanType}
+              onChange={(e) => setFilterLoanType(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Loan Types</option>
+              {loanTypeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Category */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <Star className="h-3 w-3" /> Category
+            </label>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Categories</option>
+              {categoryOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {/* Position / Rank */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" /> Position
+            </label>
+            <select
+              value={filterPosition}
+              onChange={(e) => setFilterPosition(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">All Positions</option>
+              {positionOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+        {activeFilterCount > 0 && (
+          <div className="px-4 pb-3 flex flex-wrap gap-2">
+            {filterLocation && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
+                <MapPin className="h-2.5 w-2.5" />{filterLocation}
+                <button onClick={() => setFilterLocation("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterDepartment && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+                <Building2 className="h-2.5 w-2.5" />{filterDepartment}
+                <button onClick={() => setFilterDepartment("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterLoanType && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-700">
+                <FileText className="h-2.5 w-2.5" />{filterLoanType}
+                <button onClick={() => setFilterLoanType("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterCategory && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-violet-50 border border-violet-200 text-xs font-semibold text-violet-700">
+                <Star className="h-2.5 w-2.5" />{filterCategory}
+                <button onClick={() => setFilterCategory("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {filterPosition && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-700">
+                <CheckCircle2 className="h-2.5 w-2.5" />{filterPosition}
+                <button onClick={() => setFilterPosition("")} className="ml-0.5 hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -425,7 +624,7 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
           size="sm"
           variant="outline"
           className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2"
-          onClick={() => exportToCSV(loans, `md-approved-loans-analytics-${new Date().toISOString().slice(0, 10)}.csv`)}
+          onClick={() => exportToCSV(filteredLoans, `md-approved-loans-analytics-${new Date().toISOString().slice(0, 10)}.csv`)}
         >
           <FileDown className="h-4 w-4" />
           Export Data
@@ -555,7 +754,6 @@ function AnalyticsTab({ loans }: { loans: Loan[] }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 export function MdApprovalsClient({ profile }: Props) {
   const { toast } = useToast()
-  console.log("[v0] MdApprovalsClient rendered - MD Approvals page loaded")
   const [loans, setLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -571,21 +769,26 @@ export function MdApprovalsClient({ profile }: Props) {
   const [allStampedMemos, setAllStampedMemos] = useState<Loan[]>([])
   const [loadingStamped, setLoadingStamped] = useState(false)
 
-  // Filter state (for stamped memos tab)
+  // Filter state (for stamped memos tab — 5 dimensions)
   const [filterLocation, setFilterLocation] = useState("")
   const [filterDepartment, setFilterDepartment] = useState("")
   const [filterMonth, setFilterMonth] = useState("")
+  const [filterLoanType, setFilterLoanType] = useState("")
+  const [filterCategory, setFilterCategory] = useState("")
   const [showFilters, setShowFilters] = useState(false)
 
   const fetchApprovedLoans = useCallback(async () => {
     setLoadingApproved(true)
     try {
       const res = await fetch("/api/loan/md-approve?view=approved")
-      if (!res.ok) throw new Error("Failed to fetch approved loans")
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error ${res.status}`)
+      }
       const data = await res.json()
       setApprovedLoans(data.loans || [])
-    } catch {
-      toast({ title: "Error loading approved loans", variant: "destructive" })
+    } catch (err) {
+      toast({ title: "Error loading approved loans", description: err instanceof Error ? err.message : "Please try refreshing.", variant: "destructive" })
     } finally {
       setLoadingApproved(false)
     }
@@ -595,11 +798,14 @@ export function MdApprovalsClient({ profile }: Props) {
     setLoadingStamped(true)
     try {
       const res = await fetch("/api/loan/md-approve?view=approved")
-      if (!res.ok) throw new Error("Failed to fetch stamped memos")
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error ${res.status}`)
+      }
       const data = await res.json()
       setAllStampedMemos(data.loans || [])
-    } catch {
-      toast({ title: "Error loading stamped memos", variant: "destructive" })
+    } catch (err) {
+      toast({ title: "Error loading stamped memos", description: err instanceof Error ? err.message : "Please try refreshing.", variant: "destructive" })
     } finally {
       setLoadingStamped(false)
     }
@@ -736,89 +942,126 @@ export function MdApprovalsClient({ profile }: Props) {
     return Array.from(set).sort().reverse().map((k) => ({ key: k, label: getMonthLabel(k) }))
   }, [allStampedMemos])
 
-  // Filtered stamped memos
+  const loanTypeOptions = useMemo(() => {
+    const set = new Set<string>()
+    allStampedMemos.forEach((l) => { if (l.loan_type_label) set.add(l.loan_type_label) })
+    return Array.from(set).sort()
+  }, [allStampedMemos])
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>()
+    allStampedMemos.forEach((l) => { if (l.loan_category) set.add(l.loan_category) })
+    return Array.from(set).sort()
+  }, [allStampedMemos])
+
+  // Filtered stamped memos — 5 dimensions
   const filteredStampedMemos = useMemo(() => {
     return allStampedMemos.filter((l) => {
       if (filterLocation && l.staff_location_name !== filterLocation) return false
       if (filterDepartment && l.departments?.name !== filterDepartment) return false
       if (filterMonth && l.md_approved_at && getMonthKey(l.md_approved_at) !== filterMonth) return false
+      if (filterLoanType && l.loan_type_label !== filterLoanType) return false
+      if (filterCategory && l.loan_category !== filterCategory) return false
       return true
     })
-  }, [allStampedMemos, filterLocation, filterDepartment, filterMonth])
+  }, [allStampedMemos, filterLocation, filterDepartment, filterMonth, filterLoanType, filterCategory])
 
-  const activeFilterCount = [filterLocation, filterDepartment, filterMonth].filter(Boolean).length
+  const activeFilterCount = [filterLocation, filterDepartment, filterMonth, filterLoanType, filterCategory].filter(Boolean).length
 
   const clearFilters = () => {
     setFilterLocation("")
     setFilterDepartment("")
     setFilterMonth("")
+    setFilterLoanType("")
+    setFilterCategory("")
   }
+
+  // Derived KPIs for header
+  const totalStampedValue = useMemo(() =>
+    allStampedMemos.reduce((s, l) => s + (l.fixed_amount || l.requested_amount || 0), 0),
+  [allStampedMemos])
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Executive Header */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="flex items-start justify-between gap-6 flex-wrap">
-            <div className="flex items-center gap-5">
-              <div className="relative">
-                <Avatar className="h-16 w-16 ring-4 ring-amber-400/60 shadow-xl">
+      {/* ── Executive Header ───────────────────────────────────────────────── */}
+      <div className="bg-slate-900 text-white border-b border-slate-800">
+        <div className="max-w-6xl mx-auto px-6 py-6">
+          <div className="flex items-center justify-between gap-6 flex-wrap">
+            {/* Identity */}
+            <div className="flex items-center gap-4">
+              <div className="relative flex-shrink-0">
+                <Avatar className="h-14 w-14 ring-2 ring-amber-400/50 shadow-lg">
                   <AvatarImage src={profile.profile_image_url || ""} />
-                  <AvatarFallback className="bg-amber-500 text-white text-xl font-black">{initials}</AvatarFallback>
+                  <AvatarFallback className="bg-amber-500 text-white text-lg font-black">{initials}</AvatarFallback>
                 </Avatar>
-                <div className="absolute -bottom-1 -right-1 bg-amber-400 rounded-full p-1">
-                  <Star className="h-3 w-3 text-slate-900 fill-slate-900" />
+                <div className="absolute -bottom-0.5 -right-0.5 bg-amber-400 rounded-full p-0.5">
+                  <Star className="h-2.5 w-2.5 text-slate-900 fill-slate-900" />
                 </div>
               </div>
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold tracking-[0.15em] uppercase text-amber-400">Managing Director</span>
-                </div>
-                <h1 className="text-2xl font-bold tracking-tight">{fullName}</h1>
-                <p className="text-slate-400 text-sm mt-0.5">
+                <p className="text-xs font-semibold tracking-[0.2em] uppercase text-amber-400 mb-0.5">Managing Director</p>
+                <h1 className="text-xl font-bold tracking-tight leading-none">{fullName}</h1>
+                <p className="text-slate-400 text-xs mt-1">
                   {profile.departments?.name || "QCC Head Office"} &mdash; Loan Approval Command
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-center rounded-xl bg-white/10 border border-white/10 px-5 py-3">
-                <div className="text-3xl font-black text-amber-400 tabular-nums">{totalPending}</div>
-                <div className="text-xs text-slate-400 mt-0.5 font-medium">Awaiting Approval</div>
+
+            {/* KPI tiles */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 min-w-[90px] text-center">
+                <div className="text-2xl font-black text-amber-400 tabular-nums leading-none">{totalPending}</div>
+                <div className="text-xs text-slate-400 mt-1 font-medium">Awaiting</div>
               </div>
-              <div className="text-center rounded-xl bg-white/10 border border-white/10 px-5 py-3">
-                <div className="text-3xl font-black text-emerald-400 tabular-nums">{grouped.today.length}</div>
-                <div className="text-xs text-slate-400 mt-0.5 font-medium">Today</div>
+              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 min-w-[90px] text-center">
+                <div className="text-2xl font-black text-sky-400 tabular-nums leading-none">{grouped.today.length}</div>
+                <div className="text-xs text-slate-400 mt-1 font-medium">Today</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 min-w-[90px] text-center">
+                <div className="text-2xl font-black text-emerald-400 tabular-nums leading-none">{allStampedMemos.length}</div>
+                <div className="text-xs text-slate-400 mt-1 font-medium">Total Approved</div>
+              </div>
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 min-w-[120px] text-center">
+                <div className="text-lg font-black text-emerald-300 tabular-nums leading-none">
+                  {totalStampedValue >= 1000
+                    ? `GHc ${(totalStampedValue / 1000).toFixed(1)}k`
+                    : `GHc ${totalStampedValue.toLocaleString("en-GH")}`}
+                </div>
+                <div className="text-xs text-slate-400 mt-1 font-medium">Total Value</div>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={fetchLoans}
-                disabled={loading}
+                onClick={() => { fetchLoans(); fetchStampedMemos() }}
+                disabled={loading || loadingStamped}
                 className="text-slate-400 hover:text-white hover:bg-white/10 rounded-xl h-11 w-11"
+                title="Refresh all data"
               >
-                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                <RefreshCw className={cn("h-4 w-4", (loading || loadingStamped) && "animate-spin")} />
               </Button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
 
-        {/* Tab switcher */}
-        <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm flex-wrap max-w-full">
+        {/* ── Tab bar ─────────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-1.5 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm w-full">
           <button
             onClick={() => setActiveTab("pending")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
-              activeTab === "pending" ? "bg-amber-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"
+              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex-1 justify-center",
+              activeTab === "pending"
+                ? "bg-amber-500 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
             )}
           >
-            <Clock className="h-4 w-4" />
-            Pending Approvals
+            <Clock className="h-4 w-4 flex-shrink-0" />
+            <span>Pending Approvals</span>
             {pendingLoans.length > 0 && (
               <span className={cn(
-                "text-xs rounded-full px-2 py-0.5 tabular-nums font-bold",
+                "text-xs rounded-full px-2 py-0.5 tabular-nums font-bold ml-0.5",
                 activeTab === "pending" ? "bg-white/25 text-white" : "bg-amber-100 text-amber-700"
               )}>
                 {pendingLoans.length}
@@ -828,15 +1071,17 @@ export function MdApprovalsClient({ profile }: Props) {
           <button
             onClick={() => setActiveTab("stamped")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
-              activeTab === "stamped" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"
+              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex-1 justify-center",
+              activeTab === "stamped"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
             )}
           >
-            <Stamp className="h-4 w-4" />
-            MD Approved Memos
+            <Stamp className="h-4 w-4 flex-shrink-0" />
+            <span>MD Approved Memos</span>
             {allStampedMemos.length > 0 && (
               <span className={cn(
-                "text-xs rounded-full px-2 py-0.5 tabular-nums font-bold",
+                "text-xs rounded-full px-2 py-0.5 tabular-nums font-bold ml-0.5",
                 activeTab === "stamped" ? "bg-white/25 text-white" : "bg-emerald-100 text-emerald-700"
               )}>
                 {allStampedMemos.length}
@@ -844,18 +1089,16 @@ export function MdApprovalsClient({ profile }: Props) {
             )}
           </button>
           <button
-            onClick={() => {
-              console.log("[v0] Analytics tab clicked")
-              setActiveTab("analytics")
-            }}
+            onClick={() => setActiveTab("analytics")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap",
-              activeTab === "analytics" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"
+              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex-1 justify-center whitespace-nowrap",
+              activeTab === "analytics"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
             )}
-            title="View analytics dashboard"
           >
-            <BarChart3 className="h-4 w-4" />
-            Executive Analytics
+            <TrendingUp className="h-4 w-4 flex-shrink-0" />
+            <span>Executive Analytics</span>
           </button>
         </div>
 
@@ -874,93 +1117,110 @@ export function MdApprovalsClient({ profile }: Props) {
         {/* ── STAMPED MEMOS TAB ─────────────────────────────────────────────── */}
         {activeTab === "stamped" && (
           <div className="space-y-4">
-            {/* Filter & Export bar */}
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowFilters((v) => !v)}
-                  className={cn(
-                    "flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-semibold transition-all",
-                    showFilters || activeFilterCount > 0
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                  )}
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  Filters
+            {/* ── Filter panel (always visible) ─────────────────────────────── */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-400" />
+                  <span className="text-sm font-semibold text-slate-700">Filter Memos</span>
                   {activeFilterCount > 0 && (
-                    <span className="bg-amber-400 text-slate-900 rounded-full px-1.5 text-xs font-black">{activeFilterCount}</span>
+                    <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold">
+                      {activeFilterCount}
+                    </span>
                   )}
-                </button>
-                {activeFilterCount > 0 && (
-                  <button
-                    onClick={clearFilters}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold transition-all"
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400 font-medium tabular-nums">
+                    {filteredStampedMemos.length} of {allStampedMemos.length} records
+                  </span>
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={clearFilters}
+                      className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-600 transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />Clear
+                    </button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-slate-200 text-slate-600 hover:bg-slate-50 gap-1.5 h-8 text-xs"
+                    onClick={() => exportToCSV(filteredStampedMemos, `md-approved-loans-${new Date().toISOString().slice(0, 10)}.csv`)}
+                    disabled={filteredStampedMemos.length === 0}
                   >
-                    <X className="h-3 w-3" />
-                    Clear
-                  </button>
-                )}
-                <span className="text-xs text-slate-500 font-medium">
-                  {filteredStampedMemos.length} of {allStampedMemos.length} records
-                </span>
+                    <FileDown className="h-3.5 w-3.5" />
+                    Export CSV
+                  </Button>
+                </div>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2"
-                onClick={() => exportToCSV(filteredStampedMemos, `md-approved-loans-${new Date().toISOString().slice(0, 10)}.csv`)}
-                disabled={filteredStampedMemos.length === 0}
-              >
-                <FileDown className="h-4 w-4" />
-                Export CSV
-              </Button>
-            </div>
-
-            {/* Filter dropdowns */}
-            {showFilters && (
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
-                    <MapPin className="h-3 w-3 inline mr-1" />Location
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />Location
                   </label>
                   <select
                     value={filterLocation}
                     onChange={(e) => setFilterLocation(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">All Locations</option>
                     {locationOptions.map((loc) => <option key={loc} value={loc}>{loc}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
-                    <Building2 className="h-3 w-3 inline mr-1" />Department
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                    <Building2 className="h-3 w-3" />Department
                   </label>
                   <select
                     value={filterDepartment}
                     onChange={(e) => setFilterDepartment(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">All Departments</option>
                     {departmentOptions.map((dept) => <option key={dept} value={dept}>{dept}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
-                    <Calendar className="h-3 w-3 inline mr-1" />Month
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                    <FileText className="h-3 w-3" />Loan Type
+                  </label>
+                  <select
+                    value={filterLoanType}
+                    onChange={(e) => setFilterLoanType(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">All Loan Types</option>
+                    {loanTypeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />Month
                   </label>
                   <select
                     value={filterMonth}
                     onChange={(e) => setFilterMonth(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">All Months</option>
                     {monthOptions.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
                   </select>
                 </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                    <Star className="h-3 w-3" />Category
+                  </label>
+                  <select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">All Categories</option>
+                    {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
               </div>
-            )}
+            </div>
 
             {loadingStamped ? (
               <div className="flex items-center justify-center py-20 gap-3">
@@ -969,89 +1229,137 @@ export function MdApprovalsClient({ profile }: Props) {
               </div>
             ) : filteredStampedMemos.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 gap-4 rounded-2xl border border-slate-200 bg-white">
-                <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <Stamp className="h-8 w-8 text-emerald-600" />
+                <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center">
+                  <Stamp className="h-8 w-8 text-slate-400" />
                 </div>
                 <div className="text-center">
-                  <h3 className="font-bold text-slate-800 text-lg">
+                  <h3 className="font-bold text-slate-700 text-base">
                     {activeFilterCount > 0 ? "No results match your filters" : "No stamped memos yet"}
                   </h3>
-                  <p className="text-slate-500 text-sm mt-1">
+                  <p className="text-slate-400 text-sm mt-1">
                     {activeFilterCount > 0 ? "Try adjusting or clearing your filters." : "Memos you approve will appear here for download and printing."}
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredStampedMemos.map((memo) => {
-                  const approvedDate = memo.md_approved_at ? new Date(memo.md_approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"
-                  const amount = memo.fixed_amount ? `GHc ${Number(memo.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}` : null
-                  const memoProfile = memo.user_profiles
-                  const memoStaffName =
-                    memo.staff_full_name?.trim() ||
-                    (`${memoProfile?.first_name || ""} ${memoProfile?.last_name || ""}`.trim()) ||
-                    "Unknown Staff"
-                  const memoStaffNo = memo.staff_number || memoProfile?.employee_id || memo.request_number || "—"
-                  const memoInitials = memoStaffName !== "Unknown Staff"
-                    ? memoStaffName.split(" ").map((p: string) => p[0]).join("").toUpperCase().slice(0, 2)
-                    : "?"
-                  return (
-                    <div key={memo.id} className="rounded-xl border border-emerald-200 bg-gradient-to-r from-white to-emerald-50 p-4 hover:border-emerald-300 transition-all">
-                      <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div className="flex-1 min-w-[200px]">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm flex-shrink-0">
-                              {memoInitials}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-slate-900 text-sm">{memoStaffName}</h3>
-                              <p className="text-xs text-slate-500">{memoStaffNo}</p>
-                            </div>
-                            <div className="ml-2 flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5">
-                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                              <span className="text-xs font-semibold text-emerald-700">MD Approved</span>
-                            </div>
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                {/* Table header */}
+                <div className="grid grid-cols-[1fr_160px_140px_130px_110px] gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Staff / Loan</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Location</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Department</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide text-right">Amount</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide text-right">Actions</span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {filteredStampedMemos.map((memo) => {
+                    const approvedDate = memo.md_approved_at
+                      ? new Date(memo.md_approved_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                      : "—"
+                    const rawAmount = memo.fixed_amount || memo.requested_amount || 0
+                    const amountFmt = rawAmount
+                      ? `GHc ${Number(rawAmount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}`
+                      : "—"
+                    const memoProfile = memo.user_profiles
+                    const memoStaffName =
+                      memo.staff_full_name?.trim() ||
+                      (`${memoProfile?.first_name || ""} ${memoProfile?.last_name || ""}`.trim()) ||
+                      "Unknown Staff"
+                    const memoStaffNo = memo.staff_number || memoProfile?.employee_id || "—"
+                    const memoInitials = memoStaffName !== "Unknown Staff"
+                      ? memoStaffName.split(" ").map((p: string) => p[0]).join("").toUpperCase().slice(0, 2)
+                      : "?"
+                    return (
+                      <div key={memo.id} className="grid grid-cols-[1fr_160px_140px_130px_110px] gap-4 px-5 py-4 items-center hover:bg-slate-50/70 transition-colors group">
+                        {/* Staff + Loan info */}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs flex-shrink-0 ring-2 ring-white">
+                            {memoInitials}
                           </div>
-                          <div className="flex items-center gap-3 text-sm text-slate-600 flex-wrap">
-                            <span className="font-semibold text-slate-700">{memo.loan_type_label || "Memo"}</span>
-                            {amount && <span className="text-emerald-700 font-bold">{amount}</span>}
-                            <span className="text-xs text-slate-400">Approved {approvedDate}</span>
-                            {memo.staff_location_name && (
-                              <span className="flex items-center gap-1 text-xs text-slate-400">
-                                <MapPin className="h-3 w-3" />{memo.staff_location_name}
-                              </span>
-                            )}
-                            {memo.departments?.name && (
-                              <span className="flex items-center gap-1 text-xs text-slate-400">
-                                <Building2 className="h-3 w-3" />{memo.departments.name}
-                              </span>
-                            )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-slate-900 text-sm truncate">{memoStaffName}</span>
+                              <span className="text-xs text-slate-400 font-mono flex-shrink-0">#{memoStaffNo}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-xs text-slate-500">{memo.loan_type_label || "Memo"}</span>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-xs font-mono text-slate-400">{memo.request_number}</span>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-xs text-slate-400">{approvedDate}</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Location */}
+                        <div className="text-sm text-slate-600 flex items-center gap-1.5 truncate">
+                          {memo.staff_location_name ? (
+                            <>
+                              <MapPin className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="truncate">{memo.staff_location_name}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </div>
+                        {/* Department */}
+                        <div className="text-sm text-slate-600 flex items-center gap-1.5 truncate">
+                          {memo.departments?.name ? (
+                            <>
+                              <Building2 className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="truncate">{memo.departments.name}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </div>
+                        {/* Amount */}
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-emerald-700 tabular-nums">{amountFmt}</span>
+                        </div>
+                        {/* Actions */}
+                        <div className="flex items-center justify-end gap-1.5 flex-shrink-0">
                           <a
                             href={`/api/loan/memo/${memo.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                            title="Download memo PDF"
                           >
-                            <Download className="h-4 w-4" />
+                            <Download className="h-3.5 w-3.5" />
                             Download
                           </a>
                           <a
                             href={`/api/loan/memo/${memo.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={(e) => { e.preventDefault(); const w = window.open(`/api/loan/memo/${memo.id}`, "_blank"); w?.addEventListener("load", () => w.print()) }}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              const w = window.open(`/api/loan/memo/${memo.id}`, "_blank")
+                              w?.addEventListener("load", () => w.print())
+                            }}
+                            className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors"
+                            title="Print memo"
                           >
-                            <Printer className="h-4 w-4" />
+                            <Printer className="h-3.5 w-3.5" />
                           </a>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+                {/* Table footer */}
+                <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50">
+                  <span className="text-xs text-slate-400">
+                    Showing <span className="font-semibold text-slate-600">{filteredStampedMemos.length}</span> of{" "}
+                    <span className="font-semibold text-slate-600">{allStampedMemos.length}</span> approved memos
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-700 tabular-nums">
+                    Total: GHc{" "}
+                    {filteredStampedMemos
+                      .reduce((s, l) => s + (l.fixed_amount || l.requested_amount || 0), 0)
+                      .toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
               </div>
             )}
           </div>
