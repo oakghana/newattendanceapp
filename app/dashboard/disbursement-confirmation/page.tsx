@@ -10,7 +10,6 @@ interface DisbursedLoan {
   request_number: string
   staff_full_name: string
   staff_number: string
-  staff_department: string
   loan_type_label: string
   fixed_amount: number
   status: string
@@ -18,6 +17,12 @@ interface DisbursedLoan {
   staff_receiving_funds_confirmed_at: string | null
   staff_receiving_funds_confirmed_by: string | null
   created_at: string
+  user_id: string | null
+  user_profiles?: {
+    departments?: {
+      name: string
+    } | null
+  } | null
 }
 
 export default function DisbursementConfirmationPage() {
@@ -65,14 +70,17 @@ export default function DisbursementConfirmationPage() {
             request_number,
             staff_full_name,
             staff_number,
-            staff_department,
             loan_type_label,
             fixed_amount,
             status,
             md_approved_at,
             staff_receiving_funds_confirmed_at,
             staff_receiving_funds_confirmed_by,
-            created_at
+            created_at,
+            user_id,
+            user_profiles!user_id (
+              departments (name)
+            )
           `)
           .eq("status", "staff_receiving_funds")
           .order("created_at", { ascending: false })

@@ -11,7 +11,6 @@ interface DisbursedLoan {
   request_number: string
   staff_full_name: string
   staff_number: string
-  staff_department: string
   loan_type_label: string
   fixed_amount: number
   status: string
@@ -19,6 +18,12 @@ interface DisbursedLoan {
   staff_receiving_funds_confirmed_at: string | null
   staff_receiving_funds_confirmed_by: string | null
   created_at: string
+  user_id: string | null
+  user_profiles?: {
+    departments?: {
+      name: string
+    } | null
+  } | null
 }
 
 interface DisbursementConfirmationClientProps {
@@ -157,7 +162,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans }: Disburse
                         </div>
                         <div>
                           <h3 className="font-bold text-slate-900">{loan.staff_full_name || "Unknown"}</h3>
-                          <p className="text-xs text-slate-500">{loan.staff_number} • {loan.staff_department}</p>
+                          <p className="text-xs text-slate-500">{loan.staff_number} • {loan.user_profiles?.departments?.name || "N/A"}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
