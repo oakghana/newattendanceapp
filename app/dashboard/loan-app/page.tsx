@@ -5779,20 +5779,15 @@ export default function LoanAppPage() {
               </>
             )}
             {actionModal.actionType === "payment_completed" && actionModal.row && (
-              <>
-                <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>
-                  Cancel
-                </Button>
-                <Button 
-                  className="bg-blue-600 hover:bg-blue-700" 
-                  onClick={() => {
-                    setPaymentEvidenceModal((s) => ({ ...s, open: true }))
-                    setActionModal((s) => ({ ...s, open: false }))
-                  }}
-                >
-                  Submit Payment Evidence
-                </Button>
-              </>
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700" 
+                onClick={() => {
+                  setPaymentEvidenceModal((s) => ({ ...s, open: true }))
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}
+              >
+                Submit Payment Evidence
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

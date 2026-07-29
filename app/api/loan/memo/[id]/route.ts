@@ -30,8 +30,11 @@ function fmtName(profile?: any) {
 
   const first = String(profile?.first_name || profile?.firstname || "").trim()
   const middle = String(profile?.middle_name || profile?.other_name || "").trim()
+  // Prefer last_name over surname to avoid duplication if both exist with same value
   const last = String(profile?.last_name || profile?.lastname || profile?.surname || "").trim()
-  return [first, middle, last].filter(Boolean).join(" ")
+  const parts = [first, middle, last].filter(Boolean)
+  // Remove duplicates (e.g., if last_name and surname are identical)
+  return [...new Set(parts)].join(" ")
 }
 
 function canonicalReference(referenceNumber?: string | null, requestNumber?: string | null) {
@@ -257,6 +260,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       loan.user_id === user.id ||
       role === "admin" ||
       role === "managing_director" ||
+      role === "secretary" ||
       role === "it-admin" ||
       canDoHodReview(role) ||
       canDoCommittee(role) ||
