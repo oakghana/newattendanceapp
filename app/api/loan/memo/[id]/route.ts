@@ -672,7 +672,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     })
     y += (ccList.length + 1) * 4.5 + 4
 
-    // ─── MD Approval Indicator — Clean, Professional Banner ─
+    // ─── MD Approval Indicator — Simple Text Line ─
     // Only show if MD has ACTUALLY approved (md_approved_at is populated)
     // Don't show at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
     const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
@@ -680,28 +680,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       const mdFullName = fmtName(mdProfile) || (loan as any).md_approved_by_name || "MANAGING DIRECTOR"
       const approvalDateStr = fmtDate(loan.md_approved_at || new Date())
       
-      // Add some spacing before approval indicator
-      ccStartY += 12
-
-      // Clean approval banner with green accent
-      // Light green background box
-      doc.setFillColor(236, 253, 245)   // emerald-50
-      doc.setDrawColor(16, 185, 129)    // emerald-500
-      doc.setLineWidth(1)
-      doc.rect(marginLeft, ccStartY, pageWidth - marginLeft - marginRight, 16, "FD")
-
-      // Checkmark and "APPROVED BY" text
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(11)
-      doc.setTextColor(16, 185, 129)    // emerald-500
-      doc.text("✓ APPROVED", marginLeft + 4, ccStartY + 6, { align: "left" })
-
-      // MD name and date on the right
+      y += 6  // Add spacing before MD approval note
       doc.setFont("helvetica", "normal")
       doc.setFontSize(9)
-      doc.setTextColor(55, 65, 81)      // slate-700
-      const approvalText = `${mdFullName.toUpperCase()} — Managing Director — ${approvalDateStr}`
-      doc.text(approvalText, pageWidth - marginRight - 4, ccStartY + 6, { align: "right" })
+      doc.setTextColor(70, 70, 70)
+      doc.text(`[MD Approval: ${mdFullName.toUpperCase()} approved this HR Executive memo on ${approvalDateStr}]`, marginLeft, y, { maxWidth: contentWidth })
     }
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)
