@@ -13,7 +13,7 @@
 
 export const TRAVEL_DAYS = 2
 
-export type StaffCategory = "senior" | "junior"
+export type StaffCategory = "senior" | "junior" | "manager"
 
 export interface AnnualLeaveEntitlement {
   /** "senior" | "junior" */
@@ -96,22 +96,32 @@ export function computeAnnualLeaveEntitlement(
 
 /**
  * Derive staff category from position / rank title.
- * Any title containing "Officer", "Manager" or "Director" (case-insensitive)
- * is automatically classified as Senior Staff.
+ * Rules (in order):
+ * 1. If contains "MANAGER" → "Manager"
+ * 2. If contains "OFFICER" and does NOT start with "ASSISTANT" → "Senior"
+ * 3. If starts with "ASSISTANT" → "Junior"
+ * Otherwise → null
  */
 export function deriveStaffCategoryFromPosition(
   position?: string | null,
   rank?: string | null,
 ): StaffCategory | null {
-  const combined = `${position || ""} ${rank || ""}`.toLowerCase()
+  const combined = `${position || ""} ${rank || ""}`.toLowerCase().trim()
   
-  // Junior tier: any position starting with "Assistant" is Junior regardless of other keywords
-  // E.g., "Assistant Information Technology Officer" is Junior, not Senior
-  if (combined.includes("assistant")) return "junior"
+  // 1. Manager category: any position containing "manager"
+  if (combined.includes("manager")) return "manager"
   
-  // Senior tier: Officer, Manager, Director (but not if "Assistant" prefix was found above)
-  const SENIOR_KEYWORDS = ["officer", "manager", "director"]
-  if (SENIOR_KEYWORDS.some((kw) => combined.includes(kw))) return "senior"
+  // 2. Senior category: contains "officer" but does NOT start with "assistant"
+  if (combined.includes("officer")) {
+    if (!combined.startsWith("assistant")) return "senior"
+    else return "junior"
+  }
+  
+  // 3. Junior category: starts with "assistant"
+  if (combined.startsWith("assistant")) return "junior"
+  
+  // 4. Senior category: contains "director"
+  if (combined.includes("director")) return "senior"
   
   return null
 }
