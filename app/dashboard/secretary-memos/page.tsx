@@ -48,29 +48,28 @@ export default async function SecretaryMemosPage() {
     .limit(300)
 
   // Fetch approved leave memos (HR Executive approved)
-  // Fetch leaves with hr_approved status that are approved by HR Executives
-  const { data: leaveMemos } = await admin
+  const { data: rawLeaveMemos } = await admin
     .from("leave_requests")
-    .select(`
-      id,
-      leave_type,
-      status,
-      start_date,
-      end_date,
-      reason,
-      created_at,
-      user_id,
-      user_profiles!user_id (
-        first_name,
-        last_name,
-        employee_id,
-        profile_image_url,
-        departments(name)
-      )
-    `)
+    .select("id, leave_type, status, start_date, end_date, reason, created_at, user_id")
     .eq("status", "hr_approved")
     .order("created_at", { ascending: false })
     .limit(300)
+
+  // Fetch user profiles for those leave memos separately (avoids FK join ambiguity)
+  const leaveUserIds = [...new Set((rawLeaveMemos || []).map((l: any) => l.user_id).filter(Boolean))]
+  const { data: leaveProfiles } = leaveUserIds.length > 0
+    ? await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id, profile_image_url, departments(name)")
+        .in("id", leaveUserIds)
+    : { data: [] }
+
+  const leaveProfileMap = new Map((leaveProfiles || []).map((p: any) => [p.id, p]))
+
+  const leaveMemos = (rawLeaveMemos || []).map((leave: any) => ({
+    ...leave,
+    user_profiles: leaveProfileMap.get(leave.user_id) || null,
+  }))
 
   // Fetch all MD-stamped/approved loan memos (any post-MD-approval status)
   // Include user_profiles join to resolve staff names when staff_full_name is missing
@@ -101,25 +100,26 @@ export default async function SecretaryMemosPage() {
     .limit(300)
 
   // Fetch MD approved leave memos (all final approved leave with HR sign-off)
-  const { data: approvedLeaveMemos } = await admin
+  const { data: rawApprovedLeaveMemos } = await admin
     .from("leave_requests")
-    .select(`
-      id,
-      leave_type,
-      status,
-      start_date,
-      end_date,
-      created_at,
-      user_id,
-      user_profiles!user_id (
-        first_name,
-        last_name,
-        employee_id
-      )
-    `)
+    .select("id, leave_type, status, start_date, end_date, created_at, user_id")
     .in("status", ["hr_approved", "approved"])
     .order("created_at", { ascending: false })
     .limit(300)
+
+  const approvedLeaveUserIds = [...new Set((rawApprovedLeaveMemos || []).map((l: any) => l.user_id).filter(Boolean))]
+  const { data: approvedLeaveProfiles } = approvedLeaveUserIds.length > 0
+    ? await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, employee_id")
+        .in("id", approvedLeaveUserIds)
+    : { data: [] }
+
+  const approvedLeaveProfileMap = new Map((approvedLeaveProfiles || []).map((p: any) => [p.id, p]))
+  const approvedLeaveMemos = (rawApprovedLeaveMemos || []).map((leave: any) => ({
+    ...leave,
+    user_profiles: approvedLeaveProfileMap.get(leave.user_id) || null,
+  }))
 
   // Combine approved memos
   const approvedMemos = [
