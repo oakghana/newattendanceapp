@@ -5918,7 +5918,7 @@ export default function LoanAppPage() {
                 <Download className="h-4 w-4 mr-1" /> Download PDF
               </Button>
             )}
-            {memoReviewModal.row && memoReviewModal.row.status === "awaiting_director_hr" && (
+            {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr") && (
               <Button
                 variant={modalDecision === "reject" ? "destructive" : "default"}
                 className="bg-green-700 hover:bg-green-800 text-white"
@@ -5935,7 +5935,7 @@ export default function LoanAppPage() {
                     signature_text: sigText,
                     signature_data_url: sigUrl,
                     director_letter: modalMemoText,
-                    note: "Director HR final decision via memo review",
+                    note: memoReviewModal.row.status === "awaiting_hr_executives" ? "HR Executive decision via memo review" : "Director HR final decision via memo review",
                   })
                   setMemoReviewModal((s) => ({ ...s, open: false }))
                 }}
