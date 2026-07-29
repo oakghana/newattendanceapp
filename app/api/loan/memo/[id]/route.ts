@@ -677,43 +677,46 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // Don't show at awaiting_director_hr stage — that means HR signed but MD hasn't approved yet
     const isMdApproved = Boolean(loan.md_approved_at) && ["approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"].includes(String(loan.status || ""))
     if (isMdApproved) {
-      const stampW = 48  // square width mm
-      const stampH = 48  // square height mm
-      // Right-align beside cc list
-      const stampX = pageWidth - marginRight - stampW
-      const ccMidY = y - 8
-      const stampTopY = ccMidY
+      // ── QCC physical rubber-stamp replica ──────────────────────────────────
+      // Rounded rectangle, all QCC blue ink, "QUALITY CONTROL CO. LTD. (COCOBOD)"
+      // header, large "APPROVED", signature + date, dotted separator, MANAGING DIRECTOR
+      const stampW  = 72   // mm wide
+      const stampH  = 54   // mm tall
+      const stampX  = pageWidth - marginRight - stampW
+      const stampTopY = y - 10   // sit beside the cc list
+      const cx      = stampX + stampW / 2
+      const r       = 4    // corner radius mm
 
-      // Outer square — indigo-700 border
-      doc.setDrawColor(67, 56, 202)    // indigo-700
-      doc.setLineWidth(2.2)
-      doc.rect(stampX, stampTopY, stampW, stampH, "S")
+      // Official QCC stamp blue — matches the physical ink
+      const inkR = 30, inkG = 95, inkB = 168   // #1E5FA8
 
-      // Inner square inset — blue-500
-      doc.setDrawColor(59, 130, 246)   // blue-500
-      doc.setLineWidth(0.8)
-      doc.rect(stampX + 2, stampTopY + 2, stampW - 4, stampH - 4, "S")
+      // ── Outer rounded rectangle (thick border)
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(1.6)
+      doc.roundedRect(stampX, stampTopY, stampW, stampH, r, r, "S")
 
-      const cx = stampX + stampW / 2  // horizontal centre
+      // ── Inner rounded rectangle (thin inset, 2 mm inside)
+      doc.setLineWidth(0.45)
+      doc.roundedRect(stampX + 2, stampTopY + 2, stampW - 4, stampH - 4, r - 1, r - 1, "S")
 
-      // "APPROVED" — bold red text
-      doc.setFont("times", "bold")
-      doc.setFontSize(10)
-      doc.setTextColor(185, 28, 28)    // red-700
-      doc.text("APPROVED", cx, stampTopY + 8, { align: "center" })
+      // ── Top header: "QUALITY CONTROL CO. LTD. (COCOBOD)"
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(5.8)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text("QUALITY CONTROL CO. LTD. (COCOBOD)", cx, stampTopY + 8, { align: "center" })
 
-      // Thin red divider line
-      doc.setDrawColor(185, 28, 28)
-      doc.setLineWidth(0.4)
-      doc.line(stampX + 4, stampTopY + 10, stampX + stampW - 4, stampTopY + 10)
+      // Thin solid separator under header
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(0.3)
+      doc.line(stampX + 4, stampTopY + 10.5, stampX + stampW - 4, stampTopY + 10.5)
 
-      // MD signature image — magnified
-      const sigAreaX = stampX + 3
-      const sigAreaY = stampTopY + 12
-      const sigAreaW = stampW - 6
-      const sigAreaH = 16
+      // ── "APPROVED" — large, bold, centred in QCC blue
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(17)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text("APPROVED", cx, stampTopY + 22, { align: "center" })
 
-      let mdSigRendered = false
+      // ── MD signature image overlaid on APPROVED text (authentic look)
       if (mdStampSignatureUrl) {
         try {
           const sigResp = await fetch(mdStampSignatureUrl)
@@ -722,42 +725,52 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             const sigB64 = Buffer.from(sigBuf).toString("base64")
             const ct = sigResp.headers.get("content-type") || "image/png"
             const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
-            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, sigAreaX, sigAreaY, sigAreaW, sigAreaH)
-            mdSigRendered = true
+            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 8, stampTopY + 11, stampW - 16, 16)
           }
-        } catch { /* fall through */ }
-      }
-      if (!mdSigRendered && mdStampSignatureText) {
+        } catch { /* signature optional */ }
+      } else if (mdStampSignatureText) {
         doc.setFont("times", "bolditalic")
-        doc.setFontSize(10)
-        doc.setTextColor(185, 28, 28)
-        doc.text(mdStampSignatureText, cx, stampTopY + 20, { align: "center" })
-        mdSigRendered = true
+        doc.setFontSize(11)
+        doc.setTextColor(inkR, inkG, inkB)
+        doc.text(mdStampSignatureText, cx, stampTopY + 21, { align: "center" })
       }
 
-      // Thin red divider after signature
-      doc.setDrawColor(185, 28, 28)
-      doc.setLineWidth(0.4)
-      doc.line(stampX + 4, stampTopY + 29, stampX + stampW - 4, stampTopY + 29)
+      // ── Approval date (e.g. "29-JUL-2026") in blue, centred
+      const approvalDateStr = fmtDate(loan.md_approved_at || new Date()).toUpperCase()
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(7.5)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text(approvalDateStr, cx, stampTopY + 31, { align: "center" })
 
-      // MD name
-      const mdFullName = fmtName(mdProfile) || (loan as any).md_approved_by_name || "MANAGING DIRECTOR"
-      doc.setFont("times", "bold")
-      doc.setFontSize(7)
-      doc.setTextColor(185, 28, 28)
-      doc.text(mdFullName.toUpperCase(), cx, stampTopY + 33, { align: "center" })
+      // ── Dotted separator line (matches physical stamp dots)
+      const dotY = stampTopY + 34.5
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(0.28)
+      let dx = stampX + 4
+      while (dx < stampX + stampW - 4) {
+        doc.line(dx, dotY, dx + 0.8, dotY)
+        dx += 2.2
+      }
 
-      // "MANAGING DIRECTOR" title
-      doc.setFont("times", "normal")
-      doc.setFontSize(6.5)
-      doc.setTextColor(67, 56, 202)   // indigo-700
-      doc.text("MANAGING DIRECTOR", cx, stampTopY + 37, { align: "center" })
+      // ── "MANAGING DIRECTOR" footer band — bold, centred
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(8)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text("MANAGING DIRECTOR", cx, stampTopY + 41, { align: "center" })
 
-      // Approval date
-      const approvalDateStr = fmtDate(loan.md_approved_at || new Date())
-      doc.setFontSize(6)
-      doc.setTextColor(100, 100, 100)
-      doc.text(approvalDateStr, cx, stampTopY + 41, { align: "center" })
+      // Thin solid separator above MD name
+      doc.setDrawColor(inkR, inkG, inkB)
+      doc.setLineWidth(0.3)
+      doc.line(stampX + 4, stampTopY + 43.5, stampX + stampW - 4, stampTopY + 43.5)
+
+      // ── MD personalised name (small, below separator)
+      const mdFullName = fmtName(mdProfile) || (loan as any).md_approved_by_name || ""
+      if (mdFullName) {
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(6)
+        doc.setTextColor(inkR, inkG, inkB)
+        doc.text(mdFullName.toUpperCase(), cx, stampTopY + 49, { align: "center" })
+      }
     }
 
     applySignatureSideWatermark(doc, sigImgY, marginLeft)
