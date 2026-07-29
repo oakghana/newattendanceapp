@@ -505,19 +505,18 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
           </div>
         )}
 
-        {/* MD Approved Memos Tab */}
-        {tab === "approved" && (
-          <div className="space-y-4">
+        {/* MD Approved Memos Tab — LOANS ONLY (no leave memos) */}
+        {tab === "approved_director" && (
+          <>
             {approvedMemos.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
-                <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 text-sm">No MD approved memos yet</p>
+              <div className="h-64 flex items-center justify-center text-slate-500">
+                <p>No MD approved memos yet.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {approvedMemos.map((memo) => {
-                  const staffName = memo.staff_full_name || `${memo.user_profiles?.first_name ?? ""} ${memo.user_profiles?.last_name ?? ""}`.trim() || "Unknown Staff"
-                  const staffId = memo.staff_number || memo.user_profiles?.employee_id || "—"
+                {approvedMemos
+                  .filter((memo) => memo.type === "loan") // Only show MD-stamped loans
+                  .map((memo) => {
                   const memoType = memo.type === "loan" ? "Loan" : "Leave"
                   const typeLabel = memo.loan_type_label || memo.leave_type || memoType
                   return (
@@ -585,7 +584,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                 })}
               </div>
             )}
-          </div>
+          </>
         )}
 
       </div>

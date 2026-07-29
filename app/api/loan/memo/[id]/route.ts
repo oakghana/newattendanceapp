@@ -716,7 +716,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.setTextColor(inkR, inkG, inkB)
       doc.text("APPROVED", cx, stampTopY + 22, { align: "center" })
 
-      // ── MD signature image overlaid on APPROVED text (authentic look)
+      // ── MD signature image overlaid on APPROVED text — ENLARGED for visibility
       if (mdStampSignatureUrl) {
         try {
           const sigResp = await fetch(mdStampSignatureUrl)
@@ -725,17 +725,20 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             const sigB64 = Buffer.from(sigBuf).toString("base64")
             const ct = sigResp.headers.get("content-type") || "image/png"
             const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
-            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 8, stampTopY + 11, stampW - 16, 16)
+            // Significantly enlarged signature — from 56mm height to 22mm height
+            // This ensures even small, faint signatures become clearly visible
+            const sigHeight = 22
+            doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 2, stampTopY + 10, stampW - 4, sigHeight)
           }
         } catch { /* signature optional */ }
       } else if (mdStampSignatureText) {
         doc.setFont("times", "bolditalic")
-        doc.setFontSize(11)
+        doc.setFontSize(14)
         doc.setTextColor(inkR, inkG, inkB)
-        doc.text(mdStampSignatureText, cx, stampTopY + 21, { align: "center" })
+        doc.text(mdStampSignatureText, cx, stampTopY + 24, { align: "center" })
       }
 
-      // ── Approval date (e.g. "29-JUL-2026") in blue, centred
+      // ��─ Approval date (e.g. "29-JUL-2026") in blue, centred
       const approvalDateStr = fmtDate(loan.md_approved_at || new Date()).toUpperCase()
       doc.setFont("helvetica", "bold")
       doc.setFontSize(7.5)
