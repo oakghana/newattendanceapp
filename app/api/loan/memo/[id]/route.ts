@@ -229,15 +229,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const token = request.nextUrl.searchParams.get("token") || ""
-    const verified = verifyMemoToken(token)
-    if (!verified) return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
-
     const params = await context.params
     const loanId = params.id
 
-    if (verified.loanId !== loanId || verified.userId !== user.id) {
-      return NextResponse.json({ error: "Token does not match request" }, { status: 403 })
+    // Try to verify token if provided, but allow authenticated users who have access
+    if (token) {
+      const verified = verifyMemoToken(token)
+      if (!verified) return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
+
+      if (verified.loanId !== loanId || verified.userId !== user.id) {
+        return NextResponse.json({ error: "Token does not match request" }, { status: 403 })
+      }
     }
+    // If no token, we'll check access permissions below instead
 
     const [{ data: profile, error: profileError }, { data: loan, error: loanError }] = await Promise.all([
       admin
