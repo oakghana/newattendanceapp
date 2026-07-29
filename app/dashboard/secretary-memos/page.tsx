@@ -47,8 +47,8 @@ export default async function SecretaryMemosPage() {
     .order("created_at", { ascending: false })
     .limit(300)
 
-  // Fetch approved leave memos (HR Executive approved stage and above)
-  // Includes: pending_hod, hod_approved, pending_hr, hr_approved, approved
+  // Fetch approved leave memos (HR Executive approved)
+  // Fetch leaves with hr_approved status that are approved by HR Executives
   const { data: leaveMemos } = await admin
     .from("leave_requests")
     .select(`
@@ -68,7 +68,7 @@ export default async function SecretaryMemosPage() {
         departments(name)
       )
     `)
-    .in("status", ["pending_hod", "hod_approved", "pending_hr", "hr_approved", "approved"])
+    .eq("status", "hr_approved")
     .order("created_at", { ascending: false })
     .limit(300)
 
