@@ -226,14 +226,30 @@ export async function GET() {
     let yearsOfService: number | null = welfareRow.years_of_service ?? null
     let dateOfAppointment: string | null = welfareRow.date_of_appointment ?? null
 
-    // If DB has no years_of_service but has date_of_appointment, auto-calculate it
-    if ((yearsOfService === null || yearsOfService === undefined) && dateOfAppointment) {
+    // If DB has no years_of_service (null or 0) but has date_of_appointment, auto-calculate it
+    if ((!yearsOfService || yearsOfService === 0) && dateOfAppointment) {
       const apptDate = new Date(dateOfAppointment)
       if (!isNaN(apptDate.getTime())) {
-        yearsOfService = Math.floor(
+        const calculated = Math.floor(
           (Date.now() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
         )
+        // Only use calculated value if it's reasonable (> 0 and < 100 years)
+        if (calculated > 0 && calculated < 100) {
+          yearsOfService = calculated
+        }
       }
+    }
+    
+    // If still no value and we have a date_of_appointment but calculation failed, try again
+    if (!yearsOfService && dateOfAppointment) {
+      try {
+        const apptDate = new Date(dateOfAppointment)
+        const now = new Date()
+        const calculated = Math.floor(
+          (now.getTime() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
+        )
+        if (calculated > 0) yearsOfService = calculated
+      } catch (_) { /* ignore */ }
     }
 
     // Normalise staffCategory to Title Case and only derive from position when NOT explicitly set in DB

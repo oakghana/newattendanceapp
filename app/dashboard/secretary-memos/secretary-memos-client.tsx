@@ -30,13 +30,14 @@ interface LoanMemo {
   md_approved_by_name: string | null
   staff_full_name: string | null
   staff_number: string | null
-  staff_department: string | null
-  staff_location_name: string | null
+  user_id: string | null
   user_profiles: {
     first_name: string
     last_name: string
     employee_id: string
     profile_image_url: string | null
+    departments: { name: string } | null
+    geofence_locations: { name: string } | null
   } | null
 }
 
@@ -153,13 +154,19 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   // Derive unique departments and locations from loan memos for filter dropdowns
   const uniqueDepts = useMemo(() => {
     const s = new Set<string>()
-    loanMemos.forEach((m) => { if (m.staff_department) s.add(m.staff_department) })
+    loanMemos.forEach((m) => { 
+      const deptName = m.user_profiles?.departments?.name
+      if (deptName) s.add(deptName) 
+    })
     return Array.from(s).sort()
   }, [loanMemos])
 
   const uniqueLocations = useMemo(() => {
     const s = new Set<string>()
-    loanMemos.forEach((m) => { if (m.staff_location_name) s.add(m.staff_location_name) })
+    loanMemos.forEach((m) => { 
+      const locName = m.user_profiles?.geofence_locations?.name
+      if (locName) s.add(locName) 
+    })
     return Array.from(s).sort()
   }, [loanMemos])
 
@@ -168,8 +175,8 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     return loanMemos.filter((m) => {
       const matchesSearch = !q || (m.staff_full_name?.toLowerCase().includes(q) || m.request_number?.toLowerCase().includes(q))
       const matchesStatus = statusFilter === "all" || m.status === statusFilter
-      const matchesDept = deptFilter === "all" || m.staff_department === deptFilter
-      const matchesLocation = locationFilter === "all" || m.staff_location_name === locationFilter
+      const matchesDept = deptFilter === "all" || m.user_profiles?.departments?.name === deptFilter
+      const matchesLocation = locationFilter === "all" || m.user_profiles?.geofence_locations?.name === locationFilter
       return matchesSearch && matchesStatus && matchesDept && matchesLocation
     })
   }, [loanMemos, search, statusFilter, deptFilter, locationFilter])

@@ -32,13 +32,14 @@ export default async function SecretaryMemosPage() {
       md_approved_by_name,
       staff_full_name,
       staff_number,
-      staff_department,
-      staff_location_name,
+      user_id,
       user_profiles!user_id (
         first_name,
         last_name,
         employee_id,
-        profile_image_url
+        profile_image_url,
+        departments(name),
+        geofence_locations(name)
       )
     `)
     .in("status", ["approved_director", "staff_receiving_funds", "partially_recovered"])
