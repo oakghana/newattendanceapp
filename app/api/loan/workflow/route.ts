@@ -211,15 +211,34 @@ export async function GET() {
 
     // Fetch welfare fields separately — these columns may not yet exist in all deployments,
     // so we isolate this query so a missing column never breaks the main profile load.
+    // Extract welfare fields from main profile (since the isolated query might not find columns)
+    // Also try a separate query as fallback in case those fields are in a different table
     let welfareRow: { staff_category?: string | null; years_of_service?: number | null; date_of_appointment?: string | null } = {}
     try {
-      const { data: wData } = await admin
-        .from("user_profiles")
-        .select("staff_category, years_of_service, date_of_appointment")
-        .eq("id", user.id)
-        .maybeSingle()
-      if (wData) welfareRow = wData as typeof welfareRow
-    } catch (_) { /* columns not yet in schema — gracefully continue */ }
+      // First, extract from the main profile that was already fetched
+      const profileData = profile as any
+      if (profileData) {
+        welfareRow.staff_category = profileData.staff_category
+        welfareRow.years_of_service = profileData.years_of_service
+        welfareRow.date_of_appointment = profileData.date_of_appointment
+      }
+      
+      // If we didn't get them from main profile, try an isolated query
+      if (!welfareRow.staff_category && !welfareRow.years_of_service && !welfareRow.date_of_appointment) {
+        const { data: wData } = await admin
+          .from("user_profiles")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle()
+        if (wData) {
+          welfareRow.staff_category = wData.staff_category
+          welfareRow.years_of_service = wData.years_of_service
+          welfareRow.date_of_appointment = wData.date_of_appointment
+        }
+      }
+    } catch (e) { 
+      console.log("[v0] Welfare fetch fallback error:", e)
+    }
 
     // Pull welfare fields from the isolated welfare query result
     let staffCategory: string | null = welfareRow.staff_category ?? null
