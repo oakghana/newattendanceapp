@@ -88,23 +88,33 @@ export default async function LeaveManagementPage() {
   const managerNotifications: any[] = []
   const approvedStaffRequests: any[] = []
 
-  return (
-    <div className="leave-theme">
-      <LeaveManagementModuleClient
-        userId={user.id}
-        userRole={profile.role}
-        userDepartment={(profile as any)?.department_id || null}
-        userFirstName={(profile as any)?.first_name || null}
-        userLastName={(profile as any)?.last_name || null}
-        inactivityDays={Math.max(1, inactivityDays)}
-        userDepartmentName={(profile as any)?.departments?.name || null}
-        userDepartmentCode={(profile as any)?.departments?.code || null}
-        userLocationName={userLocationName}
-        hasHodLinkage={hasHodLinkage}
-        initialStaffRequests={staffRequests}
-        initialManagerNotifications={managerNotifications}
-        initialApprovedStaffRequests={approvedStaffRequests}
-      />
-    </div>
-  )
+  try {
+    return (
+      <div className="leave-theme">
+        <LeaveManagementModuleClient
+          userId={user.id}
+          userRole={profile.role}
+          userDepartment={(profile as any)?.department_id || null}
+          userFirstName={(profile as any)?.first_name || null}
+          userLastName={(profile as any)?.last_name || null}
+          inactivityDays={Math.max(1, inactivityDays)}
+          userDepartmentName={(profile as any)?.departments?.name || null}
+          userDepartmentCode={(profile as any)?.departments?.code || null}
+          userLocationName={userLocationName}
+          hasHodLinkage={hasHodLinkage}
+          initialStaffRequests={staffRequests}
+          initialManagerNotifications={managerNotifications}
+          initialApprovedStaffRequests={approvedStaffRequests}
+        />
+      </div>
+    )
+  } catch (renderErr: any) {
+    console.error("[v0] Leave management render error:", renderErr?.message, renderErr?.stack)
+    return (
+      <div className="leave-theme p-8 text-center">
+        <p className="text-red-600 font-semibold">Failed to load leave management page.</p>
+        <p className="text-slate-500 text-sm mt-1">{renderErr?.message || "Unknown error"}</p>
+      </div>
+    )
+  }
 }
