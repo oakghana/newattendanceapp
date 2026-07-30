@@ -1713,7 +1713,7 @@ export default function LoanAppPage() {
       })
 
       // Refetch data to update the UI
-      mutate()
+      void loadData({ silent: true })
     } catch (error) {
       console.error("Error restoring loan:", error)
       toast({
@@ -1806,7 +1806,7 @@ export default function LoanAppPage() {
         })
       }
 
-      mutate()
+      void loadData({ silent: true })
     } catch (error) {
       console.error("Error restoring selected loans:", error)
       toast({
@@ -1883,7 +1883,7 @@ export default function LoanAppPage() {
       }
 
       // Refetch data to update the UI
-      mutate()
+      void loadData({ silent: true })
     } catch (error) {
       console.error("Error restoring all loans:", error)
       toast({
