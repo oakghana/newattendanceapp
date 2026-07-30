@@ -3006,7 +3006,7 @@ export default function LoanAppPage() {
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <Badge className={`${isApproved ? "bg-white text-emerald-700" : isRejected ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1`}>
-                        {isApproved ? "🎉 Approved" : isRejected ? "��� " + statusText(req.status) : "⏳ " + statusText(req.status)}
+                        {isApproved ? "🎉 Approved" : isRejected ? "����� " + statusText(req.status) : "⏳ " + statusText(req.status)}
                       </Badge>
                       <p className="text-xs opacity-70">Submitted {fmtDate(req.submitted_at || req.created_at)}</p>
                     </div>
@@ -5238,42 +5238,8 @@ export default function LoanAppPage() {
                     </div>
                   </div>
 
-                  {/* Professional Approval Certificate - Collapsable */}
-                  {row.status === "approved_director" && (row.director_hr_name || row.director_signature_text) && (
-                    <div className="mb-6">
-                      <div className="bg-gradient-to-r from-slate-50 to-blue-50 border-2 border-blue-200 rounded-lg overflow-hidden">
-                        {/* Certificate Header - Click to Collapse */}
-                        <button
-                          onClick={() => toggleLoanExpanded(row.id)}
-                          className="w-full p-4 flex items-center justify-between hover:bg-blue-100/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
-                              <span className="text-emerald-700 font-bold text-sm">✓</span>
-                            </div>
-                            <div className="text-left">
-                              <div className="text-xs text-slate-500 font-semibold">APPROVAL CERTIFICATE</div>
-                              <div className="text-sm font-bold text-emerald-700">{row.director_hr_name}</div>
-                            </div>
-                          </div>
-                          <ChevronDown className={`h-4 w-4 text-slate-600 transition-transform ${expandedLoanIds.has(row.id) ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {/* Expanded Certificate Content */}
-                        {expandedLoanIds.has(row.id) && (
-                          <>
-                            <div className="h-px bg-blue-200"></div>
-                            <div className="p-6 space-y-4">
-                              {/* APPROVED Text Prominently on Top */}
-                              <div className="text-center">
-                                <div className="text-3xl font-black text-emerald-700 tracking-wider mb-2" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.05)' }}>
-                                  APPROVED
-                                </div>
-                                {row.md_approved_at && (
-                                  <div className="text-xs text-slate-600 font-semibold">
-                                    {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                                  </div>
-                                )}
+                  {/* Professional Approval Certificate - Hidden from All Loan Requests view for professional appearance */}
+                  {/* Approval certificate is only shown in detail/staff loan records views, not in all loans list */}
                               </div>
 
                               {/* Signature - Only shown to admin users */}
