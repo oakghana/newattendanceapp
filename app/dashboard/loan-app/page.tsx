@@ -4347,25 +4347,61 @@ export default function LoanAppPage() {
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-1.5">Location</label>
                     <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option>All Locations</option>
+                      <option value="">All Locations</option>
+                      {Array.from(
+                        new Set(
+                          loanOfficeWorkspaceRows
+                            .map((r) => r.staff_location_name)
+                            .filter((loc) => loc && typeof loc === "string")
+                        )
+                      ).map((location) => (
+                        <option key={location} value={location}>{location}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-1.5">Department</label>
                     <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option>All Departments</option>
+                      <option value="">All Departments</option>
+                      {Array.from(
+                        new Set(
+                          loanOfficeWorkspaceRows
+                            .map((r) => String(r.department_name || r.user?.departments?.name || ""))
+                            .filter((dept) => dept && dept !== "")
+                        )
+                      )
+                        .sort()
+                        .map((department) => (
+                          <option key={department} value={department}>{department}</option>
+                        ))}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-1.5">Loan Type</label>
                     <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option>All Loan Types</option>
+                      <option value="">All Loan Types</option>
+                      {Array.from(loanOfficeLoansMap.values())
+                        .sort()
+                        .map((loanType) => (
+                          <option key={loanType} value={loanType}>{loanType}</option>
+                        ))}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-1.5">Category</label>
                     <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option>All Categories</option>
+                      <option value="">All Categories</option>
+                      {Array.from(
+                        new Set(
+                          loanOfficeWorkspaceRows
+                            .map((r) => r.category_name)
+                            .filter((cat) => cat && typeof cat === "string")
+                        )
+                      )
+                        .sort()
+                        .map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
                     </select>
                   </div>
                   <div className="flex items-end">
