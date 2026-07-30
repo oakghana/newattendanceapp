@@ -16,6 +16,17 @@ const LOAN_TYPES = [
   { key: 'salary_advance', label: 'Salary Advance', amount: 5000, fd_required: false, committee_required: false },
 ]
 
+const TABS = [
+  { id: 'my-loans', label: 'My Loans' },
+  { id: 'tracking', label: 'Tracking' },
+  { id: 'accounts', label: 'Accounts', count: 0 },
+  { id: 'staff-loan-records', label: 'Staff Loan Records' },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'leave-payment', label: 'Leave Payment' },
+  { id: 'my-tasks', label: 'My Tasks', count: 0 },
+  { id: 'all-loans', label: 'All Loans', count: 2 },
+]
+
 export default function LoanAppPage() {
   const { toast } = useToast()
   const [staffInfo, setStaffInfo] = useState<any>(null)
@@ -137,34 +148,37 @@ export default function LoanAppPage() {
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={() => setActiveTab('my-loans')}
-              className={`py-3 px-4 rounded-lg font-semibold text-center transition-all ${
-                activeTab === 'my-loans'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
-              }`}
-            >
-              My Loans
-            </button>
-            <button
-              onClick={() => setActiveTab('tracking')}
-              className={`py-3 px-4 rounded-lg font-semibold text-center transition-all ${
-                activeTab === 'tracking'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
-              }`}
-            >
-              Tracking
-            </button>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 px-6 py-4 bg-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-white text-purple-600 border-2 border-purple-600 hover:bg-purple-50'
+                }`}
+              >
+                {tab.label}
+                {tab.count !== undefined && (
+                  <span className="ml-1 inline-block bg-purple-100 text-purple-700 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         {activeTab === 'my-loans' && (
           <div className="space-y-6">
             {/* New Loan Request Form */}
@@ -177,7 +191,7 @@ export default function LoanAppPage() {
                   <div>
                     <Label htmlFor="loan-type" className="font-semibold text-gray-900">Loan Type</Label>
                     <Select value={selectedLoan} onValueChange={setSelectedLoan}>
-                      <SelectTrigger id="loan-type" className="bg-purple-600 text-white border-purple-600 mt-2">
+                      <SelectTrigger id="loan-type" className="bg-purple-600 text-white border-0 mt-2 rounded-lg">
                         <SelectValue placeholder="Select loan type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -211,7 +225,7 @@ export default function LoanAppPage() {
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     rows={4}
-                    className="mt-2"
+                    className="mt-2 border-gray-300"
                   />
                 </div>
 
@@ -254,7 +268,7 @@ export default function LoanAppPage() {
               ) : (
                 <div className="space-y-3">
                   {myRequests.map((request: any) => (
-                    <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                    <div key={request.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-semibold text-gray-900">{request.loan_type}</p>
@@ -279,7 +293,49 @@ export default function LoanAppPage() {
         {activeTab === 'tracking' && (
           <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Loan Tracking</h2>
-            <p className="text-gray-600">Track the status and progress of your loan requests here.</p>
+            <p className="text-gray-600">Track the status and progress of your loan requests and repayments here.</p>
+          </div>
+        )}
+
+        {activeTab === 'accounts' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Accounts</h2>
+            <p className="text-gray-600">No accounts to display.</p>
+          </div>
+        )}
+
+        {activeTab === 'staff-loan-records' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Staff Loan Records</h2>
+            <p className="text-gray-600">Staff loan records and history will appear here.</p>
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Analytics</h2>
+            <p className="text-gray-600">Analytics and insights about your loans will be displayed here.</p>
+          </div>
+        )}
+
+        {activeTab === 'leave-payment' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Leave Payment</h2>
+            <p className="text-gray-600">Leave payment information will appear here.</p>
+          </div>
+        )}
+
+        {activeTab === 'my-tasks' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">My Tasks</h2>
+            <p className="text-gray-600">No pending tasks.</p>
+          </div>
+        )}
+
+        {activeTab === 'all-loans' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">All Loans</h2>
+            <p className="text-gray-600">All available loans in the system will be displayed here.</p>
           </div>
         )}
       </div>
