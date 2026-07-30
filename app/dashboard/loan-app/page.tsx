@@ -18,6 +18,7 @@ import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
+import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -1654,12 +1655,7 @@ export default function LoanAppPage() {
     const shouldShowLoader = !options?.silent
     if (shouldShowLoader) setLoading(true)
     try {
-      // Add 10-second timeout to prevent infinite loading
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-      
-      const res = await fetch("/api/loan/workflow", { cache: "no-store", signal: controller.signal })
-      clearTimeout(timeoutId)
+      const res = await fetch("/api/loan/workflow", { cache: "no-store" })
       const result = await res.json()
       
       // Check if result is an error object (has only error/code/message) rather than valid WorkflowResponse
@@ -1687,11 +1683,7 @@ export default function LoanAppPage() {
 
       // Don't auto-set loan type - let user select with placeholder hint
     } catch (e: any) {
-      const errorMessage = e?.name === "AbortError" 
-        ? "Request timed out - server is not responding" 
-        : e?.message || "Failed to load"
-      console.log("[v0] Loan workflow fetch error:", e)
-      toast({ title: "Loan Module Error", description: errorMessage, variant: "destructive" })
+      toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
       setData(null) // Ensure data is cleared on error
     } finally {
       if (shouldShowLoader) setLoading(false)
@@ -1700,16 +1692,6 @@ export default function LoanAppPage() {
 
   useEffect(() => {
     void loadData()
-    
-    // If data hasn't loaded within 8 seconds, auto-dismiss loader to prevent infinite spinner
-    const timeout = setTimeout(() => {
-      if (loading && !data) {
-        console.log("[v0] Loan workflow fetch taking >8s, setting timeout fallback")
-        setLoading(false)
-      }
-    }, 8000)
-    
-    return () => clearTimeout(timeout)
   }, [])
 
   useEffect(() => {
@@ -4805,8 +4787,17 @@ export default function LoanAppPage() {
                                     ],
                                   }
 
-                                  // TODO: PDF download disabled - jsPDF integration needs refactoring
-                                  toast({ title: "Info", description: "PDF download temporarily disabled. Please download directly from the system.", variant: "default" })
+                                  // Generate professional PDF with actual signature
+                                  const pdf = await generateProfessionalMemoPDF(
+                                    memoData,
+                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`
+                                  )
+
+                                  // Download
+                                  await downloadMemoPDF(
+                                    pdf,
+                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}${String(currentDate.getDate()).padStart(2, "0")}.pdf`
+                                  )
                                 } catch (err) {
                                   console.error("[v0] Download error:", err)
                                   toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
