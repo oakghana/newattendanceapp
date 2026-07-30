@@ -3537,7 +3537,7 @@ export default function LoanAppPage() {
             )}
           </div>
 
-          {/* ── HR Terms Queue ── */}
+          {/* ── HR Terms Queue ��─ */}
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
               <div>
@@ -4380,7 +4380,13 @@ export default function LoanAppPage() {
                     <label className="text-xs font-semibold text-slate-600 block mb-1.5">Loan Type</label>
                     <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="">All Loan Types</option>
-                      {Array.from(loanOfficeLoansMap.values())
+                      {Array.from(
+                        new Set(
+                          loanOfficeWorkspaceRows
+                            .map((r) => r.loan_label)
+                            .filter((type) => type && typeof type === "string")
+                        )
+                      )
                         .sort()
                         .map((loanType) => (
                           <option key={loanType} value={loanType}>{loanType}</option>
