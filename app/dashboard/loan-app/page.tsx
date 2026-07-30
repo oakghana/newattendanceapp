@@ -16,6 +16,9 @@ import {
   AlertCircle,
 } from "lucide-react"
 
+// Prevent prerendering - this is an authenticated page with dynamic user data
+export const dynamic = "force-dynamic"
+
 export const metadata = {
   title: "Loan Administration | QCC Staff Welfare",
   description: "Manage staff loans, approvals, and repayment tracking",
@@ -198,15 +201,20 @@ function getStatusBadge(status: string) {
 }
 
 export default async function LoanAdminPage() {
-  const supabase = createClient()
+  try {
+    const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    if (!supabase) {
+      redirect("/auth/login")
+    }
 
-  if (!user) {
-    redirect("/auth/login")
-  }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      redirect("/auth/login")
+    }
 
   const { data: profile } = await supabase
     .from("user_profiles")
@@ -500,5 +508,16 @@ export default async function LoanAdminPage() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+    )
+  } catch (error: any) {
+    console.error("[v0] Loan admin page error:", error)
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-600 font-semibold">Error Loading Loan Administration</p>
+        <p className="text-slate-500 text-sm mt-2">
+          {error?.message || "An error occurred. Please try again."}
+        </p>
+      </div>
+    )
+  }
 }
