@@ -3006,7 +3006,7 @@ export default function LoanAppPage() {
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <Badge className={`${isApproved ? "bg-white text-emerald-700" : isRejected ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1`}>
-                        {isApproved ? "🎉 Approved" : isRejected ? "❌ " + statusText(req.status) : "⏳ " + statusText(req.status)}
+                        {isApproved ? "🎉 Approved" : isRejected ? "��� " + statusText(req.status) : "⏳ " + statusText(req.status)}
                       </Badge>
                       <p className="text-xs opacity-70">Submitted {fmtDate(req.submitted_at || req.created_at)}</p>
                     </div>
@@ -5276,8 +5276,8 @@ export default function LoanAppPage() {
                                 )}
                               </div>
 
-                              {/* Signature - Hidden for loan_office and hr_executive */}
-                              {!["loan_office", "hr_executive"].includes(data?.profile?.role || "") && (row.director_signature_data_url || row.director_signature_text) && (
+                              {/* Signature - Only shown to admin users */}
+                              {data?.profile?.role === "admin" && (row.director_signature_data_url || row.director_signature_text) && (
                                 <div className="flex items-center justify-center py-3 border-y border-blue-200">
                                   {row.director_signature_data_url ? (
                                     <img 
