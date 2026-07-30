@@ -106,14 +106,16 @@ Also improved the role select display to show the current role:
 
 ## Role Mapping Reference
 
-| UI Display | Database | API Maps |canonicalRole Reverses |
-|---|---|---|---|
-| `accounts_executive` | `accounts` | ✓ Yes | ✓ Yes |
-| `hr_executive` | `hr_leave_office` | ✓ Yes | ✓ Yes (via hr_office) |
-| `staff` | `staff` | ✗ No | ✗ No (pass-through) |
-| `admin` | `admin` | ✗ No | ✗ No (pass-through) |
-| `director_hr` | `director_hr` | ✗ No | ✗ No (pass-through) |
-| All other roles | Unchanged | ✗ No | ✗ No (pass-through) |
+| UI Selection | API Maps | DB Storage | canonicalRole Returns | UI Display |
+|---|---|---|---|---|
+| `accounts_executive` | ✓ Maps | `accounts` | Reverse-maps | `accounts_executive` ✓ |
+| `hr_executive` | ✓ Maps | `hr_leave_office` | Stays | `hr_leave_office` ✓ |
+| `staff` | ✗ No mapping | `staff` | Pass-through | `staff` ✓ |
+| `admin` | ✗ No mapping | `admin` | Pass-through | `admin` ✓ |
+| `director_hr` | ✗ No mapping | `director_hr` | Pass-through | `director_hr` ✓ |
+| Other roles | ✗ No mapping | Unchanged | Pass-through | Unchanged ✓ |
+
+**Note**: The `hr_executive` → `hr_leave_office` mapping is for API storage only. The UI consistently displays `hr_leave_office` as the human-readable form of that role. Unlike `accounts_executive` (which is purely a UI wrapper), `hr_leave_office` is the canonical name used throughout the system.
 
 ## Testing
 
