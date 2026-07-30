@@ -34,7 +34,8 @@ export async function PUT(req: NextRequest) {
       .single();
 
     const isHRExecutive = profile?.role === "hr_executive";
-    const isAccountsExecutive = profile?.role === "accounts_executive";
+    // Accept both database role ("accounts") and UI role ("accounts_executive")
+    const isAccountsExecutive = profile?.role === "accounts_executive" || profile?.role === "accounts";
 
     if (!isHRExecutive && !isAccountsExecutive) {
       return NextResponse.json(
@@ -74,20 +75,55 @@ export async function PUT(req: NextRequest) {
       updateData.accounts_approval_notes = notes;
     }
 
-    // Update payment record (trigger will auto-calculate overall_status)
+    // Calculate new overall_status based on both HR and Accounts approval statuses
+    let newOverallStatus = "pending"
+
+    // Determine overall status based on both approvals
+    const hrStatus = isHRExecutive ? approvalStatus : paymentRecord.hr_approval_status
+    const acctStatus = isAccountsExecutive ? approvalStatus : paymentRecord.accounts_approval_status
+
+    if (hrStatus === "rejected" || acctStatus === "rejected") {
+      newOverallStatus = "rejected"
+    } else if (hrStatus === "approved" && acctStatus === "approved") {
+      newOverallStatus = "completed"
+    } else if (
+      (hrStatus === "approved" || acctStatus === "approved") &&
+      (hrStatus === "pending" || acctStatus === "pending")
+    ) {
+      newOverallStatus = "pending"
+    }
+
+    updateData.overall_status = newOverallStatus
+
+    // Update payment record
     const { data: updatedRecord, error: updateError } = await admin
       .from("loan_payment_records")
       .update(updateData)
       .eq("id", paymentRecordId)
       .select()
-      .single();
+      .single()
 
     if (updateError) {
-      console.error("[API] Payment approval error:", updateError);
+      console.error("[API] Payment approval error:", updateError)
       return NextResponse.json(
         { error: "Failed to update payment approval" },
         { status: 500 }
-      );
+      )
+    }
+
+    // Log the state change for audit
+    console.log("[API] Payment approval updated:", {
+      paymentRecordId,
+      approver: isHRExecutive ? "HR_EXECUTIVE" : "ACCOUNTS_EXECUTIVE",
+      approvalStatus,
+      newOverallStatus,
+      hrStatus,
+      acctStatus,
+    })
+
+    // If both approved, trigger repayment schedule update
+    if (newOverallStatus === "completed") {
+      console.log("[API] Both executives approved payment:", paymentRecordId)
     }
 
     // If both approved, trigger repayment schedule update
@@ -138,7 +174,8 @@ export async function GET(req: NextRequest) {
       .single();
 
     const isHRExecutive = profile?.role === "hr_executive";
-    const isAccountsExecutive = profile?.role === "accounts_executive";
+    // Accept both database role ("accounts") and UI role ("accounts_executive")
+    const isAccountsExecutive = profile?.role === "accounts_executive" || profile?.role === "accounts";
 
     if (!isHRExecutive && !isAccountsExecutive) {
       return NextResponse.json(
