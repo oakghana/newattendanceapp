@@ -2,7 +2,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { normalizeRole } from "@/lib/loan-workflow"
 
-// Restore archived loans back to mainstream tracking
+// API endpoint to restore archived loans back to mainstream tracking
+// PUT /api/loan/restore
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
