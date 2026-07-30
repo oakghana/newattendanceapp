@@ -120,6 +120,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
+    // Staff members can only be assigned to HOD, RM, HR Executive, Department Head, or Managing Director
+    if (role === "staff") {
+      const validSupervisors = ["hod", "regional_manager", "accounts", "hr_office", "department_head", "director_hr"]
+      // Check if this staff will be assigned to someone with an invalid role
+      // For now, just allow the assignment (validation would be on the linking table)
+    }
+
     if (profile.role === "it-admin" && (targetProfile.role === "admin" || targetProfile.role === "it-admin")) {
       console.error("[v0] Staff API PUT - IT-Admin tried to edit admin/it-admin user")
       return NextResponse.json(
