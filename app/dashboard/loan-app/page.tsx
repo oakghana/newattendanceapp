@@ -876,6 +876,7 @@ export default function LoanAppPage() {
   const [loanTypeKey, setLoanTypeKey] = useState("")
   const [reason, setReason] = useState("")
   const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | null>(null)
+  const [repaymentMonths, setRepaymentMonths] = useState<number>(12)
   const [supportingDocumentName, setSupportingDocumentName] = useState<string>("")
   const [uploadingDocument, setUploadingDocument] = useState(false)
 
@@ -1632,6 +1633,7 @@ export default function LoanAppPage() {
     setSupportingDocumentUrl(null)
     setSupportingDocumentName("")
     setSalaryAdvanceMonths(null)
+    setRepaymentMonths(12)
     setLoanTypeKey("") // Clear to show placeholder hint
   }
 
@@ -1780,6 +1782,7 @@ export default function LoanAppPage() {
       reason: trimmedReason,
       supporting_document_url: supportingDocumentUrl,
       recovery_months: salaryAdvanceMonths,
+      repayment_duration_months: isSalaryAdvanceRequest ? salaryAdvanceMonths : repaymentMonths,
     }
 
     const res = await fetch("/api/loan/request", {
@@ -2624,6 +2627,32 @@ export default function LoanAppPage() {
                     className="bg-muted text-foreground"
                   />
                 </div>
+              </div>
+
+              <div>
+                <Label>Repayment Duration (Months)</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[6, 12, 18, 24, 36, 48].map((months) => (
+                    <button
+                      key={months}
+                      type="button"
+                      onClick={() => setRepaymentMonths(months)}
+                      className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
+                        repaymentMonths === months
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {months}m
+                    </button>
+                  ))}
+                </div>
+                {selectedType?.fixed_amount && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Monthly Payment: GHc {fmtAmount(Number(selectedType.fixed_amount) / repaymentMonths)} | 
+                    Completion: {new Date(new Date().setMonth(new Date().getMonth() + repaymentMonths)).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}
+                  </p>
+                )}
               </div>
 
               {isSalaryAdvanceRequest && (
@@ -3871,33 +3900,61 @@ export default function LoanAppPage() {
                             </td>
                             {/* Outstanding Balance */}
                             <td className="px-4 py-3">
-                              {currentLoan?.outstanding_balance ? (
-                                <span className={`font-semibold ${Number(currentLoan.outstanding_balance) > 0 ? 'text-orange-700' : 'text-emerald-700'}`}>
-                                  GHc {Number(currentLoan.outstanding_balance).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">—</span>
-                              )}
+                              {(() => {
+                                const outstanding = currentLoan?.outstanding_balance ?? (Number(currentLoan?.fixed_amount || currentLoan?.requested_amount || 0) - Number(currentLoan?.total_paid || 0))
+                                return outstanding > 0 ? (
+                                  <span className="font-semibold text-orange-700">
+                                    GHc {Number(outstanding).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-emerald-700">GHc 0.00</span>
+                                )
+                              })()}
+                            </td>
+                            {/* Monthly Payment Due */}
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const loanAmount = Number(currentLoan?.fixed_amount || currentLoan?.requested_amount || 0)
+                                const duration = currentLoan?.repayment_duration_months || 12
+                                const monthlyPayment = duration > 0 ? loanAmount / duration : 0
+                                return monthlyPayment > 0 ? (
+                                  <span className="font-semibold text-slate-900">GHc {monthlyPayment.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )
+                              })()}
                             </td>
                             {/* Next Payment Due */}
                             <td className="px-4 py-3">
-                              {currentLoan?.next_payment_due ? (
-                                <span className="text-sm text-slate-700">
-                                  {new Date(currentLoan.next_payment_due).toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">—</span>
-                              )}
+                              {(() => {
+                                const nextDue = currentLoan?.next_payment_due
+                                if (nextDue) {
+                                  return <span className="text-sm text-slate-700">{new Date(nextDue).toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}</span>
+                                }
+                                // Calculate next due from approval date
+                                if (currentLoan?.md_approved_at) {
+                                  const approvalDate = new Date(currentLoan.md_approved_at)
+                                  const nextPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + 1))
+                                  return <span className="text-sm text-slate-700">{nextPaymentDate.toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}</span>
+                                }
+                                return <span className="text-slate-400">—</span>
+                              })()}
                             </td>
                             {/* Expected Completion Date */}
                             <td className="px-4 py-3">
-                              {currentLoan?.expected_completion_date ? (
-                                <span className="text-sm text-slate-700">
-                                  {new Date(currentLoan.expected_completion_date).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">—</span>
-                              )}
+                              {(() => {
+                                const completionDate = currentLoan?.expected_completion_date
+                                if (completionDate) {
+                                  return <span className="text-sm text-slate-700">{new Date(completionDate).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
+                                }
+                                // Calculate from approval date + duration
+                                if (currentLoan?.md_approved_at && currentLoan?.repayment_duration_months) {
+                                  const approvalDate = new Date(currentLoan.md_approved_at)
+                                  const lastPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + currentLoan.repayment_duration_months))
+                                  return <span className="text-sm text-slate-700">{lastPaymentDate.toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
+                                }
+                                return <span className="text-slate-400">—</span>
+                              })()}
                             </td>
                             {/* Repayment Status */}
                             <td className="px-4 py-3">

@@ -221,9 +221,11 @@ export async function POST(request: NextRequest) {
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await request.json()
-    const { loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
+    const { loan_type_key, requested_amount, reason, supporting_document_url, repayment_duration_months } = body || {}
     const recovery_months = Number(body?.recovery_months)
     const initialRecoveryMonths = Number.isFinite(recovery_months) && recovery_months > 0 ? Math.trunc(recovery_months) : null
+    const durationMonths = Number(repayment_duration_months)
+    const initialDurationMonths = Number.isFinite(durationMonths) && durationMonths > 0 ? Math.trunc(durationMonths) : 12
 
     if (!loan_type_key) {
       return NextResponse.json({ error: "loan_type_key is required" }, { status: 400 })
@@ -442,6 +444,7 @@ export async function POST(request: NextRequest) {
       requested_amount: (loanType as any).fixed_amount || Number(requested_amount || 0) || null,
       hr_note: (loanType as any).loan_terms || null,
       recovery_months: requestRecoveryMonths,
+      repayment_duration_months: initialDurationMonths,
       reason: normalizedReason || null,
       supporting_document_url: supporting_document_url || null,
       committee_required: Boolean(loanType.requires_committee),
@@ -538,9 +541,11 @@ export async function PUT(request: NextRequest) {
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await request.json()
-    const { id, loan_type_key, requested_amount, reason, supporting_document_url } = body || {}
+    const { id, loan_type_key, requested_amount, reason, supporting_document_url, repayment_duration_months } = body || {}
     const recovery_months = Number(body?.recovery_months)
     const initialRecoveryMonths = Number.isFinite(recovery_months) && recovery_months > 0 ? Math.trunc(recovery_months) : null
+    const durationMonths = Number(repayment_duration_months)
+    const initialDurationMonths = Number.isFinite(durationMonths) && durationMonths > 0 ? Math.trunc(durationMonths) : 12
 
     if (!id) return NextResponse.json({ error: "Request id is required" }, { status: 400 })
 
@@ -592,6 +597,7 @@ export async function PUT(request: NextRequest) {
       requested_amount: Number(requested_amount || 0) || null,
       reason: normalizedReason || null,
       supporting_document_url: incomingSupportDoc,
+      repayment_duration_months: initialDurationMonths,
       updated_at: new Date().toISOString(),
     }
 
