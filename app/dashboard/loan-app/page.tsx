@@ -895,6 +895,7 @@ export default function LoanAppPage() {
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
   const [isRestoringAll, setIsRestoringAll] = useState(false)
+  const [selectedArchivedLoans, setSelectedArchivedLoans] = useState<Set<string>>(new Set())
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
@@ -1678,6 +1679,89 @@ export default function LoanAppPage() {
       })
     } finally {
       setRestoringLoanId(null)
+    }
+  }
+
+  const toggleLoanSelection = (loanId: string) => {
+    const newSelected = new Set(selectedArchivedLoans)
+    if (newSelected.has(loanId)) {
+      newSelected.delete(loanId)
+    } else {
+      newSelected.add(loanId)
+    }
+    setSelectedArchivedLoans(newSelected)
+  }
+
+  const toggleSelectAllArchived = () => {
+    const archivedLoans = filteredArchivedLoans.map(l => l.id)
+    if (selectedArchivedLoans.size === filteredArchivedLoans.length) {
+      setSelectedArchivedLoans(new Set())
+    } else {
+      setSelectedArchivedLoans(new Set(archivedLoans))
+    }
+  }
+
+  const restoreSelectedLoans = async () => {
+    if (selectedArchivedLoans.size === 0) {
+      toast({
+        title: "No Loans Selected",
+        description: "Please select loans to restore.",
+      })
+      return
+    }
+
+    try {
+      setIsRestoringAll(true)
+      let successCount = 0
+      let failureCount = 0
+
+      for (const loanId of selectedArchivedLoans) {
+        try {
+          const response = await fetch("/api/loan/restore", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              loanId,
+              newStatus: "partially_recovered",
+            }),
+          })
+
+          if (response.ok) {
+            successCount++
+          } else {
+            failureCount++
+          }
+        } catch (error) {
+          failureCount++
+        }
+      }
+
+      if (successCount > 0) {
+        toast({
+          title: "Loans Restored",
+          description: `${successCount} archived loan${successCount !== 1 ? "s" : ""} restored successfully${failureCount > 0 ? `. ${failureCount} failed.` : "."}`,
+        })
+        setSelectedArchivedLoans(new Set())
+      }
+
+      if (failureCount > 0 && successCount === 0) {
+        toast({
+          title: "Error",
+          description: "Failed to restore selected loans. Please try again.",
+          variant: "destructive",
+        })
+      }
+
+      mutate()
+    } catch (error) {
+      console.error("Error restoring selected loans:", error)
+      toast({
+        title: "Error",
+        description: "Failed to restore loans",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRestoringAll(false)
     }
   }
 
@@ -3993,7 +4077,9 @@ export default function LoanAppPage() {
                       return paged.map((record) => {
                         const currentLoan = record.currentLoan
                         const isCompleted = currentLoan?.status === "payment_completed"
-                        const canMarkCompleted = currentLoan && !isCompleted
+                        // Only allow marking as completed if loan is MD-approved and not yet completed
+                        const isMdApproved = currentLoan && ["approved_director", "staff_receiving_funds", "partially_recovered", "archived"].includes(currentLoan.status)
+                        const canMarkCompleted = currentLoan && !isCompleted && isMdApproved
 
                         return (
                           <tr key={record.staffId} className="border-b border-slate-100 hover:bg-slate-50">
@@ -5271,6 +5357,17 @@ export default function LoanAppPage() {
                   <CardDescription className="text-slate-500">View previously approved or rejected loans that have been archived.</CardDescription>
                 </div>
                 <div className="flex gap-2 shrink-0">
+                  {selectedArchivedLoans.size > 0 && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={restoreSelectedLoans}
+                      disabled={isRestoringAll}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Restore Selected ({selectedArchivedLoans.size})
+                    </Button>
+                  )}
                   <Button 
                     variant="default" 
                     size="sm" 
@@ -5339,12 +5436,43 @@ export default function LoanAppPage() {
                 Showing {filteredArchivedLoans.length} archived loans
               </div>
 
+              {filteredArchivedLoans.length > 0 && (
+                <div className="mb-4 flex items-center gap-3 py-3 px-4 bg-slate-100 rounded border border-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={selectedArchivedLoans.size > 0 && selectedArchivedLoans.size === filteredArchivedLoans.length}
+                    onChange={toggleSelectAllArchived}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  <label className="text-sm font-medium text-slate-700 cursor-pointer flex-1">
+                    Select All ({selectedArchivedLoans.size} selected)
+                  </label>
+                </div>
+              )}
+
               {filteredArchivedLoans.map((row) => (
-                <div key={row.id} className="rounded border p-4 text-sm bg-slate-50 hover:bg-slate-75 transition-colors">
+                <div 
+                  key={row.id} 
+                  className={`rounded border p-4 text-sm transition-colors cursor-pointer ${
+                    selectedArchivedLoans.has(row.id) 
+                      ? "bg-blue-50 border-blue-300" 
+                      : "bg-slate-50 hover:bg-slate-100"
+                  }`}
+                  onClick={() => toggleLoanSelection(row.id)}
+                >
                   <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex-1">
-                      <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
-                      <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                    <div className="flex items-start gap-3 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedArchivedLoans.has(row.id)}
+                        onChange={() => toggleLoanSelection(row.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
+                        <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="text-xs font-semibold text-slate-700">Archived</div>
@@ -5358,7 +5486,10 @@ export default function LoanAppPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => restoreLoan(row.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        restoreLoan(row.id)
+                      }}
                       disabled={restoringLoanId === row.id}
                       className="whitespace-nowrap"
                     >
