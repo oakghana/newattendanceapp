@@ -17,6 +17,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
+import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
+import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -2808,7 +2810,12 @@ export default function LoanAppPage() {
   }
 
   return (
-    <div className="space-y-6 p-2 loan-theme">
+    <>
+      <GlobalWarningsToasts />
+      <div className="px-2">
+        <LeaveResumptionBadge />
+      </div>
+      <div className="space-y-6 p-2 loan-theme">
       <Card className="overflow-hidden border border-violet-100 bg-[radial-gradient(circle_at_top_left,_rgba(168,85,247,0.14),_transparent_30%),linear-gradient(135deg,_#fcfaff_0%,_#f4efff_45%,_#ffffff_100%)] shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
         <CardHeader className="border-b border-violet-100/80 bg-white/80 backdrop-blur">
           <div className="flex flex-col gap-5">
@@ -7444,7 +7451,8 @@ export default function LoanAppPage() {
       </Dialog>
 
       </Tabs>
-    </div>
+      </div>
+    </>
   )
 }
 
