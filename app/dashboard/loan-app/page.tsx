@@ -19,7 +19,7 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -893,6 +893,9 @@ export default function LoanAppPage() {
   // ── Action modal state ──────────────────────────────────────────────
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
+  const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
+  const [isRestoringAll, setIsRestoringAll] = useState(false)
+  const [selectedArchivedLoans, setSelectedArchivedLoans] = useState<Set<string>>(new Set())
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
@@ -1166,6 +1169,8 @@ export default function LoanAppPage() {
       tabs.push({ key: "hod", label: `HOD (${c.hod})` })
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+      tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
+      tabs.push({ key: "analytics", label: "Analytics" })
       tabs.push({ key: "leave-payment", label: "Leave Payment" })
       tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
       tabs.push({ key: "committee", label: `Committee (${c.committee})` })
@@ -1184,6 +1189,8 @@ export default function LoanAppPage() {
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
+    // Analytics tab for Loan Office and Accounts executives
+    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
@@ -1635,6 +1642,218 @@ export default function LoanAppPage() {
     setSalaryAdvanceMonths(null)
     setRepaymentMonths(12)
     setLoanTypeKey("") // Clear to show placeholder hint
+  }
+
+  const restoreLoan = async (loanId: string) => {
+    try {
+      setRestoringLoanId(loanId)
+      const response = await fetch("/api/loan/restore", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loanId,
+          newStatus: "partially_recovered",
+        }),
+      })
+
+      const json = await response.json()
+
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: json.error || "Failed to restore loan",
+          variant: "destructive",
+        })
+        return
+      }
+
+      toast({
+        title: "Loan Restored",
+        description: "The archived loan has been restored to mainstream tracking.",
+      })
+
+      // Refetch data to update the UI
+      mutate()
+    } catch (error) {
+      console.error("Error restoring loan:", error)
+      toast({
+        title: "Error",
+        description: "Failed to restore loan",
+        variant: "destructive",
+      })
+    } finally {
+      setRestoringLoanId(null)
+    }
+  }
+
+  const toggleLoanSelection = (loanId: string) => {
+    const newSelected = new Set(selectedArchivedLoans)
+    if (newSelected.has(loanId)) {
+      newSelected.delete(loanId)
+    } else {
+      newSelected.add(loanId)
+    }
+    setSelectedArchivedLoans(newSelected)
+  }
+
+  const toggleSelectAllArchived = () => {
+    const archivedLoans = filteredArchivedLoans.map(l => l.id)
+    if (selectedArchivedLoans.size === filteredArchivedLoans.length) {
+      setSelectedArchivedLoans(new Set())
+    } else {
+      setSelectedArchivedLoans(new Set(archivedLoans))
+    }
+  }
+
+  const restoreSelectedLoans = async () => {
+    if (selectedArchivedLoans.size === 0) {
+      toast({
+        title: "No Loans Selected",
+        description: "Please select loans to restore.",
+      })
+      return
+    }
+
+    console.log("[v0] Restoring selected loans:", {
+      selectedCount: selectedArchivedLoans.size,
+      selectedIds: Array.from(selectedArchivedLoans),
+      availableLoans: filteredArchivedLoans.map(l => ({ id: l.id, status: l.status }))
+    })
+
+    try {
+      setIsRestoringAll(true)
+      let successCount = 0
+      let failureCount = 0
+
+      for (const loanId of selectedArchivedLoans) {
+        try {
+          const response = await fetch("/api/loan/restore", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              loanId,
+              newStatus: "partially_recovered",
+            }),
+          })
+
+          const json = await response.json()
+
+          if (response.ok) {
+            successCount++
+          } else {
+            console.error(`Failed to restore loan ${loanId}:`, json)
+            failureCount++
+          }
+        } catch (error) {
+          console.error(`Error restoring loan ${loanId}:`, error)
+          failureCount++
+        }
+      }
+
+      if (successCount > 0) {
+        toast({
+          title: "Loans Restored",
+          description: `${successCount} archived loan${successCount !== 1 ? "s" : ""} restored successfully${failureCount > 0 ? `. ${failureCount} failed.` : "."}`,
+        })
+        setSelectedArchivedLoans(new Set())
+      }
+
+      if (failureCount > 0 && successCount === 0) {
+        toast({
+          title: "Error",
+          description: "Failed to restore selected loans. Please try again.",
+          variant: "destructive",
+        })
+      }
+
+      mutate()
+    } catch (error) {
+      console.error("Error restoring selected loans:", error)
+      toast({
+        title: "Error",
+        description: "Failed to restore loans",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRestoringAll(false)
+    }
+  }
+
+  const restoreAllLoans = async () => {
+    try {
+      const archivedLoans = (data?.inbox?.allLoans || []).filter((l: any) => l.status === "archived")
+      
+      console.log("[v0] Restoring all loans:", {
+        archivedCount: archivedLoans.length,
+        archivedIds: archivedLoans.map(l => ({ id: l.id, status: l.status }))
+      })
+      
+      if (archivedLoans.length === 0) {
+        toast({
+          title: "No Archived Loans",
+          description: "There are no archived loans to restore.",
+        })
+        return
+      }
+
+      setIsRestoringAll(true)
+      let successCount = 0
+      let failureCount = 0
+
+      // Restore all archived loans
+      for (const loan of archivedLoans) {
+        try {
+          const response = await fetch("/api/loan/restore", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              loanId: loan.id,
+              newStatus: "partially_recovered",
+            }),
+          })
+
+          const json = await response.json()
+
+          if (response.ok) {
+            successCount++
+          } else {
+            console.error(`Failed to restore loan ${loan.id}:`, json)
+            failureCount++
+          }
+        } catch (error) {
+          console.error(`Error restoring loan ${loan.id}:`, error)
+          failureCount++
+        }
+      }
+
+      // Show summary toast
+      if (successCount > 0) {
+        toast({
+          title: "Loans Restored",
+          description: `${successCount} archived loan${successCount !== 1 ? "s" : ""} restored successfully${failureCount > 0 ? `. ${failureCount} failed.` : "."}`,
+        })
+      }
+
+      if (failureCount > 0 && successCount === 0) {
+        toast({
+          title: "Error",
+          description: "Failed to restore archived loans. Please try again.",
+          variant: "destructive",
+        })
+      }
+
+      // Refetch data to update the UI
+      mutate()
+    } catch (error) {
+      console.error("Error restoring all loans:", error)
+      toast({
+        title: "Error",
+        description: "Failed to restore archived loans",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRestoringAll(false)
+    }
   }
 
   useEffect(() => {
@@ -2810,7 +3029,7 @@ export default function LoanAppPage() {
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <Badge className={`${isApproved ? "bg-white text-emerald-700" : isRejected ? "bg-white text-red-700" : "bg-white/20 text-white border border-white/40"} font-semibold text-xs px-3 py-1`}>
-                        {isApproved ? "🎉 Approved" : isRejected ? "❌ " + statusText(req.status) : "⏳ " + statusText(req.status)}
+                        {isApproved ? "🎉 Approved" : isRejected ? "����� " + statusText(req.status) : "⏳ " + statusText(req.status)}
                       </Badge>
                       <p className="text-xs opacity-70">Submitted {fmtDate(req.submitted_at || req.created_at)}</p>
                     </div>
@@ -3825,10 +4044,21 @@ export default function LoanAppPage() {
                           name: loans[0]?.staff_full_name || "Unknown",
                           staffNo: loans[0]?.staff_number || "—",
                           loans,
-                          // Current loan = any director-approved or post-approval active loan
+                          // Current loan = MD-approved loans only, OR archived loans with outstanding balance
                           currentLoan: loans.find(l => {
-                            const activeStatuses = ["approved_director", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"]
-                            return activeStatuses.includes(l.status)
+                            // Only include MD-approved or post-approval active loans
+                            const mdApprovedStatuses = ["approved_director", "staff_receiving_funds", "partially_recovered"]
+                            if (mdApprovedStatuses.includes(l.status)) {
+                              return true
+                            }
+                            // Also include archived loans that still have outstanding balance (they were previously MD-approved)
+                            if (l.status === "archived") {
+                              const loanAmount = Number(l.fixed_amount || l.requested_amount || 0)
+                              const totalPaid = Number(l.total_paid || 0)
+                              const outstanding = loanAmount - totalPaid
+                              return outstanding > 0
+                            }
+                            return false
                           }),
                           completedLoans: loans.filter(l => l.status === "payment_completed")
                         }))
@@ -3870,7 +4100,9 @@ export default function LoanAppPage() {
                       return paged.map((record) => {
                         const currentLoan = record.currentLoan
                         const isCompleted = currentLoan?.status === "payment_completed"
-                        const canMarkCompleted = currentLoan && !isCompleted
+                        // Only allow marking as completed if loan is MD-approved and not yet completed
+                        const isMdApproved = currentLoan && ["approved_director", "staff_receiving_funds", "partially_recovered", "archived"].includes(currentLoan.status)
+                        const canMarkCompleted = currentLoan && !isCompleted && isMdApproved
 
                         return (
                           <tr key={record.staffId} className="border-b border-slate-100 hover:bg-slate-50">
@@ -3979,9 +4211,16 @@ export default function LoanAppPage() {
                             </td>
                             <td className="px-4 py-3">
                               {currentLoan ? (
-                                <Badge className={statusBadgeClass(currentLoan.status, "solid")}>
-                                  {statusText(currentLoan.status)}
-                                </Badge>
+                                <div className="flex flex-col gap-1">
+                                  <Badge className={statusBadgeClass(currentLoan.status, "solid")}>
+                                    {statusText(currentLoan.status)}
+                                  </Badge>
+                                  {currentLoan.status === "archived" && (
+                                    <Badge className="bg-slate-200 text-slate-700 text-xs">
+                                      Archived - Repaying
+                                    </Badge>
+                                  )}
+                                </div>
                               ) : (
                                 <span className="text-slate-400 text-xs">No Active Loan</span>
                               )}
@@ -4090,6 +4329,164 @@ export default function LoanAppPage() {
                   </div>
                 ) : null
               })()} 
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Analytics Tab ── */}
+        <TabsContent value="analytics" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-2xl">
+                    <BarChart3 className="h-6 w-6 text-blue-600" />
+                    Executive Analytics
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    View detailed loan analytics and performance metrics across your operations
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Filter Controls */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <span className="text-sm font-semibold text-slate-700">Filter Analytics</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Location</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Locations</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Department</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Departments</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Loan Type</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Loan Types</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Category</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Categories</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors">
+                      Export Data
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Metrics Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Total Processed</p>
+                      <p className="text-2xl font-bold text-slate-900">{loanOfficeAnalytics.totals.total_requests}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-slate-500" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Active Pipeline</p>
+                      <p className="text-2xl font-bold text-violet-700">{loanOfficeAnalytics.totals.active_pipeline}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center">
+                      <Clock className="h-5 w-5 text-violet-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Good Status</p>
+                      <p className="text-2xl font-bold text-emerald-700">{loanOfficeAnalytics.totals.good_fd}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Poor Status</p>
+                      <p className="text-2xl font-bold text-rose-700">{loanOfficeAnalytics.totals.poor_fd}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
+                      <Clock className="h-5 w-5 text-rose-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <LoanAnalyticsBarChart
+                  title="Loan Stage Breakdown"
+                  rows={loanOfficeAnalytics.stageBreakdown || []}
+                  valueKey="total"
+                  colorClass="bg-blue-500"
+                  emptyMessage="No stage data available"
+                  formatter={(row) => row.status || "Unknown"}
+                />
+                <LoanAnalyticsBarChart
+                  title="Monthly Intake Trend"
+                  rows={loanOfficeAnalytics.monthlyIntake || []}
+                  valueKey="total"
+                  colorClass="bg-emerald-500"
+                  emptyMessage="No monthly data available"
+                  formatter={(row) => row.month || "Unknown"}
+                />
+              </div>
+
+              {/* Processing Status Distribution */}
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <h4 className="font-semibold text-slate-900 mb-4 text-sm">Processing Status Distribution</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-3 bg-violet-50 rounded-lg">
+                    <div className="h-3 w-3 rounded-full bg-violet-600" />
+                    <div className="text-sm">
+                      <p className="text-slate-600 text-xs">Worked On</p>
+                      <p className="font-bold text-slate-900">{loanOfficeAnalytics.totals.worked_on}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-lg">
+                    <div className="h-3 w-3 rounded-full bg-amber-500" />
+                    <div className="text-sm">
+                      <p className="text-slate-600 text-xs">Yet to Work</p>
+                      <p className="font-bold text-slate-900">{loanOfficeAnalytics.totals.yet_to_be_worked}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg">
+                    <div className="h-3 w-3 rounded-full bg-emerald-600" />
+                    <div className="text-sm">
+                      <p className="text-slate-600 text-xs">Finalized</p>
+                      <p className="font-bold text-slate-900">{loanOfficeAnalytics.totals.finalized}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -5022,76 +5419,8 @@ export default function LoanAppPage() {
                     </div>
                   </div>
 
-                  {/* Professional Approval Certificate - Collapsable */}
-                  {row.status === "approved_director" && (row.director_hr_name || row.director_signature_text) && (
-                    <div className="mb-6">
-                      <div className="bg-gradient-to-r from-slate-50 to-blue-50 border-2 border-blue-200 rounded-lg overflow-hidden">
-                        {/* Certificate Header - Click to Collapse */}
-                        <button
-                          onClick={() => toggleLoanExpanded(row.id)}
-                          className="w-full p-4 flex items-center justify-between hover:bg-blue-100/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
-                              <span className="text-emerald-700 font-bold text-sm">✓</span>
-                            </div>
-                            <div className="text-left">
-                              <div className="text-xs text-slate-500 font-semibold">APPROVAL CERTIFICATE</div>
-                              <div className="text-sm font-bold text-emerald-700">{row.director_hr_name}</div>
-                            </div>
-                          </div>
-                          <ChevronDown className={`h-4 w-4 text-slate-600 transition-transform ${expandedLoanIds.has(row.id) ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {/* Expanded Certificate Content */}
-                        {expandedLoanIds.has(row.id) && (
-                          <>
-                            <div className="h-px bg-blue-200"></div>
-                            <div className="p-6 space-y-4">
-                              {/* APPROVED Text Prominently on Top */}
-                              <div className="text-center">
-                                <div className="text-3xl font-black text-emerald-700 tracking-wider mb-2" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.05)' }}>
-                                  APPROVED
-                                </div>
-                                {row.md_approved_at && (
-                                  <div className="text-xs text-slate-600 font-semibold">
-                                    {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Signature - Hidden for loan_office and hr_executive */}
-                              {!["loan_office", "hr_executive"].includes(data?.profile?.role || "") && (row.director_signature_data_url || row.director_signature_text) && (
-                                <div className="flex items-center justify-center py-3 border-y border-blue-200">
-                                  {row.director_signature_data_url ? (
-                                    <img 
-                                      src={row.director_signature_data_url} 
-                                      alt="Signature"
-                                      className="h-14 max-w-xs"
-                                    />
-                                  ) : row.director_signature_text ? (
-                                    <div className="text-2xl text-slate-700" style={{ fontStyle: 'italic', fontWeight: '600', fontFamily: 'cursive' }}>
-                                      {row.director_signature_text}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-
-                              {/* Approver Info */}
-                              <div className="text-center">
-                                <div className="text-sm font-bold text-slate-900">
-                                  {row.director_hr_name}
-                                </div>
-                                <div className="text-xs text-slate-600 font-semibold">
-                                  {row.director_hr_position || "Managing Director"}
-                                </div>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* Professional Approval Certificate - Hidden from All Loan Requests view for professional appearance */}
+                  {/* Approval certificate is only shown in detail/staff loan records views, not in all loans list */}
 
                     {/* Action Buttons */}
                     <div className="flex gap-2">
@@ -5140,9 +5469,31 @@ export default function LoanAppPage() {
                   <CardTitle className="text-xl font-bold text-slate-900">Archived Loan Requests</CardTitle>
                   <CardDescription className="text-slate-500">View previously approved or rejected loans that have been archived.</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredArchivedLoans, "archived-loan-requests.csv")} className="shrink-0">
-                  <Download className="h-4 w-4 mr-1" /> Export
-                </Button>
+                <div className="flex gap-2 shrink-0">
+                  {selectedArchivedLoans.size > 0 && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={restoreSelectedLoans}
+                      disabled={isRestoringAll}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Restore Selected ({selectedArchivedLoans.size})
+                    </Button>
+                  )}
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    onClick={restoreAllLoans}
+                    disabled={isRestoringAll || filteredArchivedLoans.length === 0}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {isRestoringAll ? "Restoring All..." : "Restore All"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredArchivedLoans, "archived-loan-requests.csv")}>
+                    <Download className="h-4 w-4 mr-1" /> Export
+                  </Button>
+                </div>
               </div>
 
               {/* Summary stats bar */}
@@ -5198,12 +5549,43 @@ export default function LoanAppPage() {
                 Showing {filteredArchivedLoans.length} archived loans
               </div>
 
+              {filteredArchivedLoans.length > 0 && (
+                <div className="mb-4 flex items-center gap-3 py-3 px-4 bg-slate-100 rounded border border-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={selectedArchivedLoans.size > 0 && selectedArchivedLoans.size === filteredArchivedLoans.length}
+                    onChange={toggleSelectAllArchived}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  <label className="text-sm font-medium text-slate-700 cursor-pointer flex-1">
+                    Select All ({selectedArchivedLoans.size} selected)
+                  </label>
+                </div>
+              )}
+
               {filteredArchivedLoans.map((row) => (
-                <div key={row.id} className="rounded border p-3 text-sm bg-slate-50">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex-1">
-                      <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
-                      <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                <div 
+                  key={row.id} 
+                  className={`rounded border p-4 text-sm transition-colors cursor-pointer ${
+                    selectedArchivedLoans.has(row.id) 
+                      ? "bg-blue-50 border-blue-300" 
+                      : "bg-slate-50 hover:bg-slate-100"
+                  }`}
+                  onClick={() => toggleLoanSelection(row.id)}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-start gap-3 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedArchivedLoans.has(row.id)}
+                        onChange={() => toggleLoanSelection(row.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
+                        <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="text-xs font-semibold text-slate-700">Archived</div>
@@ -5212,7 +5594,21 @@ export default function LoanAppPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-sm font-bold text-slate-900">GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-slate-900">GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        restoreLoan(row.id)
+                      }}
+                      disabled={restoringLoanId === row.id}
+                      className="whitespace-nowrap"
+                    >
+                      {restoringLoanId === row.id ? "Restoring..." : "Restore"}
+                    </Button>
+                  </div>
                 </div>
               ))}
               {filteredArchivedLoans.length === 0 && <p className="text-sm text-muted-foreground">No archived loans found.</p>}
