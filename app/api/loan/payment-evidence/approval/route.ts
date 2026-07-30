@@ -1,185 +1,174 @@
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Roles permitted to approve payments
+const HR_APPROVER_ROLES = ["hr_executive", "hr_leave_office", "admin"]
+const ACCOUNTS_APPROVER_ROLES = ["accounts_executive", "accounts", "admin"]
 
-const admin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-})
-
-export async function PATCH(request: NextRequest) {
+export async function PUT(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization") || ""
-    const token = authHeader.replace("Bearer ", "")
+    const admin = await createAdminClient()
+    const { user } = await createClientAndGetUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized: User not authenticated" }, { status: 401 })
+    }
 
-    const {
-      data: { user },
-    } = await admin.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    // Check if user is HR Executive
-    const { data: roleData } = await admin
-      .from("user_roles")
+    // Check user role
+    const { data: profileData } = await admin
+      .from("user_profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("id", user.id)
       .single()
 
-    const role = roleData?.role
-    if (!role || !["hr_executive", "admin"].includes(role)) {
+    const role = profileData?.role
+    if (!role) {
       return NextResponse.json(
-        { error: "Only HR Executives can approve/reject payment evidence" },
+        { error: "User profile not found" },
         { status: 403 }
       )
     }
 
-    const body = await request.json()
-    const { evidenceId, action, approvalNotes, rejectionReason } = body
+    // Parse request body
+    let body
+    try {
+      body = await request.json()
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
+    }
+
+    const {
+      paymentRecordId,
+      approvalType, // "hr" or "accounts"
+      approvalStatus, // "approved" or "rejected"
+      approvalNotes,
+    } = body
 
     // Validation
-    if (!evidenceId || !action) {
+    if (!paymentRecordId) {
+      return NextResponse.json({ error: "Missing required field: paymentRecordId" }, { status: 400 })
+    }
+    if (!approvalType || !["hr", "accounts"].includes(approvalType)) {
+      return NextResponse.json({ error: "Invalid approvalType: must be 'hr' or 'accounts'" }, { status: 400 })
+    }
+    if (!approvalStatus || !["approved", "rejected"].includes(approvalStatus)) {
+      return NextResponse.json({ error: "Invalid approvalStatus: must be 'approved' or 'rejected'" }, { status: 400 })
+    }
+
+    // Check authorization based on approval type
+    if (approvalType === "hr" && !HR_APPROVER_ROLES.includes(role)) {
       return NextResponse.json(
-        { error: "Missing required fields: evidenceId, action" },
-        { status: 400 }
+        { error: "Only HR executives can approve HR payments" },
+        { status: 403 }
       )
     }
 
-    if (!["approve", "reject"].includes(action)) {
-      return NextResponse.json({ error: "Action must be 'approve' or 'reject'" }, { status: 400 })
-    }
-
-    if (action === "approve" && !approvalNotes) {
+    if (approvalType === "accounts" && !ACCOUNTS_APPROVER_ROLES.includes(role)) {
       return NextResponse.json(
-        { error: "Approval notes are required when approving" },
-        { status: 400 }
+        { error: "Only Accounts executives can approve payments" },
+        { status: 403 }
       )
     }
 
-    if (action === "reject" && !rejectionReason) {
-      return NextResponse.json(
-        { error: "Rejection reason is required when rejecting" },
-        { status: 400 }
-      )
-    }
-
-    // Get the payment evidence record
-    const { data: evidenceData, error: fetchError } = await admin
-      .from("loan_payment_evidence")
+    // Fetch current payment record
+    const { data: paymentRecord, error: fetchError } = await admin
+      .from("loan_payment_records")
       .select("*")
-      .eq("id", evidenceId)
+      .eq("id", paymentRecordId)
       .single()
 
-    if (fetchError || !evidenceData) {
-      return NextResponse.json({ error: "Payment evidence not found" }, { status: 404 })
+    if (fetchError || !paymentRecord) {
+      return NextResponse.json({ error: "Payment record not found" }, { status: 404 })
     }
 
-    // Verify status is pending_approval
-    if (evidenceData.status !== "pending_approval") {
-      return NextResponse.json(
-        { error: `Cannot ${action} evidence that is already ${evidenceData.status}` },
-        { status: 400 }
-      )
-    }
+    // Prepare update data
+    const updateData: any = {}
 
-    // Update the evidence record
-    const updateData: any = {
-      status: action === "approve" ? "approved" : "rejected",
-      updated_at: new Date().toISOString(),
-    }
-
-    if (action === "approve") {
-      updateData.approved_by = user.id
-      updateData.approved_at = new Date().toISOString()
-      updateData.approval_notes = approvalNotes
+    if (approvalType === "hr") {
+      updateData.hr_executive_id = user.id
+      updateData.hr_approval_at = new Date().toISOString()
+      updateData.hr_approval_status = approvalStatus
+      updateData.hr_approval_notes = approvalNotes || null
     } else {
-      updateData.rejected_by = user.id
-      updateData.rejected_at = new Date().toISOString()
-      updateData.rejection_reason = rejectionReason
+      updateData.accounts_executive_id = user.id
+      updateData.accounts_approval_at = new Date().toISOString()
+      updateData.accounts_approval_status = approvalStatus
+      updateData.accounts_approval_notes = approvalNotes || null
     }
 
-    const { data: updatedEvidence, error: updateError } = await admin
-      .from("loan_payment_evidence")
+    // Update the payment record
+    const { data: updatedRecord, error: updateError } = await admin
+      .from("loan_payment_records")
       .update(updateData)
-      .eq("id", evidenceId)
+      .eq("id", paymentRecordId)
       .select()
       .single()
 
     if (updateError) {
-      console.error("[v0] Error updating payment evidence:", updateError)
-      return NextResponse.json({ error: "Failed to update payment evidence" }, { status: 500 })
+      console.error("[v0] Error updating payment record:", updateError)
+      return NextResponse.json({ error: "Failed to update payment record" }, { status: 500 })
     }
 
-    // If approved, mark loan as payment_completed
-    if (action === "approve") {
-      const { error: loanUpdateError } = await admin
-        .from("loan_requests")
-        .update({
-          status: "payment_completed",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", evidenceData.loan_request_id)
+    // Send notification to the approver and staff member
+    try {
+      const notifications = []
 
-      if (loanUpdateError) {
-        console.error("[v0] Error updating loan status:", loanUpdateError)
-        return NextResponse.json({ error: "Failed to mark loan as completed" }, { status: 500 })
+      // Notify staff member of approval/rejection
+      if (paymentRecord.loan_request_id) {
+        const { data: loanData } = await admin
+          .from("loan_requests")
+          .select("staff_id")
+          .eq("id", paymentRecord.loan_request_id)
+          .single()
+
+        if (loanData?.staff_id) {
+          notifications.push({
+            recipient_id: loanData.staff_id,
+            type: `payment_${approvalStatus}_${approvalType}`,
+            title: `Payment ${approvalStatus === "approved" ? "Approved" : "Rejected"} by ${approvalType === "hr" ? "HR" : "Accounts"}`,
+            message: `Your payment of GHc ${paymentRecord.amount_paid.toLocaleString("en-GH", { minimumFractionDigits: 2 })} has been ${approvalStatus}`,
+            data: { paymentRecordId },
+            is_read: false,
+          })
+        }
       }
 
-      // Create timeline entry for the approval
-      await admin
-        .from("loan_request_timeline")
-        .insert({
-          loan_request_id: evidenceData.loan_request_id,
-          action_type: "payment_evidence_approved",
-          status: "payment_completed",
-          description: `Payment evidence approved by HR Executive. Amount verified: GHc ${evidenceData.payment_amount}. Approval notes: ${approvalNotes}`,
-          actor_id: user.id,
-          actor_role: "hr_executive",
-        })
-        .catch(() => {
-          // Timeline table might not exist, silently fail
-        })
+      // If payment is fully approved by both, notify staff and update repayment schedule
+      if (updatedRecord.hr_approval_status === "approved" && updatedRecord.accounts_approval_status === "approved") {
+        const { data: loanData } = await admin
+          .from("loan_requests")
+          .select("staff_id")
+          .eq("id", paymentRecord.loan_request_id)
+          .single()
 
-      // Notify staff member
-      await admin
-        .from("notifications")
-        .insert({
-          user_id: evidenceData.user_id,
-          type: "payment_evidence_approved",
-          title: "Payment Verified - Loan Marked Complete",
-          message: `Your payment of GHc ${evidenceData.payment_amount} has been verified and approved by HR Executive. Your loan is now marked as fully repaid.`,
-          related_id: evidenceData.loan_request_id,
-          is_read: false,
-        })
-        .catch(() => {
-          // Notifications table might not exist, silently fail
-        })
-    } else {
-      // If rejected, create notification for staff to resubmit
-      await admin
-        .from("notifications")
-        .insert({
-          user_id: evidenceData.user_id,
-          type: "payment_evidence_rejected",
-          title: "Payment Evidence Rejected - Please Resubmit",
-          message: `Your payment evidence has been rejected. Reason: ${rejectionReason}. Please resubmit with correct documentation.`,
-          related_id: evidenceData.loan_request_id,
-          is_read: false,
-        })
-        .catch(() => {
-          // Notifications table might not exist, silently fail
-        })
+        if (loanData?.staff_id) {
+          notifications.push({
+            recipient_id: loanData.staff_id,
+            type: "payment_fully_approved",
+            title: "Payment Fully Approved",
+            message: `Your payment of GHc ${paymentRecord.amount_paid.toLocaleString("en-GH", { minimumFractionDigits: 2 })} has been fully approved and processed`,
+            data: { paymentRecordId },
+            is_read: false,
+          })
+        }
+      }
+
+      if (notifications.length > 0) {
+        await admin.from("staff_notifications").insert(notifications)
+      }
+    } catch (_notifyErr) {
+      // Notification failure is non-fatal
     }
 
-    return NextResponse.json({
-      success: true,
-      data: updatedEvidence,
-      message:
-        action === "approve"
-          ? "Payment evidence approved and loan marked as completed"
-          : "Payment evidence rejected - staff notified to resubmit",
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        data: updatedRecord,
+        message: `Payment ${approvalStatus === "approved" ? "approved" : "rejected"} successfully by ${approvalType === "hr" ? "HR Executive" : "Accounts Executive"}`,
+      },
+      { status: 200 }
+    )
   } catch (err) {
-    console.error("[v0] Payment evidence approval error:", err)
+    console.error("[v0] Payment approval error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
