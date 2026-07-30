@@ -894,6 +894,7 @@ export default function LoanAppPage() {
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
+  const [isRestoringAll, setIsRestoringAll] = useState(false)
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
@@ -1677,6 +1678,74 @@ export default function LoanAppPage() {
       })
     } finally {
       setRestoringLoanId(null)
+    }
+  }
+
+  const restoreAllLoans = async () => {
+    try {
+      const archivedLoans = (data?.inbox?.allLoans || []).filter((l: any) => l.status === "archived")
+      
+      if (archivedLoans.length === 0) {
+        toast({
+          title: "No Archived Loans",
+          description: "There are no archived loans to restore.",
+        })
+        return
+      }
+
+      setIsRestoringAll(true)
+      let successCount = 0
+      let failureCount = 0
+
+      // Restore all archived loans
+      for (const loan of archivedLoans) {
+        try {
+          const response = await fetch("/api/loan/restore", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              loanId: loan.id,
+              newStatus: "partially_recovered",
+            }),
+          })
+
+          if (response.ok) {
+            successCount++
+          } else {
+            failureCount++
+          }
+        } catch (error) {
+          failureCount++
+        }
+      }
+
+      // Show summary toast
+      if (successCount > 0) {
+        toast({
+          title: "Loans Restored",
+          description: `${successCount} archived loan${successCount !== 1 ? "s" : ""} restored successfully${failureCount > 0 ? `. ${failureCount} failed.` : "."}`,
+        })
+      }
+
+      if (failureCount > 0 && successCount === 0) {
+        toast({
+          title: "Error",
+          description: "Failed to restore archived loans. Please try again.",
+          variant: "destructive",
+        })
+      }
+
+      // Refetch data to update the UI
+      mutate()
+    } catch (error) {
+      console.error("Error restoring all loans:", error)
+      toast({
+        title: "Error",
+        description: "Failed to restore archived loans",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRestoringAll(false)
     }
   }
 
@@ -5201,9 +5270,20 @@ export default function LoanAppPage() {
                   <CardTitle className="text-xl font-bold text-slate-900">Archived Loan Requests</CardTitle>
                   <CardDescription className="text-slate-500">View previously approved or rejected loans that have been archived.</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredArchivedLoans, "archived-loan-requests.csv")} className="shrink-0">
-                  <Download className="h-4 w-4 mr-1" /> Export
-                </Button>
+                <div className="flex gap-2 shrink-0">
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    onClick={restoreAllLoans}
+                    disabled={isRestoringAll || filteredArchivedLoans.length === 0}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {isRestoringAll ? "Restoring All..." : "Restore All"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredArchivedLoans, "archived-loan-requests.csv")}>
+                    <Download className="h-4 w-4 mr-1" /> Export
+                  </Button>
+                </div>
               </div>
 
               {/* Summary stats bar */}
