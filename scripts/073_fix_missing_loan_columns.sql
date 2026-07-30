@@ -80,8 +80,8 @@ CREATE INDEX IF NOT EXISTS idx_loan_requests_location
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.loan_payment_records (
-  id                        TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  loan_request_id           TEXT NOT NULL
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_request_id           UUID NOT NULL
     REFERENCES public.loan_requests(id) ON DELETE CASCADE,
   payment_date              DATE NOT NULL,
   amount_paid               NUMERIC(15, 2) NOT NULL,
@@ -89,17 +89,17 @@ CREATE TABLE IF NOT EXISTS public.loan_payment_records (
     CHECK (payment_method IN ('bank_transfer','cash','cheque','mobile_money')),
   reference_number          TEXT,
 
-  submitted_by              TEXT NOT NULL
+  submitted_by              UUID NOT NULL
     REFERENCES auth.users(id) ON DELETE RESTRICT,
   submitted_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-  hr_executive_id           TEXT REFERENCES auth.users(id) ON DELETE SET NULL,
+  hr_executive_id           UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   hr_approval_at            TIMESTAMP WITH TIME ZONE,
   hr_approval_status        TEXT DEFAULT 'pending'
     CHECK (hr_approval_status IN ('pending','approved','rejected')),
   hr_approval_notes         TEXT,
 
-  accounts_executive_id     TEXT REFERENCES auth.users(id) ON DELETE SET NULL,
+  accounts_executive_id     UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   accounts_approval_at      TIMESTAMP WITH TIME ZONE,
   accounts_approval_status  TEXT DEFAULT 'pending'
     CHECK (accounts_approval_status IN ('pending','approved','rejected')),
@@ -132,14 +132,14 @@ CREATE INDEX IF NOT EXISTS idx_loan_payment_records_payment_date
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.loan_repayment_schedule (
-  id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  loan_request_id     TEXT NOT NULL
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_request_id     UUID NOT NULL
     REFERENCES public.loan_requests(id) ON DELETE CASCADE,
   installment_number  INTEGER NOT NULL,
   due_date            DATE NOT NULL,
   monthly_amount      NUMERIC(15, 2) NOT NULL,
 
-  payment_record_id   TEXT
+  payment_record_id   UUID
     REFERENCES public.loan_payment_records(id) ON DELETE SET NULL,
   paid_date           DATE,
   paid_amount         NUMERIC(15, 2),
