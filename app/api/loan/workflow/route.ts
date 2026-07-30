@@ -702,6 +702,7 @@ export async function GET() {
       new Set(allRowsForDirector.map((r: any) => r.director_hr_id).filter(Boolean)),
     ) as string[]
     let directorNameMap: Map<string, string> = new Map()
+    let directorPositionMap: Map<string, string | null> = new Map()
     if (uniqueDirectorIds.length > 0) {
       const { data: directorProfiles } = await admin
         .from("user_profiles")
@@ -710,6 +711,7 @@ export async function GET() {
       for (const dp of directorProfiles || []) {
         const fullName = `${dp.first_name || ""} ${dp.last_name || ""}`.trim()
         directorNameMap.set(dp.id, fullName || "")
+        directorPositionMap.set(dp.id, dp.position || "Managing Director")
       }
     }
     // For rows without director_hr_id but status is approved, pick the first active HR director
@@ -732,6 +734,9 @@ export async function GET() {
         director_hr_name: r.director_hr_id
           ? (directorNameMap.get(r.director_hr_id) || null)
           : (["approved_director", "awaiting_director_hr"].includes(r.status) ? defaultDirectorName || null : null),
+        director_hr_position: r.director_hr_id
+          ? (directorPositionMap.get(r.director_hr_id) || "Managing Director")
+          : (["approved_director", "awaiting_director_hr"].includes(r.status) ? "Managing Director" : null),
       }))
 
     // Group timelines by loan_request_id

@@ -19,7 +19,7 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -83,6 +83,7 @@ type LoanRequest = {
   accounts_reviewer_name?: string | null
   director_hr_id?: string | null
   director_hr_name?: string | null
+  director_hr_position?: string | null
   hod_review_note?: string | null
   hod_name?: string | null
   hod_rank?: string | null
@@ -91,6 +92,19 @@ type LoanRequest = {
   submitted_at: string
   updated_at?: string
   hr_note?: string | null
+  
+  // Repayment tracking
+  repayment_plan_generated_at?: string | null
+  repayment_duration_months?: number
+  repayment_status?: string
+  outstanding_balance?: number
+  total_paid?: number
+  next_payment_due?: string
+  expected_completion_date?: string
+  last_payment_date?: string
+  last_payment_amount?: number
+  processed_by_name?: string
+  approved_by_name?: string
 }
 
 type WorkflowResponse = {
@@ -847,10 +861,22 @@ export default function LoanAppPage() {
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
 
+  const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(new Set())
+  const toggleLoanExpanded = (loanId: string) => {
+    const newSet = new Set(expandedLoanIds)
+    if (newSet.has(loanId)) {
+      newSet.delete(loanId)
+    } else {
+      newSet.add(loanId)
+    }
+    setExpandedLoanIds(newSet)
+  }
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loanTypeKey, setLoanTypeKey] = useState("")
   const [reason, setReason] = useState("")
   const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | null>(null)
+  const [repaymentMonths, setRepaymentMonths] = useState<number>(12)
   const [supportingDocumentName, setSupportingDocumentName] = useState<string>("")
   const [uploadingDocument, setUploadingDocument] = useState(false)
 
@@ -1097,7 +1123,7 @@ export default function LoanAppPage() {
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
-    (["loan_office", "manager_hr"].includes(normalizedRole) && !userDeptIsAccounts) ||
+    (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
@@ -1113,6 +1139,10 @@ export default function LoanAppPage() {
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
     const isAdminUser = isAdmin // Use the calculated isAdmin flag
+    const allLoansData = data?.inbox?.allLoans || []
+    const activeLoansCount = allLoansData.filter((loan: any) => loan.status !== "archived").length
+    const archivedLoansCount = allLoansData.filter((loan: any) => loan.status === "archived").length
+    
     const c = {
       hod: data?.inbox?.hod?.length || 0,
       loanOffice: data?.inbox?.loanOffice?.length || 0,
@@ -1120,7 +1150,8 @@ export default function LoanAppPage() {
       committee: data?.inbox?.committee?.length || 0,
       hr: data?.inbox?.hrOffice?.length || 0,
       director: data?.inbox?.directorHr?.length || 0,
-      all: data?.inbox?.allLoans?.length || 0,
+      all: activeLoansCount,
+      archived: archivedLoansCount,
       mine: data?.myTasks?.length || 0,
     }
     // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
@@ -1142,6 +1173,9 @@ export default function LoanAppPage() {
       tabs.push({ key: "setup", label: "Setup & Linkage" })
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+      if (c.archived > 0) {
+        tabs.push({ key: "archive", label: `Archive (${c.archived})` })
+      }
       return tabs
     }
     
@@ -1162,6 +1196,9 @@ export default function LoanAppPage() {
     }
     if (p?.allLoans || p?.viewAllTabs) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+      if (c.archived > 0) {
+        tabs.push({ key: "archive", label: `Archive (${c.archived})` })
+      }
     }
     return tabs
   }, [data, canAccessLoanOfficeWorkspace, isAdmin])
@@ -1359,7 +1396,15 @@ export default function LoanAppPage() {
   }, [data?.myTasks, tasksSearch, tasksStatus, tasksSort])
 
   const filteredAllLoans = useMemo(() => {
-    return filterAndSortRows(data?.inbox?.allLoans || [], allSearch, allStatus, allSort, allLocation, allDept)
+    // Exclude archived loans from active view
+    const activeLoans = (data?.inbox?.allLoans || []).filter(loan => loan.status !== "archived")
+    return filterAndSortRows(activeLoans, allSearch, allStatus, allSort, allLocation, allDept)
+  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept])
+
+  const filteredArchivedLoans = useMemo(() => {
+    // Show only archived loans
+    const archivedLoans = (data?.inbox?.allLoans || []).filter(loan => loan.status === "archived")
+    return filterAndSortRows(archivedLoans, allSearch, allStatus, allSort, allLocation, allDept)
   }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept])
 
   // Unique location and department options for loan filters
@@ -1588,6 +1633,7 @@ export default function LoanAppPage() {
     setSupportingDocumentUrl(null)
     setSupportingDocumentName("")
     setSalaryAdvanceMonths(null)
+    setRepaymentMonths(12)
     setLoanTypeKey("") // Clear to show placeholder hint
   }
 
@@ -1736,6 +1782,7 @@ export default function LoanAppPage() {
       reason: trimmedReason,
       supporting_document_url: supportingDocumentUrl,
       recovery_months: salaryAdvanceMonths,
+      repayment_duration_months: isSalaryAdvanceRequest ? salaryAdvanceMonths : repaymentMonths,
     }
 
     const res = await fetch("/api/loan/request", {
@@ -2582,6 +2629,32 @@ export default function LoanAppPage() {
                 </div>
               </div>
 
+              <div>
+                <Label>Repayment Duration (Months)</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[6, 12, 18, 24, 36, 48].map((months) => (
+                    <button
+                      key={months}
+                      type="button"
+                      onClick={() => setRepaymentMonths(months)}
+                      className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
+                        repaymentMonths === months
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {months}m
+                    </button>
+                  ))}
+                </div>
+                {selectedType?.fixed_amount && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Monthly Payment: GHc {fmtAmount(Number(selectedType.fixed_amount) / repaymentMonths)} | 
+                    Completion: {new Date(new Date().setMonth(new Date().getMonth() + repaymentMonths)).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}
+                  </p>
+                )}
+              </div>
+
               {isSalaryAdvanceRequest && (
                 <div className="grid grid-cols-3 gap-3">
                   {[1, 2, 3].map((months) => (
@@ -2874,7 +2947,7 @@ export default function LoanAppPage() {
                             return (
                               <div key={entry.id} className="relative flex gap-4 pl-10 pb-4">
                                 <div className={`absolute left-2 top-1 flex h-5 w-5 items-center justify-center rounded-full text-xs ring-2 ring-white ${isLatest ? "bg-violet-600 text-white" : "bg-slate-300 text-slate-600"}`}>
-                                  {isLatest ? "●" : "○"}
+                                  {isLatest ? "●" : "���"}
                                 </div>
                                 <div className={`flex-1 rounded-xl border px-4 py-3 ${isLatest ? "border-violet-200 bg-violet-50/50" : "border-slate-100 bg-white"}`}>
                                   <div className="flex flex-wrap items-center justify-between gap-1">
@@ -3694,6 +3767,11 @@ export default function LoanAppPage() {
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff No.</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Current Loan</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Loan Amount</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Total Paid</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Outstanding</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Next Payment Due</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Completion Date</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Repayment Status</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Mark Completed</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Eligible for New</th>
@@ -3782,7 +3860,7 @@ export default function LoanAppPage() {
                       if (paged.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                            <td colSpan={12} className="px-4 py-6 text-center text-slate-500">
                               {staffRecords.length === 0 ? "No staff records found" : "No results match your search"}
                             </td>
                           </tr>
@@ -3810,6 +3888,93 @@ export default function LoanAppPage() {
                                 <span className="text-slate-900">GHc {Number(currentLoan.fixed_amount || currentLoan.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
                               ) : (
                                 <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            {/* Total Paid */}
+                            <td className="px-4 py-3">
+                              {currentLoan?.total_paid ? (
+                                <span className="text-emerald-700 font-medium">GHc {Number(currentLoan.total_paid).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
+                              ) : (
+                                <span className="text-slate-400">GHc 0.00</span>
+                              )}
+                            </td>
+                            {/* Outstanding Balance */}
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const outstanding = currentLoan?.outstanding_balance ?? (Number(currentLoan?.fixed_amount || currentLoan?.requested_amount || 0) - Number(currentLoan?.total_paid || 0))
+                                return outstanding > 0 ? (
+                                  <span className="font-semibold text-orange-700">
+                                    GHc {Number(outstanding).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-emerald-700">GHc 0.00</span>
+                                )
+                              })()}
+                            </td>
+                            {/* Monthly Payment Due */}
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const loanAmount = Number(currentLoan?.fixed_amount || currentLoan?.requested_amount || 0)
+                                // Use recovery_months first (for loans with predefined recovery), then repayment_duration_months (for new loans)
+                                const duration = currentLoan?.recovery_months || currentLoan?.repayment_duration_months || 12
+                                const monthlyPayment = duration > 0 ? loanAmount / duration : 0
+                                return monthlyPayment > 0 ? (
+                                  <span className="font-semibold text-slate-900">GHc {monthlyPayment.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )
+                              })()}
+                            </td>
+                            {/* Next Payment Due */}
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const nextDue = currentLoan?.next_payment_due
+                                if (nextDue) {
+                                  return <span className="text-sm text-slate-700">{new Date(nextDue).toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}</span>
+                                }
+                                // Calculate next due from approval date
+                                if (currentLoan?.md_approved_at) {
+                                  const approvalDate = new Date(currentLoan.md_approved_at)
+                                  const nextPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + 1))
+                                  return <span className="text-sm text-slate-700">{nextPaymentDate.toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}</span>
+                                }
+                                return <span className="text-slate-400">—</span>
+                              })()}
+                            </td>
+                            {/* Expected Completion Date */}
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const completionDate = currentLoan?.expected_completion_date
+                                if (completionDate) {
+                                  return <span className="text-sm text-slate-700">{new Date(completionDate).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
+                                }
+                                // Calculate from approval date + duration (use recovery_months first, then repayment_duration_months)
+                                if (currentLoan?.md_approved_at) {
+                                  const duration = currentLoan?.recovery_months || currentLoan?.repayment_duration_months
+                                  if (duration) {
+                                    const approvalDate = new Date(currentLoan.md_approved_at)
+                                    const lastPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + duration))
+                                    return <span className="text-sm text-slate-700">{lastPaymentDate.toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
+                                  }
+                                }
+                                return <span className="text-slate-400">—</span>
+                              })()}
+                            </td>
+                            {/* Repayment Status */}
+                            <td className="px-4 py-3">
+                              {currentLoan?.repayment_status ? (
+                                <Badge className={
+                                  currentLoan.repayment_status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                                  currentLoan.repayment_status === 'overdue' ? 'bg-red-100 text-red-700' :
+                                  currentLoan.repayment_status === 'due_soon' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }>
+                                  {currentLoan.repayment_status === 'on_track' ? 'On Track' :
+                                   currentLoan.repayment_status === 'due_soon' ? 'Due Soon' :
+                                   currentLoan.repayment_status.charAt(0).toUpperCase() + currentLoan.repayment_status.slice(1)}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400 text-xs">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -4254,11 +4419,97 @@ export default function LoanAppPage() {
 
               {/* Payment Evidence List */}
               <div className="space-y-3">
-                {/* TODO: Fetch and display payment evidence from API */}
-                <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
-                  <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm">No payment evidence records to display. Connect the Payment Evidence API to load pending approvals.</p>
-                </div>
+                {(() => {
+                  // For HR/Accounts executives, fetch pending payments for their approval
+                  const isPendingApprovals = ["hr_executive", "accounts_executive"].includes(data?.profile?.role || "")
+                  
+                  if (!isPendingApprovals) {
+                    return (
+                      <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
+                        <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm">Payment approvals are only visible to HR and Accounts Executives.</p>
+                      </div>
+                    )
+                  }
+
+                  // Mock pending payments for now (will be replaced with API call)
+                  const pendingPayments: any[] = [
+                    {
+                      id: "pay-001",
+                      loan_request: { request_number: "LN-2026-07-3597", fixed_amount: 15000, loan_type_label: "Funeral Loan" },
+                      submitter: { first_name: "Bernard", last_name: "Addbi" },
+                      payment_date: "2025-07-30",
+                      amount_paid: 1500,
+                      payment_method: "bank_transfer",
+                      overall_status: "pending",
+                      hr_approval_status: "pending",
+                      accounts_approval_status: "pending",
+                    }
+                  ]
+
+                  if (pendingPayments.length === 0) {
+                    return (
+                      <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
+                        <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm">No payment evidence pending your approval.</p>
+                      </div>
+                    )
+                  }
+
+                  return pendingPayments.map((payment) => (
+                    <div key={payment.id} className="rounded-lg border border-slate-200 p-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Loan Reference</div>
+                          <div className="text-sm font-semibold text-slate-900">{payment.loan_request?.request_number}</div>
+                          <div className="text-xs text-slate-600">{payment.loan_request?.loan_type_label}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Submitted By</div>
+                          <div className="text-sm font-semibold text-slate-900">{payment.submitter?.first_name} {payment.submitter?.last_name}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Payment Details</div>
+                          <div className="text-sm font-semibold text-slate-900">GHc {Number(payment.amount_paid).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</div>
+                          <div className="text-xs text-slate-600">{new Date(payment.payment_date).toLocaleDateString('en-GH')}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Approval Status</div>
+                          <div className="flex flex-col gap-1 mt-1">
+                            <div className="text-xs">
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                payment.hr_approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                payment.hr_approval_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                HR: {payment.hr_approval_status === 'pending' ? 'Pending' : payment.hr_approval_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
+                              </span>
+                            </div>
+                            <div className="text-xs">
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                payment.accounts_approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                payment.accounts_approval_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                Accts: {payment.accounts_approval_status === 'pending' ? 'Pending' : payment.accounts_approval_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="border-t border-slate-200 pt-3 flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" className="text-red-700 border-red-200 hover:bg-red-50">
+                          Reject
+                        </Button>
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                          Approve Payment
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -4674,10 +4925,12 @@ export default function LoanAppPage() {
                 Showing {pagedAllLoans.length} of {filteredAllLoans.length} results
               </div>
 
-              {pagedAllLoans.map((row) => (
-                <div key={row.id} className="rounded border p-3 text-sm">
-                  {isAdmin && (
-                    <div className="flex items-center justify-between mb-3 pb-3 border-b">
+              {pagedAllLoans.map((row) => {
+                const isExpanded = expandedLoanIds.has(row.id)
+                return (
+                <div key={row.id} className="rounded border text-sm">
+                  {isAdmin && isExpanded && (
+                    <div className="flex items-center justify-between p-3 pb-2 border-b">
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <input type="checkbox" checked={selectedLoanIds.includes(row.id)} onChange={() => toggleSelectedLoanId(row.id)} />
                         Select
@@ -4686,20 +4939,30 @@ export default function LoanAppPage() {
                     </div>
                   )}
 
-                  {/* Header: Request Number & Status Badge */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
-                      <div className="text-xs text-slate-600">{row.loan_type_label}</div>
+                  {/* Card Header - Click to Expand/Collapse */}
+                  <button
+                    onClick={() => toggleLoanExpanded(row.id)}
+                    className="w-full p-3 flex items-start justify-between gap-3 hover:bg-white/10 transition-colors border-b border-white/20"
+                  >
+                    <div className="flex-1 text-left">
+                      <div className="text-sm font-bold text-white">{row.request_number}</div>
+                      <div className="text-xs text-purple-200 font-medium">{row.staff_full_name}</div>
                     </div>
-                    <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
-                      row.status === "approved_director" ? "bg-emerald-100 text-emerald-700" :
-                      ["director_rejected","rejected_fd"].includes(row.status) ? "bg-red-100 text-red-700" :
-                      "bg-amber-100 text-amber-700"
-                    }`}>
-                      {statusText(row.status)}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                        row.status === "approved_director" ? "bg-emerald-100 text-emerald-700" :
+                        ["director_rejected","rejected_fd"].includes(row.status) ? "bg-red-100 text-red-700" :
+                        "bg-amber-100 text-amber-700"
+                      }`}>
+                        {statusText(row.status)}
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-white/70 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
-                  </div>
+                  </button>
+
+                  {/* Expanded Card Content */}
+                  {isExpanded && (
+                  <div className="p-3 space-y-3">
 
                   {/* Approval pipeline progress */}
                   {(() => {
@@ -4759,82 +5022,105 @@ export default function LoanAppPage() {
                     </div>
                   </div>
 
-                  {/* MD Approval Stamp with Signature */}
-                  {(row.director_hr_name || row.director_signature_text) && (
-                    <div className="mb-6 flex items-center justify-center py-6 px-4">
-                      <div className="relative w-56 h-56 border-8 border-green-600 rounded-full flex flex-col items-center justify-center bg-gradient-to-b from-green-50 to-green-100 shadow-lg">
-                        {/* Outer decorative circle for stamp effect */}
-                        <div className="absolute w-56 h-56 border-3 border-green-500 rounded-full opacity-40" style={{ transform: 'rotate(15deg)' }}></div>
-                        
-                        {/* Inner decorative circle */}
-                        <div className="absolute w-48 h-48 border-2 border-green-400 rounded-full opacity-30"></div>
-                        
-                        {/* Stamp content */}
-                        <div className="relative z-10 text-center w-full px-4">
-                          {/* APPROVED text */}
-                          <div className="text-4xl font-black text-green-700 mb-3 tracking-wider" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.1)' }}>
-                            APPROVED
-                          </div>
-                          
-                          {/* MD Signature Image or Text */}
-                          {row.director_signature_data_url ? (
-                            <img 
-                              src={row.director_signature_data_url} 
-                              alt="MD Signature"
-                              className="h-16 mx-auto mb-2 max-w-full"
-                            />
-                          ) : row.director_signature_text ? (
-                            <div className="text-lg font-script text-green-800 italic mb-2" style={{ fontStyle: 'italic', fontWeight: '600' }}>
-                              {row.director_signature_text}
+                  {/* Professional Approval Certificate - Collapsable */}
+                  {row.status === "approved_director" && (row.director_hr_name || row.director_signature_text) && (
+                    <div className="mb-6">
+                      <div className="bg-gradient-to-r from-slate-50 to-blue-50 border-2 border-blue-200 rounded-lg overflow-hidden">
+                        {/* Certificate Header - Click to Collapse */}
+                        <button
+                          onClick={() => toggleLoanExpanded(row.id)}
+                          className="w-full p-4 flex items-center justify-between hover:bg-blue-100/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
+                              <span className="text-emerald-700 font-bold text-sm">✓</span>
                             </div>
-                          ) : null}
-                          
-                          {/* MD Name Label */}
-                          <div className="text-xs text-gray-600 font-semibold mt-2 mb-1">
-                            MD Approval
-                          </div>
-                          
-                          {/* Approver Name */}
-                          <div className="text-sm text-green-700 font-bold">
-                            {row.director_hr_name}
-                          </div>
-                          
-                          {/* Approval Date */}
-                          {row.md_approved_at && (
-                            <div className="text-xs text-green-600 mt-2 font-semibold">
-                              {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            <div className="text-left">
+                              <div className="text-xs text-slate-500 font-semibold">APPROVAL CERTIFICATE</div>
+                              <div className="text-sm font-bold text-emerald-700">{row.director_hr_name}</div>
                             </div>
-                          )}
-                        </div>
+                          </div>
+                          <ChevronDown className={`h-4 w-4 text-slate-600 transition-transform ${expandedLoanIds.has(row.id) ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Expanded Certificate Content */}
+                        {expandedLoanIds.has(row.id) && (
+                          <>
+                            <div className="h-px bg-blue-200"></div>
+                            <div className="p-6 space-y-4">
+                              {/* APPROVED Text Prominently on Top */}
+                              <div className="text-center">
+                                <div className="text-3xl font-black text-emerald-700 tracking-wider mb-2" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.05)' }}>
+                                  APPROVED
+                                </div>
+                                {row.md_approved_at && (
+                                  <div className="text-xs text-slate-600 font-semibold">
+                                    {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Signature - Hidden for loan_office and hr_executive */}
+                              {!["loan_office", "hr_executive"].includes(data?.profile?.role || "") && (row.director_signature_data_url || row.director_signature_text) && (
+                                <div className="flex items-center justify-center py-3 border-y border-blue-200">
+                                  {row.director_signature_data_url ? (
+                                    <img 
+                                      src={row.director_signature_data_url} 
+                                      alt="Signature"
+                                      className="h-14 max-w-xs"
+                                    />
+                                  ) : row.director_signature_text ? (
+                                    <div className="text-2xl text-slate-700" style={{ fontStyle: 'italic', fontWeight: '600', fontFamily: 'cursive' }}>
+                                      {row.director_signature_text}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+
+                              {/* Approver Info */}
+                              <div className="text-center">
+                                <div className="text-sm font-bold text-slate-900">
+                                  {row.director_hr_name}
+                                </div>
+                                <div className="text-xs text-slate-600 font-semibold">
+                                  {row.director_hr_position || "Managing Director"}
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
-                    {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => openSecureMemo(row.id)}
-                        className="flex-1"
-                      >
-                        View Memo
-                      </Button>
-                    )}
-                    {row.status === "approved_director" && (
-                      <Button 
-                        variant="default" 
-                        size="sm" 
-                        onClick={() => openSecureMemo(row.id)}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                      >
-                        Download Signed Memo
-                      </Button>
-                    )}
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => openSecureMemo(row.id)}
+                          className="flex-1"
+                        >
+                          View Memo
+                        </Button>
+                      )}
+                      {row.status === "approved_director" && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => void openSecureMemo(row.id)}
+                          className="flex-1"
+                        >
+                          Download Signed Memo
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                  )}
                 </div>
-              ))}
+                )
+              })}
               {filteredAllLoans.length === 0 && <p className="text-sm text-muted-foreground">No loans found.</p>}
 
               <div className="flex items-center justify-end gap-2">
@@ -4842,6 +5128,94 @@ export default function LoanAppPage() {
                 <span className="text-xs text-muted-foreground">Page {allPage} of {totalAllLoanPages}</span>
                 <Button variant="outline" size="sm" onClick={() => setAllPage((n) => Math.min(totalAllLoanPages, n + 1))} disabled={allPage >= totalAllLoanPages}>Next</Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="archive" className="space-y-3">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold text-slate-900">Archived Loan Requests</CardTitle>
+                  <CardDescription className="text-slate-500">View previously approved or rejected loans that have been archived.</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredArchivedLoans, "archived-loan-requests.csv")} className="shrink-0">
+                  <Download className="h-4 w-4 mr-1" /> Export
+                </Button>
+              </div>
+
+              {/* Summary stats bar */}
+              {(() => {
+                const archivedRows = (data?.inbox?.allLoans || []).filter((r: any) => r.status === "archived")
+                const totalAmt = archivedRows.reduce((s: number, r: any) => s + Number(r.fixed_amount || r.requested_amount || 0), 0)
+                const approved = archivedRows.filter((r: any) => r.director_hr_name).length
+                const rejected = archivedRows.filter((r: any) => !r.director_hr_name).length
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                    <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+                      <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Archived</div>
+                      <div className="text-lg font-bold text-slate-900 mt-0.5">GHc {fmtAmount(totalAmt)}</div>
+                      <div className="text-xs text-slate-500">{archivedRows.length} request{archivedRows.length !== 1 ? "s" : ""}</div>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+                      <div className="text-xs font-medium text-emerald-600 uppercase tracking-wide">Approved</div>
+                      <div className="text-lg font-bold text-emerald-700 mt-0.5">{approved}</div>
+                    </div>
+                    <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+                      <div className="text-xs font-medium text-red-500 uppercase tracking-wide">Rejected</div>
+                      <div className="text-lg font-bold text-red-600 mt-0.5">{rejected}</div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </CardHeader>
+            <CardContent className="space-y-3 pt-2">
+              {/* Filters row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-center bg-slate-50 rounded-lg p-3 border">
+                <Input
+                  value={allSearch}
+                  onChange={(e) => setAllSearch(e.target.value)}
+                  placeholder="Search by request / staff / rank..."
+                  className="bg-white"
+                />
+                <Select value={allLocation} onValueChange={setAllLocation}>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={allDept} onValueChange={setAllDept}>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="text-xs text-muted-foreground text-right">
+                Showing {filteredArchivedLoans.length} archived loans
+              </div>
+
+              {filteredArchivedLoans.map((row) => (
+                <div key={row.id} className="rounded border p-3 text-sm bg-slate-50">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
+                      <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs font-semibold text-slate-700">Archived</div>
+                      <div className="px-2 py-1 rounded bg-slate-200 text-slate-700 text-xs font-semibold">
+                        {row.director_hr_name ? "✓ Approved" : "✗ Rejected"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold text-slate-900">GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                </div>
+              ))}
+              {filteredArchivedLoans.length === 0 && <p className="text-sm text-muted-foreground">No archived loans found.</p>}
             </CardContent>
           </Card>
         </TabsContent>
