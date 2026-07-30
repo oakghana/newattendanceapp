@@ -1,16 +1,37 @@
-import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { normalizeRole } from "@/lib/loan-workflow"
 
 export async function PUT(request: NextRequest) {
   try {
-    const { user, error: authError } = await createClientAndGetUser()
+    const supabase = await createClient()
+    const admin = await createAdminClient()
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const admin = createAdminClient()
+    // Get user profile to verify permissions
+    const { data: userProfile } = await admin
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    const userRole = normalizeRole((userProfile as any)?.role || "")
+    const isAuthorized = ["hr_executive", "accounts_executive", "loan_office", "admin"].includes(userRole)
+
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: "You do not have permission to restore loans" },
+        { status: 403 }
+      )
+    }
 
     const body = await request.json()
     const { loanId, newStatus } = body
@@ -40,23 +61,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         { error: "Only archived loans can be restored" },
         { status: 400 }
-      )
-    }
-
-    // Verify user has permission (HR executive or accounts executive)
-    const { data: userProfile } = await admin
-      .from("user_profiles")
-      .select("role")
-      .eq("id", user.data.user.id)
-      .maybeSingle()
-
-    const userRole = (userProfile as any)?.role || ""
-    const isAuthorized = ["hr_executive", "accounts_executive", "loan_office", "admin"].includes(userRole)
-
-    if (!isAuthorized) {
-      return NextResponse.json(
-        { error: "You do not have permission to restore loans" },
-        { status: 403 }
       )
     }
 
