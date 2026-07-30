@@ -35,6 +35,7 @@ type LoanType = {
   default_recovery_months?: number | null
   fixed_amount: number
   max_amount?: number | null
+  is_active?: boolean
 }
 
 type TimelineEntry = {
@@ -106,11 +107,20 @@ type LoanRequest = {
   last_payment_amount?: number
   processed_by_name?: string
   approved_by_name?: string
+  hire_date?: string | null
+  category?: string | null
+  memo_cc?: string | null
+  md_approved_at?: string | null
+  department_name?: string | null
+  loan_label?: string | null
+  category_name?: string | null
+  user?: { email?: string | null; [key: string]: any } | null
 }
 
 type WorkflowResponse = {
   degraded: boolean
   warning?: string
+  error?: string
   profile: {
     id: string
     firstName: string
@@ -178,7 +188,7 @@ type LookupPayload = {
     assigned_location_id: string | null
     geofence_locations?: { name?: string | null; address?: string | null; districts?: { name?: string | null } | null } | null
   }>
-  hods: Array<{ id: string; first_name: string; last_name: string; employee_id: string | null; position: string | null; role: string }>
+  hods: Array<{ id: string; first_name: string; last_name: string; employee_id: string | null; position: string | null; role: string; email?: string | null }>
   linkages: Array<{ id: string; staff_user_id: string; hod_user_id: string }>
   linkageRequests: Array<{
     id: string
@@ -861,6 +871,7 @@ export default function LoanAppPage() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<string>("")
 
   const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(new Set())
   const toggleLoanExpanded = (loanId: string) => {
@@ -1165,9 +1176,11 @@ export default function LoanAppPage() {
       mine: data?.myTasks?.length || 0,
     }
     // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
+    const isHrExecutive = !isAdminUser && !!p?.directorHr
+    const isAccountsExecutive = !isAdminUser && !!p?.accounts
     const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
-    const tabs = [{ key: "staff", label: "My Loans" }]
+    const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: "My Loans" }]
     // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
 
@@ -1178,11 +1191,7 @@ export default function LoanAppPage() {
 
     // Repayment Tracking tab: only for Loan Office and Accounts executives
     if (canAccessLoanOfficeWorkspace || isAccountsExecutive) {
-      tabs.push({ 
-        key: "repayment-tracking", 
-        label: "Repayment Tracking",
-        href: "/dashboard/loan-app/repayment-tracking"
-      })
+      tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
     // Analytics tab for Loan Office and Accounts executives
@@ -1747,7 +1756,7 @@ export default function LoanAppPage() {
       })
 
       // Refetch data to update the UI
-      mutate()
+      loadData({ silent: true })
     } catch (error) {
       console.error("Error restoring loan:", error)
       toast({
@@ -1840,7 +1849,7 @@ export default function LoanAppPage() {
         })
       }
 
-      mutate()
+      loadData({ silent: true })
     } catch (error) {
       console.error("Error restoring selected loans:", error)
       toast({
@@ -1917,7 +1926,7 @@ export default function LoanAppPage() {
       }
 
       // Refetch data to update the UI
-      mutate()
+      loadData({ silent: true })
     } catch (error) {
       console.error("Error restoring all loans:", error)
       toast({
@@ -2604,6 +2613,7 @@ export default function LoanAppPage() {
   }
 
       const generateMemoPdf = async (row: LoanRequest, memoText: string, sigText: string) => {
+        const { jsPDF } = await import("jspdf")
         const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
         const pageWidth = doc.internal.pageSize.getWidth()
         const pageHeight = doc.internal.pageSize.getHeight()
@@ -2875,7 +2885,7 @@ export default function LoanAppPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue={defaultTab} className="space-y-4">
+      <Tabs value={activeTab || defaultTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-2 shadow-sm backdrop-blur">
           {visibleTabs.map((tab) =>
             tab.href ? (
@@ -4466,7 +4476,7 @@ export default function LoanAppPage() {
                             .filter((loc) => loc && typeof loc === "string")
                         )
                       ).map((location) => (
-                        <option key={location} value={location}>{location}</option>
+                        <option key={location} value={location ?? ""}>{location}</option>
                       ))}
                     </select>
                   </div>
@@ -4500,7 +4510,7 @@ export default function LoanAppPage() {
                       )
                         .sort()
                         .map((loanType) => (
-                          <option key={loanType} value={loanType}>{loanType}</option>
+                          <option key={loanType} value={loanType ?? ""}>{loanType}</option>
                         ))}
                     </select>
                   </div>
@@ -4517,7 +4527,7 @@ export default function LoanAppPage() {
                       )
                         .sort()
                         .map((category) => (
-                          <option key={category} value={category}>{category}</option>
+                          <option key={category} value={category ?? ""}>{category}</option>
                         ))}
                     </select>
                   </div>
@@ -7043,7 +7053,7 @@ export default function LoanAppPage() {
                     signature_text: sigText,
                     signature_data_url: sigUrl,
                     director_letter: modalMemoText,
-                    note: memoReviewModal.row.status === "awaiting_hr_executives" ? "HR Executive decision via memo review" : "Director HR final decision via memo review",
+                    note: memoReviewModal.row?.status === "awaiting_hr_executives" ? "HR Executive decision via memo review" : "Director HR final decision via memo review",
                   })
                   setMemoReviewModal((s) => ({ ...s, open: false }))
                 }}
