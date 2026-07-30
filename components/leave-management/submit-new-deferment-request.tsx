@@ -113,15 +113,21 @@ export function SubmitNewDefermentRequest({
       }
 
       setSuccess(true)
+      // Keep success message visible for 3 seconds before closing
       setTimeout(() => {
         setSelectedLeave(null)
         setReason('')
         setSearchQuery('')
         onClose()
         onSuccess?.()
-      }, 1500)
+      }, 3000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred while submitting your deferment request'
+      setError(errorMessage)
+      // Auto-clear error after 5 seconds
+      setTimeout(() => {
+        setError(null)
+      }, 5000)
     } finally {
       setIsLoading(false)
     }
@@ -158,19 +164,19 @@ export function SubmitNewDefermentRequest({
         <div className="space-y-6 py-4">
           {/* Success State */}
           {success && (
-            <Alert className="border-green-200 bg-green-50">
+            <Alert className="border-green-200 bg-green-50 animate-in fade-in">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">
-                Deferment request submitted successfully! Awaiting HOD/RM endorsement.
+              <AlertDescription className="text-green-800 font-medium">
+                ✓ Deferment request submitted successfully! Your request has been recorded and will be reviewed by the appropriate authority for endorsement.
               </AlertDescription>
             </Alert>
           )}
 
           {/* Error State */}
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="animate-in fade-in">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription className="font-medium">{error}</AlertDescription>
             </Alert>
           )}
 

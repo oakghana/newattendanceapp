@@ -2225,17 +2225,19 @@ export function LeaveManagementClient({
                     Deferment &amp; Recall Approvals
                   </button>
                 )}
-                <button
-                  onClick={() => setDefermentSubTab("submit")}
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                    defermentSubTab === "submit"
-                      ? "bg-white text-amber-700 shadow-sm"
-                      : "text-amber-700/70 hover:text-amber-800"
-                  }`}
-                >
-                  <Plus className="h-4 w-4" />
-                  Submit New Request
-                </button>
+                {isManagerView && (
+                  <button
+                    onClick={() => setDefermentSubTab("submit")}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      defermentSubTab === "submit"
+                        ? "bg-white text-amber-700 shadow-sm"
+                        : "text-amber-700/70 hover:text-amber-800"
+                    }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Submit New Request
+                  </button>
+                )}
               </div>
 
               {/* Approvals Sub-Tab */}
@@ -2629,17 +2631,19 @@ export function LeaveManagementClient({
                     Deferment &amp; Recall Approvals
                   </button>
                 )}
-                <button
-                  onClick={() => setRecallSubTab("submit")}
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                    recallSubTab === "submit"
-                      ? "bg-white text-rose-700 shadow-sm"
-                      : "text-rose-700/70 hover:text-rose-800"
-                  }`}
-                >
-                  <Plus className="h-4 w-4" />
-                  Submit New Request
-                </button>
+                {isManagerView && (
+                  <button
+                    onClick={() => setRecallSubTab("submit")}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      recallSubTab === "submit"
+                        ? "bg-white text-rose-700 shadow-sm"
+                        : "text-rose-700/70 hover:text-rose-800"
+                    }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Submit New Request
+                  </button>
+                )}
               </div>
 
               {/* Approvals Sub-Tab */}
