@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { trackLeaveResumption } from "@/lib/leave-resumption-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -810,6 +811,14 @@ export async function POST(request: NextRequest) {
     if (isLateArrival) {
       const arrivalTime = `${checkInHour}:${checkInMinutes.toString().padStart(2, '0')}`
       checkInMessage = `Late arrival detected - You checked in at ${arrivalTime} (after 9:00 AM). ${checkInMessage}`
+    }
+
+    // Track leave resumption if applicable
+    try {
+      await trackLeaveResumption(user.id, new Date())
+    } catch (resumptionError) {
+      console.error('[v0] Non-critical error tracking leave resumption:', resumptionError)
+      // Don't fail the entire check-in if resumption tracking fails
     }
 
     return NextResponse.json({ 

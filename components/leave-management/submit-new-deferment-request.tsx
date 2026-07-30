@@ -90,6 +90,11 @@ export function SubmitNewDefermentRequest({
       return
     }
 
+    if (!reason || reason.trim().length === 0) {
+      setError('Reason for deferment is required. Please provide a detailed explanation.')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
     setSuccess(false)
@@ -156,8 +161,8 @@ export function SubmitNewDefermentRequest({
           <DialogTitle className="text-2xl font-bold">Submit New Deferment Request</DialogTitle>
           <DialogDescription>
             {isStaff
-              ? 'Select one of your approved annual leave requests to defer to a future year'
-              : 'Select a staff member\'s approved leave to defer to a future year'}
+              ? 'Select one of your approved annual leave requests to defer to a future date'
+              : 'Select a staff member\'s approved leave to defer to a future date'}
           </DialogDescription>
         </DialogHeader>
 
@@ -304,17 +309,17 @@ export function SubmitNewDefermentRequest({
           {/* Reason for Deferment */}
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-slate-700">
-              Reason for Deferment
+              Reason for Deferment <span className="text-red-500 ml-1">*</span>
             </label>
             <Textarea
-              placeholder="Explain why this leave is being deferred (optional)..."
+              placeholder="Please provide a detailed reason for this deferment request..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               disabled={isLoading}
               className="resize-none"
               rows={3}
             />
-            <p className="text-xs text-slate-500">Optional - provide context for the deferment</p>
+            <p className="text-xs text-slate-600">Required - provide a clear explanation for the deferment</p>
           </div>
 
           {/* Info Box */}
