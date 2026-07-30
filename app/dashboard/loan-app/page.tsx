@@ -1655,7 +1655,12 @@ export default function LoanAppPage() {
     const shouldShowLoader = !options?.silent
     if (shouldShowLoader) setLoading(true)
     try {
-      const res = await fetch("/api/loan/workflow", { cache: "no-store" })
+      // Add 10-second timeout to prevent infinite loading
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      
+      const res = await fetch("/api/loan/workflow", { cache: "no-store", signal: controller.signal })
+      clearTimeout(timeoutId)
       const result = await res.json()
       
       // Check if result is an error object (has only error/code/message) rather than valid WorkflowResponse
@@ -1683,7 +1688,11 @@ export default function LoanAppPage() {
 
       // Don't auto-set loan type - let user select with placeholder hint
     } catch (e: any) {
-      toast({ title: "Loan Module Error", description: e?.message || "Failed to load", variant: "destructive" })
+      const errorMessage = e?.name === "AbortError" 
+        ? "Request timed out - server is not responding" 
+        : e?.message || "Failed to load"
+      console.log("[v0] Loan workflow fetch error:", e)
+      toast({ title: "Loan Module Error", description: errorMessage, variant: "destructive" })
       setData(null) // Ensure data is cleared on error
     } finally {
       if (shouldShowLoader) setLoading(false)
@@ -1692,6 +1701,16 @@ export default function LoanAppPage() {
 
   useEffect(() => {
     void loadData()
+    
+    // If data hasn't loaded within 8 seconds, auto-dismiss loader to prevent infinite spinner
+    const timeout = setTimeout(() => {
+      if (loading && !data) {
+        console.log("[v0] Loan workflow fetch taking >8s, setting timeout fallback")
+        setLoading(false)
+      }
+    }, 8000)
+    
+    return () => clearTimeout(timeout)
   }, [])
 
   useEffect(() => {
