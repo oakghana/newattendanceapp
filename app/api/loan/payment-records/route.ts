@@ -141,10 +141,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Get HR and Accounts executives to notify them
+    // Include both UI role ("accounts_executive") and database role ("accounts")
     const { data: executives } = await admin
       .from("user_profiles")
       .select("id, email, first_name, last_name")
-      .in("role", ["hr_executive", "accounts_executive"])
+      .in("role", ["hr_executive", "accounts_executive", "accounts"])
 
     // Send notifications to executives about pending approval
     if (executives && executives.length > 0) {

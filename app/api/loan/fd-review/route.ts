@@ -32,7 +32,8 @@ export async function GET(request: Request) {
     }
 
     const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const isAccountsExecutive = roleNorm === "accounts_executive"
+    // Accept both database role ("accounts") and UI role ("accounts_executive")
+    const isAccountsExecutive = roleNorm === "accounts_executive" || roleNorm === "accounts"
     const isLoanOffice = roleNorm === "loan_office"
     const isAdmin = roleNorm === "admin"
 
@@ -215,7 +216,8 @@ export async function PATCH(request: Request) {
       .single()
 
     const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (roleNorm !== "accounts_executive" && roleNorm !== "admin") {
+    // Accept both database role ("accounts") and UI role ("accounts_executive")
+    if (roleNorm !== "accounts_executive" && roleNorm !== "accounts" && roleNorm !== "admin") {
       return NextResponse.json({ error: "Only Accounts Executive can review FD requests" }, { status: 403 })
     }
 

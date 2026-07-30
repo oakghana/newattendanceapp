@@ -34,7 +34,8 @@ export async function PUT(req: NextRequest) {
       .single();
 
     const isHRExecutive = profile?.role === "hr_executive";
-    const isAccountsExecutive = profile?.role === "accounts_executive";
+    // Accept both database role ("accounts") and UI role ("accounts_executive")
+    const isAccountsExecutive = profile?.role === "accounts_executive" || profile?.role === "accounts";
 
     if (!isHRExecutive && !isAccountsExecutive) {
       return NextResponse.json(
@@ -173,7 +174,8 @@ export async function GET(req: NextRequest) {
       .single();
 
     const isHRExecutive = profile?.role === "hr_executive";
-    const isAccountsExecutive = profile?.role === "accounts_executive";
+    // Accept both database role ("accounts") and UI role ("accounts_executive")
+    const isAccountsExecutive = profile?.role === "accounts_executive" || profile?.role === "accounts";
 
     if (!isHRExecutive && !isAccountsExecutive) {
       return NextResponse.json(
