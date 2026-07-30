@@ -701,7 +701,7 @@ export function StaffManagement() {
                   <SelectItem value="it-admin">IT-Admin</SelectItem>
                   <SelectItem value="department_head">Department Head</SelectItem>
                   <SelectItem value="audit_staff">Audit Staff</SelectItem>
-                  <SelectItem value="accounts">Accounts</SelectItem>
+                  <SelectItem value="accounts_executive">Accounts Executive</SelectItem>
                   <SelectItem value="loan_office">Loan Office</SelectItem>
                   <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
                   <SelectItem value="manager_hr">Manager HR</SelectItem>
@@ -862,7 +862,7 @@ export function StaffManagement() {
                                 <SelectItem value="department_head">Department Head</SelectItem>
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
+                                {currentUserRole === "admin" && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}

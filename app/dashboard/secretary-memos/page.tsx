@@ -14,8 +14,10 @@ export default async function SecretaryMemosPage() {
     .eq("id", user.id)
     .maybeSingle()
 
-  // The proxy has already validated the role — just render the client without redirects
-  if (!profile || profile.role !== "secretary") redirect("/auth/login")
+  // Allow secretary and admin roles to access memo console
+  if (!profile || (profile.role !== "secretary" && profile.role !== "admin" && profile.role !== "it-admin")) {
+    redirect("/auth/login")
+  }
 
   // Fetch approved loan memos (HR Executive approved stage and above)
   // Includes: awaiting_director_hr (HR signed, awaiting MD), approved_director (MD approved), staff_receiving_funds, partially_recovered
