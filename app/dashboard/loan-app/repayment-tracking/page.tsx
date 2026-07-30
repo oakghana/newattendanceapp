@@ -2,35 +2,52 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useUser } from "@/lib/supabase/hooks"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Calendar, Download, Eye } from "lucide-react"
+import { ArrowLeft, Calendar, Download, Eye, Loader2 } from "lucide-react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isToday, isSameMonth, addMonths, subMonths } from "date-fns"
 
 export default function RepaymentTrackingPage() {
   const router = useRouter()
-  const { data: sessionData, isLoading } = useUser()
-  const user = sessionData?.user
-  const profile = sessionData?.profile
 
   const [repaymentData, setRepaymentData] = useState<any[]>([])
   const [balanceData, setBalanceData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [authorized, setAuthorized] = useState<boolean | null>(null)
 
-  // Redirect if user is not loan office or admin
+  // Check authorization on mount
   useEffect(() => {
-    if (!isLoading && (!profile || !["loan_office", "admin"].includes(profile.role))) {
-      router.push("/dashboard/loan-app")
+    const checkAuthorization = async () => {
+      try {
+        const response = await fetch("/api/auth/me")
+        if (response.ok) {
+          const { profile } = await response.json()
+          if (profile && ["loan_office", "accounts_executive", "admin"].includes(profile.role)) {
+            setAuthorized(true)
+          } else {
+            setAuthorized(false)
+            router.push("/dashboard/loan-app")
+          }
+        } else {
+          setAuthorized(false)
+          router.push("/auth/login")
+        }
+      } catch (err) {
+        console.error("[v0] Auth check error:", err)
+        setAuthorized(false)
+        router.push("/auth/login")
+      }
     }
-  }, [isLoading, profile, router])
+
+    checkAuthorization()
+  }, [router])
 
   // Fetch repayment schedule data
   useEffect(() => {
-    if (!user) return
+    if (authorized !== true) return
 
     const fetchRepaymentData = async () => {
       setLoading(true)
@@ -62,17 +79,17 @@ export default function RepaymentTrackingPage() {
 
     fetchRepaymentData()
     fetchBalanceData()
-  }, [user])
+  }, [authorized])
 
-  if (isLoading) {
+  if (authorized === null || loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-slate-600">Loading...</div>
+        <Loader2 className="h-8 w-8 text-slate-400 animate-spin" />
       </div>
     )
   }
 
-  if (!profile || !["loan_office", "admin"].includes(profile.role)) {
+  if (authorized !== true) {
     return null
   }
 
