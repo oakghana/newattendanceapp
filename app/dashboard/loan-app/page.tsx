@@ -2849,8 +2849,8 @@ export default function LoanAppPage() {
 
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-2 shadow-sm backdrop-blur">
-          {visibleTabs.map((tab) => (
-            {tab.href ? (
+          {visibleTabs.map((tab) =>
+            tab.href ? (
               <a
                 key={tab.key}
                 href={tab.href}
@@ -2862,8 +2862,8 @@ export default function LoanAppPage() {
               <TabsTrigger key={tab.key} value={tab.key} className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
                 {tab.label}
               </TabsTrigger>
-            )}
-          ))}
+            )
+          )}
         </TabsList>
 
         <TabsContent value="staff" className="space-y-4">
