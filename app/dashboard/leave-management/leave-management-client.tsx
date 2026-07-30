@@ -2251,6 +2251,18 @@ export function LeaveManagementClient({
               {/* Tracking Sub-Tab */}
               {defermentSubTab === "tracking" && (
               <div className="space-y-6">
+              
+              {/* Staff Information Banner */}
+              {!isManagerView && (
+                <Alert className="border-blue-200 bg-blue-50">
+                  <AlertCircle className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-900 ml-2">
+                    <span className="font-semibold">Note:</span> Leave deferment requests can only be submitted by Department Heads, Regional Managers, and Management. 
+                    Please contact your HOD/RM if you need to defer your leave.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {/* Deferment Requests Tracker */}
               <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
                 <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
@@ -2657,6 +2669,18 @@ export function LeaveManagementClient({
               {/* Tracking Sub-Tab */}
               {recallSubTab === "tracking" && (
               <div className="space-y-6">
+              
+              {/* Staff Information Banner */}
+              {!isManagerView && (
+                <Alert className="border-blue-200 bg-blue-50">
+                  <AlertCircle className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-900 ml-2">
+                    <span className="font-semibold">Note:</span> Leave recall requests can only be submitted by Department Heads, Regional Managers, and Management. 
+                    Please contact your HOD/RM if you need to recall your leave.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {/* Recall Requests Tracker */}
               <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
                 <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">
