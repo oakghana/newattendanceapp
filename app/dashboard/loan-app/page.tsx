@@ -1125,6 +1125,10 @@ export default function LoanAppPage() {
   const visibleTabs = useMemo(() => {
     const p = data?.permissions
     const isAdminUser = isAdmin // Use the calculated isAdmin flag
+    const allLoansData = data?.inbox?.allLoans || []
+    const activeLoansCount = allLoansData.filter((loan: any) => loan.status !== "archived").length
+    const archivedLoansCount = allLoansData.filter((loan: any) => loan.status === "archived").length
+    
     const c = {
       hod: data?.inbox?.hod?.length || 0,
       loanOffice: data?.inbox?.loanOffice?.length || 0,
@@ -1132,7 +1136,8 @@ export default function LoanAppPage() {
       committee: data?.inbox?.committee?.length || 0,
       hr: data?.inbox?.hrOffice?.length || 0,
       director: data?.inbox?.directorHr?.length || 0,
-      all: data?.inbox?.allLoans?.length || 0,
+      all: activeLoansCount,
+      archived: archivedLoansCount,
       mine: data?.myTasks?.length || 0,
     }
     // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
@@ -1154,6 +1159,9 @@ export default function LoanAppPage() {
       tabs.push({ key: "setup", label: "Setup & Linkage" })
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+      if (c.archived > 0) {
+        tabs.push({ key: "archive", label: `Archive (${c.archived})` })
+      }
       return tabs
     }
     
@@ -1174,6 +1182,9 @@ export default function LoanAppPage() {
     }
     if (p?.allLoans || p?.viewAllTabs) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
+      if (c.archived > 0) {
+        tabs.push({ key: "archive", label: `Archive (${c.archived})` })
+      }
     }
     return tabs
   }, [data, canAccessLoanOfficeWorkspace, isAdmin])
@@ -1371,7 +1382,15 @@ export default function LoanAppPage() {
   }, [data?.myTasks, tasksSearch, tasksStatus, tasksSort])
 
   const filteredAllLoans = useMemo(() => {
-    return filterAndSortRows(data?.inbox?.allLoans || [], allSearch, allStatus, allSort, allLocation, allDept)
+    // Exclude archived loans from active view
+    const activeLoans = (data?.inbox?.allLoans || []).filter(loan => loan.status !== "archived")
+    return filterAndSortRows(activeLoans, allSearch, allStatus, allSort, allLocation, allDept)
+  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept])
+
+  const filteredArchivedLoans = useMemo(() => {
+    // Show only archived loans
+    const archivedLoans = (data?.inbox?.allLoans || []).filter(loan => loan.status === "archived")
+    return filterAndSortRows(archivedLoans, allSearch, allStatus, allSort, allLocation, allDept)
   }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept])
 
   // Unique location and department options for loan filters
@@ -4889,6 +4908,94 @@ export default function LoanAppPage() {
                 <span className="text-xs text-muted-foreground">Page {allPage} of {totalAllLoanPages}</span>
                 <Button variant="outline" size="sm" onClick={() => setAllPage((n) => Math.min(totalAllLoanPages, n + 1))} disabled={allPage >= totalAllLoanPages}>Next</Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="archive" className="space-y-3">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold text-slate-900">Archived Loan Requests</CardTitle>
+                  <CardDescription className="text-slate-500">View previously approved or rejected loans that have been archived.</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => downloadCsv(filteredArchivedLoans, "archived-loan-requests.csv")} className="shrink-0">
+                  <Download className="h-4 w-4 mr-1" /> Export
+                </Button>
+              </div>
+
+              {/* Summary stats bar */}
+              {(() => {
+                const archivedRows = (data?.inbox?.allLoans || []).filter((r: any) => r.status === "archived")
+                const totalAmt = archivedRows.reduce((s: number, r: any) => s + Number(r.fixed_amount || r.requested_amount || 0), 0)
+                const approved = archivedRows.filter((r: any) => r.director_hr_name).length
+                const rejected = archivedRows.filter((r: any) => !r.director_hr_name).length
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                    <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+                      <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Archived</div>
+                      <div className="text-lg font-bold text-slate-900 mt-0.5">GHc {fmtAmount(totalAmt)}</div>
+                      <div className="text-xs text-slate-500">{archivedRows.length} request{archivedRows.length !== 1 ? "s" : ""}</div>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+                      <div className="text-xs font-medium text-emerald-600 uppercase tracking-wide">Approved</div>
+                      <div className="text-lg font-bold text-emerald-700 mt-0.5">{approved}</div>
+                    </div>
+                    <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+                      <div className="text-xs font-medium text-red-500 uppercase tracking-wide">Rejected</div>
+                      <div className="text-lg font-bold text-red-600 mt-0.5">{rejected}</div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </CardHeader>
+            <CardContent className="space-y-3 pt-2">
+              {/* Filters row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-center bg-slate-50 rounded-lg p-3 border">
+                <Input
+                  value={allSearch}
+                  onChange={(e) => setAllSearch(e.target.value)}
+                  placeholder="Search by request / staff / rank..."
+                  className="bg-white"
+                />
+                <Select value={allLocation} onValueChange={setAllLocation}>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All locations" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {allLoanLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={allDept} onValueChange={setAllDept}>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All departments" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {allLoanDepts.map((dept) => <SelectItem key={dept} value={dept}>{dept}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="text-xs text-muted-foreground text-right">
+                Showing {filteredArchivedLoans.length} archived loans
+              </div>
+
+              {filteredArchivedLoans.map((row) => (
+                <div key={row.id} className="rounded border p-3 text-sm bg-slate-50">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
+                      <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs font-semibold text-slate-700">Archived</div>
+                      <div className="px-2 py-1 rounded bg-slate-200 text-slate-700 text-xs font-semibold">
+                        {row.director_hr_name ? "✓ Approved" : "✗ Rejected"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold text-slate-900">GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                </div>
+              ))}
+              {filteredArchivedLoans.length === 0 && <p className="text-sm text-muted-foreground">No archived loans found.</p>}
             </CardContent>
           </Card>
         </TabsContent>
