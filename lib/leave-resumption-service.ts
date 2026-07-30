@@ -82,9 +82,12 @@ export async function markAsResumed(
     // Notify supervisors of return
     await notifySupervisorsOfResumption(staffUser, updatedRecord)
 
+    // Generate and send resumption memo to HOD, HR Leave Office, and HR Executive
+    await generateAndSendResumptionMemo(staffUser, updatedRecord, checkInDate)
+
     // Log audit trail
     await logAuditTrail(recordId, userId, 'resumed', 
-      `Staff member ${staffUser?.full_name} resumed duty on ${format(checkInDate, 'dd MMM yyyy')}`)
+      `Staff member ${staffUser?.full_name} resumed duty on ${format(checkInDate, 'dd MMM yyyy')}. Resumption memo generated and sent.`)
   } catch (error) {
     console.error('[v0] Error marking leave as resumed:', error)
   }
@@ -280,6 +283,54 @@ async function sendQueryMemo(
       type: 'alert',
       severity: 'critical',
     })
+  }
+}
+
+/**
+ * Generate and send resumption memo via API
+ */
+async function generateAndSendResumptionMemo(
+  staff: any,
+  record: any,
+  checkInDate: Date
+) {
+  try {
+    // Call the resumption memo API to create memo and send notifications
+    const memoPayload = {
+      staffUserId: staff.id,
+      leaveEndDate: record.leave_end_date,
+      leaveType: record.leave_type || 'Annual Leave',
+      notifyRoles: ['hod', 'hr_office', 'hr_executive'],
+    }
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/leave/resumption-memo`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(memoPayload),
+      }
+    )
+
+    if (!response.ok) {
+      console.error('[v0] Failed to generate resumption memo:', await response.text())
+      return
+    }
+
+    const memoResult = await response.json()
+    console.log('[v0] Resumption memo generated:', memoResult.memo_id)
+
+    // Send dashboard notification about memo
+    await sendNotification({
+      userId: staff.id,
+      title: 'Return to Work Memo Generated',
+      message: `Your return to work memo has been generated and is available for download. Reference: ${memoResult.memo_id}`,
+      type: 'info',
+      severity: 'medium',
+    })
+  } catch (error) {
+    console.error('[v0] Error generating resumption memo:', error)
+    // Don't block the resumption flow if memo generation fails
   }
 }
 
