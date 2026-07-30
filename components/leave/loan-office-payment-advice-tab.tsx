@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-// generateProfessionalMemoPDF / downloadMemoPDF loaded dynamically at each
-// call site so jsPDF never enters the client component's initial bundle.
+import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 
 interface PaymentMemo {
   id: string
@@ -139,7 +138,6 @@ async function downloadSingleMemo(memo: PaymentMemo, toast: ReturnType<typeof us
 
     const slugName = (memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")
     const dateSuffix = `${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}${String(currentDate.getDate()).padStart(2, "0")}`
-    const { generateProfessionalMemoPDF, downloadMemoPDF } = await import("@/lib/professional-memo-generator")
     const pdf = await generateProfessionalMemoPDF(memoData, `leave-payment-${slugName}.pdf`)
     await downloadMemoPDF(pdf, `leave-payment-${slugName}-${dateSuffix}.pdf`)
   } catch (err) {
@@ -229,7 +227,6 @@ async function downloadCombinedMemo(
     const slug = category.toLowerCase().replace(/\s+/g, "-")
     const monthSlug = monthLabel.toLowerCase().replace(/\s+/g, "-")
     const dateSuffix = `${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}`
-    const { generateProfessionalMemoPDF, downloadMemoPDF } = await import("@/lib/professional-memo-generator")
     const pdf = await generateProfessionalMemoPDF(memoData, `combined-leave-payment-${slug}-${monthSlug}.pdf`)
     await downloadMemoPDF(pdf, `combined-leave-payment-${slug}-${monthSlug}-${dateSuffix}.pdf`)
   } catch (err) {
