@@ -1726,12 +1726,16 @@ export default function LoanAppPage() {
             }),
           })
 
+          const json = await response.json()
+
           if (response.ok) {
             successCount++
           } else {
+            console.error(`Failed to restore loan ${loanId}:`, json)
             failureCount++
           }
         } catch (error) {
+          console.error(`Error restoring loan ${loanId}:`, error)
           failureCount++
         }
       }
@@ -1793,12 +1797,16 @@ export default function LoanAppPage() {
             }),
           })
 
+          const json = await response.json()
+
           if (response.ok) {
             successCount++
           } else {
+            console.error(`Failed to restore loan ${loan.id}:`, json)
             failureCount++
           }
         } catch (error) {
+          console.error(`Error restoring loan ${loan.id}:`, error)
           failureCount++
         }
       }
