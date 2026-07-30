@@ -19,7 +19,7 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -1169,6 +1169,8 @@ export default function LoanAppPage() {
       tabs.push({ key: "hod", label: `HOD (${c.hod})` })
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+      tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
+      tabs.push({ key: "analytics", label: "Analytics" })
       tabs.push({ key: "leave-payment", label: "Leave Payment" })
       tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
       tabs.push({ key: "committee", label: `Committee (${c.committee})` })
@@ -1187,6 +1189,8 @@ export default function LoanAppPage() {
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
+    // Analytics tab for Loan Office and Accounts executives
+    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
@@ -4325,6 +4329,187 @@ export default function LoanAppPage() {
                   </div>
                 ) : null
               })()} 
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Analytics Tab ── */}
+        <TabsContent value="analytics" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-2xl">
+                    <BarChart3 className="h-6 w-6 text-blue-600" />
+                    Executive Analytics
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    View detailed loan analytics and performance metrics across your operations
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Filter Controls */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <span className="text-sm font-semibold text-slate-700">Filter Analytics</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Location</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Locations</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Department</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Departments</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Loan Type</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Loan Types</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Category</label>
+                    <select className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>All Categories</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors">
+                      Export Data
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Metrics Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Total Processed</p>
+                      <p className="text-2xl font-bold text-slate-900">{loanOfficeAnalytics.totals.total_requests}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-slate-500" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Active Pipeline</p>
+                      <p className="text-2xl font-bold text-violet-700">{loanOfficeAnalytics.totals.active_pipeline}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center">
+                      <Clock className="h-5 w-5 text-violet-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Good Status</p>
+                      <p className="text-2xl font-bold text-emerald-700">{loanOfficeAnalytics.totals.good_fd}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-600 font-semibold mb-1">Poor Status</p>
+                      <p className="text-2xl font-bold text-rose-700">{loanOfficeAnalytics.totals.poor_fd}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
+                      <Clock className="h-5 w-5 text-rose-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Stage Breakdown */}
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <h4 className="font-semibold text-slate-900 mb-4 text-sm">Loan Stage Breakdown</h4>
+                  {loanOfficeAnalytics.stageBreakdown.length > 0 ? (
+                    <div className="h-64 flex items-center justify-center bg-slate-50 rounded">
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={loanOfficeAnalytics.stageBreakdown}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="stage" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }} />
+                          <Bar dataKey="count" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-40 flex items-center justify-center text-slate-400">No data available</div>
+                  )}
+                </div>
+
+                {/* Monthly Intake */}
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <h4 className="font-semibold text-slate-900 mb-4 text-sm">Monthly Intake Trend</h4>
+                  {loanOfficeAnalytics.monthlyIntake.length > 0 ? (
+                    <div className="h-64 flex items-center justify-center bg-slate-50 rounded">
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={loanOfficeAnalytics.monthlyIntake}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip contentStyle={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }} />
+                          <Line type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} dot={{ fill: "#10b981", r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-40 flex items-center justify-center text-slate-400">No data available</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Processing Status Distribution */}
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <h4 className="font-semibold text-slate-900 mb-4 text-sm">Processing Status Distribution</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-3 bg-violet-50 rounded-lg">
+                    <div className="h-3 w-3 rounded-full bg-violet-600" />
+                    <div className="text-sm">
+                      <p className="text-slate-600 text-xs">Worked On</p>
+                      <p className="font-bold text-slate-900">{loanOfficeAnalytics.totals.worked_on}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-lg">
+                    <div className="h-3 w-3 rounded-full bg-amber-500" />
+                    <div className="text-sm">
+                      <p className="text-slate-600 text-xs">Yet to Work</p>
+                      <p className="font-bold text-slate-900">{loanOfficeAnalytics.totals.yet_to_be_worked}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-lg">
+                    <div className="h-3 w-3 rounded-full bg-emerald-600" />
+                    <div className="text-sm">
+                      <p className="text-slate-600 text-xs">Finalized</p>
+                      <p className="font-bold text-slate-900">{loanOfficeAnalytics.totals.finalized}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
