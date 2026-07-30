@@ -25,7 +25,9 @@ export default function RepaymentTrackingPage() {
         const response = await fetch("/api/auth/current-user")
         if (response.ok) {
           const { user } = await response.json()
-          if (user && ["loan_office", "accounts_executive", "admin"].includes(user.role)) {
+          // Check for both database role ('accounts') and UI role ('accounts_executive')
+          const authorizedRoles = ["loan_office", "accounts_executive", "accounts", "admin"]
+          if (user && authorizedRoles.includes(user.role)) {
             setAuthorized(true)
           } else {
             setAuthorized(false)

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { displayRole } from "@/lib/role-mapping"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -83,19 +84,6 @@ interface Location {
 }
 
 export function StaffManagement() {
-  const canonicalRole = (role: string | null | undefined) => {
-    const normalized = String(role || "").toLowerCase().trim()
-    
-    // Reverse-map database roles back to their UI equivalents
-    const reverseMapping: Record<string, string> = {
-      "accounts": "accounts_executive",
-      "hr_office": "hr_leave_office",
-      "hr_leave_office": "hr_leave_office",
-    }
-    
-    return reverseMapping[normalized] || normalized
-  }
-
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -179,7 +167,7 @@ export function StaffManagement() {
 
       if (result.success) {
         const rows = Array.isArray(result.data)
-          ? result.data.map((row: StaffMember) => ({ ...row, role: canonicalRole(row.role) }))
+          ? result.data.map((row: StaffMember) => ({ ...row, role: displayRole(row.role) }))
           : []
         setStaff(rows)
         setTotalPages(result.pagination?.totalPages || 1)
@@ -525,7 +513,7 @@ export function StaffManagement() {
         setStaff((prev) =>
           prev.map((s) =>
             s.id === editingStaff.id
-              ? { ...s, ...updatedMember, role: canonicalRole(updatedMember.role ?? s.role) }
+              ? { ...s, ...updatedMember, role: displayRole(updatedMember.role ?? s.role) }
               : s
           )
         )
@@ -1377,10 +1365,10 @@ export function StaffManagement() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setEditingStaff({ ...member, role: canonicalRole(member.role) })}
+                            onClick={() => setEditingStaff({ ...member, role: displayRole(member.role) })}
                             className="h-8 w-8 p-0 hover:bg-primary/10 hover:border-primary/20"
                             disabled={
-                              currentUserRole === "it-admin" && (member.role === "admin" || member.role === "it-admin")
+                              currentUserRole === "it-admin" && (displayRole(member.role) === "admin" || displayRole(member.role) === "it-admin")
                             }
                           >
                             <Edit className="h-3 w-3" />
