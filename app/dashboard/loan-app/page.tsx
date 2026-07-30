@@ -1365,6 +1365,14 @@ export default function LoanAppPage() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6)
 
+    // Calculate monetary totals
+    const rowAmount = (r: LoanRequest) => Number(r.fixed_amount || r.requested_amount || 0)
+    const totalLoanValue = rows.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
+    const approvedStatuses = new Set(["hod_approved", "sent_to_accounts", "approved_director", "awaiting_committee", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered", "payment_completed"])
+    const approvedRows = rows.filter((r: LoanRequest) => approvedStatuses.has(String(r.status || "")))
+    const totalApprovedValue = approvedRows.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
+    const avgLoanAmount = rows.length > 0 ? totalLoanValue / rows.length : 0
+
     return {
       totals: {
         total_requests: rows.length,
@@ -1374,6 +1382,9 @@ export default function LoanAppPage() {
         active_pipeline: rows.filter((row) => !terminalStatuses.has(String(row.status || ""))).length,
         good_fd: rows.filter((row) => row.fd_good === true).length,
         poor_fd: rows.filter((row) => row.fd_good === false || row.status === "rejected_fd" || (typeof row.fd_score === "number" && row.fd_score < 39)).length,
+        total_loan_value: totalLoanValue,
+        total_approved_value: totalApprovedValue,
+        avg_loan_amount: avgLoanAmount,
       },
       stageBreakdown,
       locationRanking,
@@ -4411,6 +4422,45 @@ export default function LoanAppPage() {
                     </div>
                     <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
                       <Clock className="h-5 w-5 text-rose-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Monetary Metrics Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-blue-600 font-semibold mb-1">Total Loan Value</p>
+                      <p className="text-2xl font-bold text-blue-900">
+                        GHc {loanOfficeAnalytics.totals.total_loan_value.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-blue-500 mt-1">All {loanOfficeAnalytics.totals.total_requests} loans</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-emerald-600 font-semibold mb-1">Approved Value</p>
+                      <p className="text-2xl font-bold text-emerald-900">
+                        GHc {loanOfficeAnalytics.totals.total_approved_value.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-emerald-500 mt-1">Active pipeline</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-amber-600 font-semibold mb-1">Average Amount</p>
+                      <p className="text-2xl font-bold text-amber-900">
+                        GHc {loanOfficeAnalytics.totals.avg_loan_amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-amber-500 mt-1">Per request</p>
                     </div>
                   </div>
                 </div>
