@@ -796,29 +796,32 @@ export async function GET(
     if (useTable === true) {
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
       const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
+      // Public holidays and travelling days are ADDED to the granted days (not deducted)
+      const holidayDaysAdded = Number(lr.holiday_days_deducted || 0)   // field name is legacy; treated as addition per business rule
+      const travelDaysFromField = Math.max(0, Number(lr.travelling_days_added || 0))
 
-      // tableEntitlement is now the actual working-day base (from calculateWorkingDays or adjusted_days).
-      // Travel days are additive; prior leave is deductive; outstanding leave is additive.
-      // Public holidays are already excluded from the working-days base — do NOT deduct them again.
+      // tableEntitlement is the actual working-day base (from calculateWorkingDays or adjusted_days).
+      // Travel days and public holidays are additive; prior leave already enjoyed is deductive.
       const baseDays   = Math.max(0, Number(tableEntitlement || 0))
-      const travelDays = Math.max(0, Number(tableTravellingDays || 0))
+      const travelDays = Math.max(0, Number(tableTravellingDays || 0) || travelDaysFromField)
 
       const entitlementLabel = travelDays > 0
         ? `${baseDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
         : String(baseDays || effectiveDays)
 
-      // Total granted = base working days + travel − prior leave already enjoyed + outstanding added
-      const totalGranted = Math.max(0, baseDays + travelDays - priorLeaveDaysDeducted + outstandingLeaveDaysAdded)
+      // Total granted = base working days + travel + public holidays + outstanding − prior leave already enjoyed
+      const totalGranted = Math.max(0, baseDays + travelDays + holidayDaysAdded - priorLeaveDaysDeducted + outstandingLeaveDaysAdded)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
       )
       const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
-      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0
+      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0 || holidayDaysAdded > 0
       const remarksParts: string[] = []
-      // NOTE: travelling days are already shown in entitlementLabel, so don't repeat in remarks
-      // Only include other deductions/additions that aren't visible in the table labels
+      // Build remarks: show every component that affects the total
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`)
+      if (holidayDaysAdded > 0) remarksParts.push(`${holidayDaysAdded} public holiday day(s) added`)
+      if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
       const remarksSummary = remarksParts.length > 0
