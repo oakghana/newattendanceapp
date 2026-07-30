@@ -85,7 +85,15 @@ interface Location {
 export function StaffManagement() {
   const canonicalRole = (role: string | null | undefined) => {
     const normalized = String(role || "").toLowerCase().trim()
-    return normalized === "hr_office" ? "hr_leave_office" : normalized
+    
+    // Reverse-map database roles back to their UI equivalents
+    const reverseMapping: Record<string, string> = {
+      "accounts": "accounts_executive",
+      "hr_office": "hr_leave_office",
+      "hr_leave_office": "hr_leave_office",
+    }
+    
+    return reverseMapping[normalized] || normalized
   }
 
   const [staff, setStaff] = useState<StaffMember[]>([])
@@ -1111,7 +1119,7 @@ export function StaffManagement() {
                       onValueChange={(value) => setEditingStaff({ ...editingStaff, role: value })}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder={editingStaff.role || "Select Role"} />
                       </SelectTrigger>
                       <SelectContent>
                         {currentUserRole === "it-admin" ? (
