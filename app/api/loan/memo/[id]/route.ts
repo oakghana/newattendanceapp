@@ -710,13 +710,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       doc.setLineWidth(0.3)
       doc.line(stampX + 4, stampTopY + 10.5, stampX + stampW - 4, stampTopY + 10.5)
 
-      // ── "APPROVED" — large, bold, centred in QCC blue
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(17)
-      doc.setTextColor(inkR, inkG, inkB)
-      doc.text("APPROVED", cx, stampTopY + 22, { align: "center" })
-
-      // ── MD signature image overlaid on APPROVED text — ENLARGED for visibility
+      // ── MD signature image — drawn FIRST so APPROVED text renders on top
       if (mdStampSignatureUrl) {
         try {
           const sigResp = await fetch(mdStampSignatureUrl)
@@ -725,8 +719,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
             const sigB64 = Buffer.from(sigBuf).toString("base64")
             const ct = sigResp.headers.get("content-type") || "image/png"
             const imgType = ct.includes("jpeg") ? "JPEG" : "PNG"
-            // Significantly enlarged signature — from 56mm height to 22mm height
-            // This ensures even small, faint signatures become clearly visible
             const sigHeight = 22
             doc.addImage(`data:${ct};base64,${sigB64}`, imgType, stampX + 2, stampTopY + 10, stampW - 4, sigHeight)
           }
@@ -737,6 +729,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         doc.setTextColor(inkR, inkG, inkB)
         doc.text(mdStampSignatureText, cx, stampTopY + 24, { align: "center" })
       }
+
+      // ── "APPROVED" — drawn AFTER signature so it appears on top, bold and visible
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(17)
+      doc.setTextColor(inkR, inkG, inkB)
+      doc.text("APPROVED", cx, stampTopY + 16, { align: "center" })
 
       // ��─ Approval date (e.g. "29-JUL-2026") in blue, centred
       const approvalDateStr = fmtDate(loan.md_approved_at || new Date()).toUpperCase()

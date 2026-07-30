@@ -4722,11 +4722,11 @@ export default function LoanAppPage() {
                   {/* Card Header - Click to Expand/Collapse */}
                   <button
                     onClick={() => toggleLoanExpanded(row.id)}
-                    className="w-full p-3 flex items-start justify-between gap-3 hover:bg-slate-50 transition-colors border-b"
+                    className="w-full p-3 flex items-start justify-between gap-3 hover:bg-white/10 transition-colors border-b border-white/20"
                   >
                     <div className="flex-1 text-left">
-                      <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
-                      <div className="text-xs text-slate-600">{row.staff_full_name}</div>
+                      <div className="text-sm font-bold text-white">{row.request_number}</div>
+                      <div className="text-xs text-purple-200 font-medium">{row.staff_full_name}</div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
@@ -4736,7 +4736,7 @@ export default function LoanAppPage() {
                       }`}>
                         {statusText(row.status)}
                       </div>
-                      <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`h-4 w-4 text-white/70 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                   </button>
 
