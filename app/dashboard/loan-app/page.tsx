@@ -83,6 +83,7 @@ type LoanRequest = {
   accounts_reviewer_name?: string | null
   director_hr_id?: string | null
   director_hr_name?: string | null
+  director_hr_position?: string | null
   hod_review_note?: string | null
   hod_name?: string | null
   hod_rank?: string | null
@@ -2874,7 +2875,7 @@ export default function LoanAppPage() {
                             return (
                               <div key={entry.id} className="relative flex gap-4 pl-10 pb-4">
                                 <div className={`absolute left-2 top-1 flex h-5 w-5 items-center justify-center rounded-full text-xs ring-2 ring-white ${isLatest ? "bg-violet-600 text-white" : "bg-slate-300 text-slate-600"}`}>
-                                  {isLatest ? "●" : "○"}
+                                  {isLatest ? "●" : "���"}
                                 </div>
                                 <div className={`flex-1 rounded-xl border px-4 py-3 ${isLatest ? "border-violet-200 bg-violet-50/50" : "border-slate-100 bg-white"}`}>
                                   <div className="flex flex-wrap items-center justify-between gap-1">
@@ -4759,52 +4760,60 @@ export default function LoanAppPage() {
                     </div>
                   </div>
 
-                  {/* MD Approval Stamp with Signature */}
+                  {/* Professional Approval Certificate */}
                   {(row.director_hr_name || row.director_signature_text) && (
-                    <div className="mb-6 flex items-center justify-center py-6 px-4">
-                      <div className="relative w-56 h-56 border-8 border-green-600 rounded-full flex flex-col items-center justify-center bg-gradient-to-b from-green-50 to-green-100 shadow-lg">
-                        {/* Outer decorative circle for stamp effect */}
-                        <div className="absolute w-56 h-56 border-3 border-green-500 rounded-full opacity-40" style={{ transform: 'rotate(15deg)' }}></div>
-                        
-                        {/* Inner decorative circle */}
-                        <div className="absolute w-48 h-48 border-2 border-green-400 rounded-full opacity-30"></div>
-                        
-                        {/* Stamp content */}
-                        <div className="relative z-10 text-center w-full px-4">
-                          {/* APPROVED text */}
-                          <div className="text-4xl font-black text-green-700 mb-3 tracking-wider" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.1)' }}>
-                            APPROVED
-                          </div>
-                          
-                          {/* MD Signature Image or Text */}
-                          {row.director_signature_data_url ? (
-                            <img 
-                              src={row.director_signature_data_url} 
-                              alt="MD Signature"
-                              className="h-16 mx-auto mb-2 max-w-full"
-                            />
-                          ) : row.director_signature_text ? (
-                            <div className="text-lg font-script text-green-800 italic mb-2" style={{ fontStyle: 'italic', fontWeight: '600' }}>
-                              {row.director_signature_text}
+                    <div className="mb-6">
+                      <div className="bg-gradient-to-r from-slate-50 to-blue-50 border-2 border-blue-200 rounded-lg p-6">
+                        {/* Header: APPROVED Badge */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                              <span className="text-emerald-700 font-bold text-lg">✓</span>
                             </div>
-                          ) : null}
-                          
-                          {/* MD Name Label */}
-                          <div className="text-xs text-gray-600 font-semibold mt-2 mb-1">
-                            MD Approval
+                            <div>
+                              <div className="text-xs text-slate-500 font-semibold">STATUS</div>
+                              <div className="text-lg font-bold text-emerald-700">APPROVED</div>
+                            </div>
                           </div>
-                          
-                          {/* Approver Name */}
-                          <div className="text-sm text-green-700 font-bold">
-                            {row.director_hr_name}
-                          </div>
-                          
-                          {/* Approval Date */}
                           {row.md_approved_at && (
-                            <div className="text-xs text-green-600 mt-2 font-semibold">
-                              {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500 font-semibold">APPROVED</div>
+                              <div className="text-sm font-semibold text-slate-900">
+                                {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                              </div>
                             </div>
                           )}
+                        </div>
+
+                        {/* Divider */}
+                        <div className="h-px bg-blue-200 mb-4"></div>
+
+                        {/* Approver Details */}
+                        <div className="space-y-3">
+                          {/* Signature */}
+                          <div className="flex items-center justify-center py-2">
+                            {row.director_signature_data_url ? (
+                              <img 
+                                src={row.director_signature_data_url} 
+                                alt="Signature"
+                                className="h-12 max-w-xs"
+                              />
+                            ) : row.director_signature_text ? (
+                              <div className="text-2xl text-slate-700" style={{ fontStyle: 'italic', fontWeight: '600', fontFamily: 'cursive' }}>
+                                {row.director_signature_text}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {/* Approver Info */}
+                          <div className="border-t border-blue-200 pt-3 text-center">
+                            <div className="text-sm font-bold text-slate-900">
+                              {row.director_hr_name}
+                            </div>
+                            <div className="text-xs text-slate-600 font-semibold">
+                              {row.director_hr_position || "Managing Director"}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
