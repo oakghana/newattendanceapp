@@ -893,6 +893,7 @@ export default function LoanAppPage() {
   // ── Action modal state ──────────────────────────────────────────────
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
+  const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
   const [memoReviewModal, setMemoReviewModal] = useState<{ open: boolean; row: LoanRequest | null }>({ open: false, row: null })
   const [isSavingMemo, setIsSavingMemo] = useState(false)
   const [modalNote, setModalNote] = useState("")
@@ -1635,6 +1636,48 @@ export default function LoanAppPage() {
     setSalaryAdvanceMonths(null)
     setRepaymentMonths(12)
     setLoanTypeKey("") // Clear to show placeholder hint
+  }
+
+  const restoreLoan = async (loanId: string) => {
+    try {
+      setRestoringLoanId(loanId)
+      const response = await fetch("/api/loan/restore", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loanId,
+          newStatus: "partially_recovered",
+        }),
+      })
+
+      const json = await response.json()
+
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: json.error || "Failed to restore loan",
+          variant: "destructive",
+        })
+        return
+      }
+
+      toast({
+        title: "Loan Restored",
+        description: "The archived loan has been restored to mainstream tracking.",
+      })
+
+      // Refetch data to update the UI
+      mutate()
+    } catch (error) {
+      console.error("Error restoring loan:", error)
+      toast({
+        title: "Error",
+        description: "Failed to restore loan",
+        variant: "destructive",
+      })
+    } finally {
+      setRestoringLoanId(null)
+    }
   }
 
   useEffect(() => {
@@ -5216,8 +5259,8 @@ export default function LoanAppPage() {
               </div>
 
               {filteredArchivedLoans.map((row) => (
-                <div key={row.id} className="rounded border p-3 text-sm bg-slate-50">
-                  <div className="flex items-start justify-between gap-3 mb-2">
+                <div key={row.id} className="rounded border p-4 text-sm bg-slate-50 hover:bg-slate-75 transition-colors">
+                  <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex-1">
                       <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
                       <div className="text-xs text-slate-600">{row.staff_full_name}</div>
@@ -5229,7 +5272,18 @@ export default function LoanAppPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-sm font-bold text-slate-900">GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-slate-900">GHc {fmtAmount(row.fixed_amount || row.requested_amount)}</div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => restoreLoan(row.id)}
+                      disabled={restoringLoanId === row.id}
+                      className="whitespace-nowrap"
+                    >
+                      {restoringLoanId === row.id ? "Restoring..." : "Restore"}
+                    </Button>
+                  </div>
                 </div>
               ))}
               {filteredArchivedLoans.length === 0 && <p className="text-sm text-muted-foreground">No archived loans found.</p>}
