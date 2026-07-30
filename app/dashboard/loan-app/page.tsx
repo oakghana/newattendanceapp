@@ -2848,31 +2848,7 @@ export default function LoanAppPage() {
                 </div>
               </div>
 
-              <div>
-                <Label>Repayment Duration (Months)</Label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[6, 12, 18, 24, 36, 48].map((months) => (
-                    <button
-                      key={months}
-                      type="button"
-                      onClick={() => setRepaymentMonths(months)}
-                      className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
-                        repaymentMonths === months
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {months}m
-                    </button>
-                  ))}
-                </div>
-                {selectedType?.fixed_amount && (
-                  <p className="text-xs text-slate-500 mt-2">
-                    Monthly Payment: GHc {fmtAmount(Number(selectedType.fixed_amount) / repaymentMonths)} | 
-                    Completion: {new Date(new Date().setMonth(new Date().getMonth() + repaymentMonths)).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}
-                  </p>
-                )}
-              </div>
+
 
               {isSalaryAdvanceRequest && (
                 <div className="grid grid-cols-3 gap-3">
