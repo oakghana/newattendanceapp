@@ -95,7 +95,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await request.json()
     console.log("[v0] Update request body:", body)
 
-    const {
+    let {
       first_name,
       last_name,
       employee_id,
@@ -109,6 +109,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       years_of_service,
       contact_number,
     } = body
+
+    // Map non-database roles to their database equivalents
+    if (role === "accounts_executive") {
+      role = "accounts"
+    }
+    if (role === "hr_executive") {
+      role = "hr_leave_office"
+    }
 
     if (!first_name || !last_name || !employee_id) {
       return NextResponse.json({ error: "First name, last name, and employee ID are required" }, { status: 400 })
