@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     if (error) throw error
 
     // Create notification for staff
-    await admin
+    const { error: staffNotifError } = await admin
       .from("staff_notifications")
       .insert({
         recipient_id: staff_id,
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         },
         is_read: false,
       })
-      .catch(() => {}) // Ignore if fails
+    if (staffNotifError) console.error("[v0] Staff notification creation failed:", staffNotifError) // Ignore if fails
 
     // Create HR office notification
     const { data: hrStaff } = await admin
@@ -96,10 +96,10 @@ export async function POST(request: NextRequest) {
         is_read: false,
       }))
 
-      await admin
+      const { error: hrNotifError } = await admin
         .from("staff_notifications")
         .insert(hrNotifications)
-        .catch(() => {}) // Ignore if fails
+      if (hrNotifError) console.error("[v0] HR notification creation failed:", hrNotifError) // Ignore if fails
     }
 
     return NextResponse.json({

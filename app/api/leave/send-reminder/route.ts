@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       await notifyLeaveResumeReminder(admin, {
         leavePlanRequestId: String(leave.id),
         staffUserId: staff_id,
-        staffName,
+        staffName: staff_name,
         leaveType: String(leave.leave_type_key || "Annual Leave"),
         endDate,
         resumeDate: resumeDate.toISOString().split("T")[0],
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create notification record
-    await admin
+    const { error: notifError } = await admin
       .from("staff_notifications")
       .insert({
         recipient_id: staff_id,
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         },
         is_read: false,
       })
-      .catch(() => {}) // Ignore if fails
+    if (notifError) console.error("[v0] Notification creation failed:", notifError) // Ignore if fails
 
     return NextResponse.json({
       success: true,
