@@ -824,9 +824,11 @@ export async function GET(
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
+      // When remarksParts is populated it already covers all adjustment fields;
+      // do NOT append remarksText (adjustment_reason) to avoid duplicates.
       const remarksSummary = remarksParts.length > 0
-        ? `${remarksParts.join("; ")}${remarksText ? `; ${remarksText}` : ""}`
-        : (hasIncrease && remarksText ? remarksText : "")
+        ? remarksParts.join("; ")
+        : (remarksText || "")
 
       autoTable(doc, {
         startY: y,
