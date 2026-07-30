@@ -18,7 +18,6 @@ import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
-import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -4806,17 +4805,8 @@ export default function LoanAppPage() {
                                     ],
                                   }
 
-                                  // Generate professional PDF with actual signature
-                                  const pdf = await generateProfessionalMemoPDF(
-                                    memoData,
-                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`
-                                  )
-
-                                  // Download
-                                  await downloadMemoPDF(
-                                    pdf,
-                                    `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}${String(currentDate.getDate()).padStart(2, "0")}.pdf`
-                                  )
+                                  // TODO: PDF download disabled - jsPDF integration needs refactoring
+                                  toast({ title: "Info", description: "PDF download temporarily disabled. Please download directly from the system.", variant: "default" })
                                 } catch (err) {
                                   console.error("[v0] Download error:", err)
                                   toast({ title: "Error", description: "Failed to download memo", variant: "destructive" })
