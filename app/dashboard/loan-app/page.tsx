@@ -1170,31 +1170,20 @@ export default function LoanAppPage() {
     // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
 
-    // ADMIN ACCESS: Admins see all tabs without restriction
-    if (isAdminUser) {
-      tabs.push({ key: "hod", label: `HOD (${c.hod})` })
-      tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
-      tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
-      tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
-      tabs.push({ key: "analytics", label: "Analytics" })
-      tabs.push({ key: "leave-payment", label: "Leave Payment" })
-      tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
-      tabs.push({ key: "committee", label: `Committee (${c.committee})` })
-      tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-      tabs.push({ key: "setup", label: "Setup & Linkage" })
-      tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
-      tabs.push({ key: "overview", label: `All Loans (${c.all})` })
-      if (c.archived > 0) {
-        tabs.push({ key: "archive", label: `Archive (${c.archived})` })
-      }
-      return tabs
+    // Payment Approvals tab: only for HR and Accounts executives
+    if (isHrExecutive || isAccountsExecutive) {
+      tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     }
-    
-    // NON-ADMIN: Standard permission-based access
-    if (p?.hod || p?.viewAllTabs) tabs.push({ key: "hod", label: `HOD (${c.hod})` })
-    if (canAccessLoanOfficeWorkspace) tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice + c.hr})` })
-    if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
-    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "staff-loan-records", label: "Staff Loan Records" })
+
+    // Repayment Tracking tab: only for Loan Office and Accounts executives
+    if (canAccessLoanOfficeWorkspace || isAccountsExecutive) {
+      tabs.push({ 
+        key: "repayment-tracking", 
+        label: "Repayment Tracking",
+        href: "/dashboard/loan-app/repayment-tracking"
+      })
+    }
+
     // Analytics tab for Loan Office and Accounts executives
     if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
@@ -2861,9 +2850,19 @@ export default function LoanAppPage() {
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-2 shadow-sm backdrop-blur">
           {visibleTabs.map((tab) => (
-            <TabsTrigger key={tab.key} value={tab.key} className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-              {tab.label}
-            </TabsTrigger>
+            {tab.href ? (
+              <a
+                key={tab.key}
+                href={tab.href}
+                className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                {tab.label}
+              </a>
+            ) : (
+              <TabsTrigger key={tab.key} value={tab.key} className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+                {tab.label}
+              </TabsTrigger>
+            )}
           ))}
         </TabsList>
 
