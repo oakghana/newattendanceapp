@@ -1365,6 +1365,11 @@ export default function LoanAppPage() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6)
 
+    const totalLoanValue = rows.reduce((sum, row) => sum + (Number(row.loan_amount) || 0), 0)
+    const approvedRows = rows.filter((row) => terminalStatuses.has(String(row.status || "")) && !String(row.status).includes("rejected"))
+    const totalApprovedValue = approvedRows.reduce((sum, row) => sum + (Number(row.loan_amount) || 0), 0)
+    const avgLoanAmount = rows.length > 0 ? totalLoanValue / rows.length : 0
+
     return {
       totals: {
         total_requests: rows.length,
@@ -1374,6 +1379,9 @@ export default function LoanAppPage() {
         active_pipeline: rows.filter((row) => !terminalStatuses.has(String(row.status || ""))).length,
         good_fd: rows.filter((row) => row.fd_good === true).length,
         poor_fd: rows.filter((row) => row.fd_good === false || row.status === "rejected_fd" || (typeof row.fd_score === "number" && row.fd_score < 39)).length,
+        total_loan_value: totalLoanValue,
+        total_approved_value: totalApprovedValue,
+        avg_loan_amount: avgLoanAmount,
       },
       stageBreakdown,
       locationRanking,
@@ -4389,13 +4397,14 @@ export default function LoanAppPage() {
                 </div>
               </div>
 
-              {/* Key Metrics Cards */}
+              {/* Key Metrics Cards - Row 1: Counts */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-600 font-semibold mb-1">Total Processed</p>
+                      <p className="text-xs text-slate-500 font-medium mb-1">Total Processed</p>
                       <p className="text-2xl font-bold text-slate-900">{loanOfficeAnalytics.totals.total_requests}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">All loan requests</p>
                     </div>
                     <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
                       <CheckCircle2 className="h-5 w-5 text-slate-500" />
@@ -4406,8 +4415,9 @@ export default function LoanAppPage() {
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-600 font-semibold mb-1">Active Pipeline</p>
+                      <p className="text-xs text-slate-500 font-medium mb-1">Active Pipeline</p>
                       <p className="text-2xl font-bold text-violet-700">{loanOfficeAnalytics.totals.active_pipeline}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">In processing</p>
                     </div>
                     <div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center">
                       <Clock className="h-5 w-5 text-violet-600" />
@@ -4418,8 +4428,9 @@ export default function LoanAppPage() {
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-600 font-semibold mb-1">Good Status</p>
+                      <p className="text-xs text-slate-500 font-medium mb-1">Good FD Status</p>
                       <p className="text-2xl font-bold text-emerald-700">{loanOfficeAnalytics.totals.good_fd}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Healthy repayment</p>
                     </div>
                     <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
                       <CheckCircle2 className="h-5 w-5 text-emerald-600" />
@@ -4430,11 +4441,60 @@ export default function LoanAppPage() {
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-600 font-semibold mb-1">Poor Status</p>
+                      <p className="text-xs text-slate-500 font-medium mb-1">Poor FD Status</p>
                       <p className="text-2xl font-bold text-rose-700">{loanOfficeAnalytics.totals.poor_fd}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Needs attention</p>
                     </div>
                     <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
                       <Clock className="h-5 w-5 text-rose-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Metrics Cards - Row 2: Monetary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-blue-600 font-semibold mb-1">Total Loan Value</p>
+                      <p className="text-2xl font-bold text-blue-900">
+                        GHc {loanOfficeAnalytics.totals.total_loan_value.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-blue-500 mt-0.5">Combined value of all {loanOfficeAnalytics.totals.total_requests} loans</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Wallet className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-emerald-600 font-semibold mb-1">Total Approved Value</p>
+                      <p className="text-2xl font-bold text-emerald-900">
+                        GHc {loanOfficeAnalytics.totals.total_approved_value.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-emerald-500 mt-0.5">Fully approved loans only</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-amber-600 font-semibold mb-1">Average Loan Amount</p>
+                      <p className="text-2xl font-bold text-amber-900">
+                        GHc {loanOfficeAnalytics.totals.avg_loan_amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-amber-500 mt-0.5">Per loan request</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center">
+                      <BarChart3 className="h-6 w-6 text-amber-600" />
                     </div>
                   </div>
                 </div>
