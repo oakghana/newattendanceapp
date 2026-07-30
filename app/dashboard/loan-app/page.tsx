@@ -1220,44 +1220,18 @@ export default function LoanAppPage() {
   )
 
   const loanOfficeWorkspaceRows = useMemo(() => {
-    let allLoans = data?.inbox?.allLoans || []
-    if (allLoans.length === 0) {
-      const merged = [
-        ...(data?.inbox?.loanOffice || []),
-        ...(data?.inbox?.accounts || []),
-        ...(data?.inbox?.committee || []),
-        ...(data?.inbox?.hrOffice || []),
-        ...(data?.inbox?.directorHr || []),
-        ...(data?.inbox?.accountsSigned || []),
-      ]
-      allLoans = Array.from(new Map(merged.map((r) => [r.id, r])).values())
-    }
+    const allLoans = data?.inbox?.allLoans || []
+    if (allLoans.length > 0) return allLoans
 
-    // Filter loans based on staff category
-    const staffCategory = data?.profile?.staffCategory
-    if (!staffCategory || staffCategory === "Manager") {
-      return allLoans // Managers can see all loans
-    }
-
-    // Filter based on staff category (junior/senior)
-    return allLoans.filter((loan) => {
-      const loanCategory = String(loan.category || "").toLowerCase().trim()
-      
-      // If loan has no category suffix, everyone can see it
-      if (!loanCategory) return true
-      
-      // If staff is junior, only show loans with no category or (junior) suffix
-      if (staffCategory === "Junior") {
-        return !loanCategory.includes("senior")
-      }
-      
-      // If staff is senior, only show loans with no category or (senior) suffix
-      if (staffCategory === "Senior") {
-        return !loanCategory.includes("junior")
-      }
-      
-      return true
-    })
+    const merged = [
+      ...(data?.inbox?.loanOffice || []),
+      ...(data?.inbox?.accounts || []),
+      ...(data?.inbox?.committee || []),
+      ...(data?.inbox?.hrOffice || []),
+      ...(data?.inbox?.directorHr || []),
+      ...(data?.inbox?.accountsSigned || []),
+    ]
+    return Array.from(new Map(merged.map((r) => [r.id, r])).values())
   }, [
     data?.inbox?.allLoans,
     data?.inbox?.loanOffice,
@@ -1266,7 +1240,6 @@ export default function LoanAppPage() {
     data?.inbox?.hrOffice,
     data?.inbox?.directorHr,
     data?.inbox?.accountsSigned,
-    data?.profile?.staffCategory,
   ])
 
   const loanOfficeTypeOptions = useMemo(() => {
@@ -3850,44 +3823,6 @@ export default function LoanAppPage() {
 
         <TabsContent value="accounts" className="space-y-3">
           <ReadOnlyHint canAct={Boolean(p?.accounts)} roleLabel="Accounts" />
-          
-          {/* Accounts Approvals Section for Accounts Executives */}
-          {p?.accounts && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-amber-900">
-                  <CheckCircle2 className="h-5 w-5" />
-                  Loan FD Approvals for Accounts Review
-                </CardTitle>
-                <CardDescription className="text-amber-800">
-                  Loans ready for Accounts executive review and FD score approval
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {loanOfficeWorkspaceRows.filter(r => r.status === "sent_to_accounts" && !r.fd_score).length === 0 ? (
-                  <p className="text-sm text-amber-700">No loans pending Accounts FD review.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {loanOfficeWorkspaceRows
-                      .filter(r => r.status === "sent_to_accounts" && !r.fd_score)
-                      .slice(0, 5)
-                      .map(row => (
-                        <div key={row.id} className="rounded-lg border border-amber-200 bg-white p-3 flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="text-sm font-semibold text-slate-900">{row.request_number} - {row.staff_full_name}</div>
-                            <div className="text-xs text-slate-600 mt-1">{row.loan_type_label} • GHc {Number(row.fixed_amount || row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</div>
-                          </div>
-                          <Button size="sm" className="ml-2 bg-amber-600 hover:bg-amber-700" onClick={() => openActionModal(row, "accounts")}>
-                            Set FD Score
-                          </Button>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-          
           <Card>
             <CardHeader>
               <CardTitle>Accounts FD Queue</CardTitle>
