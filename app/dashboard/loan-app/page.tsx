@@ -92,6 +92,19 @@ type LoanRequest = {
   submitted_at: string
   updated_at?: string
   hr_note?: string | null
+  
+  // Repayment tracking
+  repayment_plan_generated_at?: string | null
+  repayment_duration_months?: number
+  repayment_status?: string
+  outstanding_balance?: number
+  total_paid?: number
+  next_payment_due?: string
+  expected_completion_date?: string
+  last_payment_date?: string
+  last_payment_amount?: number
+  processed_by_name?: string
+  approved_by_name?: string
 }
 
 type WorkflowResponse = {
@@ -3725,6 +3738,11 @@ export default function LoanAppPage() {
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Staff No.</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Current Loan</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Loan Amount</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Total Paid</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Outstanding</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Next Payment Due</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Completion Date</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Repayment Status</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Mark Completed</th>
                       <th className="px-4 py-3 text-left font-semibold text-slate-700">Eligible for New</th>
@@ -3813,7 +3831,7 @@ export default function LoanAppPage() {
                       if (paged.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                            <td colSpan={12} className="px-4 py-6 text-center text-slate-500">
                               {staffRecords.length === 0 ? "No staff records found" : "No results match your search"}
                             </td>
                           </tr>
@@ -3841,6 +3859,61 @@ export default function LoanAppPage() {
                                 <span className="text-slate-900">GHc {Number(currentLoan.fixed_amount || currentLoan.requested_amount || 0).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
                               ) : (
                                 <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            {/* Total Paid */}
+                            <td className="px-4 py-3">
+                              {currentLoan?.total_paid ? (
+                                <span className="text-emerald-700 font-medium">GHc {Number(currentLoan.total_paid).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
+                              ) : (
+                                <span className="text-slate-400">GHc 0.00</span>
+                              )}
+                            </td>
+                            {/* Outstanding Balance */}
+                            <td className="px-4 py-3">
+                              {currentLoan?.outstanding_balance ? (
+                                <span className={`font-semibold ${Number(currentLoan.outstanding_balance) > 0 ? 'text-orange-700' : 'text-emerald-700'}`}>
+                                  GHc {Number(currentLoan.outstanding_balance).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            {/* Next Payment Due */}
+                            <td className="px-4 py-3">
+                              {currentLoan?.next_payment_due ? (
+                                <span className="text-sm text-slate-700">
+                                  {new Date(currentLoan.next_payment_due).toLocaleDateString('en-GH', { month: 'short', day: 'numeric' })}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            {/* Expected Completion Date */}
+                            <td className="px-4 py-3">
+                              {currentLoan?.expected_completion_date ? (
+                                <span className="text-sm text-slate-700">
+                                  {new Date(currentLoan.expected_completion_date).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            {/* Repayment Status */}
+                            <td className="px-4 py-3">
+                              {currentLoan?.repayment_status ? (
+                                <Badge className={
+                                  currentLoan.repayment_status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                                  currentLoan.repayment_status === 'overdue' ? 'bg-red-100 text-red-700' :
+                                  currentLoan.repayment_status === 'due_soon' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }>
+                                  {currentLoan.repayment_status === 'on_track' ? 'On Track' :
+                                   currentLoan.repayment_status === 'due_soon' ? 'Due Soon' :
+                                   currentLoan.repayment_status.charAt(0).toUpperCase() + currentLoan.repayment_status.slice(1)}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400 text-xs">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -4285,11 +4358,97 @@ export default function LoanAppPage() {
 
               {/* Payment Evidence List */}
               <div className="space-y-3">
-                {/* TODO: Fetch and display payment evidence from API */}
-                <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
-                  <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm">No payment evidence records to display. Connect the Payment Evidence API to load pending approvals.</p>
-                </div>
+                {(() => {
+                  // For HR/Accounts executives, fetch pending payments for their approval
+                  const isPendingApprovals = ["hr_executive", "accounts_executive"].includes(data?.profile?.role || "")
+                  
+                  if (!isPendingApprovals) {
+                    return (
+                      <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
+                        <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm">Payment approvals are only visible to HR and Accounts Executives.</p>
+                      </div>
+                    )
+                  }
+
+                  // Mock pending payments for now (will be replaced with API call)
+                  const pendingPayments: any[] = [
+                    {
+                      id: "pay-001",
+                      loan_request: { request_number: "LN-2026-07-3597", fixed_amount: 15000, loan_type_label: "Funeral Loan" },
+                      submitter: { first_name: "Bernard", last_name: "Addbi" },
+                      payment_date: "2025-07-30",
+                      amount_paid: 1500,
+                      payment_method: "bank_transfer",
+                      overall_status: "pending",
+                      hr_approval_status: "pending",
+                      accounts_approval_status: "pending",
+                    }
+                  ]
+
+                  if (pendingPayments.length === 0) {
+                    return (
+                      <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
+                        <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm">No payment evidence pending your approval.</p>
+                      </div>
+                    )
+                  }
+
+                  return pendingPayments.map((payment) => (
+                    <div key={payment.id} className="rounded-lg border border-slate-200 p-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Loan Reference</div>
+                          <div className="text-sm font-semibold text-slate-900">{payment.loan_request?.request_number}</div>
+                          <div className="text-xs text-slate-600">{payment.loan_request?.loan_type_label}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Submitted By</div>
+                          <div className="text-sm font-semibold text-slate-900">{payment.submitter?.first_name} {payment.submitter?.last_name}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Payment Details</div>
+                          <div className="text-sm font-semibold text-slate-900">GHc {Number(payment.amount_paid).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</div>
+                          <div className="text-xs text-slate-600">{new Date(payment.payment_date).toLocaleDateString('en-GH')}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 font-semibold">Approval Status</div>
+                          <div className="flex flex-col gap-1 mt-1">
+                            <div className="text-xs">
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                payment.hr_approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                payment.hr_approval_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                HR: {payment.hr_approval_status === 'pending' ? 'Pending' : payment.hr_approval_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
+                              </span>
+                            </div>
+                            <div className="text-xs">
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                payment.accounts_approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                payment.accounts_approval_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                Accts: {payment.accounts_approval_status === 'pending' ? 'Pending' : payment.accounts_approval_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="border-t border-slate-200 pt-3 flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" className="text-red-700 border-red-200 hover:bg-red-50">
+                          Reject
+                        </Button>
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                          Approve Payment
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                })()}
               </div>
             </CardContent>
           </Card>
