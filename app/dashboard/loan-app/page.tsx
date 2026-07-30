@@ -19,6 +19,7 @@ import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
+import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -1189,6 +1190,16 @@ export default function LoanAppPage() {
     // Payment Approvals tab: only for HR and Accounts executives
     if (isHrExecutive || isAccountsExecutive) {
       tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    }
+
+    // FD Approval tab: only for Accounts executives to review FD values from Loan Office
+    if (isAccountsExecutive) {
+      // TODO: Update when API is integrated to return pending FD count
+      // For now, display FD Approval tab without count
+      tabs.push({ 
+        key: "fd-approval", 
+        label: "FD Approval"
+      })
     }
 
     // Repayment Tracking tab: only for Loan Office and Accounts executives
@@ -5139,6 +5150,11 @@ export default function LoanAppPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── FD Approval Tab (Accounts Executive) ── */}
+        <TabsContent value="fd-approval" className="space-y-4">
+          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} />
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
