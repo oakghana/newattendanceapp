@@ -179,7 +179,11 @@ function shouldRetryWithoutLocationColumns(error: any): boolean {
     msg.includes("staff_location_name") ||
     msg.includes("staff_district_name") ||
     msg.includes("staff_location_address") ||
-    msg.includes("reference_number")
+    msg.includes("reference_number") ||
+    // Columns added by add_loan_repayment_tracking migration — may not exist on
+    // older production databases that haven't run the migration yet.
+    msg.includes("repayment_duration_months") ||
+    msg.includes("recovery_months")
   )
 }
 
@@ -457,6 +461,8 @@ export async function POST(request: NextRequest) {
     let { data: inserted, error: insertError } = await admin.from("loan_requests").insert(payload).select("*").single()
 
     if (insertError && isSchemaIssue(insertError) && shouldRetryWithoutLocationColumns(insertError)) {
+      // Strip columns that may not exist on databases that haven't run all
+      // migrations yet (location columns, repayment tracking columns, etc.)
       const fallbackPayload = {
         ...payload,
         reference_number: undefined,
@@ -464,6 +470,8 @@ export async function POST(request: NextRequest) {
         staff_location_name: undefined,
         staff_location_address: undefined,
         staff_district_name: undefined,
+        repayment_duration_months: undefined,
+        recovery_months: undefined,
       }
       const retry = await admin.from("loan_requests").insert(fallbackPayload).select("*").single()
       inserted = retry.data as any
