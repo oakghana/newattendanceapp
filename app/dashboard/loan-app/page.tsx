@@ -1710,6 +1710,12 @@ export default function LoanAppPage() {
       return
     }
 
+    console.log("[v0] Restoring selected loans:", {
+      selectedCount: selectedArchivedLoans.size,
+      selectedIds: Array.from(selectedArchivedLoans),
+      availableLoans: filteredArchivedLoans.map(l => ({ id: l.id, status: l.status }))
+    })
+
     try {
       setIsRestoringAll(true)
       let successCount = 0
@@ -1772,6 +1778,11 @@ export default function LoanAppPage() {
   const restoreAllLoans = async () => {
     try {
       const archivedLoans = (data?.inbox?.allLoans || []).filter((l: any) => l.status === "archived")
+      
+      console.log("[v0] Restoring all loans:", {
+        archivedCount: archivedLoans.length,
+        archivedIds: archivedLoans.map(l => ({ id: l.id, status: l.status }))
+      })
       
       if (archivedLoans.length === 0) {
         toast({
