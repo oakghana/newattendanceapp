@@ -136,6 +136,15 @@ export async function POST(request: Request) {
       fd_value,
       supporting_docs_url,
       submission_memo,
+      // New calculation fields
+      loan_amount_ghc,
+      recovery_period_months,
+      annual_salary_ghc,
+      monthly_repayment_amount,
+      total_recovery_value,
+      affordability_percentage,
+      affordability_status,
+      fd_calculation_memo,
     } = body
 
     // Validate input
@@ -159,6 +168,15 @@ export async function POST(request: Request) {
         supporting_docs_url,
         submission_memo,
         review_status: "pending_review",
+        // New calculation fields
+        loan_amount_ghc,
+        recovery_period_months,
+        annual_salary_ghc,
+        monthly_repayment_amount,
+        total_recovery_value,
+        affordability_percentage,
+        affordability_status,
+        fd_calculation_memo,
       })
       .select()
       .single()
