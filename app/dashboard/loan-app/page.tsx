@@ -1,3 +1,5 @@
+"use client"
+
 // Payment evidence fix: loadData moved to finally block
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
@@ -853,8 +855,6 @@ function resolveCurrentHodForRequest(
     location: request.hod_location || "—",
   }
 }
-
-"use client"
 
 export default function LoanAppPage() {
   const { toast } = useToast()
