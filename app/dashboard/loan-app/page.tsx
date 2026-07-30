@@ -1183,7 +1183,16 @@ export default function LoanAppPage() {
     const isAccountsExecutive = !isAdminUser && !!p?.accounts
     const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
-    const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: "My Loans" }]
+    // Get loan type name for "My Loans" tab if a loan is selected
+    let myLoansLabel = "My Loans"
+    if (loanTypeKey && data?.loanTypes) {
+      const selectedLoanType = data.loanTypes.find((lt: any) => lt.key === loanTypeKey)
+      if (selectedLoanType?.name) {
+        myLoansLabel = `My Loans - ${selectedLoanType.name}`
+      }
+    }
+
+    const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: myLoansLabel }]
     // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
 
