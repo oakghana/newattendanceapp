@@ -20,15 +20,21 @@ interface FDReview {
   id: string
   loan_request_id: string
   staff_user_id: string
-  leave_type: string
-  leave_start_date: string
-  leave_end_date: string
+  staff_name?: string
+  staff_number?: string
+  loan_type?: string
+  request_number?: string
+  requested_amount?: number
+  monthly_deduction?: number
+  repayment_months?: number
   fd_value: number
-  supporting_docs_url: string
-  submission_date: string
-  submission_memo: string
   fd_score?: number
   fd_good?: boolean
+  fd_document_url?: string
+  supporting_docs_url?: string
+  submission_date: string
+  submission_memo: string
+  status?: string
   review_status: 'pending_review' | 'approved' | 'rejected'
 }
 
@@ -215,10 +221,18 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <p className="font-semibold text-sm">{review.leave_type} Leave</p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(review.leave_start_date).toLocaleDateString()} to {new Date(review.leave_end_date).toLocaleDateString()}
+                    <p className="font-semibold text-sm">
+                      {review.staff_name || 'Unknown Staff'}
+                      {review.staff_number && <span className="text-slate-400 font-normal ml-1">#{review.staff_number}</span>}
                     </p>
+                    <p className="text-xs text-slate-500">
+                      {review.loan_type || 'Loan'} &bull; Ref: {review.request_number || review.id.slice(0, 8)}
+                    </p>
+                    {review.requested_amount && (
+                      <p className="text-xs text-slate-500">
+                        Amount: ₵{Number(review.requested_amount).toLocaleString()} &bull; {review.repayment_months}mo
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     {poorFD && (
@@ -319,15 +333,18 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600">Leave Period</p>
-                  <p className="text-sm">
-                    {new Date(selectedReview.leave_start_date).toLocaleDateString()} to{' '}
-                    {new Date(selectedReview.leave_end_date).toLocaleDateString()}
-                  </p>
+                  <p className="text-xs font-semibold text-slate-600">Staff / Loan</p>
+                  <p className="text-sm font-medium">{selectedReview.staff_name || 'N/A'}</p>
+                  <p className="text-xs text-slate-500">{selectedReview.loan_type} &bull; Ref: {selectedReview.request_number || selectedReview.id.slice(0, 8)}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-600">FD Value Claimed</p>
-                  <p className="text-lg font-bold text-amber-600">₵{selectedReview.fd_value.toFixed(2)}</p>
+                  <p className="text-xs font-semibold text-slate-600">FD Score</p>
+                  <p className={`text-lg font-bold ${(selectedReview.fd_score ?? 0) >= 39 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {selectedReview.fd_score ?? 'N/A'}
+                  </p>
+                  {selectedReview.requested_amount && (
+                    <p className="text-xs text-slate-500">Loan: ₵{Number(selectedReview.requested_amount).toLocaleString()}</p>
+                  )}
                 </div>
               </div>
 
