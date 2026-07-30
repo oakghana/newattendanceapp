@@ -1365,10 +1365,20 @@ export default function LoanAppPage() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6)
 
-    const totalLoanValue = rows.reduce((sum, row) => sum + (Number(row.loan_amount) || 0), 0)
-    const approvedRows = rows.filter((row) => terminalStatuses.has(String(row.status || "")) && !String(row.status).includes("rejected"))
-    const totalApprovedValue = approvedRows.reduce((sum, row) => sum + (Number(row.loan_amount) || 0), 0)
-    const avgLoanAmount = rows.length > 0 ? totalLoanValue / rows.length : 0
+    // Monetary figures: use ALL loans (approved + archived) for the current calendar year
+    const currentYear = new Date().getFullYear().toString()
+    const allLoansThisYear = (data?.inbox?.allLoans || []).filter((r: LoanRequest) => {
+      const date = String(r.created_at || r.submitted_at || "")
+      return date.startsWith(currentYear)
+    })
+    const rowAmount = (r: LoanRequest) => Number(r.fixed_amount || r.requested_amount || 0)
+    const approvedStatuses = new Set(["approved_director", "partially_recovered", "fully_recovered"])
+    const totalLoanValue = allLoansThisYear.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
+    const approvedAndArchivedRows = allLoansThisYear.filter((r: LoanRequest) =>
+      approvedStatuses.has(String(r.status || "")) || r.status === "archived"
+    )
+    const totalApprovedValue = approvedAndArchivedRows.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
+    const avgLoanAmount = allLoansThisYear.length > 0 ? totalLoanValue / allLoansThisYear.length : 0
 
     return {
       totals: {
@@ -1382,12 +1392,13 @@ export default function LoanAppPage() {
         total_loan_value: totalLoanValue,
         total_approved_value: totalApprovedValue,
         avg_loan_amount: avgLoanAmount,
+        year_count: allLoansThisYear.length,
       },
       stageBreakdown,
       locationRanking,
       monthlyIntake,
     }
-  }, [loanOfficeWorkspaceRows])
+  }, [loanOfficeWorkspaceRows, data?.inbox?.allLoans])
 
   const filteredAccounts = useMemo(
     () => filterAndSortRows(data?.inbox?.accounts || [], accountsSearch, accountsStatus, accountsSort, accountsLocation, accountsDept),
@@ -4461,7 +4472,7 @@ export default function LoanAppPage() {
                       <p className="text-2xl font-bold text-blue-900">
                         GHc {loanOfficeAnalytics.totals.total_loan_value.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
-                      <p className="text-xs text-blue-500 mt-0.5">Combined value of all {loanOfficeAnalytics.totals.total_requests} loans</p>
+                      <p className="text-xs text-blue-500 mt-0.5">All {loanOfficeAnalytics.totals.year_count} loans in {new Date().getFullYear()}</p>
                     </div>
                     <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
                       <Wallet className="h-6 w-6 text-blue-600" />
@@ -4476,7 +4487,7 @@ export default function LoanAppPage() {
                       <p className="text-2xl font-bold text-emerald-900">
                         GHc {loanOfficeAnalytics.totals.total_approved_value.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
-                      <p className="text-xs text-emerald-500 mt-0.5">Fully approved loans only</p>
+                      <p className="text-xs text-emerald-500 mt-0.5">Approved + archived in {new Date().getFullYear()}</p>
                     </div>
                     <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
                       <CheckCircle2 className="h-6 w-6 text-emerald-600" />
