@@ -28,6 +28,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { GPSStatusBanner } from "@/components/attendance/gps-status-banner"
 import { SecurityHealthCard } from "@/components/admin/security-health-card"
+import { NonResumptionWarningDisplay } from "@/components/leave/non-resumption-warning-display"
 
 export const metadata = {
   title: "Dashboard | QCC Electronic Attendance",
@@ -226,6 +227,9 @@ export default async function DashboardPage() {
 
           {/* GPS Status Banner */}
           <GPSStatusBanner />
+
+          {/* Non-Resumption Warning Banner */}
+          <NonResumptionWarningDisplay />
 
           {/* Admin Security Health */}
           {profile?.role === "admin" && (

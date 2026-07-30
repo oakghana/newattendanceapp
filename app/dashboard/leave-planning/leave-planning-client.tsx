@@ -288,7 +288,7 @@ function buildMemoTemplateData(req: any): Record<string, string> {
   const priorLeaveDays = Number(req.prior_leave_days_deducted || 0)
   const travellingDays = Number(req.travelling_days_added || 0)
   const adjustmentLines = [
-    holidayDays > 0 ? `Less public holidays: ${holidayDays} day(s).` : "",
+    holidayDays > 0 ? `Public holidays added: ${holidayDays} day(s).` : "",
     priorLeaveDays > 0 ? `Less prior leave enjoyed: ${priorLeaveDays} day(s).` : "",
     travellingDays > 0 ? `Travelling days added: ${travellingDays} day(s).` : "",
   ].filter(Boolean)
@@ -1670,7 +1670,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ���── Holiday CRUD Functions ───────����────���────────���───────────────────
+  // ���── Holiday CRUD Functions ───────����────���────────����───────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")
@@ -2244,7 +2244,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     const baseDays = adjStart && adjEnd
       ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForCalc).workingDays
       : 0
-    const finalDays = Math.max(0, baseDays + outstandingAdded - holidayDeducted - priorDeducted + travelAdded)
+    // Public holidays are ADDED to the granted days (not deducted)
+    const finalDays = Math.max(0, baseDays + outstandingAdded + holidayDeducted - priorDeducted + travelAdded)
 
     // Get selected HR executive name for confirmation
     const selectedExec = hrExecutives.find(e => e.id === forwardToHrExecutiveId)
@@ -2262,7 +2263,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
       `Adjusted Dates: ${adjStart} to ${adjEnd}\n` +
       `Base Days: ${baseDays}\n` +
       `${outstandingAdded > 0 ? `+ Outstanding Days: ${outstandingAdded}\n` : ""}` +
-      `- Public Holidays: ${holidayDeducted}\n` +
+      `+ Public Holidays: ${holidayDeducted}\n` +
       `- Prior Leave Enjoyed: ${priorDeducted}\n` +
       `+ Travelling Days: ${travelAdded}\n` +
       `Final Days to Approvers: ${finalDays}\n\n` +
@@ -3589,10 +3590,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                                   const baseDays = adjStart && adjEnd
                                     ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
                                     : Number(req.requested_days || 0)
-                                  const finalDays = Math.max(0, baseDays + outstandingD - holidayD - priorD + travelD)
+                                  // Public holidays are ADDED to the granted days (not deducted)
+                                  const finalDays = Math.max(0, baseDays + outstandingD + holidayD - priorD + travelD)
                                   const generatedReason = [
                                     outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
-                                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
+                                    holidayD > 0 ? `${holidayD} public holiday day(s) added` : "",
                                     priorD > 0 ? `${priorD} prior leave day(s) deducted` : "",
                                     travelD > 0 ? `${travelD} travelling day(s) added` : "",
                                   ].filter(Boolean).join("; ")

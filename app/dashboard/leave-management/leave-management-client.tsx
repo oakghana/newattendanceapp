@@ -2225,17 +2225,19 @@ export function LeaveManagementClient({
                     Deferment &amp; Recall Approvals
                   </button>
                 )}
-                <button
-                  onClick={() => setDefermentSubTab("submit")}
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                    defermentSubTab === "submit"
-                      ? "bg-white text-amber-700 shadow-sm"
-                      : "text-amber-700/70 hover:text-amber-800"
-                  }`}
-                >
-                  <Plus className="h-4 w-4" />
-                  Submit New Request
-                </button>
+                {isManagerView && (
+                  <button
+                    onClick={() => setDefermentSubTab("submit")}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      defermentSubTab === "submit"
+                        ? "bg-white text-amber-700 shadow-sm"
+                        : "text-amber-700/70 hover:text-amber-800"
+                    }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Submit New Request
+                  </button>
+                )}
               </div>
 
               {/* Approvals Sub-Tab */}
@@ -2249,6 +2251,18 @@ export function LeaveManagementClient({
               {/* Tracking Sub-Tab */}
               {defermentSubTab === "tracking" && (
               <div className="space-y-6">
+              
+              {/* Staff Information Banner */}
+              {!isManagerView && (
+                <Alert className="border-blue-200 bg-blue-50">
+                  <AlertCircle className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-900 ml-2">
+                    <span className="font-semibold">Note:</span> Leave deferment requests can only be submitted by Department Heads, Regional Managers, and Management. 
+                    Please contact your HOD/RM if you need to defer your leave.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {/* Deferment Requests Tracker */}
               <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50/50">
                 <CardHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
@@ -2629,17 +2643,19 @@ export function LeaveManagementClient({
                     Deferment &amp; Recall Approvals
                   </button>
                 )}
-                <button
-                  onClick={() => setRecallSubTab("submit")}
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                    recallSubTab === "submit"
-                      ? "bg-white text-rose-700 shadow-sm"
-                      : "text-rose-700/70 hover:text-rose-800"
-                  }`}
-                >
-                  <Plus className="h-4 w-4" />
-                  Submit New Request
-                </button>
+                {isManagerView && (
+                  <button
+                    onClick={() => setRecallSubTab("submit")}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      recallSubTab === "submit"
+                        ? "bg-white text-rose-700 shadow-sm"
+                        : "text-rose-700/70 hover:text-rose-800"
+                    }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Submit New Request
+                  </button>
+                )}
               </div>
 
               {/* Approvals Sub-Tab */}
@@ -2653,6 +2669,18 @@ export function LeaveManagementClient({
               {/* Tracking Sub-Tab */}
               {recallSubTab === "tracking" && (
               <div className="space-y-6">
+              
+              {/* Staff Information Banner */}
+              {!isManagerView && (
+                <Alert className="border-blue-200 bg-blue-50">
+                  <AlertCircle className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-900 ml-2">
+                    <span className="font-semibold">Note:</span> Leave recall requests can only be submitted by Department Heads, Regional Managers, and Management. 
+                    Please contact your HOD/RM if you need to recall your leave.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {/* Recall Requests Tracker */}
               <Card className="border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50">
                 <CardHeader className="border-b border-rose-200 bg-gradient-to-r from-rose-600 to-red-600 text-white">

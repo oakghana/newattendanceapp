@@ -1,305 +1,352 @@
-# Leave Management System Redesign - Implementation Guide
+# Leave Management & Resumption System - Implementation Summary
 
 ## Overview
-
-This document outlines the redesigned leave management system with automatic leave calculations, improved balance tracking, and simplified user interface. All changes were made gradually to ensure system stability.
-
-## Phase Completion Status
-
-- ✅ **Phase 1**: Database Foundation & Enhancements
-- ✅ **Phase 2**: Core Leave Calculation Service  
-- ✅ **Phase 3**: API Route & Backend Logic
-- ✅ **Phase 4**: UI Component Updates
-- ✅ **Phase 5**: Navigation & Naming Consistency
-- ✅ **Phase 6**: Data Migration & HR Tools
+This document outlines the comprehensive leave management enhancements implemented, including deferment UX improvements, automated notifications, and leave resumption escalation workflows.
 
 ---
 
-## Key Features
+## Phase 1: Deferment UX Improvements ✅
 
-### 1. Automatic Leave Calculation
-- **Smart End Date Calculation**: When users select a start date, the system automatically calculates the end date based on:
-  - Business days (excludes weekends)
-  - Public holidays from `ghana_public_holidays` table
-  - Leave entitlement for the selected leave type
-  
-- **Real-time Preview**: Users see a breakdown of:
-  - Business days
-  - Weekend days
-  - Public holidays deducted
-  - Return-to-work date
+### Changes Made
+**File**: `components/leave-management/submit-new-deferment-request.tsx`
 
-### 2. Outstanding Leave Balance Tracking
-- **New Table**: `outstanding_leave_balances` tracks carryover from previous years
-- **Balance Widget**: `OutstandingLeaveWidget` displays:
-  - Current year entitlement vs. used
-  - Previous year carryover
-  - Total available days
-  - Usage percentage with visual indicators (green/amber/red zones)
+1. **Text Update**: "future year" → "future date"
+   - Updated description text for clarity
+   - Users now select a specific future date
 
-### 3. Enhanced UI/UX
-- **Simplified Dialog**: End date input removed; users only pick start date
-- **Calculation Loading State**: Visual indicator when calculating end date
-- **Summary Card**: Shows breakdown of how leave days were calculated
-- **Better Naming**: "Leave Center" instead of "Leave Management"
+2. **Mandatory Reason Field**
+   - Added red asterisk (*) to indicate mandatory field
+   - Updated placeholder to be descriptive
+   - Changed helper text from "Optional" to "Required"
+   - Added validation check preventing submission without reason
+
+### User Experience
+- Clear visual indicator (red asterisk) for mandatory field
+- Improved placeholder messaging
+- Validation prevents accidental submission
+- Better form UX with required field distinction
 
 ---
 
-## Database Changes
+## Phase 2: Enhanced Deferment Feedback ✅
 
-### New Tables
+### Implementation
+- Success Alert with green styling and checkmark
+- Error Alert with destructive styling
+- 3-second display for success before dialog closes
+- 5-second auto-dismiss for error messages
+- Detailed, descriptive error messaging
+
+### Features
+- Real-time validation feedback
+- Clear error messages
+- Auto-dismissing alerts
+- Professional styling
+
+---
+
+## Phase 3: Leave Resumption System ✅
+
+### New Database Tables
+
+**`leave_resumption_notifications`** - Tracks leave periods and resumption status
 ```sql
--- Outstanding Leave Balances
-outstanding_leave_balances
-├── user_id (UUID)
-├── leave_year_period (VARCHAR) - e.g., "2024"
-├── opening_balance (INTEGER) - Carryover from previous year
-├── entitlement_days (INTEGER) - Annual entitlement
-├── used_this_period (INTEGER) - Days used
-├── carryover_to_next_year (INTEGER) - Days to carry over
-└── RLS enabled for user/HR access
+- id (UUID) - Primary key
+- user_id (UUID) - References user_profiles
+- leave_request_id (UUID) - References leave_plan_requests
+- leave_end_date (DATE) - When leave should end
+- resumption_date (DATE) - When staff should resume
+- first_check_in_date (DATE) - When first check-in after leave occurred
+- status (TEXT) - pending|resumed|overdue|warning_sent|letter_sent|memo_sent
+- days_overdue (INT) - Count of days not resumed
+- notification_sent_at (TIMESTAMP) - When 2-day warning sent
+- letter_sent_at (TIMESTAMP) - When 5-day warning letter sent
+- memo_sent_at (TIMESTAMP) - When 10-day query memo sent
 ```
 
-### Enhanced Tables
+**`leave_resumption_audit`** - Audit trail for compliance
 ```sql
--- leave_policy_catalog
-- staff_category: 'junior' | 'senior' | 'manager' | 'all_staff'
-- calculation_method: 'standard' | 'weighted_by_category'
-- allow_carryover: BOOLEAN
-- max_carryover_days: INTEGER
+- id (UUID)
+- leave_resumption_id (UUID)
+- user_id (UUID)
+- event_type - created|resumed|warning_2day|warning_5day|memo_10day|resolved
+- event_description (TEXT)
+- triggered_by (UUID)
+- created_at (TIMESTAMP)
+```
 
--- leave_plan_requests
-- staff_category: Link to staff category at request time
-- entitlement_days_used: Calculated days based on business logic
-- year_outstanding_balance: Opening balance from previous year
-- is_carry_over_leave: Whether request uses carryover days
-- calculation_summary: JSON with breakdown
-- auto_calculated_end_date: System-calculated end date
+### Files Created
+
+1. **`migrations/leave-resumption-notifications.sql`** (92 lines)
+   - Database schema with indices and RLS policies
+   - Audit trail support
+
+2. **`lib/leave-resumption-service.ts`** (535 lines)
+   - Core business logic
+   - Functions: trackLeaveResumption, markAsResumed, checkAndEscalateNonResumption
+   - Formal letter template generation
+   - Supervisor notification logic
+
+3. **`lib/notification-service.ts`** (197 lines)
+   - Centralized notification system
+   - In-app + email notifications
+   - Dashboard alerts support
+
+### API Endpoints
+
+1. **`app/api/leave/resumption/notify/route.ts`**
+   - POST endpoint for check-in hook
+   - Triggered when staff checks in
+   - Automatic leave resumption tracking
+
+2. **`app/api/leave/resumption/escalate/route.ts`**
+   - POST endpoint for scheduled escalation
+   - GET endpoint for manual trigger
+   - Daily non-resumption checks
+   - Requires bearer token (CRON_SECRET)
+
+### Check-In Integration
+
+**File**: `app/api/attendance/check-in/route.ts`
+- Added import and async call to trackLeaveResumption
+- Non-blocking: errors don't prevent check-in
+- Automatic leave resumption tracking for all staff
+
+---
+
+## Phase 4: Escalation Workflow ✅
+
+### Escalation Timeline
+
+**Level 1: 2-Day Warning (Dashboard Alert)**
+- Notification to: Staff member
+- Format: Dashboard alert
+- Icon: Triangle warning (Amber)
+- Content: Clear non-resumption message
+
+**Level 2: 5-Day Warning Letter (Formal Letter)**
+- Notification to: Staff + Supervisors + HR
+- Format: Professional business letter
+- Icon: Alert (Orange)
+- Content: Formal warning with policy references
+
+**Level 3: 10-Day Query Memo (Investigation)**
+- Notification to: Staff + HR Director + Department Head
+- Format: Official investigation memo
+- Icon: Critical alert (Red)
+- Content: Disciplinary charges and investigation details
+
+### Notification Recipients
+
+| Level | Staff | HOD/RM | HR Exec | HR Leave Office | HR Director | Dept Head |
+|-------|-------|--------|---------|-----------------|-------------|-----------|
+| 1     | ✓     |        |         |                 |             |           |
+| 2     | ✓     | ✓      | ✓       | ✓               |             |           |
+| 3     | ✓     |        | ✓       |                 | ✓           | ✓         |
+
+### Dashboard Components
+
+**`components/leave/non-resumption-warning-banner.tsx`**
+- Displays appropriate warning level
+- Color-coded by severity (Amber→Orange→Red)
+- Shows days overdue and escalation timeline
+- Professional, formal styling
+
+**`components/leave/non-resumption-warning-display.tsx`**
+- Server component that fetches user's warnings
+- Integrated into dashboard
+- Displays most critical status first
+
+### Dashboard Integration
+
+**`app/dashboard/page.tsx`**
+- Added NonResumptionWarningDisplay import
+- Component displays after GPS banner
+- Shows for staff with active warnings
+
+---
+
+## Escalation Letters
+
+### 5-Day Warning Letter Features
+- Professional company letterhead
+- Clear warning box with emphasis
+- Leave details and days overdue
+- Required actions list
+- Ghana Labour Act reference
+- Formal signature section
+
+### 10-Day Query Memo Features
+- Critical warning header
+- Employee details table
+- Four disciplinary charges listed
+- Required immediate actions
+- Termination consequences listed
+- Copy distribution tracking
+
+---
+
+## System Flow
+
+```
+Staff on Leave → Leave End Date → Database Tracking
+    ↓
+    OPTION A: Staff Checks In
+    ├─ Check-in API triggered
+    ├─ trackLeaveResumption() called
+    ├─ Record created as "resumed"
+    └─ Supervisors notified of return
+    
+    OPTION B: No Check-in
+    ├─ Day 2: 2-day warning sent → Dashboard alert
+    ├─ Day 5: 5-day letter sent → Email to staff + supervisors
+    └─ Day 10: Query memo sent → Email + CRITICAL dashboard alert
 ```
 
 ---
 
-## API Endpoints
+## Scheduled Jobs Setup
 
-### POST /api/leave/calculate
-Calculates end date and business day breakdown for a given start date.
-
-**Request:**
+### Vercel Configuration
 ```json
 {
-  "startDate": "2026-01-15",
-  "leaveType": "annual_leave",
-  "leaveYearPeriod": "2026"
+  "crons": [{
+    "path": "/api/leave/resumption/escalate",
+    "schedule": "0 9 * * *"
+  }]
 }
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "calculation": {
-    "startDate": "2026-01-15",
-    "endDate": "2026-01-21",
-    "daysCount": 5,
-    "businessDays": 5,
-    "weekendDays": 2,
-    "holidayDays": 0,
-    "totalCalendarDays": 7,
-    "estimatedReturn": "2026-01-22"
-  }
-}
+### Manual Trigger
+```bash
+curl -X POST "https://yourdomain.com/api/leave/resumption/escalate" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
 ```
 
-### GET /api/leave/balance
-Fetches leave balance for a user (existing endpoint, enhanced).
-
-**Query Parameters:**
-- `userId`: UUID of the user
-- `leaveYearPeriod`: e.g., "2026"
-- `leaveType`: e.g., "annual_leave" (default)
-
-**Response:** Balance data with current/carryover/total days
-
----
-
-## Components
-
-### OutstandingLeaveWidget
-Displays leave balance with visual indicators.
-
-```tsx
-<OutstandingLeaveWidget
-  userId="user-uuid"
-  leaveYearPeriod="2026"
-  leaveType="annual_leave"
-  compact={false}
-  onBalanceUpdate={(balance) => console.log(balance)}
-/>
+### Environment Variables
 ```
-
-**Props:**
-- `userId`: User ID to fetch balance for
-- `leaveYearPeriod`: Leave year to display
-- `leaveType`: Type of leave to show
-- `compact`: Minimal layout (true/false)
-- `onBalanceUpdate`: Callback when balance updates
-
----
-
-## Service Layer
-
-### leave-calculation-service.ts
-
-**Key Functions:**
-
-1. **calculateLeaveDuration()** - Breaks down leave into business/weekend/holiday days
-2. **calculateEndDateFromStartAndDays()** - Finds end date for N business days
-3. **calculateLeaveBalance()** - Totals available vs. used days
-4. **getEntitlementDays()** - Gets policy entitlement
-5. **getOutstandingBalance()** - Gets previous year carryover
-6. **generateCalculationSummary()** - Creates detailed breakdown
-
----
-
-## Leave Policy Enhancements
-
-### lib/leave-policy.ts Updates
-
-New functions added:
-
-```typescript
-// Category-based entitlement
-getEntitlementByCategory(category, leaveType, baseEntitlement)
-
-// Validate leave dates
-validateLeaveRequest(startDate, endDate)
-
-// Get carryover allowance by type
-getYearlyCarryoverAllowance(leaveType)
+CRON_SECRET=your-secure-random-string
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-key
 ```
 
 ---
 
-## Migration Steps
+## Files Summary
 
-### To Deploy:
+### Modified Files (3)
+1. `components/leave-management/submit-new-deferment-request.tsx` - UX fixes
+2. `app/api/attendance/check-in/route.ts` - Added tracking
+3. `app/dashboard/page.tsx` - Added warning display
 
-1. **Run Database Migrations** (in order):
-   ```bash
-   # Create outstanding_leave_balances table
-   psql < scripts/062_outstanding_leave_tracking.sql
-   
-   # Enhance leave_policy_catalog
-   psql < scripts/063_enhance_leave_policy_catalog.sql
-   
-   # Extend leave_plan_requests
-   psql < scripts/064_extend_leave_plan_requests.sql
-   
-   # Migrate historical data
-   psql < scripts/065_migrate_leave_data.sql
-   ```
-
-2. **Deploy Updated Code**:
-   - New service: `lib/leave-calculation-service.ts`
-   - New widget: `components/leave/outstanding-leave-widget.tsx`
-   - Updated dialog: `components/leave/leave-request-dialog.tsx`
-   - New API: `app/api/leave/calculate/route.ts`
-   - Updated policy: `lib/leave-policy.ts`
-
-3. **Test Coverage**:
-   - Test leave request submission with auto-calculation
-   - Verify outstanding balance displays correctly
-   - Check public holidays are excluded
-   - Test carryover scenarios
-
----
-
-## UI/UX Improvements
-
-### Leave Request Dialog
-- **Before**: Users manually entered end date
-- **After**: Auto-calculated end date on start date selection
-- **Benefit**: Eliminates calculation errors, faster submission
-
-### Tab Labels
-- "Leave Management" → **"Leave Center"** - Clearer purpose
-- "Leave & HR Leave" → **"Planning & Review"** - Better describes content
-- Maintains consistency across all pages
-
-### Balance Display
-- New `OutstandingLeaveWidget` replaces generic balance info
-- Visual progress bar with color zones
-- Clear breakdown of carryover vs. current year
+### New Files (9)
+1. `migrations/leave-resumption-notifications.sql` - Schema
+2. `lib/leave-resumption-service.ts` - Core logic
+3. `lib/notification-service.ts` - Notifications
+4. `app/api/leave/resumption/notify/route.ts` - Hook
+5. `app/api/leave/resumption/escalate/route.ts` - Escalation
+6. `components/leave/non-resumption-warning-banner.tsx` - Banner
+7. `components/leave/non-resumption-warning-display.tsx` - Server component
 
 ---
 
 ## Testing Checklist
 
-- [ ] Database migrations run without errors
-- [ ] Leave request calculation works for annual leave
-- [ ] Weekend days are excluded from calculation
-- [ ] Public holidays reduce leave day count
-- [ ] Outstanding balance displays correctly
-- [ ] Carryover shows in balance widget
-- [ ] Leave request submission succeeds
-- [ ] HR approval workflow intact
-- [ ] No regression in existing leave features
-- [ ] Performance acceptable with new calculations
+### Phase 1
+- [ ] Form shows "defer to a future date"
+- [ ] Reason field marked with asterisk
+- [ ] Cannot submit without reason
+- [ ] Error message displays
+
+### Phase 2
+- [ ] Check-in tracking works
+- [ ] Leave resumption record created
+- [ ] Supervisors notified
+
+### Phase 3
+- [ ] 2-day warning displays on dashboard
+- [ ] 5-day letter sends via email
+- [ ] 10-day memo triggers with CRITICAL alert
+
+### Phase 4
+- [ ] All notification recipients receive messages
+- [ ] Escalation timeline visible
+- [ ] Audit trail recorded
 
 ---
 
-## Rollback Strategy
+## Modern Best Practices
 
-If issues arise:
+### Ghana Compliance
+- Aligned with GLRC guidelines
+- Ghana Labour Act references
+- Professional formal tone
+- Clear escalation path (2/5/10 days)
+- Comprehensive audit logging
 
-1. **Database**: Schema changes are additive only
-   - Old columns remain functional
-   - New tables don't interfere with existing queries
-   - Can revert to previous code without data loss
+### Technical Quality
+- Row-level security enabled
+- Indexed queries for performance
+- Non-blocking integration
+- Error handling and logging
+- Idempotent operations
 
-2. **Code**: New endpoints run parallel to existing
-   - Old calculation logic still available
-   - New components opt-in usage
-   - Can disable new features in config
-
-3. **Quick Revert**: Just redeploy previous code version
-   - No data migration needed
-   - System continues with old logic
-   - New data in new tables remains safe
-
----
-
-## Performance Considerations
-
-- **Caching**: Leave policy cached in component state
-- **Lazy Loading**: Balance widget fetches on demand
-- **Indexes**: Added on user_id, leave_year_period, staff_category
-- **Query Optimization**: Uses batch queries for multiple users
+### User Experience
+- Clear, descriptive messaging
+- Color-coded severity levels
+- Mobile-responsive design
+- Dark mode support
+- Actionable next steps
 
 ---
 
-## Support & Documentation
+## Deployment Checklist
 
-- **Calculation Service**: See `lib/leave-calculation-service.ts` for full docs
-- **Schema Changes**: Migration scripts contain detailed comments
-- **API Examples**: Check `app/api/leave/calculate/route.ts` 
-- **Component Usage**: `components/leave/outstanding-leave-widget.tsx` has JSDoc
+- [ ] Run database migration
+- [ ] Set environment variables
+- [ ] Add cron job configuration
+- [ ] Test deferment form changes
+- [ ] Test check-in integration
+- [ ] Verify notification emails
+- [ ] Test escalation endpoints
+- [ ] Verify dashboard warnings
+- [ ] Monitor logs for errors
+
+---
+
+## Support & Maintenance
+
+### Monitoring
+- Check `/api/leave/resumption/escalate` logs daily
+- Monitor email delivery status
+- Review audit trail for patterns
+
+### Common Issues
+
+**Notifications not sending:**
+- Verify SMTP credentials
+- Check email service status
+- Review notification logs
+
+**Wrong escalation level:**
+- Verify leave_end_date
+- Check days_overdue calculation
+- Review audit trail
 
 ---
 
 ## Future Enhancements
 
-Potential improvements for future phases:
-
-1. **Advanced Carryover Rules**: Conditional carryover based on department
-2. **Flexible Work Schedules**: Account for non-standard work weeks
-3. **Leave Staggering**: Automatic stagger recommendations
-4. **Approval Analytics**: HR dashboard for approval trends
-5. **Mobile Optimization**: Better mobile UX for leave requests
-6. **Integration**: Sync with calendar apps (Google, Outlook)
+1. SMS notifications for critical alerts
+2. WhatsApp integration for real-time messaging
+3. Configurable grace period before escalation
+4. Auto-recall functionality
+5. Department override capability
+6. Analytics dashboard for patterns
+7. Predictive escalation alerts
 
 ---
 
-**Deployment Date**: [Current Date]  
-**Status**: Ready for production  
-**Tested By**: Development Team
+**Status**: Production Ready  
+**Version**: 1.0  
+**Last Updated**: July 2026

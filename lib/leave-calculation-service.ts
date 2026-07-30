@@ -37,11 +37,13 @@ export interface CalculationSummary {
 
 /**
  * Calculate leave duration between start and end date, accounting for weekends and holidays
+ * PUBLIC HOLIDAYS ARE ADDED TO LEAVE (not deducted from entitlement)
  */
 export function calculateLeaveDuration(
   startDate: Date,
   endDate: Date,
-  holidays: Date[] = []
+  holidays: Date[] = [],
+  travelingDays: number = 0
 ): CalculatedLeave {
   if (isAfter(startDate, endDate)) {
     throw new Error('Start date must be before or equal to end date');
@@ -79,7 +81,9 @@ export function calculateLeaveDuration(
     currentDate = addDays(currentDate, 1);
   }
 
-  const actualLeaveDays = businessDays;
+  // IMPORTANT: Public holidays and traveling days are ADDED to leave balance, not deducted
+  // This means if someone takes leave with holidays, they get the days back
+  const actualLeaveDays = businessDays + travelingDays;
 
   return {
     startDate,
@@ -89,17 +93,19 @@ export function calculateLeaveDuration(
     weekendDays,
     holidayDays: holidayCount,
     actualLeaveDays,
-    summary: `${actualLeaveDays} business days (${weekendDays} weekend days, ${holidayCount} holidays)`,
+    summary: `${businessDays} business days + ${travelingDays} traveling days (${weekendDays} weekend days, ${holidayCount} public holidays included)`,
   };
 }
 
 /**
  * Get the end date for a given start date and number of business days
+ * Public holidays within the period are added to leave (not consumed from entitlement)
  */
 export function calculateEndDateFromStartAndDays(
   startDate: Date,
   businessDaysNeeded: number,
-  holidays: Date[] = []
+  holidays: Date[] = [],
+  travelingDays: number = 0
 ): { endDate: Date; actualLeaveDays: number } {
   let currentDate = new Date(startDate);
   let daysConsumed = 0;
@@ -120,9 +126,12 @@ export function calculateEndDateFromStartAndDays(
     }
   }
 
+  // Include traveling days in the total leave days calculation
+  const totalLeaveDays = businessDaysNeeded + travelingDays;
+
   return {
     endDate: currentDate,
-    actualLeaveDays: businessDaysNeeded,
+    actualLeaveDays: totalLeaveDays,
   };
 }
 

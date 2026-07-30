@@ -90,6 +90,11 @@ export function SubmitNewDefermentRequest({
       return
     }
 
+    if (!reason || reason.trim().length === 0) {
+      setError('Reason for deferment is required. Please provide a detailed explanation.')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
     setSuccess(false)
@@ -113,15 +118,21 @@ export function SubmitNewDefermentRequest({
       }
 
       setSuccess(true)
+      // Keep success message visible for 3 seconds before closing
       setTimeout(() => {
         setSelectedLeave(null)
         setReason('')
         setSearchQuery('')
         onClose()
         onSuccess?.()
-      }, 1500)
+      }, 3000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred while submitting your deferment request'
+      setError(errorMessage)
+      // Auto-clear error after 5 seconds
+      setTimeout(() => {
+        setError(null)
+      }, 5000)
     } finally {
       setIsLoading(false)
     }
@@ -150,27 +161,27 @@ export function SubmitNewDefermentRequest({
           <DialogTitle className="text-2xl font-bold">Submit New Deferment Request</DialogTitle>
           <DialogDescription>
             {isStaff
-              ? 'Select one of your approved annual leave requests to defer to a future year'
-              : 'Select a staff member\'s approved leave to defer to a future year'}
+              ? 'Select one of your approved annual leave requests to defer to a future date'
+              : 'Select a staff member\'s approved leave to defer to a future date'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           {/* Success State */}
           {success && (
-            <Alert className="border-green-200 bg-green-50">
+            <Alert className="border-green-200 bg-green-50 animate-in fade-in">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">
-                Deferment request submitted successfully! Awaiting HOD/RM endorsement.
+              <AlertDescription className="text-green-800 font-medium">
+                ✓ Deferment request submitted successfully! Your request has been recorded and will be reviewed by the appropriate authority for endorsement.
               </AlertDescription>
             </Alert>
           )}
 
           {/* Error State */}
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="animate-in fade-in">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription className="font-medium">{error}</AlertDescription>
             </Alert>
           )}
 
@@ -298,17 +309,17 @@ export function SubmitNewDefermentRequest({
           {/* Reason for Deferment */}
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-slate-700">
-              Reason for Deferment
+              Reason for Deferment <span className="text-red-500 ml-1">*</span>
             </label>
             <Textarea
-              placeholder="Explain why this leave is being deferred (optional)..."
+              placeholder="Please provide a detailed reason for this deferment request..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               disabled={isLoading}
               className="resize-none"
               rows={3}
             />
-            <p className="text-xs text-slate-500">Optional - provide context for the deferment</p>
+            <p className="text-xs text-slate-600">Required - provide a clear explanation for the deferment</p>
           </div>
 
           {/* Info Box */}

@@ -446,6 +446,8 @@ export async function GET(
       isApplicant ||
       role === "admin" ||
       role === "loan_office" ||
+      role === "hr_executive" ||
+      role === "accounts_executive" ||
       isHrApproverRole(role, deptName, deptCode) ||
       isHrLeaveOfficeRole(role) ||
       isManagerRole(role) ||
@@ -463,7 +465,7 @@ export async function GET(
       if (!storedToken || token !== storedToken) {
         return NextResponse.json({ error: "Invalid or expired memo token." }, { status: 401 })
       }
-    } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin") {
+    } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin" && role !== "hr_executive" && role !== "accounts_executive") {
       // No token provided — allow the applicant or loan_office to download their own memo, or HOD/manager.
       if (!isApplicant && role !== "loan_office" && !isManagerRole(role)) {
         return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
@@ -796,34 +798,46 @@ export async function GET(
     if (useTable === true) {
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
       const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
+      // Public holidays and travelling days are ADDED to the granted days (not deducted)
+      const holidayDaysAdded = Number(lr.holiday_days_deducted || 0)   // field name is legacy; treated as addition per business rule
+      const travelDaysFromField = Math.max(0, Number(lr.travelling_days_added || 0))
+      const travelDays = Math.max(0, Number(tableTravellingDays || 0) || travelDaysFromField)
 
-      // tableEntitlement is now the actual working-day base (from calculateWorkingDays or adjusted_days).
-      // Travel days are additive; prior leave is deductive; outstanding leave is additive.
-      // Public holidays are already excluded from the working-days base — do NOT deduct them again.
-      const baseDays   = Math.max(0, Number(tableEntitlement || 0))
-      const travelDays = Math.max(0, Number(tableTravellingDays || 0))
-
+      // ─── Entitlement label (top-left cell): gross entitlement ───────────────
+      // Show the staff's full annual entitlement (e.g. "24") even when some days were
+      // already enjoyed — this is what the memo should declare as the entitlement.
+      // Priority: entitlement_days field → tableEntitlement (computed working days)
+      const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
+      const grossEntitlement = rawEntitlement > 0 ? rawEntitlement : Math.max(0, Number(tableEntitlement || 0))
       const entitlementLabel = travelDays > 0
-        ? `${baseDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
-        : String(baseDays || effectiveDays)
+        ? `${grossEntitlement} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
+        : String(grossEntitlement || effectiveDays)
 
-      // Total granted = base working days + travel − prior leave already enjoyed + outstanding added
-      const totalGranted = Math.max(0, baseDays + travelDays - priorLeaveDaysDeducted + outstandingLeaveDaysAdded)
+      // ─── Number of Days Granted (net actual days being taken) ───────────────
+      // tableEntitlement is the NET working days for this grant (baseLeaveDays already
+      // accounts for prior deduction from HR office adjustments).
+      // We then add: travelling days + public holidays + outstanding leave.
+      // We do NOT subtract priorLeaveDaysDeducted here because baseDays is already net.
+      const baseDays = Math.max(0, Number(tableEntitlement || 0))
+      const totalGranted = Math.max(0, baseDays + travelDays + holidayDaysAdded + outstandingLeaveDaysAdded)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
       )
       const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
-      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0
+      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0 || holidayDaysAdded > 0
       const remarksParts: string[] = []
-      // NOTE: travelling days are already shown in entitlementLabel, so don't repeat in remarks
-      // Only include other deductions/additions that aren't visible in the table labels
+      // Build remarks: show every component that affects the total
       if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`)
+      if (holidayDaysAdded > 0) remarksParts.push(`${holidayDaysAdded} public holiday day(s) added`)
+      if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
+      // When remarksParts is populated it already covers all adjustment fields;
+      // do NOT append remarksText (adjustment_reason) to avoid duplicates.
       const remarksSummary = remarksParts.length > 0
-        ? `${remarksParts.join("; ")}${remarksText ? `; ${remarksText}` : ""}`
-        : (hasIncrease && remarksText ? remarksText : "")
+        ? remarksParts.join("; ")
+        : (remarksText || "")
 
       autoTable(doc, {
         startY: y,

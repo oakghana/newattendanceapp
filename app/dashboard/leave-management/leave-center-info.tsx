@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, BookOpen, Clock, CheckCircle2, Users, Calendar, FileText, Download, Loader2, CheckCircle } from "lucide-react"
+import { ReturnToWorkReminder } from "@/components/leave/return-to-work-reminder"
 
 interface LeaveCenterInfoProps {
   userRole?: string | null
@@ -147,6 +148,9 @@ export function LeaveCenterInfo({ userRole, userDepartmentName }: LeaveCenterInf
 
   return (
     <div className="space-y-6 w-full">
+      {/* Return to Work Reminder — for staff returning within 5 days */}
+      {isStaff && <ReturnToWorkReminder />}
+
       {/* Welcome Banner */}
       <Card className="bg-gradient-to-r from-emerald-600 to-teal-600 border-0 text-white">
         <CardContent className="pt-6">

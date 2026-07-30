@@ -305,15 +305,7 @@ export function HrExecutiveApprovalDashboard() {
           <CheckCircle className="h-4 w-4 mr-1" />
           Approved Defer/Recall ({approvedDeferments.length + approvedRecalls.length})
         </Button>
-        <Button
-          variant={activeSection === 'memos' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setActiveSection('memos')}
-          className={activeSection === 'memos' ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''}
-        >
-          <FileText className="h-4 w-4 mr-1" />
-          Approved Request ({approvedMemos.length})
-        </Button>
+
       </div>
 
       {/* ── PENDING DECISIONS ── */}
@@ -583,51 +575,7 @@ export function HrExecutiveApprovalDashboard() {
         </Tabs>
       )}
 
-      {/* ── APPROVED PAYMENT ADVICE ── */}
-      {activeSection === 'memos' && (
-        <div className="space-y-3">
-          {approvedMemos.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-slate-500">
-                <FileText className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                No approved payment advice yet
-              </CardContent>
-            </Card>
-          ) : approvedMemos.map(memo => {
-            let body: any = {}
-            try { body = typeof memo.memo_body === 'string' ? JSON.parse(memo.memo_body) : (memo.memo_body || {}) } catch {}
-            const category = memo.staff_category || body.staff_category || 'Staff'
-            const month = memo.leave_month || body.leave_month || fmtDate(memo.created_at)
-            const staffCount = (body.staffList?.length) || 1
-            return (
-              <Card key={memo.id} className="border-l-4 border-l-emerald-400">
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-sm">{category} — {month}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {staffCount} staff member{staffCount !== 1 ? 's' : ''} &bull; Signed by {memo.signer_name || 'HR Executive'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {statusBadge(memo.status)}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs"
-                        onClick={() => downloadMemo(memo.id, `${category}-${month}`)}
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        Download PDF
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
+
     </div>
   )
 }

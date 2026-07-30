@@ -18,7 +18,7 @@ function isSchemaIssue(error: any): boolean {
 function canManageLookups(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   return (
     role === "admin" ||
-    role === "it-admin" ||
+    role === "it_admin" || // normalized form (after normalizeRole converts it-admin to it_admin)
     role === "loan_office" ||
     role === "manager_hr" ||
     role === "director_hr" ||
