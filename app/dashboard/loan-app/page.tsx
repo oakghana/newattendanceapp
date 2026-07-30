@@ -1048,6 +1048,12 @@ export default function LoanAppPage() {
   const [paymentApprovalsSearch, setPaymentApprovalsSearch] = useState("")
   const [paymentApprovalsFilter, setPaymentApprovalsFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending")
   const [paymentApprovalsSort, setPaymentApprovalsSort] = useState<"date" | "amount">("date")
+  const [paymentRecords, setPaymentRecords] = useState<any[]>([])
+  const [paymentRecordsLoading, setPaymentRecordsLoading] = useState(false)
+  const [selectedPaymentForApproval, setSelectedPaymentForApproval] = useState<any>(null)
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false)
+  const [approvalNotes, setApprovalNotes] = useState("")
+  const [approvingPaymentId, setApprovingPaymentId] = useState<string | null>(null)
   const [selectedPaymentEvidence, setSelectedPaymentEvidence] = useState<any | null>(null)
   const [paymentApprovalModal, setPaymentApprovalModal] = useState({
     open: false,
@@ -1507,6 +1513,46 @@ export default function LoanAppPage() {
 
   useEffect(() => setHodPage(1), [hodSearch, hodStatus, hodSort])
   useEffect(() => setLoanOfficePage(1), [loanOfficeSearch, loanOfficeStatus, loanOfficeSort])
+
+  // Fetch payment records for approval
+  useEffect(() => {
+    const fetchPaymentRecords = async () => {
+      const isApprover = ["hr_executive", "accounts_executive", "admin"].includes(data?.profile?.role || "")
+      if (!isApprover) return
+
+      setPaymentRecordsLoading(true)
+      try {
+        const response = await fetch(`/api/loan/payment-evidence?overallStatus=${paymentApprovalsFilter === "all" ? "" : paymentApprovalsFilter}`)
+        if (response.ok) {
+          const result = await response.json()
+          const records = result.data || []
+          
+          // Filter and sort records
+          let filtered = records
+          if (paymentApprovalsSearch) {
+            filtered = records.filter((r: any) =>
+              r.reference_number?.toLowerCase().includes(paymentApprovalsSearch.toLowerCase()) ||
+              r.description?.toLowerCase().includes(paymentApprovalsSearch.toLowerCase())
+            )
+          }
+          
+          if (paymentApprovalsSort === "amount") {
+            filtered.sort((a: any, b: any) => Number(b.amount_paid) - Number(a.amount_paid))
+          } else {
+            filtered.sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())
+          }
+          
+          setPaymentRecords(filtered)
+        }
+      } catch (err) {
+        console.error("[v0] Error fetching payment records:", err)
+      } finally {
+        setPaymentRecordsLoading(false)
+      }
+    }
+
+    fetchPaymentRecords()
+  }, [data?.profile?.role, paymentApprovalsFilter, paymentApprovalsSearch, paymentApprovalsSort])
   useEffect(() => setLoanOfficePage(1), [loanOfficeTypeTab, loanOfficeStageTab])
   useEffect(() => setAccountsPage(1), [accountsSearch, accountsStatus, accountsSort])
   useEffect(() => setCommitteePage(1), [committeeSearch, committeeStatus, committeeSort])
@@ -3927,7 +3973,7 @@ export default function LoanAppPage() {
           </Card>
         </TabsContent>
 
-        {/* ── Staff Loan Records Tab ── */}
+        {/* ── Staff Loan Records Tab ��─ */}
         <TabsContent value="staff-loan-records" className="space-y-4">
           <Card>
             <CardHeader>
@@ -4886,9 +4932,11 @@ export default function LoanAppPage() {
               <div className="space-y-3">
                 {(() => {
                   // For HR/Accounts executives, fetch pending payments for their approval
-                  const isPendingApprovals = ["hr_executive", "accounts_executive"].includes(data?.profile?.role || "")
+                  const userRole = data?.profile?.role || ""
+                  const isHrApprover = ["hr_executive", "admin"].includes(userRole)
+                  const isAccountsApprover = ["accounts_executive", "admin"].includes(userRole)
                   
-                  if (!isPendingApprovals) {
+                  if (!isHrApprover && !isAccountsApprover) {
                     return (
                       <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
                         <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
@@ -4897,22 +4945,16 @@ export default function LoanAppPage() {
                     )
                   }
 
-                  // Mock pending payments for now (will be replaced with API call)
-                  const pendingPayments: any[] = [
-                    {
-                      id: "pay-001",
-                      loan_request: { request_number: "LN-2026-07-3597", fixed_amount: 15000, loan_type_label: "Funeral Loan" },
-                      submitter: { first_name: "Bernard", last_name: "Addbi" },
-                      payment_date: "2025-07-30",
-                      amount_paid: 1500,
-                      payment_method: "bank_transfer",
-                      overall_status: "pending",
-                      hr_approval_status: "pending",
-                      accounts_approval_status: "pending",
-                    }
-                  ]
+                  if (paymentRecordsLoading) {
+                    return (
+                      <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
+                        <Loader2 className="h-8 w-8 text-slate-400 mx-auto mb-3 animate-spin" />
+                        <p className="text-sm">Loading payment records...</p>
+                      </div>
+                    )
+                  }
 
-                  if (pendingPayments.length === 0) {
+                  if (paymentRecords.length === 0) {
                     return (
                       <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
                         <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
@@ -4921,59 +4963,96 @@ export default function LoanAppPage() {
                     )
                   }
 
-                  return pendingPayments.map((payment) => (
-                    <div key={payment.id} className="rounded-lg border border-slate-200 p-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                        <div>
-                          <div className="text-xs text-slate-500 font-semibold">Loan Reference</div>
-                          <div className="text-sm font-semibold text-slate-900">{payment.loan_request?.request_number}</div>
-                          <div className="text-xs text-slate-600">{payment.loan_request?.loan_type_label}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500 font-semibold">Submitted By</div>
-                          <div className="text-sm font-semibold text-slate-900">{payment.submitter?.first_name} {payment.submitter?.last_name}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500 font-semibold">Payment Details</div>
-                          <div className="text-sm font-semibold text-slate-900">GHc {Number(payment.amount_paid).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</div>
-                          <div className="text-xs text-slate-600">{new Date(payment.payment_date).toLocaleDateString('en-GH')}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500 font-semibold">Approval Status</div>
-                          <div className="flex flex-col gap-1 mt-1">
-                            <div className="text-xs">
-                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
-                                payment.hr_approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                payment.hr_approval_status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                'bg-amber-100 text-amber-700'
-                              }`}>
-                                HR: {payment.hr_approval_status === 'pending' ? 'Pending' : payment.hr_approval_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
-                              </span>
-                            </div>
-                            <div className="text-xs">
-                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
-                                payment.accounts_approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                payment.accounts_approval_status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                'bg-amber-100 text-amber-700'
-                              }`}>
-                                Accts: {payment.accounts_approval_status === 'pending' ? 'Pending' : payment.accounts_approval_status === 'approved' ? '✓ Approved' : '✗ Rejected'}
-                              </span>
+                  return paymentRecords.map((payment) => {
+                    const needsHrApproval = isHrApprover && payment.hr_approval_status === "pending"
+                    const needsAccountsApproval = isAccountsApprover && payment.accounts_approval_status === "pending"
+                    const canApprove = needsHrApproval || needsAccountsApproval
+                    const approvalType = needsHrApproval ? "hr" : needsAccountsApproval ? "accounts" : null
+
+                    return (
+                      <div key={payment.id} className="rounded-lg border border-slate-200 p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                          <div>
+                            <div className="text-xs text-slate-500 font-semibold">Payment Reference</div>
+                            <div className="text-sm font-semibold text-slate-900">{payment.reference_number || payment.id}</div>
+                            <div className="text-xs text-slate-600">{payment.description || "Payment record"}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-slate-500 font-semibold">Payment Details</div>
+                            <div className="text-sm font-semibold text-slate-900">GHc {Number(payment.amount_paid).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</div>
+                            <div className="text-xs text-slate-600">{new Date(payment.payment_date).toLocaleDateString("en-GH")}</div>
+                            <div className="text-xs text-slate-600">{payment.payment_method || "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-slate-500 font-semibold">Submitted By</div>
+                            <div className="text-sm font-semibold text-slate-900">{payment.submitted_by || "System"}</div>
+                            <div className="text-xs text-slate-600">{new Date(payment.submitted_at).toLocaleDateString("en-GH")}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-slate-500 font-semibold">Approval Status</div>
+                            <div className="flex flex-col gap-1 mt-1">
+                              <div className="text-xs">
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                  payment.hr_approval_status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                                  payment.hr_approval_status === "rejected" ? "bg-red-100 text-red-700" :
+                                  "bg-amber-100 text-amber-700"
+                                }`}>
+                                  HR: {payment.hr_approval_status === "pending" ? "Pending" : payment.hr_approval_status === "approved" ? "✓ Approved" : "✗ Rejected"}
+                                </span>
+                              </div>
+                              <div className="text-xs">
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                  payment.accounts_approval_status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                                  payment.accounts_approval_status === "rejected" ? "bg-red-100 text-red-700" :
+                                  "bg-amber-100 text-amber-700"
+                                }`}>
+                                  Accts: {payment.accounts_approval_status === "pending" ? "Pending" : payment.accounts_approval_status === "approved" ? "✓ Approved" : "✗ Rejected"}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Action buttons */}
-                      <div className="border-t border-slate-200 pt-3 flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" className="text-red-700 border-red-200 hover:bg-red-50">
-                          Reject
-                        </Button>
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                          Approve Payment
-                        </Button>
+                        {/* Action buttons */}
+                        {canApprove && (
+                          <div className="border-t border-slate-200 pt-3 flex gap-2 justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-red-700 border-red-200 hover:bg-red-50"
+                              onClick={() => {
+                                setSelectedPaymentForApproval(payment)
+                                setApprovalNotes("")
+                                setApprovingPaymentId(`reject-${payment.id}`)
+                                setApprovalModalOpen(true)
+                              }}
+                              disabled={approvingPaymentId !== null}
+                            >
+                              Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700"
+                              onClick={() => {
+                                setSelectedPaymentForApproval(payment)
+                                setApprovalNotes("")
+                                setApprovingPaymentId(`approve-${payment.id}`)
+                                setApprovalModalOpen(true)
+                              }}
+                              disabled={approvingPaymentId !== null}
+                            >
+                              Approve Payment
+                            </Button>
+                          </div>
+                        )}
+                        {!canApprove && (
+                          <div className="border-t border-slate-200 pt-3 flex gap-2 justify-end">
+                            <span className="text-xs text-slate-500">No action required for this record</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))
+                    )
+                  })
                 })()}
               </div>
             </CardContent>
@@ -7175,6 +7254,115 @@ export default function LoanAppPage() {
               }}
             >
               {paymentEvidenceModal.isSubmitting ? "Submitting..." : "Submit for Approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Approval Modal */}
+      <Dialog open={approvalModalOpen} onOpenChange={setApprovalModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {approvingPaymentId?.startsWith("approve") ? "Approve Payment" : "Reject Payment"}
+            </DialogTitle>
+            <DialogDescription>
+              {approvingPaymentId?.startsWith("approve")
+                ? `Approve payment of GHc ${Number(selectedPaymentForApproval?.amount_paid || 0).toLocaleString("en-GH", { minimumFractionDigits: 2 })}`
+                : `Reject payment of GHc ${Number(selectedPaymentForApproval?.amount_paid || 0).toLocaleString("en-GH", { minimumFractionDigits: 2 })}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs font-semibold text-slate-600">
+                {approvingPaymentId?.startsWith("approve") ? "Approval Notes" : "Rejection Reason"}
+              </Label>
+              <Textarea
+                placeholder={approvingPaymentId?.startsWith("approve") ? "Enter approval notes..." : "Explain why this payment is being rejected..."}
+                value={approvalNotes}
+                onChange={(e) => setApprovalNotes(e.target.value)}
+                className="mt-1.5 text-sm"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setApprovalModalOpen(false)}
+              disabled={approvingPaymentId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              className={approvingPaymentId?.startsWith("approve") ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}
+              onClick={async () => {
+                if (!selectedPaymentForApproval || !approvingPaymentId) return
+                
+                const isApprove = approvingPaymentId.startsWith("approve")
+                const userRole = data?.profile?.role || ""
+                const isHrApprover = ["hr_executive", "admin"].includes(userRole)
+                const isAccountsApprover = ["accounts_executive", "admin"].includes(userRole)
+                const approvalType = isHrApprover && selectedPaymentForApproval.hr_approval_status === "pending" ? "hr" : "accounts"
+
+                try {
+                  const response = await fetch("/api/loan/payment-evidence/approval", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      paymentRecordId: selectedPaymentForApproval.id,
+                      approvalType,
+                      approvalStatus: isApprove ? "approved" : "rejected",
+                      approvalNotes: approvalNotes || null,
+                    }),
+                  })
+
+                  if (response.ok) {
+                    toast({
+                      title: isApprove ? "Payment Approved" : "Payment Rejected",
+                      description: `Payment has been ${isApprove ? "approved" : "rejected"} successfully`,
+                    })
+                    setApprovalModalOpen(false)
+                    setSelectedPaymentForApproval(null)
+                    setApprovalNotes("")
+                    setApprovingPaymentId(null)
+                    // Refresh payment records
+                    const refetchResponse = await fetch(`/api/loan/payment-evidence`)
+                    if (refetchResponse.ok) {
+                      const result = await refetchResponse.json()
+                      setPaymentRecords(result.data || [])
+                    }
+                  } else {
+                    const error = await response.json()
+                    toast({
+                      title: "Error",
+                      description: error.error || "Failed to process payment",
+                      variant: "destructive",
+                    })
+                  }
+                } catch (err) {
+                  console.error("[v0] Payment approval error:", err)
+                  toast({
+                    title: "Error",
+                    description: "Failed to process payment approval",
+                    variant: "destructive",
+                  })
+                } finally {
+                  setApprovingPaymentId(null)
+                }
+              }}
+              disabled={approvingPaymentId === null || !approvalNotes.trim()}
+            >
+              {approvingPaymentId ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : approvingPaymentId?.startsWith("approve") ? (
+                "Approve"
+              ) : (
+                "Reject"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
