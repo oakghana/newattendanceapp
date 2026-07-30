@@ -23,21 +23,20 @@ export default async function DisbursementConfirmationPage() {
 
   const admin = await createAdminClient()
 
-  // Verify user is in Accounts/Loan Office department
+  // Verify user is HR Executive, Accounts Executive, or Loan Office staff
   const { data: profile } = await admin
     .from("user_profiles")
-    .select("id, role, first_name, last_name, departments(name)")
+    .select("id, role, first_name, last_name")
     .eq("id", user.id)
     .maybeSingle()
 
-  const deptName = (profile as any)?.departments?.name || ""
-  const isAccountsOrLoanOffice = 
-    deptName.toLowerCase().includes("account") ||
-    deptName.toLowerCase().includes("finance") ||
-    deptName.toLowerCase().includes("loan") ||
-    deptName.toLowerCase().includes("welfare")
+  const userRole = (profile as any)?.role || ""
+  const isAuthorized = 
+    userRole === "hr_executive" ||
+    userRole === "accounts_executive" ||
+    userRole === "loan_office"
 
-  if (!profile || !isAccountsOrLoanOffice) {
+  if (!profile || !isAuthorized) {
     redirect("/auth/login")
   }
 
