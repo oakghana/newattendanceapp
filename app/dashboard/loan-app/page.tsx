@@ -2831,12 +2831,29 @@ export default function LoanAppPage() {
                     )}
 
                     {isRejected && (
-                      <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-3">
-                        <span className="text-3xl">❌</span>
-                        <div>
-                          <p className="text-sm font-semibold text-red-800">Application {statusText(req.status)}</p>
-                          <p className="text-xs text-red-600">Please contact HR for further assistance.</p>
+                      <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">❌</span>
+                          <div>
+                            <p className="text-sm font-semibold text-red-800">Application {statusText(req.status)}</p>
+                            <p className="text-xs text-red-600">
+                              {req.status === "rejected_fd"
+                                ? "Your FD standing did not meet the required threshold."
+                                : "Please contact HR for further assistance."}
+                            </p>
+                          </div>
                         </div>
+                        {(req.status === "rejected_fd" || req.status === "director_rejected") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-300 text-red-700 hover:bg-red-100 gap-1.5 shrink-0"
+                            onClick={() => void openSecureMemo(req.id)}
+                          >
+                            <Download className="h-4 w-4" />
+                            Download Rejection Memo
+                          </Button>
+                        )}
                       </div>
                     )}
 

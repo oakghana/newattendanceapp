@@ -1,5 +1,5 @@
 "use client"
-
+// v2 - PWAComponents removed; chunk cache invalidated
 import type React from "react"
 import { useEffect } from "react"
 import { NotificationProvider } from "@/components/ui/notification-system"
