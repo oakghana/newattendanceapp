@@ -19,7 +19,7 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -847,6 +847,17 @@ export default function LoanAppPage() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<WorkflowResponse | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
+
+  const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(new Set())
+  const toggleLoanExpanded = (loanId: string) => {
+    const newSet = new Set(expandedLoanIds)
+    if (newSet.has(loanId)) {
+      newSet.delete(loanId)
+    } else {
+      newSet.add(loanId)
+    }
+    setExpandedLoanIds(newSet)
+  }
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loanTypeKey, setLoanTypeKey] = useState("")
@@ -4675,10 +4686,12 @@ export default function LoanAppPage() {
                 Showing {pagedAllLoans.length} of {filteredAllLoans.length} results
               </div>
 
-              {pagedAllLoans.map((row) => (
-                <div key={row.id} className="rounded border p-3 text-sm">
-                  {isAdmin && (
-                    <div className="flex items-center justify-between mb-3 pb-3 border-b">
+              {pagedAllLoans.map((row) => {
+                const isExpanded = expandedLoanIds.has(row.id)
+                return (
+                <div key={row.id} className="rounded border text-sm">
+                  {isAdmin && isExpanded && (
+                    <div className="flex items-center justify-between p-3 pb-2 border-b">
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <input type="checkbox" checked={selectedLoanIds.includes(row.id)} onChange={() => toggleSelectedLoanId(row.id)} />
                         Select
@@ -4687,20 +4700,30 @@ export default function LoanAppPage() {
                     </div>
                   )}
 
-                  {/* Header: Request Number & Status Badge */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div>
+                  {/* Card Header - Click to Expand/Collapse */}
+                  <button
+                    onClick={() => toggleLoanExpanded(row.id)}
+                    className="w-full p-3 flex items-start justify-between gap-3 hover:bg-slate-50 transition-colors border-b"
+                  >
+                    <div className="flex-1 text-left">
                       <div className="text-sm font-bold text-slate-900">{row.request_number}</div>
-                      <div className="text-xs text-slate-600">{row.loan_type_label}</div>
+                      <div className="text-xs text-slate-600">{row.staff_full_name}</div>
                     </div>
-                    <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
-                      row.status === "approved_director" ? "bg-emerald-100 text-emerald-700" :
-                      ["director_rejected","rejected_fd"].includes(row.status) ? "bg-red-100 text-red-700" :
-                      "bg-amber-100 text-amber-700"
-                    }`}>
-                      {statusText(row.status)}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                        row.status === "approved_director" ? "bg-emerald-100 text-emerald-700" :
+                        ["director_rejected","rejected_fd"].includes(row.status) ? "bg-red-100 text-red-700" :
+                        "bg-amber-100 text-amber-700"
+                      }`}>
+                        {statusText(row.status)}
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
-                  </div>
+                  </button>
+
+                  {/* Expanded Card Content */}
+                  {isExpanded && (
+                  <div className="p-3 space-y-3">
 
                   {/* Approval pipeline progress */}
                   {(() => {
@@ -4760,90 +4783,105 @@ export default function LoanAppPage() {
                     </div>
                   </div>
 
-                  {/* Professional Approval Certificate */}
-                  {(row.director_hr_name || row.director_signature_text) && (
+                  {/* Professional Approval Certificate - Collapsable */}
+                  {row.status === "approved_director" && (row.director_hr_name || row.director_signature_text) && (
                     <div className="mb-6">
-                      <div className="bg-gradient-to-r from-slate-50 to-blue-50 border-2 border-blue-200 rounded-lg p-6">
-                        {/* Header: APPROVED Badge */}
-                        <div className="flex items-center justify-between mb-4">
+                      <div className="bg-gradient-to-r from-slate-50 to-blue-50 border-2 border-blue-200 rounded-lg overflow-hidden">
+                        {/* Certificate Header - Click to Collapse */}
+                        <button
+                          onClick={() => toggleLoanExpanded(row.id)}
+                          className="w-full p-4 flex items-center justify-between hover:bg-blue-100/50 transition-colors"
+                        >
                           <div className="flex items-center gap-2">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
-                              <span className="text-emerald-700 font-bold text-lg">✓</span>
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
+                              <span className="text-emerald-700 font-bold text-sm">✓</span>
                             </div>
-                            <div>
-                              <div className="text-xs text-slate-500 font-semibold">STATUS</div>
-                              <div className="text-lg font-bold text-emerald-700">APPROVED</div>
+                            <div className="text-left">
+                              <div className="text-xs text-slate-500 font-semibold">APPROVAL CERTIFICATE</div>
+                              <div className="text-sm font-bold text-emerald-700">{row.director_hr_name}</div>
                             </div>
                           </div>
-                          {row.md_approved_at && (
-                            <div className="text-right">
-                              <div className="text-xs text-slate-500 font-semibold">APPROVED</div>
-                              <div className="text-sm font-semibold text-slate-900">
-                                {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                          <ChevronDown className={`h-4 w-4 text-slate-600 transition-transform ${expandedLoanIds.has(row.id) ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Expanded Certificate Content */}
+                        {expandedLoanIds.has(row.id) && (
+                          <>
+                            <div className="h-px bg-blue-200"></div>
+                            <div className="p-6 space-y-4">
+                              {/* APPROVED Text Prominently on Top */}
+                              <div className="text-center">
+                                <div className="text-3xl font-black text-emerald-700 tracking-wider mb-2" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.05)' }}>
+                                  APPROVED
+                                </div>
+                                {row.md_approved_at && (
+                                  <div className="text-xs text-slate-600 font-semibold">
+                                    {new Date(row.md_approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Signature - Hidden for loan_office and hr_executive */}
+                              {!["loan_office", "hr_executive"].includes(data?.profile?.role || "") && (row.director_signature_data_url || row.director_signature_text) && (
+                                <div className="flex items-center justify-center py-3 border-y border-blue-200">
+                                  {row.director_signature_data_url ? (
+                                    <img 
+                                      src={row.director_signature_data_url} 
+                                      alt="Signature"
+                                      className="h-14 max-w-xs"
+                                    />
+                                  ) : row.director_signature_text ? (
+                                    <div className="text-2xl text-slate-700" style={{ fontStyle: 'italic', fontWeight: '600', fontFamily: 'cursive' }}>
+                                      {row.director_signature_text}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+
+                              {/* Approver Info */}
+                              <div className="text-center">
+                                <div className="text-sm font-bold text-slate-900">
+                                  {row.director_hr_name}
+                                </div>
+                                <div className="text-xs text-slate-600 font-semibold">
+                                  {row.director_hr_position || "Managing Director"}
+                                </div>
                               </div>
                             </div>
-                          )}
-                        </div>
-
-                        {/* Divider */}
-                        <div className="h-px bg-blue-200 mb-4"></div>
-
-                        {/* Approver Details */}
-                        <div className="space-y-3">
-                          {/* Signature */}
-                          <div className="flex items-center justify-center py-2">
-                            {row.director_signature_data_url ? (
-                              <img 
-                                src={row.director_signature_data_url} 
-                                alt="Signature"
-                                className="h-12 max-w-xs"
-                              />
-                            ) : row.director_signature_text ? (
-                              <div className="text-2xl text-slate-700" style={{ fontStyle: 'italic', fontWeight: '600', fontFamily: 'cursive' }}>
-                                {row.director_signature_text}
-                              </div>
-                            ) : null}
-                          </div>
-
-                          {/* Approver Info */}
-                          <div className="border-t border-blue-200 pt-3 text-center">
-                            <div className="text-sm font-bold text-slate-900">
-                              {row.director_hr_name}
-                            </div>
-                            <div className="text-xs text-slate-600 font-semibold">
-                              {row.director_hr_position || "Managing Director"}
-                            </div>
-                          </div>
-                        </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
-                    {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => openSecureMemo(row.id)}
-                        className="flex-1"
-                      >
-                        View Memo
-                      </Button>
-                    )}
-                    {row.status === "approved_director" && (
-                      <Button 
-                        variant="default" 
-                        size="sm" 
-                        onClick={() => openSecureMemo(row.id)}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                      >
-                        Download Signed Memo
-                      </Button>
-                    )}
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => openSecureMemo(row.id)}
+                          className="flex-1"
+                        >
+                          View Memo
+                        </Button>
+                      )}
+                      {row.status === "approved_director" && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => void openSecureMemo(row.id)}
+                          className="flex-1"
+                        >
+                          Download Signed Memo
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                  )}
                 </div>
-              ))}
+                )
+              })}
               {filteredAllLoans.length === 0 && <p className="text-sm text-muted-foreground">No loans found.</p>}
 
               <div className="flex items-center justify-end gap-2">
