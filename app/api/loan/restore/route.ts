@@ -1,16 +1,16 @@
-import { createClient } from "@/utils/supabase/server"
+import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { normalizeRole } from "@/lib/loan-workflow"
 
 export async function PUT(request: NextRequest) {
   try {
-    const admin = createClient({ admin: true })
-    const user = await admin.auth.admin.getUserById(
-      request.headers.get("x-user-id") || ""
-    )
+    const { user, error: authError } = await createClientAndGetUser()
 
-    if (!user.data?.user) {
+    if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const admin = createAdminClient()
 
     const body = await request.json()
     const { loanId, newStatus } = body

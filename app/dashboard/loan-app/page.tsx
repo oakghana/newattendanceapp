@@ -3868,13 +3868,14 @@ export default function LoanAppPage() {
                           name: loans[0]?.staff_full_name || "Unknown",
                           staffNo: loans[0]?.staff_number || "—",
                           loans,
-                          // Current loan = any director-approved or post-approval active loan, OR archived loans with outstanding balance
+                          // Current loan = MD-approved loans only, OR archived loans with outstanding balance
                           currentLoan: loans.find(l => {
-                            const activeStatuses = ["approved_director", "awaiting_hr_terms", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered"]
-                            if (activeStatuses.includes(l.status)) {
+                            // Only include MD-approved or post-approval active loans
+                            const mdApprovedStatuses = ["approved_director", "staff_receiving_funds", "partially_recovered"]
+                            if (mdApprovedStatuses.includes(l.status)) {
                               return true
                             }
-                            // Also include archived loans that still have outstanding balance
+                            // Also include archived loans that still have outstanding balance (they were previously MD-approved)
                             if (l.status === "archived") {
                               const loanAmount = Number(l.fixed_amount || l.requested_amount || 0)
                               const totalPaid = Number(l.total_paid || 0)
