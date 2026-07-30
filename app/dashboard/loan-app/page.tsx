@@ -18,7 +18,9 @@ import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
-import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
+// generateProfessionalMemoPDF / downloadMemoPDF are imported dynamically at the
+// call site so jsPDF (which touches window at module load time) never enters
+// the page's initial SSR bundle and does not crash the server render pass.
 import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -4787,13 +4789,12 @@ export default function LoanAppPage() {
                                     ],
                                   }
 
-                                  // Generate professional PDF with actual signature
+                                  // Dynamic import keeps jsPDF out of the initial bundle
+                                  const { generateProfessionalMemoPDF, downloadMemoPDF } = await import("@/lib/professional-memo-generator")
                                   const pdf = await generateProfessionalMemoPDF(
                                     memoData,
                                     `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}.pdf`
                                   )
-
-                                  // Download
                                   await downloadMemoPDF(
                                     pdf,
                                     `leave-payment-${(memo.staff_name || "staff").toLowerCase().replace(/\s+/g, "-")}-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}${String(currentDate.getDate()).padStart(2, "0")}.pdf`
