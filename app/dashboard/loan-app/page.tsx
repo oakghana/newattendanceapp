@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClientAndGetUser } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -201,67 +201,59 @@ function getStatusBadge(status: string) {
 }
 
 export default async function LoanAdminPage() {
-  try {
-    const supabase = createClient()
+  const { supabase, user, authError } = await createClientAndGetUser()
 
-    if (!supabase) {
-      redirect("/auth/login")
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      redirect("/auth/login")
-    }
-
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("id, role, first_name, last_name")
-    .eq("id", user.id)
-    .single()
-
-  const allowedRoles = [
-    "admin",
-    "loan_office",
-    "accounts_executive",
-    "director_hr",
-    "manager_hr",
-  ]
-  if (!profile || !allowedRoles.includes(profile.role)) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-red-600 font-semibold">Access Denied</p>
-        <p className="text-slate-500 text-sm mt-2">
-          You do not have permission to access the loan administration page.
-        </p>
-      </div>
-    )
+  if (!user || authError) {
+    redirect("/auth/login")
   }
 
-  const stats = await getLoanStats(supabase)
-  const recentLoans = await getRecentLoans(supabase)
+  try {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("id, role, first_name, last_name")
+      .eq("id", user.id)
+      .single()
 
-  return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">
-            QCC Loan Processing Hub
-          </h1>
-          <p className="text-slate-600 mt-1">
-            Welcome back, {profile.first_name}. Manage staff loans and approvals.
+    const allowedRoles = [
+      "admin",
+      "loan_office",
+      "accounts_executive",
+      "director_hr",
+      "manager_hr",
+    ]
+    if (!profile || !allowedRoles.includes(profile.role)) {
+      return (
+        <div className="p-8 text-center">
+          <p className="text-red-600 font-semibold">Access Denied</p>
+          <p className="text-slate-500 text-sm mt-2">
+            You do not have permission to access the loan administration page.
           </p>
         </div>
+      )
+    }
+
+    const stats = await getLoanStats(supabase)
+    const recentLoans = await getRecentLoans(supabase)
+
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">
+              QCC Loan Processing Hub
+            </h1>
+            <p className="text-slate-600 mt-1">
+              Welcome back, {profile.first_name}. Manage staff loans and approvals.
+            </p>
+          </div>
         <Button className="bg-emerald-600 hover:bg-emerald-700">
           <Plus className="h-4 w-4 mr-2" />
           New Loan Request
-        </Button>
-      </div>
+          </Button>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
               <ClipboardList className="h-4 w-4 text-blue-600" />
@@ -506,8 +498,8 @@ export default async function LoanAdminPage() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
-    </div>
+        </Tabs>
+      </div>
     )
   } catch (error: any) {
     console.error("[v0] Loan admin page error:", error)
