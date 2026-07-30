@@ -29,6 +29,8 @@ import { redirect } from "next/navigation"
 import { GPSStatusBanner } from "@/components/attendance/gps-status-banner"
 import { SecurityHealthCard } from "@/components/admin/security-health-card"
 import { NonResumptionWarningDisplay } from "@/components/leave/non-resumption-warning-display"
+import { DashboardLeaveToastWrapper } from "@/components/leave/dashboard-leave-toast-wrapper"
+import { StaffLeaveMonitoringClient } from "@/components/leave/staff-leave-monitoring-client"
 
 export const metadata = {
   title: "Dashboard | QCC Electronic Attendance",
@@ -101,7 +103,8 @@ export default async function DashboardPage() {
       monthlyAttendanceResult,
       yearlyAttendanceResult,
       leaveRequestsResult,
-      notificationsResult
+      notificationsResult,
+      leaveStatusResult
     ] = await Promise.all([
       supabase
         .from("user_profiles")
@@ -137,7 +140,12 @@ export default async function DashboardPage() {
         .eq("user_id", user.id)
         .eq("is_read", false)
         .order("created_at", { ascending: false })
-        .limit(3)
+        .limit(3),
+      supabase
+        .from("user_profiles")
+        .select("leave_status, leave_start_date, leave_end_date, leave_reason")
+        .eq("id", user.id)
+        .single()
     ])
 
     const profile = profileResult.data
@@ -146,6 +154,7 @@ export default async function DashboardPage() {
     const yearlyAttendance = yearlyAttendanceResult.data || []
     const leaveRequests = leaveRequestsResult.data || []
     const notifications = notificationsResult.data || []
+    const leaveStatus = leaveStatusResult.data
 
     // Calculate comprehensive metrics
     const monthlyStats = {
@@ -225,6 +234,15 @@ export default async function DashboardPage() {
             </div>
           </div>
 
+          {/* Leave Countdown Toast */}
+          <DashboardLeaveToastWrapper
+            leaveStatus={leaveStatus?.leave_status || null}
+            leaveStartDate={leaveStatus?.leave_start_date || null}
+            leaveEndDate={leaveStatus?.leave_end_date || null}
+            leaveType={leaveStatus?.leave_reason || "Leave"}
+            staffName={`${profile?.first_name || ''} ${profile?.last_name || ''}`}
+          />
+
           {/* GPS Status Banner */}
           <GPSStatusBanner />
 
@@ -258,6 +276,9 @@ export default async function DashboardPage() {
               </AlertDescription>
             </Alert>
           )}
+
+          {/* Staff Leave Monitoring for HOD/RM */}
+          <StaffLeaveMonitoringClient userRole={profile?.role || null} />
 
           {/* Key Metrics Grid */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
