@@ -5240,40 +5240,6 @@ export default function LoanAppPage() {
 
                   {/* Professional Approval Certificate - Hidden from All Loan Requests view for professional appearance */}
                   {/* Approval certificate is only shown in detail/staff loan records views, not in all loans list */}
-                              </div>
-
-                              {/* Signature - Only shown to admin users */}
-                              {data?.profile?.role === "admin" && (row.director_signature_data_url || row.director_signature_text) && (
-                                <div className="flex items-center justify-center py-3 border-y border-blue-200">
-                                  {row.director_signature_data_url ? (
-                                    <img 
-                                      src={row.director_signature_data_url} 
-                                      alt="Signature"
-                                      className="h-14 max-w-xs"
-                                    />
-                                  ) : row.director_signature_text ? (
-                                    <div className="text-2xl text-slate-700" style={{ fontStyle: 'italic', fontWeight: '600', fontFamily: 'cursive' }}>
-                                      {row.director_signature_text}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-
-                              {/* Approver Info */}
-                              <div className="text-center">
-                                <div className="text-sm font-bold text-slate-900">
-                                  {row.director_hr_name}
-                                </div>
-                                <div className="text-xs text-slate-600 font-semibold">
-                                  {row.director_hr_position || "Managing Director"}
-                                </div>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
                     {/* Action Buttons */}
                     <div className="flex gap-2">
