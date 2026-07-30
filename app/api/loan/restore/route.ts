@@ -52,22 +52,28 @@ export async function PUT(request: NextRequest) {
       .eq("id", loanId)
       .maybeSingle()
 
+    console.log("[v0] Restore loan search:", { loanId, found: !!loan, status: loan?.status, fetchError })
+
     if (fetchError || !loan) {
+      console.error("[v0] Loan not found:", { loanId, fetchError })
       return NextResponse.json(
-        { error: "Loan not found" },
+        { error: "Loan not found", details: fetchError?.message },
         { status: 404 }
       )
     }
 
     if (loan.status !== "archived") {
+      console.warn("[v0] Loan is not archived:", { loanId, currentStatus: loan.status })
       return NextResponse.json(
-        { error: "Only archived loans can be restored" },
+        { error: `Only archived loans can be restored. Current status: ${loan.status}` },
         { status: 400 }
       )
     }
 
     // Restore the loan - set status back to partially_recovered (or the specified status)
     const restorationStatus = newStatus || "partially_recovered"
+    
+    console.log("[v0] Attempting to restore loan:", { loanId, newStatus: restorationStatus })
     
     const { data: restored, error: updateError } = await admin
       .from("loan_applications")
@@ -80,12 +86,14 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (updateError) {
-      console.error("Error restoring loan:", updateError)
+      console.error("[v0] Error restoring loan:", { loanId, error: updateError.message, details: updateError })
       return NextResponse.json(
-        { error: "Failed to restore loan" },
+        { error: "Failed to restore loan", details: updateError.message },
         { status: 500 }
       )
     }
+    
+    console.log("[v0] Loan restored successfully:", { loanId, newStatus: restored?.status })
 
     return NextResponse.json({
       success: true,
