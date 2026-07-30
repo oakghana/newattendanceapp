@@ -524,35 +524,11 @@ function downloadCsv(rows: LoanRequest[], fileName: string) {
   URL.revokeObjectURL(url)
 }
 
-async function downloadPdf(rows: LoanRequest[], fileName: string, title: string) {
-  const [{ jsPDF }, autoTableMod] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ])
-  const autoTable = autoTableMod.default
-
-  const doc = new jsPDF({ orientation: "landscape" })
-  doc.setFontSize(14)
-  doc.text(title, 14, 15)
-
-  autoTable(doc, {
-    startY: 22,
-    head: [["Request #", "Loan Type", "Staff #", "Rank", "Amount (GHc)", "Status", "Date"]],
-    body: rows.map((r) => [
-      r.request_number,
-      r.loan_type_label,
-      r.staff_number || "",
-      r.staff_rank || "",
-      fmtAmount(r.fixed_amount || r.requested_amount),
-      statusText(r.status),
-      fmtDate(r.updated_at || r.created_at),
-    ]),
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [110, 25, 129] },
-  })
-
-  doc.save(fileName)
-}
+// PDF download functionality disabled for client component
+// If needed in future, wrap this in a server action
+// function downloadPdf(rows: LoanRequest[], fileName: string, title: string) {
+//   // PDF export logic removed - can be re-enabled as server action
+// }
 
 function normalizeRoleValue(value?: string | null) {
   return String(value || "")
@@ -742,21 +718,11 @@ function filterAndSortRows(
   return next
 }
 
-async function loadImageAsDataUrl(src: string): Promise<string | null> {
-  try {
-    const res = await fetch(src)
-    if (!res.ok) return null
-    const blob = await res.blob()
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(String(reader.result || ""))
-      reader.onerror = () => reject(new Error("Failed to read image data"))
-      reader.readAsDataURL(blob)
-    })
-  } catch {
-    return null
-  }
-}
+// Image loading functionality disabled for client component
+// If needed in future, wrap this in a server action
+// function loadImageAsDataUrl(src: string): Promise<string | null> {
+//   // Image loading logic removed - can be re-enabled as server action
+// }
 
 function LoanAnalyticsMetricCard({
   label,
@@ -2612,7 +2578,8 @@ export default function LoanAppPage() {
         const marginRight = 25
         const topMargin = 18
         const usableWidth = pageWidth - marginLeft - marginRight
-        const logoDataUrl = await loadImageAsDataUrl(`${window.location.origin}/images/qcc-logo.png`)
+        // const logoDataUrl = await loadImageAsDataUrl(`${window.location.origin}/images/qcc-logo.png`)
+        const logoDataUrl = null // Disabled for client component
 
         const applySignatureSideWatermark = () => {
           const targetPage = doc.getNumberOfPages()
@@ -4016,9 +3983,10 @@ export default function LoanAppPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex justify-end">
-                <Button variant="outline" onClick={() => void downloadPdf(data?.inbox.accountsSigned || [], "approved-loans-accounts.pdf", "Approved Loans for Accounts Records") }>
+                {/* Download button disabled for now - PDF export removed from client component */}
+                {/* <Button variant="outline" onClick={() => void downloadPdf(data?.inbox.accountsSigned || [], "approved-loans-accounts.pdf", "Approved Loans for Accounts Records") }>
                   <Download className="h-4 w-4 mr-1" /> Download Approved Loans
-                </Button>
+                </Button> */}
               </div>
               {(data?.inbox.accountsSigned || []).map((row) => (
                 <div key={row.id} className="border rounded p-3 text-sm space-y-1">
