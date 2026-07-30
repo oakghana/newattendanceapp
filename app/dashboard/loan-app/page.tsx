@@ -1365,20 +1365,22 @@ export default function LoanAppPage() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6)
 
-    // Monetary figures: use ALL loans (approved + archived) for the current calendar year
+    // Monetary figures: use loanOfficeWorkspaceRows (all loans this user can see) filtered to calendar year
     const currentYear = new Date().getFullYear().toString()
-    const allLoansThisYear = (data?.inbox?.allLoans || []).filter((r: LoanRequest) => {
+    const rowAmount = (r: LoanRequest) => Number(r.fixed_amount || r.requested_amount || 0)
+    const allLoansThisYear = rows.filter((r: LoanRequest) => {
       const date = String(r.created_at || r.submitted_at || "")
       return date.startsWith(currentYear)
     })
-    const rowAmount = (r: LoanRequest) => Number(r.fixed_amount || r.requested_amount || 0)
+    // If no year filter matches (e.g. dates missing), fall back to all rows
+    const monetaryRows = allLoansThisYear.length > 0 ? allLoansThisYear : rows
     const approvedStatuses = new Set(["approved_director", "partially_recovered", "fully_recovered"])
-    const totalLoanValue = allLoansThisYear.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
-    const approvedAndArchivedRows = allLoansThisYear.filter((r: LoanRequest) =>
+    const totalLoanValue = monetaryRows.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
+    const approvedAndArchivedRows = monetaryRows.filter((r: LoanRequest) =>
       approvedStatuses.has(String(r.status || "")) || r.status === "archived"
     )
     const totalApprovedValue = approvedAndArchivedRows.reduce((sum: number, r: LoanRequest) => sum + rowAmount(r), 0)
-    const avgLoanAmount = allLoansThisYear.length > 0 ? totalLoanValue / allLoansThisYear.length : 0
+    const avgLoanAmount = monetaryRows.length > 0 ? totalLoanValue / monetaryRows.length : 0
 
     return {
       totals: {
@@ -1392,13 +1394,13 @@ export default function LoanAppPage() {
         total_loan_value: totalLoanValue,
         total_approved_value: totalApprovedValue,
         avg_loan_amount: avgLoanAmount,
-        year_count: allLoansThisYear.length,
+        year_count: monetaryRows.length,
       },
       stageBreakdown,
       locationRanking,
       monthlyIntake,
     }
-  }, [loanOfficeWorkspaceRows, data?.inbox?.allLoans])
+  }, [loanOfficeWorkspaceRows])
 
   const filteredAccounts = useMemo(
     () => filterAndSortRows(data?.inbox?.accounts || [], accountsSearch, accountsStatus, accountsSort, accountsLocation, accountsDept),
