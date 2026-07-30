@@ -88,7 +88,13 @@ export function canDoLoanOffice(role: string, deptName?: string | null, deptCode
 
 export function canDoAccounts(role: string, deptName?: string | null, deptCode?: string | null): boolean {
   const normalizedRole = normalizeRole(role)
-  return isAdminRole(normalizedRole) || normalizedRole === "accounts" || normalizedRole.includes("account") || isAccountsDepartment(deptName, deptCode)
+  return (
+    isAdminRole(normalizedRole) ||
+    normalizedRole === "accounts" ||
+    normalizedRole === "accounts_executive" ||
+    normalizedRole.includes("account") ||
+    isAccountsDepartment(deptName, deptCode)
+  )
 }
 
 export function canDoCommittee(role: string): boolean {
