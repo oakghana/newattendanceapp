@@ -89,59 +89,98 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create payment evidence record
-    const { data: evidenceData, error: evidenceError } = await admin
-      .from("loan_payment_evidence")
+    // Create payment record in new loan_payment_records table
+    const { data: paymentData, error: paymentError } = await admin
+      .from("loan_payment_records")
       .insert({
         loan_request_id: loanRequestId,
-        user_id: loanData.user_id,
         payment_date: paymentDate,
-        payment_amount: amount,
+        amount_paid: amount,
         payment_method: paymentMethod || null,
         reference_number: referenceNumber || null,
         description: description || null,
-        evidence_file_url: evidenceFileUrl || null,
+        evidence_file_path: evidenceFileUrl || null,
         submitted_by: user.id,
-        status: "pending_approval",
+        // Dual approval workflow: both HR and Accounts must approve
+        hr_approval_status: "pending",
+        accounts_approval_status: "pending",
+        overall_status: "pending",
       })
       .select()
       .single()
 
-    if (evidenceError) {
-      console.error("[v0] Error creating payment evidence:", evidenceError)
-      return NextResponse.json({ error: "Failed to create payment evidence" }, { status: 500 })
+    if (paymentError) {
+      console.error("[v0] Error creating payment record:", paymentError)
+      return NextResponse.json({ error: "Failed to create payment record" }, { status: 500 })
     }
 
-    // Notify HR directors/executives about the new payment evidence
-    const { data: hrDirectors } = await admin
+    // Route to appropriate approvers based on roles
+    const approverRoles = [
+      { role: "hr_executive", approverType: "hr_executive" },
+      { role: "hr_leave_office", approverType: "hr_executive" },
+      { role: "accounts_executive", approverType: "accounts_executive" },
+      { role: "accounts", approverType: "accounts_executive" },
+      { role: "admin", approverType: "both" },
+    ]
+
+    // Get HR approvers
+    const { data: hrApprovers } = await admin
       .from("user_profiles")
       .select("id")
-      .in("role", ["director_hr", "manager_hr", "admin"])
+      .in("role", ["hr_executive", "hr_leave_office", "admin"])
       .eq("is_active", true)
-      .limit(10)
+      .limit(5)
 
-    if (hrDirectors && hrDirectors.length > 0) {
+    // Get Accounts approvers
+    const { data: accountsApprovers } = await admin
+      .from("user_profiles")
+      .select("id")
+      .in("role", ["accounts_executive", "accounts", "admin"])
+      .eq("is_active", true)
+      .limit(5)
+
+    // Notify both sets of approvers
+    const notifications = []
+    
+    if (hrApprovers && hrApprovers.length > 0) {
+      notifications.push(
+        ...hrApprovers.map((approver) => ({
+          recipient_id: approver.id,
+          type: "payment_record_pending_hr_approval",
+          title: "Payment Record Requires HR Approval",
+          message: `Payment of GHc ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })} submitted for loan approval`,
+          data: { paymentRecordId: paymentData.id, approvalType: "hr" },
+          is_read: false,
+        }))
+      )
+    }
+
+    if (accountsApprovers && accountsApprovers.length > 0) {
+      notifications.push(
+        ...accountsApprovers.map((approver) => ({
+          recipient_id: approver.id,
+          type: "payment_record_pending_accounts_approval",
+          title: "Payment Record Requires Accounts Approval",
+          message: `Payment of GHc ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })} submitted for verification`,
+          data: { paymentRecordId: paymentData.id, approvalType: "accounts" },
+          is_read: false,
+        }))
+      )
+    }
+
+    if (notifications.length > 0) {
       try {
-        await admin.from("staff_notifications").insert(
-          hrDirectors.map((hr) => ({
-            recipient_id: hr.id,
-            type: "payment_evidence_pending_approval",
-            title: "New Payment Evidence Requires Approval",
-            message: `Payment evidence submitted for loan - Amount: GHc ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2 })}`,
-            data: { evidenceId: evidenceData.id },
-            is_read: false,
-          }))
-        )
+        await admin.from("staff_notifications").insert(notifications)
       } catch (_notifyErr) {
-        // Notification failure is non-fatal — evidence was already saved
+        // Notification failure is non-fatal — payment record was already saved
       }
     }
 
     return NextResponse.json(
       {
         success: true,
-        data: evidenceData,
-        message: "Payment evidence submitted successfully and awaiting HR Executive approval",
+        data: paymentData,
+        message: "Payment record submitted successfully and awaiting dual approval from HR and Accounts executives",
       },
       { status: 201 }
     )
@@ -151,7 +190,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - Retrieve payment evidence records
+// GET - Retrieve payment records
 export async function GET(request: NextRequest) {
   try {
     const admin = await createAdminClient()
@@ -160,18 +199,19 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const loanRequestId = searchParams.get("loanRequestId")
-    const status = searchParams.get("status") // "pending_approval", "approved", "rejected"
+    const overallStatus = searchParams.get("overallStatus") // "pending", "approved", "rejected", "completed"
     const filterByPending = searchParams.get("pendingOnly") === "true"
 
     let query = admin
-      .from("loan_payment_evidence")
+      .from("loan_payment_records")
       .select(
         `
-        id, loan_request_id, user_id, payment_date, payment_amount, 
-        payment_method, reference_number, description, evidence_file_url,
-        status, submitted_by, submitted_at, approved_by, approved_at, 
-        approval_notes, rejected_by, rejected_at, rejection_reason,
-        created_at, updated_at
+        id, loan_request_id, payment_date, amount_paid, 
+        payment_method, reference_number, description, evidence_file_path,
+        submitted_by, submitted_at,
+        hr_executive_id, hr_approval_at, hr_approval_status, hr_approval_notes,
+        accounts_executive_id, accounts_approval_at, accounts_approval_status, accounts_approval_notes,
+        overall_status, created_at, updated_at
       `
       )
       .order("submitted_at", { ascending: false })
@@ -180,24 +220,24 @@ export async function GET(request: NextRequest) {
       query = query.eq("loan_request_id", loanRequestId)
     }
 
-    if (status) {
-      query = query.eq("status", status)
+    if (overallStatus) {
+      query = query.eq("overall_status", overallStatus)
     }
 
     if (filterByPending) {
-      query = query.eq("status", "pending_approval")
+      query = query.eq("overall_status", "pending")
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.error("[v0] Error fetching payment evidence:", error)
-      return NextResponse.json({ error: "Failed to fetch payment evidence" }, { status: 500 })
+      console.error("[v0] Error fetching payment records:", error)
+      return NextResponse.json({ error: "Failed to fetch payment records" }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: data || [] })
   } catch (err) {
-    console.error("[v0] Payment evidence GET error:", err)
+    console.error("[v0] Payment records GET error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
