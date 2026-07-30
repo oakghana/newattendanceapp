@@ -22,10 +22,10 @@ export default function RepaymentTrackingPage() {
   useEffect(() => {
     const checkAuthorization = async () => {
       try {
-        const response = await fetch("/api/auth/me")
+        const response = await fetch("/api/auth/current-user")
         if (response.ok) {
-          const { profile } = await response.json()
-          if (profile && ["loan_office", "accounts_executive", "admin"].includes(profile.role)) {
+          const { user } = await response.json()
+          if (user && ["loan_office", "accounts_executive", "admin"].includes(user.role)) {
             setAuthorized(true)
           } else {
             setAuthorized(false)
