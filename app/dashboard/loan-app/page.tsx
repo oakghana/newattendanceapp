@@ -1123,7 +1123,7 @@ export default function LoanAppPage() {
   const userDeptIsAccounts = /account|finance/i.test(userDeptName)
   const canAccessLoanOfficeWorkspace =
     isAdmin ||
-    (["loan_office", "manager_hr"].includes(normalizedRole) && !userDeptIsAccounts) ||
+    (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
   const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
@@ -3915,7 +3915,8 @@ export default function LoanAppPage() {
                             <td className="px-4 py-3">
                               {(() => {
                                 const loanAmount = Number(currentLoan?.fixed_amount || currentLoan?.requested_amount || 0)
-                                const duration = currentLoan?.repayment_duration_months || 12
+                                // Use recovery_months first (for loans with predefined recovery), then repayment_duration_months (for new loans)
+                                const duration = currentLoan?.recovery_months || currentLoan?.repayment_duration_months || 12
                                 const monthlyPayment = duration > 0 ? loanAmount / duration : 0
                                 return monthlyPayment > 0 ? (
                                   <span className="font-semibold text-slate-900">GHc {monthlyPayment.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
@@ -3947,11 +3948,14 @@ export default function LoanAppPage() {
                                 if (completionDate) {
                                   return <span className="text-sm text-slate-700">{new Date(completionDate).toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
                                 }
-                                // Calculate from approval date + duration
-                                if (currentLoan?.md_approved_at && currentLoan?.repayment_duration_months) {
-                                  const approvalDate = new Date(currentLoan.md_approved_at)
-                                  const lastPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + currentLoan.repayment_duration_months))
-                                  return <span className="text-sm text-slate-700">{lastPaymentDate.toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
+                                // Calculate from approval date + duration (use recovery_months first, then repayment_duration_months)
+                                if (currentLoan?.md_approved_at) {
+                                  const duration = currentLoan?.recovery_months || currentLoan?.repayment_duration_months
+                                  if (duration) {
+                                    const approvalDate = new Date(currentLoan.md_approved_at)
+                                    const lastPaymentDate = new Date(approvalDate.setMonth(approvalDate.getMonth() + duration))
+                                    return <span className="text-sm text-slate-700">{lastPaymentDate.toLocaleDateString('en-GH', { month: 'short', year: '2-digit' })}</span>
+                                  }
                                 }
                                 return <span className="text-slate-400">—</span>
                               })()}
