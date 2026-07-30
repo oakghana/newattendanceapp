@@ -4442,45 +4442,22 @@ export default function LoanAppPage() {
 
               {/* Charts Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Stage Breakdown */}
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <h4 className="font-semibold text-slate-900 mb-4 text-sm">Loan Stage Breakdown</h4>
-                  {loanOfficeAnalytics.stageBreakdown && loanOfficeAnalytics.stageBreakdown.length > 0 ? (
-                      <div className="h-64 flex items-center justify-center bg-slate-50 rounded">
-                        <ResponsiveContainer width="100%" height={250}>
-                          <BarChart data={loanOfficeAnalytics.stageBreakdown}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                            <XAxis dataKey="status" tick={{ fontSize: 12 }} />
-                          <YAxis tick={{ fontSize: 12 }} />
-                          <Tooltip contentStyle={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }} />
-                            <Bar dataKey="total" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    ) : (
-                      <div className="h-40 flex items-center justify-center text-slate-400">No data available</div>
-                    )}
-                  </div>
-
-                  {/* Monthly Intake */}
-                  <div className="rounded-lg border border-slate-200 bg-white p-4">
-                    <h4 className="font-semibold text-slate-900 mb-4 text-sm">Monthly Intake Trend</h4>
-                    {loanOfficeAnalytics.monthlyIntake && loanOfficeAnalytics.monthlyIntake.length > 0 ? (
-                      <div className="h-64 flex items-center justify-center bg-slate-50 rounded">
-                        <ResponsiveContainer width="100%" height={250}>
-                          <LineChart data={loanOfficeAnalytics.monthlyIntake}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                            <YAxis tick={{ fontSize: 12 }} />
-                            <Tooltip contentStyle={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }} />
-                            <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} dot={{ fill: "#10b981", r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <div className="h-40 flex items-center justify-center text-slate-400">No data available</div>
-                  )}
-                </div>
+                <LoanAnalyticsBarChart
+                  title="Loan Stage Breakdown"
+                  rows={loanOfficeAnalytics.stageBreakdown || []}
+                  valueKey="total"
+                  colorClass="bg-blue-500"
+                  emptyMessage="No stage data available"
+                  formatter={(row) => row.status || "Unknown"}
+                />
+                <LoanAnalyticsBarChart
+                  title="Monthly Intake Trend"
+                  rows={loanOfficeAnalytics.monthlyIntake || []}
+                  valueKey="total"
+                  colorClass="bg-emerald-500"
+                  emptyMessage="No monthly data available"
+                  formatter={(row) => row.month || "Unknown"}
+                />
               </div>
 
               {/* Processing Status Distribution */}
