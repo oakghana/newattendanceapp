@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
 
+
 export default async function LeaveManagementPage() {
   const supabase = await createClient()
   const admin = await createAdminClient()
@@ -25,16 +26,15 @@ export default async function LeaveManagementPage() {
     return <div>Profile not found</div>
   }
 
-  const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-  const isAdminRole = roleNorm === "admin"
-
   // Fetch only essential fast queries first
-  let staffRequests = []
+  let staffRequests: any[] = []
   let hasHodLinkage = false
+  let userLocationName: string | null = null
 
   try {
-    // Fast parallel queries for immediate display
-    const [requestsRes, linkageRes] = await Promise.all([
+    // Build parallel queries — include location lookup when user has an assigned location
+    const locationId = (profile as any)?.assigned_location_id
+    const queries: Promise<any>[] = [
       admin
         .from("leave_plan_requests")
         .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, adjusted_start_date, adjusted_end_date, hod_decision, memo_token")
@@ -47,7 +47,20 @@ export default async function LeaveManagementPage() {
         .eq("staff_user_id", user.id)
         .limit(1)
         .maybeSingle(),
-    ])
+    ]
+
+    if (locationId) {
+      queries.push(
+        admin
+          .from("geofence_locations")
+          .select("name")
+          .eq("id", locationId)
+          .maybeSingle()
+      )
+    }
+
+    const results = await Promise.all(queries)
+    const [requestsRes, linkageRes, locationRes] = results
 
     staffRequests = (requestsRes.data || []).map((request: any) => ({
       id: String(request.id),
@@ -64,28 +77,29 @@ export default async function LeaveManagementPage() {
       memo_token: request.memo_token || null,
     }))
 
-    hasHodLinkage = Boolean((linkageRes.data as any)?.id)
+    hasHodLinkage = Boolean((linkageRes?.data as any)?.id)
+    userLocationName = (locationRes?.data as any)?.name || null
   } catch (err) {
     console.error("[v0] Error fetching essential data:", err)
     hasHodLinkage = false
   }
 
-  // Defer heavy queries to client-side or lazy load
-  let managerNotifications = []
-  let approvedStaffRequests = []
-  // These will be lazy-loaded in the client component instead
+  // Heavy reviewer queries are lazy-loaded client-side to keep page fast
+  const managerNotifications: any[] = []
+  const approvedStaffRequests: any[] = []
 
   return (
     <div className="leave-theme">
       <LeaveManagementModuleClient
         userId={user.id}
         userRole={profile.role}
-        userDepartment={profile.department_id}
+        userDepartment={(profile as any)?.department_id || null}
         userFirstName={(profile as any)?.first_name || null}
         userLastName={(profile as any)?.last_name || null}
         inactivityDays={Math.max(1, inactivityDays)}
         userDepartmentName={(profile as any)?.departments?.name || null}
         userDepartmentCode={(profile as any)?.departments?.code || null}
+        userLocationName={userLocationName}
         hasHodLinkage={hasHodLinkage}
         initialStaffRequests={staffRequests}
         initialManagerNotifications={managerNotifications}
