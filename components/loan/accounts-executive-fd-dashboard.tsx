@@ -38,7 +38,12 @@ interface FDReview {
   review_status: 'pending_review' | 'approved' | 'rejected'
 }
 
-export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
+interface AccountsExecutiveFDDashboardProps {
+  userId: string
+  userRole?: string
+}
+
+export function AccountsExecutiveFDDashboard({ userId, userRole = "accounts_executive" }: AccountsExecutiveFDDashboardProps) {
   const [reviews, setReviews] = useState<FDReview[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedReview, setSelectedReview] = useState<FDReview | null>(null)
@@ -46,6 +51,14 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
   const [reviewDecision, setReviewDecision] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
+
+  // Role-based permissions
+  // - accounts_executive: Full access (can approve/reject)
+  // - loan_office: Can only ADD FD requests, not approve
+  // - hr_loan_office: View-only access
+  const canApprove = userRole === "accounts_executive" || userRole === "admin"
+  const canAddFD = userRole === "loan_office" || userRole === "accounts_executive" || userRole === "admin"
+  const isViewOnly = userRole === "hr_loan_office"
 
   useEffect(() => {
     fetchPendingReviews()
@@ -189,6 +202,24 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* View-only notice for restricted roles */}
+      {isViewOnly && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <p className="text-sm text-blue-800 font-medium">
+            ⓘ You have view-only access to FD Approvals. Only Accounts Executives can approve or reject FD requests.
+          </p>
+        </div>
+      )}
+
+      {/* Loan Office notice */}
+      {!canApprove && userRole === "loan_office" && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm text-amber-800 font-medium">
+            ⓘ You can submit FD requests for approval, but only Accounts Executives can approve or reject them.
+          </p>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -196,7 +227,12 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
             FD Verification Queue
           </CardTitle>
           <CardDescription>
-            Review FD requests submitted by Loan Office. Verify calculations and supporting documents.
+            {canApprove 
+              ? "Review FD requests submitted by Loan Office. Verify calculations and supporting documents."
+              : isViewOnly
+              ? "View FD requests. Only Accounts Executives can approve or reject."
+              : "View FD requests and submit new ones for Accounts Executive review."
+            }
           </CardDescription>
         </CardHeader>
       </Card>
@@ -296,8 +332,8 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
                     </div>
                     <Button
                       onClick={() => handleAutoRejectPoorFD(review)}
-                      disabled={submitting}
-                      className="w-full bg-red-600 hover:bg-red-700"
+                      disabled={submitting || !canApprove}
+                      className={`w-full ${canApprove ? "bg-red-600 hover:bg-red-700" : "bg-slate-300 text-slate-500"}`}
                     >
                       <XCircle className="h-4 w-4 mr-1" />
                       Auto-Reject Poor FD
@@ -308,8 +344,10 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
                     onClick={() => setSelectedReview(review)}
                     className="w-full"
                     variant="outline"
+                    disabled={!canApprove}
+                    title={!canApprove ? "Only Accounts Executives can approve FD requests" : ""}
                   >
-                    Review & Approve
+                    {canApprove ? "Review & Approve" : "View Only"}
                   </Button>
                 )}
               </CardContent>
@@ -383,22 +421,31 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
             >
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={submitting || !reviewDecision}
-            >
-              <XCircle className="h-4 w-4 mr-1" />
-              Reject
-            </Button>
-            <Button
-              onClick={handleApprove}
-              disabled={submitting || !verificationMemo}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              <CheckCircle className="h-4 w-4 mr-1" />
-              Approve
-            </Button>
+            {canApprove && (
+              <>
+                <Button
+                  variant="destructive"
+                  onClick={handleReject}
+                  disabled={submitting || !reviewDecision}
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Reject
+                </Button>
+                <Button
+                  onClick={handleApprove}
+                  disabled={submitting || !verificationMemo}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Approve
+                </Button>
+              </>
+            )}
+            {!canApprove && (
+              <div className="text-sm text-slate-600 py-2">
+                Only Accounts Executives can approve or reject FD requests.
+              </div>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

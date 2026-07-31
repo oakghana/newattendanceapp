@@ -3,6 +3,9 @@
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { LeaveNotificationsCard } from "@/components/leave/leave-notifications-card"
+import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
+import { ActiveLeaveBanner } from "@/components/leave/active-leave-banner"
+import { SimpleLeaveCountdownBadge } from "@/components/leave/simple-leave-countdown-badge"
 import ActiveLocationsCard from "@/components/admin/active-locations-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -68,12 +71,20 @@ function MdExecutiveDashboard({ profile, pendingMdApprovals = 0 }: { profile: an
                 <div className="text-xs text-slate-400 mt-1 font-medium">Awaiting Your Approval</div>
               </div>
             )}
-            {pendingMdApprovals === 0 && (
-              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-6 py-4 text-center">
-                <div className="text-4xl font-black text-emerald-400 tabular-nums">0</div>
-                <div className="text-xs text-slate-400 mt-1 font-medium">All Clear</div>
-              </div>
-            )}
+      {pendingMdApprovals === 0 && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-5">
+          <div className="flex items-center gap-3">
+            <UserCheck className="h-5 w-5 text-emerald-600" />
+            <div>
+              <p className="font-semibold text-emerald-900">All Clear</p>
+              <p className="text-sm text-emerald-700">No pending approvals</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Resumption Countdown Badge */}
+      <LeaveResumptionBadge />
           </div>
         </div>
       </div>
@@ -323,6 +334,14 @@ export function DashboardOverviewClient({
             icon={Users}
           />
         </div>
+
+        {/* Show leave countdown badge if user is on leave */}
+        <div className="flex justify-center">
+          <SimpleLeaveCountdownBadge />
+        </div>
+
+        {/* Show active leave banner if user is on leave */}
+        <ActiveLeaveBanner />
 
         <div className="grid gap-4 lg:grid-cols-5">
           <div className="lg:col-span-2">

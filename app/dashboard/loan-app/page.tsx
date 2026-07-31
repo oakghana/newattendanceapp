@@ -448,13 +448,20 @@ function loanTypeGroupKey(loanType: LoanType) {
 
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
+  const loanCategory = String(loanType.category || "").toLowerCase().trim()
   
-  // If no user tier or no loan tier restriction, include it
-  if (!userTier || !loanTier) {
+  // Loans without category are available to everyone
+  if (!loanCategory) {
     return true
   }
   
-  return loanTier === userTier
+  // If no user tier, only show uncategorized loans
+  if (!userTier) {
+    return !loanCategory
+  }
+  
+  // User tier must match loan category or loan has no category
+  return loanCategory === userTier || !loanCategory || !loanTier
 }
 
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
@@ -4999,6 +5006,22 @@ export default function LoanAppPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* View-only notice for HR Loan Office */}
+              {(() => {
+                const userRole = data?.profile?.role || ""
+                const isHrLoanOffice = userRole === "hr_loan_office"
+                if (isHrLoanOffice) {
+                  return (
+                    <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                      <p className="text-sm text-blue-800 font-medium">
+                        ⓘ You have view-only access to Payment Approvals. Only Accounts Executives can approve or reject payments.
+                      </p>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+
               {/* Search and Filters */}
               <div className="space-y-4 mb-6">
                 <div className="flex gap-3 items-center flex-wrap">
@@ -5033,18 +5056,28 @@ export default function LoanAppPage() {
               {/* Payment Evidence List */}
               <div className="space-y-3">
                 {(() => {
-                  // For HR/Accounts executives, fetch pending payments for their approval
+                  // Role-based access to Payment Approvals tab
+                  // - Accounts Executive: Full edit/approve access
+                  // - HR Loan Office: View-only access  
+                  // - Other roles: No access
                   const userRole = data?.profile?.role || ""
-                  const isHrApprover = ["hr_executive", "admin"].includes(userRole)
-                  const isAccountsApprover = ["accounts_executive", "admin"].includes(userRole)
+                  const isAccountsExecutive = userRole === "accounts_executive" || userRole === "admin"
+                  const isHrLoanOffice = userRole === "hr_loan_office"
+                  const canEdit = isAccountsExecutive
+                  const canView = isAccountsExecutive || isHrLoanOffice
                   
-                  if (!isHrApprover && !isAccountsApprover) {
+                  if (!canView) {
                     return (
                       <div className="rounded-lg border border-slate-200 p-6 text-center text-slate-500">
                         <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                        <p className="text-sm">Payment approvals are only visible to HR and Accounts Executives.</p>
+                        <p className="text-sm">Payment approvals are only visible to Accounts Executives and HR Loan Office staff.</p>
                       </div>
                     )
+                  }
+
+                  {/* View-only notice for HR Loan Office */}
+                  if (isHrLoanOffice && !isAccountsExecutive) {
+                    renderViewOnlyNotice = true
                   }
 
                   if (paymentRecordsLoading) {
@@ -5066,10 +5099,10 @@ export default function LoanAppPage() {
                   }
 
                   return paymentRecords.map((payment) => {
-                    const needsHrApproval = isHrApprover && payment.hr_approval_status === "pending"
-                    const needsAccountsApproval = isAccountsApprover && payment.accounts_approval_status === "pending"
-                    const canApprove = needsHrApproval || needsAccountsApproval
-                    const approvalType = needsHrApproval ? "hr" : needsAccountsApproval ? "accounts" : null
+                    // Updated: Only Accounts Executives can approve
+                    const needsAccountsApproval = isAccountsExecutive && payment.accounts_approval_status === "pending"
+                    const canApprove = needsAccountsApproval && !isHrLoanOffice
+                    const approvalType = needsAccountsApproval ? "accounts" : null
 
                     return (
                       <div key={payment.id} className="rounded-lg border border-slate-200 p-4">
@@ -5161,9 +5194,12 @@ export default function LoanAppPage() {
           </Card>
         </TabsContent>
 
-        {/* ── FD Approval Tab (Accounts Executive) ── */}
+        {/* ── FD Approval Tab (Accounts Executive / Loan Office / HR Loan Office) ── */}
         <TabsContent value="fd-approval" className="space-y-4">
-          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} />
+          <AccountsExecutiveFDDashboard 
+            userId={data?.profile?.id || ""} 
+            userRole={data?.profile?.role || ""}
+          />
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
@@ -5597,7 +5633,7 @@ export default function LoanAppPage() {
                   >
                     <div className="flex-1 text-left">
                       <div className="text-sm font-bold text-white">{row.request_number}</div>
-                      <div className="text-xs text-purple-200 font-medium">{row.staff_full_name}</div>
+                      <div className="text-xs text-purple-200 font-medium">{row.staff_full_name} - {row.loan_type_label}</div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${

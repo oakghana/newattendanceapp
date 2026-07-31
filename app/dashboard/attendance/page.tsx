@@ -9,12 +9,16 @@ import { LocationPreviewCard } from "@/components/attendance/location-preview-ca
 import { LeaveStatusCard } from "@/components/leave/leave-status-card"
 import { StaffStatusBadge } from "@/components/attendance/staff-status-badge"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
+import { SimpleLeaveCountdownBadge } from "@/components/leave/simple-leave-countdown-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { Clock, History, ArrowLeft, Home } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Clock, History, ArrowLeft, Home, AlertTriangle } from "lucide-react"
 import Link from "next/link"
+import { differenceInCalendarDays } from "date-fns"
 
 export default function AttendancePage() {
   const router = useRouter()
@@ -128,7 +132,16 @@ export default function AttendancePage() {
   }
 
   const assignedLocation = locations.find((loc) => loc.id === userProfile?.assigned_location_id) || null
-  const isOnLeave = userProfile?.leave_status === "on_leave" || userProfile?.leave_status === "sick_leave"
+  
+  // Check if user is on leave - either by status field OR by date range
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const leaveStartDate = userProfile?.leave_start_date ? new Date(userProfile.leave_start_date) : null
+  const leaveEndDate = userProfile?.leave_end_date ? new Date(userProfile.leave_end_date) : null
+  const isOnLeaveBystatus = userProfile?.leave_status === "on_leave" || userProfile?.leave_status === "sick_leave"
+  const isOnLeaveByDateRange = leaveStartDate && leaveEndDate && today >= leaveStartDate && today <= leaveEndDate
+  const isOnLeave = isOnLeaveBystatus || isOnLeaveByDateRange
+  
   const isCheckedIn = !!todayAttendance && !todayAttendance.check_out_time
 
   return (
@@ -170,6 +183,29 @@ export default function AttendancePage() {
             leaveStatus={userProfile?.leave_status as "active" | "pending" | "approved" | "rejected" | "on_leave" | "sick_leave" | null}
           />
         </div>
+
+        {/* Leave Countdown Badge */}
+        <div className="flex justify-center">
+          <SimpleLeaveCountdownBadge />
+        </div>
+
+        {/* On Leave Alert Banner */}
+        {isOnLeave && leaveEndDate && (
+          <Alert className="border-amber-300 bg-amber-50 shadow-md">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+            <AlertDescription className="text-amber-900">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold">🏖️ You are currently on leave</p>
+                  <p className="text-sm mt-1">
+                    Resuming work in {Math.max(0, differenceInCalendarDays(leaveEndDate, today) + 1)} day(s) 
+                    ({leaveEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})
+                  </p>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {userProfile?.leave_status && userProfile.leave_status !== "active" && (
           <LeaveStatusCard

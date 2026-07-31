@@ -8,7 +8,12 @@
     "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts,.tsx,.js,.jsx",
     "lint:app-lib": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint app lib --ext .ts,.tsx,.js,.jsx",
     "test": "vitest",
-    "start": "next start"
+    "start": "next start",
+    "fix:admin-menu": "node fix-admin-template.js",
+    "simulate": "node --env-file=.env.development.local scripts/test-simulation.mjs",
+    "cleanup:inactive-hods": "node --env-file=.env.development.local scripts/cleanup-inactive-hods.mjs",
+    "cleanup:20-hods": "node --env-file=.env.development.local scripts/cleanup-20-invalid-hods.mjs",
+    "remove:staff-hods": "node --env-file=.env.development.local scripts/remove-staff-role-hods.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
