@@ -448,13 +448,20 @@ function loanTypeGroupKey(loanType: LoanType) {
 
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
+  const loanCategory = String(loanType.category || "").toLowerCase().trim()
   
-  // If no user tier or no loan tier restriction, include it
-  if (!userTier || !loanTier) {
+  // Loans without category are available to everyone
+  if (!loanCategory) {
     return true
   }
   
-  return loanTier === userTier
+  // If no user tier, only show uncategorized loans
+  if (!userTier) {
+    return !loanCategory
+  }
+  
+  // User tier must match loan category or loan has no category
+  return loanCategory === userTier || !loanCategory || !loanTier
 }
 
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
