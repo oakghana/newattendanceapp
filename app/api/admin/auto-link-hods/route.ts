@@ -30,11 +30,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get all staff members with their departments and locations
+    // Note: Using a large limit to ensure we fetch all 2000+ staff members
+    // Default Supabase limit is 1000, so we set it higher
     const { data: staffMembers, error: staffError } = await supabase
       .from("user_profiles")
       .select("id, department_id, assigned_location_id, role")
       .eq("is_active", true)
       .not("role", "in", `(${ALLOWED_HOD_ROLES.join(",")})`)
+      .limit(10000) // Increased from default 1000 to accommodate 2000+ staff
 
     if (staffError) throw staffError
 
