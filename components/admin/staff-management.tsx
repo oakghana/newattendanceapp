@@ -565,20 +565,22 @@ export function StaffManagement() {
     setHodLinkError(null)
     try {
       // Fetch all roles that act as head of department in parallel
-      const [resDH, resRM, resMHR, resDHR] = await Promise.all([
+      const [resDH, resRM, resMHR, resDHR, resAE] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
         authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
+        authenticatedFetch("/api/admin/staff?role=accounts_executive&limit=200"),
       ])
-      const [dh, rm, mhr, dhr]: StaffMember[][] = await Promise.all([
+      const [dh, rm, mhr, dhr, ae]: StaffMember[][] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
         resMHR.json().then((d: any) => d.data || []),
         resDHR.json().then((d: any) => d.data || []),
+        resAE.json().then((d: any) => d.data || []),
       ])
       // Deduplicate by id and sort by name
-      const all = [...dh, ...rm, ...mhr, ...dhr]
+      const all = [...dh, ...rm, ...mhr, ...dhr, ...ae]
       const seen = new Set<string>()
       const unique = all.filter((s) => {
         if (seen.has(s.id)) return false
