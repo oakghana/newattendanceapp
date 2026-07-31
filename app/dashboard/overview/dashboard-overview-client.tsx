@@ -4,6 +4,7 @@ import { StatsCard } from "@/components/dashboard/stats-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { LeaveNotificationsCard } from "@/components/leave/leave-notifications-card"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
+import { ActiveLeaveBanner } from "@/components/leave/active-leave-banner"
 import ActiveLocationsCard from "@/components/admin/active-locations-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -332,6 +333,9 @@ export function DashboardOverviewClient({
             icon={Users}
           />
         </div>
+
+        {/* Show active leave banner if user is on leave */}
+        <ActiveLeaveBanner />
 
         <div className="grid gap-4 lg:grid-cols-5">
           <div className="lg:col-span-2">
