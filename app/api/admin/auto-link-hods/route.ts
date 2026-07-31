@@ -29,14 +29,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Only admins can auto-link HODs" }, { status: 403 })
     }
 
-    // Get all staff members with their departments and locations
+    // Get all ACTIVE staff members with their departments and locations
+    // Exclude HODs (they have their own role) and exclude inactive staff
     // Note: Using a large limit to ensure we fetch all 2000+ staff members
     // Default Supabase limit is 1000, so we set it higher
     const { data: staffMembers, error: staffError } = await supabase
       .from("user_profiles")
       .select("id, department_id, assigned_location_id, role")
-      .eq("is_active", true)
-      .not("role", "in", `(${ALLOWED_HOD_ROLES.join(",")})`)
+      .eq("is_active", true) // Only ACTIVE staff members
+      .not("role", "in", `(${ALLOWED_HOD_ROLES.join(",")})`) // Exclude HOD roles
       .limit(10000) // Increased from default 1000 to accommodate 2000+ staff
 
     if (staffError) throw staffError
@@ -60,14 +61,15 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      // Find HODs in the same department and location with allowed roles
+      // Find ACTIVE HODs in the same department and location with allowed roles
+      // Only link to HODs who are marked as is_active=true
       const { data: hods, error: hodError } = await supabase
         .from("user_profiles")
-        .select("id, role, first_name, last_name")
+        .select("id, role, first_name, last_name, is_active")
         .eq("department_id", staff.department_id)
         .eq("assigned_location_id", staff.assigned_location_id)
         .in("role", ALLOWED_HOD_ROLES)
-        .eq("is_active", true)
+        .eq("is_active", true) // MUST be active to be assigned as HOD
 
       if (hodError) {
         console.error(`[v0] Error finding HODs for staff ${staff.id}:`, hodError)
