@@ -38,16 +38,40 @@ async function removeStaffRoleHods() {
     // Get all user IDs from linkages
     const allUserIds = [...new Set(allLinkages.flatMap((l) => [l.staff_user_id, l.hod_user_id]))]
 
-    // Fetch user profiles
+    // Fetch user profiles with locations
     const { data: userProfiles, error: profileError } = await supabase
       .from("user_profiles")
-      .select("id, role, email, first_name, last_name")
+      .select("id, role, email, first_name, last_name, assigned_location_id")
       .in("id", allUserIds)
 
     if (profileError) throw profileError
 
-    // Create role map
-    const roleMap = new Map((userProfiles || []).map((p) => [p.id, { role: p.role, ...p }]))
+    // Get location details
+    const locationIds = [...new Set(
+      (userProfiles || []).filter(p => p.assigned_location_id).map(p => p.assigned_location_id)
+    )]
+
+    const { data: locations, error: locError } = await supabase
+      .from("locations")
+      .select("id, location_name")
+      .in("id", locationIds)
+
+    if (locError) throw locError
+
+    // Create location map
+    const locationMap = new Map((locations || []).map((l) => [l.id, l.location_name]))
+
+    // Create role map with location info
+    const roleMap = new Map((userProfiles || []).map((p) => [
+      p.id,
+      {
+        role: p.role,
+        email: p.email,
+        name: `${p.first_name || ""} ${p.last_name || ""}`.trim(),
+        location: locationMap.get(p.assigned_location_id) || "No location assigned",
+        ...p
+      }
+    ]))
 
     // Find linkages where HOD has "staff" role
     const linkagesToRemove = allLinkages.filter((linkage) => {
@@ -73,19 +97,37 @@ async function removeStaffRoleHods() {
       byHod.get(key).push(linkage)
     })
 
-    // Show details
-    console.log("[v0] Staff role HODs with invalid linkages:")
+    // Show detailed breakdown by HOD
+    console.log("[v0] Detailed breakdown of staff role HOD linkages:\n")
+    let staffCount = 0
     for (const [hodEmail, linkages] of byHod) {
-      console.log(`\n  ${hodEmail} (staff role) - ${linkages.length} linkages:`)
-      linkages.slice(0, 5).forEach((linkage) => {
+      const hodData = roleMap.get([...allUserIds].find(id => roleMap.get(id)?.email === hodEmail))
+      console.log(`  HOD: ${hodData?.name || hodEmail} (staff role) - ${linkages.length} staff linked:`)
+      
+      // Group by location
+      const byLocation = new Map()
+      linkages.forEach((linkage) => {
         const staffData = roleMap.get(linkage.staff_user_id)
-        console.log(`    - ${staffData?.email}`)
+        const location = staffData?.location || "No location"
+        if (!byLocation.has(location)) {
+          byLocation.set(location, [])
+        }
+        byLocation.get(location).push(staffData)
       })
-      if (linkages.length > 5) {
-        console.log(`    ... and ${linkages.length - 5} more`)
+
+      // Show staff by location
+      for (const [location, staffList] of byLocation) {
+        console.log(`    📍 ${location} (${staffList.length} staff):`)
+        staffList.slice(0, 3).forEach((staff) => {
+          console.log(`      - ${staff.name} (${staff.email})`)
+          staffCount++
+        })
+        if (staffList.length > 3) {
+          console.log(`      ... and ${staffList.length - 3} more`)
+        }
       }
+      console.log()
     }
-    console.log()
 
     // Remove linkages
     console.log("[v0] Removing invalid linkages...")
@@ -116,16 +158,34 @@ async function removeStaffRoleHods() {
       return hodRole === "staff"
     }).length || 0
 
+    // Get unique staff and HODs affected
+    const affectedStaffIds = new Set(linkagesToRemove.map(l => l.staff_user_id))
+    const affectedHodIds = new Set(linkagesToRemove.map(l => l.hod_user_id))
+    
+    // Get locations affected
+    const locationsAffected = new Set()
+    affectedStaffIds.forEach(staffId => {
+      const staffData = roleMap.get(staffId)
+      if (staffData?.location) {
+        locationsAffected.add(staffData.location)
+      }
+    })
+
     // Report
-    console.log("════════════════════════════════════════════════")
+    console.log("\n════════════════════════════════════════════════════════════")
     console.log("📊 STAFF ROLE HOD REMOVAL REPORT")
-    console.log("════════════════════════════════════════════════")
-    console.log(`Total linkages before: ${allLinkages.length}`)
-    console.log(`Staff role HODs removed: ${linkagesToRemove.length}`)
-    console.log(`Valid linkages remaining: ${verifyLinkages?.length || 0}`)
-    console.log(`Staff role HODs still present: ${staffHodIds} (should be 0)`)
-    console.log(`Removed percentage: ${((linkagesToRemove.length / allLinkages.length) * 100).toFixed(2)}%`)
-    console.log("════════════════════════════════════════════════\n")
+    console.log("════════════════════════════════════════════════════════════")
+    console.log(`\n📈 OVERALL STATISTICS:`)
+    console.log(`   Total linkages before: ${allLinkages.length}`)
+    console.log(`   Staff role HOD linkages to remove: ${linkagesToRemove.length}`)
+    console.log(`   Valid linkages remaining: ${verifyLinkages?.length || 0}`)
+    console.log(`   Removed percentage: ${((linkagesToRemove.length / allLinkages.length) * 100).toFixed(2)}%`)
+    console.log(`\n👥 AFFECTED ENTITIES:`)
+    console.log(`   Unique staff members: ${affectedStaffIds.size}`)
+    console.log(`   Staff role HODs: ${affectedHodIds.size}`)
+    console.log(`   Locations affected: ${locationsAffected.size}`)
+    console.log(`   Locations: ${Array.from(locationsAffected).join(", ")}`)
+    console.log("\n════════════════════════════════════════════════════════════\n")
 
     if (staffHodIds === 0) {
       console.log("[v0] ✅ Cleanup completed! No staff role HODs remain.")
