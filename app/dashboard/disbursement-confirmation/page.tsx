@@ -23,31 +23,31 @@ export default async function DisbursementConfirmationPage() {
 
   const admin = await createAdminClient()
 
-  // Verify user is HR Executive, Accounts Executive, or Loan Office staff
+  // Verify user is in Accounts/Loan Office department
   const { data: profile } = await admin
     .from("user_profiles")
-    .select("id, role, first_name, last_name")
+    .select("id, role, first_name, last_name, departments(name)")
     .eq("id", user.id)
     .maybeSingle()
 
-  const userRole = (profile as any)?.role || ""
-  const isAuthorized = 
-    userRole === "hr_executive" ||
-    userRole === "accounts_executive" ||
-    userRole === "loan_office" ||
-    userRole === "admin"
+  const deptName = (profile as any)?.departments?.name || ""
+  const isAccountsOrLoanOffice = 
+    deptName.toLowerCase().includes("account") ||
+    deptName.toLowerCase().includes("finance") ||
+    deptName.toLowerCase().includes("loan") ||
+    deptName.toLowerCase().includes("welfare")
 
-  if (!profile || !isAuthorized) {
+  if (!profile || !isAccountsOrLoanOffice) {
     redirect("/auth/login")
   }
 
-  // Fetch loans that have been approved by MD or Director HR (ready for disbursement confirmation)
-  // Include both md_approved and awaiting_director_hr statuses as these are the ones ready to disburse
+  // Fetch loans in staff_receiving_funds status
+  // Use a simpler query without nested relationships to avoid issues
   const { data: loans, error: loansError } = await admin
     .from("loan_requests")
     .select("*")
-    .in("status", ["md_approved", "awaiting_director_hr"])
-    .order("md_approved_at", { ascending: false })
+    .eq("status", "staff_receiving_funds")
+    .order("created_at", { ascending: false })
     .limit(500)
 
   if (loansError) {
@@ -94,7 +94,6 @@ export default async function DisbursementConfirmationPage() {
     <DisbursementConfirmationClient 
       loans={enrichedLoans} 
       userProfile={profile}
-      userRole={userRole}
     />
   )
 }

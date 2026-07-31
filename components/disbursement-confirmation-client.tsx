@@ -24,33 +24,15 @@ interface DisbursedLoan {
 interface DisbursementConfirmationClientProps {
   loans: DisbursedLoan[]
   userProfile?: any
-  userRole?: string
 }
 
-export function DisbursementConfirmationClient({ loans: initialLoans, userProfile, userRole = "" }: DisbursementConfirmationClientProps) {
+export function DisbursementConfirmationClient({ loans: initialLoans, userProfile }: DisbursementConfirmationClientProps) {
   const [loans, setLoans] = useState(initialLoans)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const supabase = createClient()
   const { toast } = useToast()
 
-  // Role-based permissions
-  // Only accounts_executive and loan_office can CONFIRM disbursement
-  // hr_loan_office is VIEW ONLY
-  const canConfirmDisbursement = userRole === "accounts_executive" || userRole === "accounts" || userRole === "loan_office"
-  const isViewOnly = userRole === "hr_loan_office"
-  const isAuthorized = canConfirmDisbursement || isViewOnly
-
   const handleConfirmDisbursement = async (loanId: string) => {
-    // Check permissions before allowing confirmation
-    if (!canConfirmDisbursement) {
-      toast({
-        title: "Permission Denied",
-        description: "You don't have permission to confirm disbursements. View-only access enabled.",
-        variant: "destructive",
-      })
-      return
-    }
-
     setConfirmingId(loanId)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -114,15 +96,6 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* View-Only Notice for HR Loan Office */}
-        {isViewOnly && (
-          <div className="mb-8 rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <p className="text-sm text-blue-800 font-medium">
-              ⓘ You have view-only access to Disbursement Confirmation. Only Accounts Executives and Loan Office staff can confirm disbursements.
-            </p>
-          </div>
-        )}
-
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900">Disbursement Confirmation</h1>
@@ -198,13 +171,8 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
                     </div>
                     <Button
                       onClick={() => handleConfirmDisbursement(loan.id)}
-                      disabled={confirmingId === loan.id || !canConfirmDisbursement}
-                      className={`${
-                        canConfirmDisbursement 
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-                          : "bg-slate-300 text-slate-500 cursor-not-allowed"
-                      } font-semibold px-6 py-2 rounded-lg inline-flex items-center gap-2 transition-all disabled:opacity-50`}
-                      title={isViewOnly ? "View-only access: Cannot confirm disbursements" : ""}
+                      disabled={confirmingId === loan.id}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2 rounded-lg inline-flex items-center gap-2 transition-all disabled:opacity-50"
                     >
                       {confirmingId === loan.id ? (
                         <>
@@ -214,7 +182,7 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
                       ) : (
                         <>
                           <CheckCircle2 className="h-4 w-4" />
-                          {isViewOnly ? "View Only" : "Confirm Received"}
+                          Confirm Received
                         </>
                       )}
                     </Button>
