@@ -5,6 +5,7 @@ import { QuickActions } from "@/components/dashboard/quick-actions"
 import { LeaveNotificationsCard } from "@/components/leave/leave-notifications-card"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { ActiveLeaveBanner } from "@/components/leave/active-leave-banner"
+import { SimpleLeaveCountdownBadge } from "@/components/leave/simple-leave-countdown-badge"
 import ActiveLocationsCard from "@/components/admin/active-locations-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -332,6 +333,11 @@ export function DashboardOverviewClient({
             description={profile?.departments?.name || "No department assigned"}
             icon={Users}
           />
+        </div>
+
+        {/* Show leave countdown badge if user is on leave */}
+        <div className="flex justify-center">
+          <SimpleLeaveCountdownBadge />
         </div>
 
         {/* Show active leave banner if user is on leave */}

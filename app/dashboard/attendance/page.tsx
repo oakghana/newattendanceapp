@@ -9,6 +9,7 @@ import { LocationPreviewCard } from "@/components/attendance/location-preview-ca
 import { LeaveStatusCard } from "@/components/leave/leave-status-card"
 import { StaffStatusBadge } from "@/components/attendance/staff-status-badge"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
+import { SimpleLeaveCountdownBadge } from "@/components/leave/simple-leave-countdown-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -181,6 +182,11 @@ export default function AttendancePage() {
             isOnLeave={isOnLeave}
             leaveStatus={userProfile?.leave_status as "active" | "pending" | "approved" | "rejected" | "on_leave" | "sick_leave" | null}
           />
+        </div>
+
+        {/* Leave Countdown Badge */}
+        <div className="flex justify-center">
+          <SimpleLeaveCountdownBadge />
         </div>
 
         {/* On Leave Alert Banner */}
