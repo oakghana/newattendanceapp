@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog"
 import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2 } from "lucide-react"
 import { PasswordManagement } from "./password-management"
+import { AutoLinkHodButton } from "./auto-link-hod-button"
 import { useNotifications } from "@/components/ui/notification-system"
 
 const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -714,6 +715,8 @@ export function StaffManagement() {
 
             {/* Action Buttons */}
             <div className="flex gap-3">
+              <AutoLinkHodButton />
+
               <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="shadow-sm hover:shadow-md transition-shadow bg-transparent">
