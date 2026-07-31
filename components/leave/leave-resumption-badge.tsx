@@ -28,21 +28,34 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
 
         const { data: profile } = await supabase
           .from('user_profiles')
-          .select('leave_status, leave_end_date, leave_start_date')
+          .select('leave_status, leave_end_date, leave_start_date, is_on_leave')
           .eq('id', user.id)
           .single()
 
         if (!isMounted) return
 
-        // Show countdown for ANY on_leave status (not just <= 5 days)
-        if (profile?.leave_status === 'on_leave' && profile?.leave_end_date) {
-          const days = calculateDaysRemaining(profile.leave_end_date)
-          setDaysRemaining(days)
-          setLeaveEndDate(profile.leave_end_date)
-          setIsOnLeave(true)
+        // Check if user is on leave - either via leave_status or is_on_leave flag or by date range
+        if (profile?.leave_end_date) {
+          const today = new Date()
+          const endDate = new Date(profile.leave_end_date)
+          const startDate = profile.leave_start_date ? new Date(profile.leave_start_date) : null
+          
+          // User is on leave if:
+          // 1. leave_status is explicitly 'on_leave' OR
+          // 2. is_on_leave flag is true OR
+          // 3. Today is between start and end date
+          const isOnLeaveByStatus = profile?.leave_status === 'on_leave' || profile?.is_on_leave
+          const isOnLeaveByDate = startDate ? (today >= startDate && today <= endDate) : (today <= endDate)
+          
+          if (isOnLeaveByStatus || isOnLeaveByDate) {
+            const days = calculateDaysRemaining(profile.leave_end_date)
+            setDaysRemaining(days)
+            setLeaveEndDate(profile.leave_end_date)
+            setIsOnLeave(true)
+          }
         }
       } catch (error) {
-        console.error('Error checking leave status:', error)
+        console.error('[v0] Error checking leave status:', error)
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -59,20 +72,27 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
     }
   }, [])
 
-  if (loading || !isOnLeave || daysRemaining === null) return null
+  // Only return null if loading is true. Show badge if isOnLeave is true, even if daysRemaining is 0 or negative
+  if (loading) return null
+  if (!isOnLeave) return null
+  if (daysRemaining === null) return null
 
   const getUrgencyColor = (days: number) => {
-    if (days <= 0) return 'bg-red-500 text-white'
-    if (days === 1) return 'bg-orange-500 text-white'
-    if (days <= 2) return 'bg-amber-500 text-white'
-    return 'bg-blue-500 text-white'
+    if (days < 0) return 'bg-red-600 text-white' // Overdue - dark red
+    if (days === 0) return 'bg-red-500 text-white' // Today
+    if (days === 1) return 'bg-orange-500 text-white' // Tomorrow
+    if (days <= 3) return 'bg-amber-500 text-white' // Next few days
+    if (days <= 5) return 'bg-yellow-500 text-white' // Within a week
+    return 'bg-blue-500 text-white' // More than a week
   }
 
   const getUrgencyEmoji = (days: number) => {
-    if (days <= 0) return '🔴'
-    if (days === 1) return '🎉'
-    if (days <= 2) return '⏰'
-    return '📅'
+    if (days < 0) return '⛔' // Overdue
+    if (days === 0) return '🎉' // Today
+    if (days === 1) return '⏰' // Tomorrow
+    if (days <= 3) return '📅' // Soon
+    if (days <= 5) return '📆' // Within week
+    return '🏖️' // Plenty of time
   }
 
   const urgencyClass = getUrgencyColor(daysRemaining)
