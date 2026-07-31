@@ -34,13 +34,12 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
 
         if (!isMounted) return
 
+        // Show countdown for ANY on_leave status (not just <= 5 days)
         if (profile?.leave_status === 'on_leave' && profile?.leave_end_date) {
           const days = calculateDaysRemaining(profile.leave_end_date)
-          if (days <= 5) {
-            setDaysRemaining(days)
-            setLeaveEndDate(profile.leave_end_date)
-            setIsOnLeave(true)
-          }
+          setDaysRemaining(days)
+          setLeaveEndDate(profile.leave_end_date)
+          setIsOnLeave(true)
         }
       } catch (error) {
         console.error('Error checking leave status:', error)
@@ -51,7 +50,7 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
 
     checkLeaveStatus()
 
-    // Re-check every minute
+    // Re-check every minute to keep countdown updated
     const interval = setInterval(checkLeaveStatus, 60000)
 
     return () => {
