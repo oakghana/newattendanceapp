@@ -5597,7 +5597,7 @@ export default function LoanAppPage() {
                   >
                     <div className="flex-1 text-left">
                       <div className="text-sm font-bold text-white">{row.request_number}</div>
-                      <div className="text-xs text-purple-200 font-medium">{row.staff_full_name}</div>
+                      <div className="text-xs text-purple-200 font-medium">{row.staff_full_name} - {row.loan_type_label}</div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <div className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${

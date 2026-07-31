@@ -34,7 +34,8 @@ export default async function DisbursementConfirmationPage() {
   const isAuthorized = 
     userRole === "hr_executive" ||
     userRole === "accounts_executive" ||
-    userRole === "loan_office"
+    userRole === "loan_office" ||
+    userRole === "admin"
 
   if (!profile || !isAuthorized) {
     redirect("/auth/login")
