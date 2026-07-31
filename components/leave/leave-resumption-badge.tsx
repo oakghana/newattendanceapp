@@ -26,17 +26,54 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
 
         if (!user || !isMounted) return
 
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        // First, try to get approved leave from leave_plan_requests
+        const { data: approvedLeave } = await supabase
+          .from('leave_plan_requests')
+          .select('preferred_start_date, preferred_end_date, adjusted_start_date, adjusted_end_date')
+          .eq('user_id', user.id)
+          .eq('status', 'approved')
+          .order('preferred_start_date', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (!isMounted) return
+
+        if (approvedLeave) {
+          const startDate = approvedLeave.adjusted_start_date 
+            ? new Date(approvedLeave.adjusted_start_date)
+            : new Date(approvedLeave.preferred_start_date)
+          const endDate = approvedLeave.adjusted_end_date 
+            ? new Date(approvedLeave.adjusted_end_date)
+            : new Date(approvedLeave.preferred_end_date)
+
+          // Check if currently on leave
+          if (today >= startDate && today <= endDate) {
+            const days = calculateDaysRemaining(endDate.toISOString().split('T')[0])
+            setDaysRemaining(days)
+            setLeaveEndDate(endDate.toISOString().split('T')[0])
+            setIsOnLeave(true)
+            if (isMounted) setLoading(false)
+            return
+          }
+        }
+
+        // Fallback: check user_profiles
         const { data: profile } = await supabase
           .from('user_profiles')
           .select('leave_status, leave_end_date, leave_start_date, is_on_leave')
           .eq('id', user.id)
           .single()
 
-        if (!isMounted) return
+        if (!isMounted || !profile) {
+          if (isMounted) setLoading(false)
+          return
+        }
 
         // Check if user is on leave - either via leave_status or is_on_leave flag or by date range
         if (profile?.leave_end_date) {
-          const today = new Date()
           const endDate = new Date(profile.leave_end_date)
           const startDate = profile.leave_start_date ? new Date(profile.leave_start_date) : null
           
