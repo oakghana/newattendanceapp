@@ -10,7 +10,8 @@
     "test": "vitest",
     "start": "next start",
     "fix:admin-menu": "node fix-admin-template.js",
-    "simulate": "node --env-file=.env.development.local scripts/test-simulation.mjs"
+    "simulate": "node --env-file=.env.development.local scripts/test-simulation.mjs",
+    "cleanup:inactive-hods": "node --env-file=.env.development.local scripts/cleanup-inactive-hods.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
