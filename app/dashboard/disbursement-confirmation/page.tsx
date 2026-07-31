@@ -94,6 +94,7 @@ export default async function DisbursementConfirmationPage() {
     <DisbursementConfirmationClient 
       loans={enrichedLoans} 
       userProfile={profile}
+      userRole={userRole}
     />
   )
 }
