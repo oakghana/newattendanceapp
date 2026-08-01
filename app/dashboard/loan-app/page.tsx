@@ -99,6 +99,9 @@ type LoanRequest = {
   updated_at?: string
   hr_note?: string | null
   
+  // FD / Accounts fields
+  monthly_deduction?: number | null
+
   // Repayment tracking
   repayment_plan_generated_at?: string | null
   repayment_duration_months?: number
@@ -3954,7 +3957,7 @@ export default function LoanAppPage() {
                           requested_amount: loanReq.requested_amount || 0,
                           repayment_duration_months: loanReq.repayment_duration_months || 12,
                           loan_type_label: loanReq.loan_type_label,
-                          monthly_deduction: loanReq.monthly_deduction,
+                          monthly_deduction: loanReq.monthly_deduction ?? undefined,
                           status: loanReq.status,
                           fd_calculated: !!loanReq.fd_score,
                         }}
