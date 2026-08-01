@@ -7202,7 +7202,7 @@ export default function LoanAppPage() {
                   </div>
                 )}
 
-                <Label className="text-sm font-semibold">Processing Memo *</Label>
+                <Label className="text-sm font-semibold">Processing Memo</Label>
                 <Textarea 
                   value={modalNote} 
                   onChange={(e) => setModalNote(e.target.value)} 
@@ -7212,14 +7212,14 @@ export default function LoanAppPage() {
                 />
                 <Label className="text-sm font-semibold">Disbursement Date *</Label>
                 <Input 
-                  type="date"
+                  type="month"
                   value={modalDisbursement} 
                   onChange={(e) => setModalDisbursement(e.target.value)} 
                   className="h-8 text-xs"
                 />
                 <Label className="text-sm font-semibold">Recovery Start Date *</Label>
                 <Input 
-                  type="date"
+                  type="month"
                   value={modalRecovery} 
                   onChange={(e) => setModalRecovery(e.target.value)} 
                   className="h-8 text-xs"
