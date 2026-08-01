@@ -763,7 +763,7 @@ export async function notifyLoanHodApproved(
   },
 ): Promise<void> {
   try {
-    const loanOfficeRoles = ["loan_officer", "loan_office", "hr_officer", "hr_office", "manager_hr", "admin"]
+    const loanOfficeRoles = ["loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "manager_hr", "admin"]
     const emails = await emailsForRoles(admin, loanOfficeRoles)
     if (!emails.length) return
 

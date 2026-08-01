@@ -64,7 +64,7 @@ export function LeaveManagementModuleClient({
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
   const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
-  const isLoanOffice = normalizedRole === 'loan_office'
+  const isLoanOffice = normalizedRole === 'loan_office' || normalizedRole === 'hr_loan_office' || normalizedRole === 'accounts_loan_office'
 
   // HR Executives get a simplified dedicated module instead of the full tab bar
   if (isHrExecutive) {

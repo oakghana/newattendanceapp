@@ -71,7 +71,7 @@ interface SidebarProps {
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
   "admin", "it-admin", "regional_manager", "department_head",
-  "staff", "loan_office", "accounts", "director_hr", "manager_hr",
+  "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary",
 ]
@@ -160,7 +160,7 @@ const navigationItems = [
     title: "Disbursement Confirmation",
     href: "/dashboard/disbursement-confirmation",
     icon: CheckCircle2,
-    roles: ["accounts", "loan_office", "admin"],
+    roles: ["accounts", "loan_office", "hr_loan_office", "accounts_loan_office", "admin"],
     category: "main",
   },
   {
@@ -414,7 +414,7 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
 
   // Support role hierarchy: map 'audit_staff' to behave like 'staff' for base permissions
   // managing_director and secretary keep their own role names for exclusive menu items.
-  const normalizedRole = (profile?.role || "staff").toLowerCase().trim()
+  const normalizedRole = (profile?.role || "staff").toLowerCase().replace(/[\s-]+/g, "_").trim()
   const effectiveRole =
     normalizedRole === "audit_staff" ? "staff" :
     normalizedRole

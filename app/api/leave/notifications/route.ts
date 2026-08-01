@@ -9,7 +9,7 @@ function normalizeRole(role: string | null | undefined) {
 }
 
 const HOD_REVIEW_ROLES = new Set(["department_head", "regional_manager"])
-const HR_REVIEW_ROLES = new Set(["hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office"])
+const HR_REVIEW_ROLES = new Set(["hr_officer", "manager_hr", "director_hr", "hr_director", "loan_office", "hr_loan_office", "accounts_loan_office"])
 
 function canReviewLeave(role: string) {
   return role === "admin" || HOD_REVIEW_ROLES.has(role) || HR_REVIEW_ROLES.has(role)

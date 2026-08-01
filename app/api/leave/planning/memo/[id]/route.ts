@@ -445,7 +445,7 @@ export async function GET(
     const canAccess =
       isApplicant ||
       role === "admin" ||
-      role === "loan_office" ||
+      role === "loan_office" || role === "hr_loan_office" || role === "accounts_loan_office" ||
       role === "hr_executive" ||
       role === "accounts_executive" ||
       isHrApproverRole(role, deptName, deptCode) ||
@@ -467,7 +467,7 @@ export async function GET(
       }
     } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin" && role !== "hr_executive" && role !== "accounts_executive") {
       // No token provided — allow the applicant or loan_office to download their own memo, or HOD/manager.
-      if (!isApplicant && role !== "loan_office" && !isManagerRole(role)) {
+      if (!isApplicant && role !== "loan_office" && role !== "hr_loan_office" && role !== "accounts_loan_office" && !isManagerRole(role)) {
         return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
       }
     }
