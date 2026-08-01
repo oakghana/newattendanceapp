@@ -964,16 +964,15 @@ export async function notifyStaffOfLeaveReminder(opts: {
     const subject = `📅 Annual Leave Submission Reminder - ${daysLeft} days left`
     const html = baseLayout(
       'Annual Leave Submission Reminder',
-      <p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong></strong>,</p>
-      <p style="margin:0 0 6px;font-size:14px;color:#374151;">You have <strong> day</strong> left to submit your annual leave plan for the <strong></strong> year.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong>${opts.staffName}</strong>,</p>
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;">You have <strong>${daysLeft} day</strong> left to submit your annual leave plan for the <strong>${leaveYearPeriod}</strong> year.</p>
       <p style="margin:0 0 22px;"></p>
       <p style="margin:0 0 12px;font-size:13px;color:#374151;"><strong>Why this matters:</strong></p>
       <ul style="margin:0 0 18px 16px;padding:0;font-size:13px;color:#374151;line-height:1.6;">
         <li>Your leave payment processing depends on submitting an approved leave plan</li>
         <li>COCOBOD leave grant payments require timely submission</li>
         <li>Early submission allows time for HOD and HR reviews</li>
-      </ul>
-      ,
+      </ul>`
     )
     
     await emailService.sendEmail(opts.staffEmail, {
@@ -996,20 +995,19 @@ export async function notifyManagerOfEscalation(opts: {
   escalationType: string
 }): Promise<void> {
   try {
-    const link = ${APP_URL}/dashboard/leave-planning
-    const subject = ⚠️ Escalation:  Overdue Leave Endorsement
+    const link = `${APP_URL}/dashboard/leave-planning`
+    const subject = `⚠️ Escalation: ${escalationType} - Overdue Leave Endorsement`
     const html = baseLayout(
       'Overdue Leave Endorsement Escalation',
-      <p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong></strong>,</p>
-      <p style="margin:0 0 6px;font-size:14px;color:#374151;"><strong style="color:#991b1b;"></strong> leave request you are reviewing have been pending for over 7 days without a decision.</p>
+      `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong>${opts.managerName}</strong>,</p>
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;"><strong style="color:#991b1b;">${pendingCount}</strong> leave request${pendingCount !== 1 ? 's' : ''} you are reviewing have been pending for over 7 days without a decision.</p>
       <p style="margin:0 0 22px;"></p>
       <p style="margin:0 0 12px;font-size:13px;color:#374151;"><strong>Next Steps:</strong></p>
       <ul style="margin:0 0 18px 16px;padding:0;font-size:13px;color:#374151;line-height:1.6;">
         <li>Review and approve/reject the pending requests</li>
         <li>Add any necessary comments or requested changes</li>
         <li>Staff members are waiting for your endorsement to proceed</li>
-      </ul>
-      ,
+      </ul>`
     )
     
     await emailService.sendEmail(opts.managerEmail, {
