@@ -1212,7 +1212,7 @@ export default function LoanAppPage() {
     }
 
     // Loan Office tab: for HR Loan Office staff to process HOD-approved loans and perform FD checks
-    if (canAccessLoanOfficeWorkspace || p?.loanOffice) {
+    if (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || canAccessLoanOfficeWorkspace || p?.loanOffice) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
 
