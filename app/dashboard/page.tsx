@@ -29,6 +29,7 @@ import { redirect } from "next/navigation"
 import { GPSStatusBanner } from "@/components/attendance/gps-status-banner"
 import { SecurityHealthCard } from "@/components/admin/security-health-card"
 import { NonResumptionWarningDisplay } from "@/components/leave/non-resumption-warning-display"
+import { DashboardCountdownWrapper } from "@/components/leave/dashboard-countdown-wrapper"
 
 export const metadata = {
   title: "Dashboard | QCC Electronic Attendance",
@@ -230,6 +231,9 @@ export default async function DashboardPage() {
 
           {/* Non-Resumption Warning Banner */}
           <NonResumptionWarningDisplay />
+
+          {/* Leave Resumption Countdown Widget */}
+          <DashboardCountdownWrapper />
 
           {/* Admin Security Health */}
           {profile?.role === "admin" && (
