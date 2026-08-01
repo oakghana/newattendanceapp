@@ -31,6 +31,8 @@ interface LoanRequest {
   monthly_deduction?: number
   status?: string
   fd_calculated?: boolean
+  fd_score?: number
+  fd_note?: string
 }
 
 interface FDCalculationSubmissionProps {
@@ -140,16 +142,25 @@ export function FDCalculationSubmission({ loanRequest, onSubmitComplete }: FDCal
 
   const isGood = result?.fd_good ?? false
 
+  const isEditMode = loanRequest.fd_calculated && loanRequest.fd_score
+
   return (
     <div className="space-y-4">
       {/* Loan Summary */}
-      <Card className="border-border">
+      <Card className={isEditMode ? "border-purple-200 bg-purple-50/40" : "border-border"}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground" />
               <div>
-                <CardTitle className="text-base">{loanRequest.staff_full_name}</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">{loanRequest.staff_full_name}</CardTitle>
+                  {isEditMode && (
+                    <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
+                      Edit Mode
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Staff No: {loanRequest.staff_number} &bull; {loanRequest.request_number}
                 </p>
@@ -160,6 +171,11 @@ export function FDCalculationSubmission({ loanRequest, onSubmitComplete }: FDCal
               <p className="text-xs text-muted-foreground">
                 {loanRequest.repayment_duration_months} months &bull; {loanRequest.loan_type_label}
               </p>
+              {isEditMode && (
+                <p className="text-xs font-semibold text-purple-700 mt-1">
+                  Current Score: {loanRequest.fd_score}/100
+                </p>
+              )}
             </div>
           </div>
         </CardHeader>

@@ -24,7 +24,7 @@ import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submis
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -3939,43 +3939,85 @@ export default function LoanAppPage() {
           
           {/* FD Calculation Submission for Accounts Loan Office Staff */}
           {normalizedRole === "accounts_loan_office" && (
-            <Card className="border-blue-200 bg-blue-50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-blue-900">
-                  <Calculator className="h-5 w-5" />
-                  Submit FD Calculation for Loan Request
-                </CardTitle>
-                <CardDescription className="text-blue-800">
-                  Enter staff financial information to automatically calculate their Financial Due Diligence (FD) score. No attachment needed.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {data?.inbox?.accounts && data.inbox.accounts.length > 0 ? (
-                  <div className="space-y-4">
-                    {data.inbox.accounts.filter(r => !r.fd_score).map(loanReq => (
-                      <FDCalculationSubmission 
-                        key={loanReq.id}
-                        loanRequest={{
-                          id: loanReq.id,
-                          request_number: loanReq.request_number || "",
-                          staff_number: loanReq.staff_number || "",
-                          staff_full_name: loanReq.staff_full_name || "",
-                          requested_amount: loanReq.requested_amount || 0,
-                          repayment_duration_months: loanReq.repayment_duration_months || 12,
-                          loan_type_label: loanReq.loan_type_label,
-                          monthly_deduction: loanReq.monthly_deduction ?? undefined,
-                          status: loanReq.status,
-                          fd_calculated: !!loanReq.fd_score,
-                        }}
-                        onSubmitComplete={() => void loadData()}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-blue-700">No loans awaiting FD calculation submission.</p>
-                )}
-              </CardContent>
-            </Card>
+            <>
+              {/* New FD Calculations (Pending) */}
+              <Card className="border-blue-200 bg-blue-50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-blue-900">
+                    <Calculator className="h-5 w-5" />
+                    Submit FD Calculation for Loan Request
+                  </CardTitle>
+                  <CardDescription className="text-blue-800">
+                    Enter staff financial information to automatically calculate their Financial Due Diligence (FD) score. No attachment needed.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {data?.inbox?.accounts && data.inbox.accounts.filter(r => !r.fd_score).length > 0 ? (
+                    <div className="space-y-4">
+                      {data.inbox.accounts.filter(r => !r.fd_score).map(loanReq => (
+                        <FDCalculationSubmission 
+                          key={loanReq.id}
+                          loanRequest={{
+                            id: loanReq.id,
+                            request_number: loanReq.request_number || "",
+                            staff_number: loanReq.staff_number || "",
+                            staff_full_name: loanReq.staff_full_name || "",
+                            requested_amount: loanReq.requested_amount || 0,
+                            repayment_duration_months: loanReq.repayment_duration_months || 12,
+                            loan_type_label: loanReq.loan_type_label,
+                            monthly_deduction: loanReq.monthly_deduction ?? undefined,
+                            status: loanReq.status,
+                            fd_calculated: !!loanReq.fd_score,
+                          }}
+                          onSubmitComplete={() => void loadData()}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-blue-700">No loans awaiting FD calculation submission.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Edit Already-Calculated FD Scores */}
+              {data?.inbox?.accounts && data.inbox.accounts.filter(r => r.fd_score).length > 0 && (
+                <Card className="border-purple-200 bg-purple-50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-purple-900">
+                      <Edit3 className="h-5 w-5" />
+                      Edit FD Calculations
+                    </CardTitle>
+                    <CardDescription className="text-purple-800">
+                      Already-calculated FD scores can be edited here to adjust financial data or re-calculate.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {data.inbox.accounts.filter(r => r.fd_score).map(loanReq => (
+                        <FDCalculationSubmission 
+                          key={`edit-${loanReq.id}`}
+                          loanRequest={{
+                            id: loanReq.id,
+                            request_number: loanReq.request_number || "",
+                            staff_number: loanReq.staff_number || "",
+                            staff_full_name: loanReq.staff_full_name || "",
+                            requested_amount: loanReq.requested_amount || 0,
+                            repayment_duration_months: loanReq.repayment_duration_months || 12,
+                            loan_type_label: loanReq.loan_type_label,
+                            monthly_deduction: loanReq.monthly_deduction ?? undefined,
+                            status: loanReq.status,
+                            fd_calculated: !!loanReq.fd_score,
+                            fd_score: loanReq.fd_score || undefined,
+                            fd_note: loanReq.fd_note || undefined,
+                          }}
+                          onSubmitComplete={() => void loadData()}
+                        />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
           
 
