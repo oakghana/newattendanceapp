@@ -7578,7 +7578,7 @@ export default function LoanAppPage() {
                 </Button>
               )}
             </div>
-            {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr") && (
+            {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr" || memoReviewModal.row.status === "pending_hr_executive_review") && (
               <Button
                 className={`gap-2 font-semibold text-base py-5 px-6 flex-1 min-w-fit ${
                   modalDecision === "approve"
@@ -7598,7 +7598,7 @@ export default function LoanAppPage() {
                     signature_text: sigText,
                     signature_data_url: sigUrl,
                     director_letter: modalMemoText,
-                    note: memoReviewModal.row?.status === "awaiting_hr_executives" ? "HR Executive decision via memo review" : "Director HR final decision via memo review",
+                    note: memoReviewModal.row?.status === "awaiting_hr_executives" ? "HR Executive decision via memo review" : memoReviewModal.row?.status === "pending_hr_executive_review" ? "HR Executive approval via memo review" : "Director HR final decision via memo review",
                   })
                   setMemoReviewModal((s) => ({ ...s, open: false }))
                 }}
