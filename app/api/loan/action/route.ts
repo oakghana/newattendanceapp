@@ -961,9 +961,15 @@ export async function POST(request: NextRequest) {
       update.status = "pending_hr_executive_review"
       toStatus = "pending_hr_executive_review"
 
-      // Store the disbursement and recovery dates
-      if (body.disbursement_date) update.disbursement_date = body.disbursement_date
-      if (body.recovery_start_date) update.recovery_start_date = body.recovery_start_date
+      // Store the disbursement and recovery dates (convert YYYY-MM to YYYY-MM-01)
+      if (body.disbursement_date) {
+        const disbursementMonth = body.disbursement_date.trim()
+        update.disbursement_date = disbursementMonth.length === 7 ? `${disbursementMonth}-01` : body.disbursement_date
+      }
+      if (body.recovery_start_date) {
+        const recoveryMonth = body.recovery_start_date.trim()
+        update.recovery_start_date = recoveryMonth.length === 7 ? `${recoveryMonth}-01` : body.recovery_start_date
+      }
       if (body.reference_number) update.reference_number = body.reference_number
     }
 
