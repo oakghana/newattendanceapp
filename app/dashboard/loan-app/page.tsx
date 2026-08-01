@@ -447,30 +447,14 @@ function loanTypeGroupKey(loanType: LoanType) {
 }
 
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
-  // IMPORTANT: If loan category is "other", it's available to everyone
-  if (loanType.category === "other") {
-    return true
-  }
-  
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
   
-  // If loan has no tier restriction, include it for everyone
-  if (!loanTier) {
+  // If no user tier or no loan tier restriction, include it
+  if (!userTier || !loanTier) {
     return true
   }
   
-  // If user has no tier set, show all loans (don't restrict)
-  if (!userTier) {
-    return true
-  }
-  
-  // If both have tiers, match them or show loans below user tier
-  // Example: Manager tier users can see manager tier loans AND senior AND junior
-  const tierOrder = { junior: 1, senior: 2, manager: 3 }
-  const userTierLevel = tierOrder[userTier as keyof typeof tierOrder] || 0
-  const loanTierLevel = tierOrder[loanTier as keyof typeof tierOrder] || 0
-  
-  return loanTierLevel <= userTierLevel
+  return loanTier === userTier
 }
 
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
@@ -1107,16 +1091,7 @@ export default function LoanAppPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   const filteredLoanTypes = useMemo(() => {
-    if (!data) {
-      return []
-    }
-    
     const rawTypes = data?.loanTypes || []
-
-    if (rawTypes.length === 0) {
-      return []
-    }
-
     const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
 
     const normalizedTypes = rawTypes.map((type) => ({
@@ -1162,10 +1137,10 @@ export default function LoanAppPage() {
     }
   }, [actionModal.open, actionModal.actionType, actionModal.row])
 
-  const p = data?.permissions || {}
+  const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
-  const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs || false
+  const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
   // Accounts-dept loan_office users get Accounts tab, not Loan Office tab
   const userDeptName = data?.profile?.departmentName || ""
@@ -1174,7 +1149,7 @@ export default function LoanAppPage() {
     isAdmin ||
     (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
-  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs || false)
+  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
     () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
@@ -1186,8 +1161,8 @@ export default function LoanAppPage() {
   )
 
   const visibleTabs = useMemo(() => {
-    const perms = data?.permissions || {}
-    const isAdminUser = isAdmin
+    const p = data?.permissions
+    const isAdminUser = isAdmin // Use the calculated isAdmin flag
     const allLoansData = data?.inbox?.allLoans || []
     const activeLoansCount = allLoansData.filter((loan: any) => loan.status !== "archived").length
     const archivedLoansCount = allLoansData.filter((loan: any) => loan.status === "archived").length
@@ -1203,10 +1178,12 @@ export default function LoanAppPage() {
       archived: archivedLoansCount,
       mine: data?.myTasks?.length || 0,
     }
-    const isHrExecutive = !isAdminUser && !!perms?.directorHr
-    const isAccountsExecutive = !isAdminUser && !!perms?.accounts
-    const isHrExecutiveOnly = !isAdminUser && perms?.directorHr && !perms?.hod && !perms?.loanOffice && !perms?.accounts && !perms?.hrOffice && !perms?.viewAllTabs
+    // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
+    const isHrExecutive = !isAdminUser && !!p?.directorHr
+    const isAccountsExecutive = !isAdminUser && !!p?.accounts
+    const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
+    // Get loan type name for "My Loans" tab if a loan is selected
     let myLoansLabel = "My Loans"
     if (loanTypeKey && data?.loanTypes) {
       const selectedLoanType = data.loanTypes.find((lt: any) => lt.key === loanTypeKey)
@@ -1216,31 +1193,42 @@ export default function LoanAppPage() {
     }
 
     const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: myLoansLabel }]
+    // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
 
+    // Payment Approvals tab: only for HR and Accounts executives
     if (isHrExecutive || isAccountsExecutive) {
       tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     }
 
+    // FD Approval tab: only for Accounts executives to review FD values from Loan Office
     if (isAccountsExecutive) {
-      tabs.push({ key: "fd-approval", label: "FD Approval" })
+      // TODO: Update when API is integrated to return pending FD count
+      // For now, display FD Approval tab without count
+      tabs.push({ 
+        key: "fd-approval", 
+        label: "FD Approval"
+      })
     }
 
+    // Repayment Tracking tab: only for Loan Office and Accounts executives
     if (canAccessLoanOfficeWorkspace || isAccountsExecutive) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
-    if (canAccessLoanOfficeWorkspace || perms?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
-    if (perms?.accounts || perms?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
-    if (canAccessLoanOfficeWorkspace && !perms?.accounts && !perms?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
-    if (perms?.committee || perms?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
-    if (perms?.directorHr || perms?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-    if (perms?.directorHr || perms?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    // Analytics tab for Loan Office and Accounts executives
+    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
+    if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
+    if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
+    if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
+    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    if (!isHrExecutiveOnly && (perms?.hod || perms?.loanOffice || perms?.accounts || perms?.committee || perms?.hrOffice || perms?.viewAllTabs || perms?.allLoans)) {
+    // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
+    if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
-    if (perms?.allLoans || perms?.viewAllTabs) {
+    if (p?.allLoans || p?.viewAllTabs) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
       if (c.archived > 0) {
         tabs.push({ key: "archive", label: `Archive (${c.archived})` })
