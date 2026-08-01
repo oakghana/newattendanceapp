@@ -21,7 +21,6 @@ import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
-import { calculateFD, validateFDInput, type FDCalculationResult, type OutstandingLoans, OUTSTANDING_LOAN_LABELS } from "@/lib/fd-calculator"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -944,13 +943,7 @@ export default function LoanAppPage() {
   const [modalFdScore, setModalFdScore] = useState("")
   const [modalFdNote, setModalFdNote] = useState("")
   const [modalFdProof, setModalFdProof] = useState<File | null>(null)
-  const [modalFdSalaryAnnum, setModalFdSalaryAnnum] = useState("")
-  const [modalFdOtherAllowances, setModalFdOtherAllowances] = useState("")
-  const [modalFdGrossDeduction, setModalFdGrossDeduction] = useState("")
-  const [modalFdOutstanding, setModalFdOutstanding] = useState<Partial<Record<keyof OutstandingLoans, string>>>({})
-  const [modalFdOutstandingOpen, setModalFdOutstandingOpen] = useState(false)
-  const [modalFdCalcResult, setModalFdCalcResult] = useState<FDCalculationResult | null>(null)
-  const [modalFdCalcErrors, setModalFdCalcErrors] = useState<string[]>([])
+
   const [modalDisbursement, setModalDisbursement] = useState("")
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
@@ -2639,13 +2632,6 @@ export default function LoanAppPage() {
           const fd = fdInputs[row.id]
           setModalFdScore(fd?.score || "")
           setModalFdNote(fd?.note || "")
-          setModalFdSalaryAnnum("")
-          setModalFdOtherAllowances("")
-          setModalFdGrossDeduction(row.monthly_deduction ? String(row.monthly_deduction) : "")
-          setModalFdOutstanding({})
-          setModalFdOutstandingOpen(false)
-          setModalFdCalcResult(null)
-          setModalFdCalcErrors([])
         }
         if (actionType === "hr_terms") {
           const entry = hrInputs[row.id]
@@ -6686,65 +6672,23 @@ export default function LoanAppPage() {
                 <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Managing Director&#10;Deputy Director Finance" rows={2} className="text-xs" />
               </>
             )}
-            {/* Accounts FD — full inline FD calculation form */}
+            {/* Accounts FD — simple form, full calculation done in Accounts Loan Office */}
             {actionModal.actionType === "accounts" && actionModal.row && (
               <>
-                {/* Salary Inputs */}
-                <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Salary Information (from HANA / Payroll)</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Salary Per Annum (GH&cent;) <span className="text-destructive">*</span></Label>
-                      <Input type="number" min={0} step="0.01" placeholder="e.g. 125831.00" className="h-7 text-xs"
-                        value={modalFdSalaryAnnum} onChange={e => setModalFdSalaryAnnum(e.target.value)} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Other Monthly Allowances (GH&cent;)</Label>
-                      <Input type="number" min={0} step="0.01" placeholder="e.g. 4318.39" className="h-7 text-xs"
-                        value={modalFdOtherAllowances} onChange={e => setModalFdOtherAllowances(e.target.value)} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Existing Gross Deductions / Month (GH&cent;)</Label>
-                      <Input type="number" min={0} step="0.01" placeholder="e.g. 6698.08" className="h-7 text-xs"
-                        value={modalFdGrossDeduction} onChange={e => setModalFdGrossDeduction(e.target.value)} />
-                    </div>
-                  </div>
+                <div className="rounded-md border bg-blue-50 p-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>Note:</strong> FD calculations with outstanding loans are handled by the Accounts Loan Office. 
+                    This form is for reference only if already calculated.
+                  </p>
                 </div>
 
-                {/* Outstanding Loans toggle */}
-                <div className="rounded-md border overflow-hidden">
-                  <button type="button"
-                    onClick={() => setModalFdOutstandingOpen(p => !p)}
-                    className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium bg-muted/40 hover:bg-muted/60 transition-colors">
-                    Balance Outstanding Loans (optional — enter any that apply)
-                    {modalFdOutstandingOpen
-                      ? <ChevronDown className="h-3.5 w-3.5 rotate-180" />
-                      : <ChevronDown className="h-3.5 w-3.5" />}
-                  </button>
-                  {modalFdOutstandingOpen && (
-                    <div className="grid grid-cols-3 gap-2 p-3">
-                      {(Object.keys(OUTSTANDING_LOAN_LABELS) as Array<keyof OutstandingLoans>).map(key => (
-                        <div key={key} className="space-y-1">
-                          <Label className="text-[11px] text-muted-foreground leading-tight block">{OUTSTANDING_LOAN_LABELS[key]}</Label>
-                          <Input type="number" min={0} step="0.01" placeholder="0.00" className="h-7 text-xs"
-                            value={modalFdOutstanding[key] ?? ""}
-                            onChange={e => setModalFdOutstanding(prev => ({ ...prev, [key]: e.target.value }))} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <Label className="text-xs">FD Score (Mark out of 100)</Label>
+                <Input type="number" min={0} max={100} value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
 
-                {/* Validation errors */}
-                {modalFdCalcErrors.length > 0 && (
-                  <div className="rounded-md bg-destructive/10 border border-destructive/20 p-2 space-y-1">
-                    {modalFdCalcErrors.map((e, i) => (
-                      <p key={i} className="text-xs text-destructive flex items-center gap-1.5">
-                        <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />{e}
-                      </p>
-                    ))}
-                  </div>
-                )}
+                <Label className="text-xs">HR Loan Office Remarks (optional)</Label>
+                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Any observations or remarks..." rows={2} className="text-xs" />
+              </>
+            )}
 
                 {/* Calculate button */}
                 <Button type="button" variant="outline" size="sm" className="w-full text-xs"
@@ -6948,42 +6892,22 @@ export default function LoanAppPage() {
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
               <Button
-                disabled={!modalFdCalcResult}
+                disabled={!modalFdScore}
                 onClick={async () => {
-                  if (!modalFdCalcResult) {
-                    toast({ title: "Calculate First", description: "Please calculate the FD score before confirming.", variant: "destructive" })
+                  if (!modalFdScore) {
+                    toast({ title: "Enter FD Score", description: "Please enter an FD score before saving.", variant: "destructive" })
                     return
                   }
-                  const parsedOutstanding = Object.fromEntries(
-                    Object.entries(modalFdOutstanding)
-                      .map(([k, v]) => [k, parseFloat(v as string) || 0])
-                      .filter(([, v]) => (v as number) > 0)
-                  ) as OutstandingLoans
                   await runAction({
                     action: "accounts_fd_update",
                     id: actionModal.row!.id,
-                    fd_score: modalFdCalcResult.fd_score,
-                    fd_good: modalFdCalcResult.fd_good,
+                    fd_score: Number(modalFdScore),
                     note: modalFdNote || null,
                     fd_document_url: null,
-                    fd_calculation_data: {
-                      salary_per_annum: modalFdCalcResult.salary_per_annum,
-                      consolidated_salary_per_month: modalFdCalcResult.consolidated_salary_per_month,
-                      other_allowances: modalFdCalcResult.other_allowances_per_month,
-                      gross_salary_monthly: modalFdCalcResult.gross_salary_per_month,
-                      gross_deductions_monthly: modalFdCalcResult.gross_deduction_monthly,
-                      loan_installment_monthly: modalFdCalcResult.loan_installment_monthly,
-                      total_deductions_monthly: modalFdCalcResult.total_deduction_monthly,
-                      net_salary_monthly: modalFdCalcResult.net_salary_monthly,
-                      half_gross_monthly: modalFdCalcResult.half_gross_salary_per_month,
-                      net_to_gross_ratio: modalFdCalcResult.net_to_gross_ratio,
-                      total_outstanding_loans: modalFdCalcResult.total_outstanding,
-                      outstanding_loans: parsedOutstanding,
-                    },
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}>
-                Confirm &amp; Send to Accounts Executive
+                Save FD Score
               </Button>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
