@@ -1272,8 +1272,8 @@ export default function LoanAppPage() {
     // Payment Approvals: HR/Accounts executives and HR Loan Office
     if (isHrExecutive || isAccountsExecutive || isHRLoanOffice) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
-    if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
+    // My Tasks: hidden for pure HR Executives and HR Loan Office — they work on forwarded queues, not personal tasks
+    if (!isHrExecutiveOnly && !isHRLoanOffice && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
     // All Loans: admins, viewAllTabs, and HR Loan Office (read-only view with download access)
@@ -1376,6 +1376,8 @@ export default function LoanAppPage() {
       isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
     const isPending = (row: LoanRequest) =>
       row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
+    const isFdApprovedByAccounts = (row: LoanRequest) =>
+      row.status === "pending_hr_loan_office"
 
     return {
       pending: loanOfficeRowsForSelectedType.filter((row) => isPending(row)),
@@ -1383,6 +1385,7 @@ export default function LoanAppPage() {
       "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
       "good-fd-not-pushed": loanOfficeRowsForSelectedType.filter((row) => isGoodFdNotPushed(row)),
       "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => row.status === "awaiting_director_hr"),
+      "fd-approved-accounts-exec": loanOfficeRowsForSelectedType.filter((row) => isFdApprovedByAccounts(row)),
       archivable: loanOfficeRowsForSelectedType.filter((row) => isArchivableStatus(row.status)),
       archived: loanOfficeRowsForSelectedType.filter((row) => isArchivedStatus(row.status)),
     }
@@ -3686,6 +3689,10 @@ export default function LoanAppPage() {
                               <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>
                                 Review &amp; Forward
                               </Button>
+                            ) : row.status === "pending_hr_loan_office" ? (
+                              <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => console.log('[v0] Push to HR Executive for:', row.id)}>
+                                Push to HR Exec
+                              </Button>
                             ) : (
                               <span className="text-[11px] text-slate-400">{statusText(row.status)}</span>
                             )}
@@ -3702,6 +3709,8 @@ export default function LoanAppPage() {
                   <StageCard key={row.id} row={row}>
                     {row.status === "hod_approved" && p?.loanOffice
                       ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>Review &amp; Forward</Button>
+                      : row.status === "pending_hr_loan_office" && p?.loanOffice
+                      ? <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => console.log('[v0] Push to HR Executive for:', row.id)}>Push to HR Exec</Button>
                       : <span className="text-xs text-slate-500">{statusText(row.status)}</span>
                     }
                   </StageCard>
