@@ -268,15 +268,32 @@ export async function POST(request: Request) {
     // Build the notes string with calculation data if automated
     let finalNotes = fd_note || ""
     if (submission_type === "automated_calculation" && fd_calculation_data) {
+      // Format outstanding loans if present
+      let outstandingSection = ""
+      if (fd_calculation_data.outstanding_loans && Object.keys(fd_calculation_data.outstanding_loans).length > 0) {
+        const outstandingItems = Object.entries(fd_calculation_data.outstanding_loans)
+          .map(([key, value]) => {
+            // Convert snake_case to Title Case for display
+            const label = key.replace(/_/g, ' ').split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+            return `  - ${label}: GH¢ ${(value as number).toFixed(2)}`
+          })
+          .join('\n')
+        outstandingSection = `\nBalance Outstanding Loans:\n${outstandingItems}`
+      }
+      
       const calcNotes = `
-Automated FD Calculation (Accounts Loan Office):
+Automated FD Calculation (HR Loan Office):
+- Salary Per Annum: GH¢ ${fd_calculation_data.salary_per_annum?.toFixed(2)}
+- Consolidated Monthly Salary: GH¢ ${fd_calculation_data.consolidated_salary_per_month?.toFixed(2)}
+- Other Monthly Allowances: GH¢ ${fd_calculation_data.other_allowances?.toFixed(2)}
 - Gross Monthly Salary: GH¢ ${fd_calculation_data.gross_salary_monthly?.toFixed(2)}
+- Existing Gross Deductions: GH¢ ${fd_calculation_data.gross_deductions_monthly?.toFixed(2)}
+- Approx Loan Installment: GH¢ ${fd_calculation_data.loan_installment_monthly?.toFixed(2)}
 - Total Monthly Deductions: GH¢ ${fd_calculation_data.total_deductions_monthly?.toFixed(2)}
 - Net Monthly Salary: GH¢ ${fd_calculation_data.net_salary_monthly?.toFixed(2)}
-- Net to Gross Ratio: ${fd_calculation_data.net_to_gross_ratio?.toFixed(1)}%
-- Monthly Loan Installment: GH¢ ${fd_calculation_data.loan_installment_monthly?.toFixed(2)}
-- Total Outstanding Loans: GH¢ ${fd_calculation_data.total_outstanding_loans?.toFixed(2)}
-${accounts_notes ? `\nAccounts Notes: ${accounts_notes}` : ""}
+- ½ of Gross Monthly Salary: GH¢ ${fd_calculation_data.half_gross_monthly?.toFixed(2)}
+- Net to Gross Ratio: ${fd_calculation_data.net_to_gross_ratio?.toFixed(1)}%${outstandingSection}
+${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}
       `.trim()
       finalNotes = calcNotes
     }
