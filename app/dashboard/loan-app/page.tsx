@@ -179,6 +179,7 @@ type WorkflowResponse = {
     hrOffice: LoanRequest[]
     directorHr: LoanRequest[]
     directorGoodFd: LoanRequest[]
+    hrExecutive: LoanRequest[]
     allLoans: LoanRequest[]
   }
 }
