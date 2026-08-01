@@ -1186,8 +1186,8 @@ export default function LoanAppPage() {
   )
 
   const visibleTabs = useMemo(() => {
-    const p = data?.permissions
-    const isAdminUser = isAdmin // Use the calculated isAdmin flag
+    const perms = data?.permissions || {}
+    const isAdminUser = isAdmin
     const allLoansData = data?.inbox?.allLoans || []
     const activeLoansCount = allLoansData.filter((loan: any) => loan.status !== "archived").length
     const archivedLoansCount = allLoansData.filter((loan: any) => loan.status === "archived").length
@@ -1203,12 +1203,10 @@ export default function LoanAppPage() {
       archived: archivedLoansCount,
       mine: data?.myTasks?.length || 0,
     }
-    // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
-    const isHrExecutive = !isAdminUser && !!p?.directorHr
-    const isAccountsExecutive = !isAdminUser && !!p?.accounts
-    const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
+    const isHrExecutive = !isAdminUser && !!perms?.directorHr
+    const isAccountsExecutive = !isAdminUser && !!perms?.accounts
+    const isHrExecutiveOnly = !isAdminUser && perms?.directorHr && !perms?.hod && !perms?.loanOffice && !perms?.accounts && !perms?.hrOffice && !perms?.viewAllTabs
 
-    // Get loan type name for "My Loans" tab if a loan is selected
     let myLoansLabel = "My Loans"
     if (loanTypeKey && data?.loanTypes) {
       const selectedLoanType = data.loanTypes.find((lt: any) => lt.key === loanTypeKey)
@@ -1218,42 +1216,31 @@ export default function LoanAppPage() {
     }
 
     const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: myLoansLabel }]
-    // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
 
-    // Payment Approvals tab: only for HR and Accounts executives
     if (isHrExecutive || isAccountsExecutive) {
       tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     }
 
-    // FD Approval tab: only for Accounts executives to review FD values from Loan Office
     if (isAccountsExecutive) {
-      // TODO: Update when API is integrated to return pending FD count
-      // For now, display FD Approval tab without count
-      tabs.push({ 
-        key: "fd-approval", 
-        label: "FD Approval"
-      })
+      tabs.push({ key: "fd-approval", label: "FD Approval" })
     }
 
-    // Repayment Tracking tab: only for Loan Office and Accounts executives
     if (canAccessLoanOfficeWorkspace || isAccountsExecutive) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
-    // Analytics tab for Loan Office and Accounts executives
-    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
-    if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
-    if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
-    if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
-    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    if (canAccessLoanOfficeWorkspace || perms?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
+    if (perms?.accounts || perms?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
+    if (canAccessLoanOfficeWorkspace && !perms?.accounts && !perms?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
+    if (perms?.committee || perms?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
+    if (perms?.directorHr || perms?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
+    if (perms?.directorHr || perms?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
-    if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
+    if (!isHrExecutiveOnly && (perms?.hod || perms?.loanOffice || perms?.accounts || perms?.committee || perms?.hrOffice || perms?.viewAllTabs || perms?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
-    if (p?.allLoans || p?.viewAllTabs) {
+    if (perms?.allLoans || perms?.viewAllTabs) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
       if (c.archived > 0) {
         tabs.push({ key: "archive", label: `Archive (${c.archived})` })
