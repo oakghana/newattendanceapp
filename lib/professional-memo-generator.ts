@@ -1,5 +1,5 @@
-// jsPDF and jspdf-autotable are loaded dynamically inside each function
-// to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
+import { jsPDF } from "jspdf"
+import { autoTable } from "jspdf-autotable"
 
 export interface MemoData {
   to: string
@@ -96,11 +96,6 @@ async function generateMainMemo(
   fileName: string,
   hasAttachment: boolean
 ): Promise<Blob> {
-  const [{ jsPDF }, autoTableMod] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ])
-  const autoTable = autoTableMod.default
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -670,11 +665,6 @@ async function generateStaffAttachment(
   }>,
   fileName: string
 ): Promise<Blob> {
-  const [{ jsPDF }, autoTableMod] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ])
-  const autoTable = autoTableMod.default
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
