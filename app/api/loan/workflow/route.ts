@@ -488,7 +488,7 @@ export async function GET() {
 
     const myRequestIds = (myRes.data || []).map((r: any) => r.id)
 
-    const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes] = await Promise.all([
+    const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes, hrExecutiveRes] = await Promise.all([
       hodPromise,
       showLoanOffice
         ? admin.from("loan_requests").select("*").in("status", ["hod_approved", "pending_hr_loan_office"]).order("created_at", { ascending: false })
@@ -530,6 +530,8 @@ export async function GET() {
       myRequestIds.length > 0
         ? admin.from("loan_request_timeline").select("*").in("loan_request_id", myRequestIds).order("created_at", { ascending: true })
         : Promise.resolve({ data: [], error: null } as any),
+      // HR Executive queue - all pending_hr_executive_review requests
+      admin.from("loan_requests").select("*").eq("status", "pending_hr_executive_review").order("created_at", { ascending: false }),
       (async () => {
         // First, get all staff members where the current user is a linked HOD
         const { data: hodLinkages } = await admin
@@ -564,7 +566,7 @@ export async function GET() {
       })(),
     ])
 
-    const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes]
+    const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes, hrExecutiveRes]
     const schemaError = responses.find((r: any) => r?.error && isSchemaIssue(r.error))
     if (schemaError) {
       return NextResponse.json(
@@ -610,6 +612,7 @@ export async function GET() {
       ...(directorGoodFdRes.data || []),
       ...(allLoansRes.data || []),
       ...(myRes.data || []),
+      ...(hrExecutiveRes.data || []),
     ]
     const uniqueUserIds = Array.from(new Set(allInboxRows.map((r: any) => r.user_id).filter(Boolean))) as string[]
     let staffProfileMap: Map<string, any> = new Map()
@@ -836,6 +839,7 @@ export async function GET() {
         hrOffice: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || [])))),
         directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || [])))),
         directorGoodFd: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || [])))),
+        hrExecutive: attachDirectorName(attachAccountsReviewerName(attachName(hrExecutiveRes.data || []))),
         allLoans: attachDirectorName(attachAccountsReviewerName(attachName(allLoansRes.data || []))),
       },
     })

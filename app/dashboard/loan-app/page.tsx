@@ -1518,8 +1518,8 @@ export default function LoanAppPage() {
     [data?.inbox?.hrOffice, hrSearch, hrStatus, hrSort, hrLocation, hrDept],
   )
   const filteredDirector = useMemo(
-    () => filterAndSortRows(data?.inbox?.directorHr || [], directorSearch, directorStatus, directorSort, directorLocation, directorDept),
-    [data?.inbox?.directorHr, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
+    () => filterAndSortRows(data?.inbox?.hrExecutive || [], directorSearch, directorStatus, directorSort, directorLocation, directorDept),
+    [data?.inbox?.hrExecutive, directorSearch, directorStatus, directorSort, directorLocation, directorDept],
   )
 
   const filteredMyTasks = useMemo(() => {
