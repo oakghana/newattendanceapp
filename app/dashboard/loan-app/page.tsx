@@ -1103,24 +1103,16 @@ export default function LoanAppPage() {
 
   const filteredLoanTypes = useMemo(() => {
     if (!data) {
-      console.log("[v0] Loan types: data not loaded yet")
       return []
     }
     
     const rawTypes = data?.loanTypes || []
-    const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
-    
-    console.log("[v0] Loan types debug:", {
-      rawTypesCount: rawTypes.length,
-      userTier,
-      userPosition: data?.profile?.position,
-      userRole: data?.profile?.role,
-    })
 
     if (rawTypes.length === 0) {
-      console.log("[v0] No loan types returned from API")
       return []
     }
+
+    const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
 
     const normalizedTypes = rawTypes.map((type) => ({
       ...type,
@@ -1128,10 +1120,15 @@ export default function LoanAppPage() {
     }))
 
     const filtered = normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
-    console.log("[v0] Filtered loan types:", {
-      normalizedCount: normalizedTypes.length,
-      filteredCount: filtered.length,
-    })
+    
+    // IMPORTANT: If filtering returns nothing but we have loan types,
+    // it means the filtering is too restrictive - show all for debugging
+    if (filtered.length === 0 && normalizedTypes.length > 0) {
+      console.warn("[v0] Filtering excluded all loans! Showing all loans for debugging.")
+      console.warn("[v0] User tier:", userTier)
+      console.warn("[v0] Available loan types:", normalizedTypes.map(t => ({ label: t.loan_label, category: t.category })))
+      return normalizedTypes // Fallback: show all loans
+    }
     
     return filtered
   }, [data])
