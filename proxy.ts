@@ -9,7 +9,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/admin": ["admin"],
   "/dashboard/admin": ["admin"],
   "/dashboard/settings": ["admin"],
-  "/dashboard/loan-app": ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract", "managing_director", "secretary", "hr_executive"],
+  "/dashboard/loan-app": ["admin", "it-admin", "regional_manager", "department_head", "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern", "contract", "managing_director", "secretary", "hr_executive"],
   
   // HR/Leave Management — every authenticated role may access this page
   "/dashboard/leave-management": [
@@ -21,6 +21,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "department_head",
     "regional_manager",
     "loan_office",
+    "hr_loan_office",
+    "accounts_loan_office",
     "accounts",
     "accounts_executive",
     "director_hr",
@@ -45,6 +47,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
     "department_head",
     "regional_manager",
     "loan_office",
+    "hr_loan_office",
+    "accounts_loan_office",
     "accounts",
     "accounts_executive",
     "director_hr",
@@ -62,10 +66,10 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   ],
   
   // Attendance check-in — the universal landing page for every role after login
-  "/dashboard/attendance": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+  "/dashboard/attendance": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
 
   // Staff Dashboard root — all roles
-  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+  "/dashboard": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
   
   // Regional Manager pages
   "/dashboard/regional": ["admin", "regional_manager"],
@@ -84,7 +88,7 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   "/dashboard/secretary-memos": ["secretary", "admin", "it-admin"],
 
   // Overview dashboard — all roles
-  "/dashboard/overview": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
+  "/dashboard/overview": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],
 };
 
 function normalizeRole(role: string | null | undefined): string {
