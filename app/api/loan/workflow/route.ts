@@ -201,7 +201,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, staff_category, years_of_service, date_of_appointment, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -209,79 +209,21 @@ export async function GET() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    // Fetch welfare fields separately — these columns may not yet exist in all deployments,
-    // so we isolate this query so a missing column never breaks the main profile load.
-    // Extract welfare fields from main profile (since the isolated query might not find columns)
-    // Also try a separate query as fallback in case those fields are in a different table
-    let welfareRow: { staff_category?: string | null; years_of_service?: number | null; date_of_appointment?: string | null } = {}
-    try {
-      // First, extract from the main profile that was already fetched
-      const profileData = profile as any
-      if (profileData) {
-        welfareRow.staff_category = profileData.staff_category
-        welfareRow.years_of_service = profileData.years_of_service
-        welfareRow.date_of_appointment = profileData.date_of_appointment
-      }
-      
-      // If we didn't get them from main profile, try an isolated query
-      if (!welfareRow.staff_category && !welfareRow.years_of_service && !welfareRow.date_of_appointment) {
-        const { data: wData } = await admin
-          .from("user_profiles")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle()
-        if (wData) {
-          welfareRow.staff_category = wData.staff_category
-          welfareRow.years_of_service = wData.years_of_service
-          welfareRow.date_of_appointment = wData.date_of_appointment
-        }
-      }
-    } catch (e) { 
-      console.log("[v0] Welfare fetch fallback error:", e)
-    }
+    const profileData = profile as any
+    let staffCategory: string | null = profileData.staff_category ?? null
+    let yearsOfService: number | null = profileData.years_of_service ?? null
+    let dateOfAppointment: string | null = profileData.date_of_appointment ?? null
 
-    // Pull welfare fields from the isolated welfare query result
-    let staffCategory: string | null = welfareRow.staff_category ?? null
-    let yearsOfService: number | null = welfareRow.years_of_service ?? null
-    let dateOfAppointment: string | null = welfareRow.date_of_appointment ?? null
-
-    console.log("[v0] Workflow API - Welfare row data:", {
-      years_of_service: welfareRow.years_of_service,
-      date_of_appointment: welfareRow.date_of_appointment,
-      staff_category: welfareRow.staff_category,
-    })
-
-    // If DB has no years_of_service (null or 0) but has date_of_appointment, auto-calculate it
+    // Auto-calculate years_of_service from date_of_appointment when not stored
     if ((!yearsOfService || yearsOfService === 0) && dateOfAppointment) {
       const apptDate = new Date(dateOfAppointment)
       if (!isNaN(apptDate.getTime())) {
         const calculated = Math.floor(
           (Date.now() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
         )
-        console.log("[v0] Workflow API - Calculated YoS from date:", { dateOfAppointment, calculated })
-        // Only use calculated value if it's reasonable (> 0 and < 100 years)
-        if (calculated > 0 && calculated < 100) {
-          yearsOfService = calculated
-        }
+        if (calculated > 0 && calculated < 100) yearsOfService = calculated
       }
     }
-    
-    // If still no value and we have a date_of_appointment but calculation failed, try again
-    if (!yearsOfService && dateOfAppointment) {
-      try {
-        const apptDate = new Date(dateOfAppointment)
-        const now = new Date()
-        const calculated = Math.floor(
-          (now.getTime() - apptDate.getTime()) / (365.25 * 24 * 3600 * 1000)
-        )
-        console.log("[v0] Workflow API - Fallback YoS calculation:", { calculated })
-        if (calculated > 0) yearsOfService = calculated
-      } catch (e) { 
-        console.log("[v0] Workflow API - Fallback calc error:", e)
-      }
-    }
-    
-    console.log("[v0] Workflow API - Final yearsOfService:", yearsOfService)
 
     // Normalise staffCategory to Title Case and only derive from position when NOT explicitly set in DB
     if (staffCategory) {
