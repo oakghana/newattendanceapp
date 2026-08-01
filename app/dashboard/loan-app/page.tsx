@@ -3546,7 +3546,9 @@ export default function LoanAppPage() {
                     onClick={() => setLoanOfficeStageTab(key)}
                     className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       isActive
-                        ? "border-violet-700 bg-violet-700 text-white"
+                        ? key === "fd-approved-accounts-exec"
+                          ? "border-emerald-700 bg-emerald-700 text-white"
+                          : "border-violet-700 bg-violet-700 text-white"
                         : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700"
                     }`}
                   >
@@ -3651,8 +3653,9 @@ export default function LoanAppPage() {
                       // Highlight priority/pending records
                       const pendingStatuses = ['pending_fd', 'pending_hod', 'hod_approved', 'sent_for_approval']
                       const isPending = pendingStatuses.includes(String(row.status || ''))
+                      const isFdApproved = row.fd_good === true && row.status === "pending_hr_loan_office"
                       return (
-                      <tr key={row.id} className={`transition-colors ${isPending ? 'bg-yellow-50/40 hover:bg-yellow-50/60 border-l-4 border-l-yellow-400' : 'hover:bg-slate-50/70'}`}>
+                      <tr key={row.id} className={`transition-colors ${isFdApproved ? 'bg-emerald-50/70 hover:bg-emerald-50/90 border-l-4 border-l-emerald-500' : isPending ? 'bg-yellow-50/40 hover:bg-yellow-50/60 border-l-4 border-l-yellow-400' : 'hover:bg-slate-50/70'}`}>
                         <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
@@ -7131,10 +7134,10 @@ export default function LoanAppPage() {
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef}
+                disabled={!modalDisbursement || !modalRecovery || !modalMemoRef}
                 onClick={async () => {
-                  if (!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef || !modalAccountSignatory || !modalHrSignatory) {
-                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields including signatories before pushing to HR Executive.", variant: "destructive" })
+                  if (!modalDisbursement || !modalRecovery || !modalMemoRef) {
+                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date, Recovery Start Date, Reference Number) before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
                   await runAction({
