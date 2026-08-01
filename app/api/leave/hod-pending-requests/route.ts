@@ -1,12 +1,53 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClientAndGetUser } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
     // Initialize Supabase server client
-    const supabase = await createClient()
+    const admin = await createAdminClient()
+    const { user } = await createClientAndGetUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Get user profile to check if they're HOD/department head
+    const { data: profile } = await admin
+      .from('user_profiles')
+      .select('id, role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (!profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
+    }
+
+    // Get staff linked to this HOD
+    let linkedStaffIds: string[] = []
+    if (['department_head', 'regional_manager'].includes(profile.role)) {
+      const { data: linkageRows } = await admin
+        .from('loan_hod_linkages')
+        .select('staff_user_id')
+        .eq('hod_user_id', user.id)
+        .limit(5000)
+      linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
+    }
+
+    // Get all HODs linked to this user (if staff)
+    let linkedHodIds: string[] = []
+    if (!['admin', 'department_head', 'regional_manager'].includes(profile.role)) {
+      const { data: hodLinkageRows } = await admin
+        .from('loan_hod_linkages')
+        .select('hod_user_id')
+        .eq('staff_user_id', user.id)
+        .limit(5000)
+      linkedHodIds = (hodLinkageRows || []).map((row: any) => row.hod_user_id).filter(Boolean)
+    }
+
     // Query leave_plan_requests where HOD decision is pending (null or 'pending')
-    const { data: requests, error } = await supabase
+    // For HODs: show requests from linked staff
+    // For staff: requests from ALL linked HODs (multi-HOD broadcast)
+    let query = admin
       .from('leave_plan_requests')
       .select(`
         id,
@@ -18,12 +59,24 @@ export async function GET(request: NextRequest) {
         adjusted_days,
         status,
         hod_decision,
+        hod_reviewer_id,
         staff_category,
         created_at,
         submitted_at
       `)
       .or('hod_decision.is.null,hod_decision.eq.pending')
       .neq('status', 'rejected')
+
+    // If HOD/department head: filter to linked staff
+    if (linkedStaffIds.length > 0 && ['department_head', 'regional_manager'].includes(profile.role)) {
+      query = query.in('user_id', linkedStaffIds)
+    }
+    // If staff with multiple HODs: show requests from those HODs
+    else if (linkedHodIds.length > 0 && !['admin', 'department_head', 'regional_manager'].includes(profile.role)) {
+      query = query.in('hod_reviewer_id', [...linkedHodIds, user.id].filter(Boolean))
+    }
+
+    const { data: requests, error } = await query
       .order('created_at', { ascending: true })
 
     if (error) {
