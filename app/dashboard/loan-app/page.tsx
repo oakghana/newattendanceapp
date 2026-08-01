@@ -5542,11 +5542,11 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                         <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
                         <TableHead className="whitespace-nowrap">Status</TableHead>
+                        <TableHead className="whitespace-nowrap">Action</TableHead>
                         <TableHead className="whitespace-nowrap">Location</TableHead>
                         <TableHead className="whitespace-nowrap">Attachment</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
                         <TableHead className="whitespace-nowrap">Memo</TableHead>
-                        <TableHead className="whitespace-nowrap">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -5559,6 +5559,34 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            {isHod && row.status === "pending_hod" && (
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                                  onClick={() => openActionModal(row, "hod")}
+                                  title="Review and make decision (Approve/Reject)"
+                                >
+                                  Review
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                                  onClick={() => openActionModal(row, "hod")}
+                                  title="Endorse this loan request"
+                                >
+                                  Endorse
+                                </Button>
+                              </div>
+                            )}
+                            {isHod && row.status !== "pending_hod" && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                            {!isHod && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.staff_location_name || "—"}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.supporting_document_url ? (
@@ -5577,31 +5605,6 @@ export default function LoanAppPage() {
                             {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status)
                               ? <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                               : <span className="text-muted-foreground">—</span>}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">
-                            {isHod && row.status === "pending_hod" && (
-                              <div className="flex gap-1">
-                                <Button 
-                                  size="sm" 
-                                  className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                  onClick={() => openActionModal(row, "hod")}
-                                  title="Review and make decision (Approve/Reject)"
-                                >
-                                  Review
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  className="h-7 bg-blue-600 hover:bg-blue-700 text-white"
-                                  onClick={() => openActionModal(row, "hod")}
-                                  title="Endorse this loan request"
-                                >
-                                  Endorse
-                                </Button>
-                              </div>
-                            )}
-                            {isHod && row.status !== "pending_hod" && (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
                           </TableCell>
                         </TableRow>
                       ))}
