@@ -553,7 +553,7 @@ export async function POST(request: NextRequest) {
         const { data: hrOfficeUsers } = await admin
           .from("user_profiles")
           .select("id")
-          .in("role", ["loan_office", "hr_officer", "manager_hr", "admin"])
+          .in("role", ["loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "manager_hr", "admin"])
           .eq("is_active", true)
 
         await notifyUsers(
@@ -747,7 +747,7 @@ export async function POST(request: NextRequest) {
       // "hr" is the generic role used for HR Executives in the system
       const isHrExecutive = [
         "hr_executive", "hr", "hr_manager", "manager_hr", "director_hr",
-        "hr_director", "accounts", "loan_office", "admin",
+        "hr_director", "accounts", "loan_office", "hr_loan_office", "accounts_loan_office", "admin",
       ].includes(role)
       const isDirectorHr = [
         "director_hr", "manager_hr", "hr_director", "managing_director", "admin",

@@ -1232,15 +1232,15 @@ export default function LoanAppPage() {
     }
 
     // Loan Office tab: ONLY for HR department loan office staff to process HOD-approved loans and perform FD checks
-    // Show ONLY if: (has loan_office/manager_hr/hr_executive role in HR department) OR (has direct permission AND not in Accounts)
-    const isHRLoanOffice = (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) || (p?.loanOffice && !userDeptIsAccounts)
+    // Supports both new (hr_loan_office) and legacy (loan_office in HR dept) role names
+    const isHRLoanOffice = (["hr_loan_office", "loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) || (p?.loanOffice && !userDeptIsAccounts)
     if (isHRLoanOffice) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
 
     // Accounts tab: ONLY for Accounts department loan office staff OR users with direct accounts permission
-    // Show ONLY if: (has loan_office role in Accounts department) OR (has direct accounts permission)
-    const isAccountsOffice = (normalizedRole === "loan_office" && userDeptIsAccounts) || p?.accounts
+    // Supports both new (accounts_loan_office) and legacy (loan_office in Accounts dept) role names
+    const isAccountsOffice = (normalizedRole === "accounts_loan_office") || (normalizedRole === "loan_office" && userDeptIsAccounts) || p?.accounts
     if (isAccountsOffice) {
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     }

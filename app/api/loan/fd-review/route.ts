@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
     const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
     const isAccountsExecutive = roleNorm === "accounts_executive" || roleNorm === "accounts"
-    const isLoanOffice = roleNorm === "loan_office"
+    const isLoanOffice = roleNorm === "loan_office" || roleNorm === "hr_loan_office" || roleNorm === "accounts_loan_office"
     const isAdmin = roleNorm === "admin"
 
     if (!isAccountsExecutive && !isLoanOffice && !isAdmin) {
@@ -245,7 +245,7 @@ export async function POST(request: Request) {
       .single()
 
     const roleNorm = String(profile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (roleNorm !== "loan_office" && roleNorm !== "admin") {
+    if (!["loan_office", "hr_loan_office", "accounts_loan_office", "admin"].includes(roleNorm)) {
       return NextResponse.json({ error: "Only Loan Office can submit FD values" }, { status: 403 })
     }
 

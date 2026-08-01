@@ -19,7 +19,7 @@ function canManageLookups(role: string, deptName?: string | null, deptCode?: str
   return (
     role === "admin" ||
     role === "it_admin" || // normalized form (after normalizeRole converts it-admin to it_admin)
-    role === "loan_office" ||
+    role === "loan_office" || role === "hr_loan_office" || role === "accounts_loan_office" ||
     role === "manager_hr" ||
     role === "director_hr" ||
     role === "accounts" ||
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
           admin
             .from("user_profiles")
             .select("id, first_name, last_name, employee_id, position, role, department_id, departments(name, code), assigned_location_id, geofence_locations!assigned_location_id(name, address, districts(name))")
-            .in("role", ["staff", "nsp", "intern", "contract", "it-admin", "it_admin", "department_head", "regional_manager", "loan_officer", "loan_office", "hr_officer", "hr_office", "accounts", "director_hr", "manager_hr", "audit_staff", "loan_committee", "committee"])
+            .in("role", ["staff", "nsp", "intern", "contract", "it-admin", "it_admin", "department_head", "regional_manager", "loan_officer", "loan_office", "hr_loan_office", "accounts_loan_office", "hr_officer", "hr_office", "accounts", "director_hr", "manager_hr", "audit_staff", "loan_committee", "committee"])
             .eq("is_active", true)
             .order("first_name", { ascending: true })
             .range(from, to),

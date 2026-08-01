@@ -2,7 +2,7 @@ import { createAdminClient, createClientAndGetUser } from "@/lib/supabase/server
 import { NextRequest, NextResponse } from "next/server"
 
 // Roles permitted to submit payment evidence
-const ALLOWED_ROLES = ["admin", "accounts", "loan_office", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "it-admin"]
+const ALLOWED_ROLES = ["admin", "accounts", "loan_office", "hr_loan_office", "accounts_loan_office", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "it-admin"]
 
 export async function POST(request: NextRequest) {
   try {

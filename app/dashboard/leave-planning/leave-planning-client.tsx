@@ -1026,7 +1026,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
   const canSeeAllRequests = isHrApprover || isHrOffice || isAdmin
   const canManageLeaveTypePolicy = isHrOffice || isAdmin
-  const isLoanOffice = normalizedRole === "loan_office"
+  const isLoanOffice = normalizedRole === "loan_office" || normalizedRole === "hr_loan_office" || normalizedRole === "accounts_loan_office"
   const canSelfApply = isStaff || isHod || isAdmin || isLoanOffice ||
     ["hr_officer", "hr_director", "director_hr", "manager_hr", "hr_leave_office", "hr_office", "accounts"].includes(normalizedRole)
 
@@ -1670,7 +1670,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     setNewLeaveTypeDays("")
   }, [leaveTypes, newLeaveTypeDays, newLeaveTypeKey, newLeaveTypeLabel, saveLeaveTypePolicy, toast])
 
-  // ���── Holiday CRUD Functions ───────����────���────────����───────────────────
+  // ���── Holiday CRUD Functions ───────����────���────────������───────────────────
   const [holidayDrafts, setHolidayDrafts] = useState<Record<string, { date: string; name: string }>>({})
   const [newHolidayDate, setNewHolidayDate] = useState("")
   const [newHolidayName, setNewHolidayName] = useState("")

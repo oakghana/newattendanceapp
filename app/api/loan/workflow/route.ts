@@ -64,7 +64,7 @@ async function autoAdvanceStaleHodRequests(admin: any) {
   const { data: loanOfficeUsers } = await admin
     .from("user_profiles")
     .select("id")
-    .in("role", ["loan_officer", "hr_officer", "director_hr", "hr_director", "loan_office", "manager_hr", ...ADMIN_DB_ROLE_ALIASES])
+    .in("role", ["loan_officer", "hr_officer", "director_hr", "hr_director", "loan_office", "hr_loan_office", "accounts_loan_office", "manager_hr", ...ADMIN_DB_ROLE_ALIASES])
     .eq("is_active", true)
 
   const loanOfficeIds = (loanOfficeUsers || []).map((u: any) => u.id)
@@ -420,7 +420,7 @@ export async function GET() {
             hrOffice: canDoHrOffice(role, deptName, deptCode),
             directorHr: canDoDirectorHr(role, deptName, deptCode),
             viewAllTabs,
-            allLoans: isAdminRole(role) || ["loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
+            allLoans: isAdminRole(role) || ["loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "loan_committee", "committee"].includes(role),
           },
         },
         { status: 200 },

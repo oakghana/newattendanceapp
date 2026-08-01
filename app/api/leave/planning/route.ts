@@ -806,7 +806,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Loan Office role: sees and manages their own leave requests ─────────────
-    if (role === "loan_office") {
+    if (role === "loan_office" || role === "hr_loan_office" || role === "accounts_loan_office") {
       const { data: myReqs, error: myReqsErr } = await admin
         .from("leave_plan_requests")
         .select("*")

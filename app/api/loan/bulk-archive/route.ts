@@ -31,7 +31,7 @@ export async function POST(_request: NextRequest) {
       .maybeSingle()
 
     const role = normalizeRole((profile as any)?.role || "")
-    const allowed = ["admin", "it_admin", "super_admin", "god", "loan_office"].includes(role)
+    const allowed = ["admin", "it_admin", "super_admin", "god", "loan_office", "hr_loan_office", "accounts_loan_office"].includes(role)
     if (!allowed) {
       return NextResponse.json(
         { success: false, error: "Only Loan Office staff or admins can archive loan requests" },
