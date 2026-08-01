@@ -5585,8 +5585,17 @@ export default function LoanAppPage() {
                                   size="sm" 
                                   className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white"
                                   onClick={() => openActionModal(row, "hod")}
+                                  title="Review and make decision (Approve/Reject)"
                                 >
                                   Review
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 bg-blue-600 hover:bg-blue-700 text-white"
+                                  onClick={() => openActionModal(row, "hod")}
+                                  title="Endorse this loan request"
+                                >
+                                  Endorse
                                 </Button>
                               </div>
                             )}
@@ -5636,8 +5645,17 @@ export default function LoanAppPage() {
                         size="sm" 
                         className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                         onClick={() => openActionModal(row, "hod")}
+                        title="Review and make decision"
                       >
                         Review
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => openActionModal(row, "hod")}
+                        title="Endorse this loan"
+                      >
+                        Endorse
                       </Button>
                     </div>
                   )}
