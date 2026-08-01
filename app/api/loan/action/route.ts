@@ -962,9 +962,9 @@ export async function POST(request: NextRequest) {
       toStatus = "pending_hr_executive_review"
 
       // Store the disbursement and recovery dates
-      if (req_body.disbursement_date) update.disbursement_date = req_body.disbursement_date
-      if (req_body.recovery_start_date) update.recovery_start_date = req_body.recovery_start_date
-      if (req_body.reference_number) update.reference_number = req_body.reference_number
+      if (body.disbursement_date) update.disbursement_date = body.disbursement_date
+      if (body.recovery_start_date) update.recovery_start_date = body.recovery_start_date
+      if (body.reference_number) update.reference_number = body.reference_number
     }
 
     if (!actionHandled) {
