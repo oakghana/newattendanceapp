@@ -5579,7 +5579,7 @@ export default function LoanAppPage() {
                               : <span className="text-muted-foreground">—</span>}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-xs">
-                            {isHod && row.status === "pending_hod_decision" && (
+                            {isHod && row.status === "pending_hod" && (
                               <div className="flex gap-1">
                                 <Button 
                                   size="sm" 
@@ -5590,7 +5590,7 @@ export default function LoanAppPage() {
                                 </Button>
                               </div>
                             )}
-                            {isHod && row.status !== "pending_hod_decision" && (
+                            {isHod && row.status !== "pending_hod" && (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </TableCell>
@@ -5630,7 +5630,7 @@ export default function LoanAppPage() {
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                     </div>
                   )}
-                  {isHod && row.status === "pending_hod_decision" && (
+                  {isHod && row.status === "pending_hod" && (
                     <div className="pt-2 flex gap-2">
                       <Button 
                         size="sm" 
