@@ -947,26 +947,6 @@ export async function POST(request: NextRequest) {
       update.director_note = note || "Memo saved by HR personnel for review"
     }
 
-    if (!actionHandled) {
-      return NextResponse.json({ error: "Unknown or unsupported action" }, { status: 400 })
-    }
-
-    let updateQuery: any = admin.from("loan_requests").update(update).eq("id", id)
-    if (action !== "loan_office_update_request") {
-      // First-action-wins lock: once status changes, later approvers cannot overwrite.
-      updateQuery = updateQuery.eq("status", req.status)
-    }
-
-    const { data: updated, error: updateError } = await updateQuery.select("*").single()
-
-    if (updateError) {
-      const msg = String(updateError?.message || "")
-      if (msg.toLowerCase().includes("no rows")) {
-        return NextResponse.json({ error: "Request was already processed by another approver. Refresh queue." }, { status: 409 })
-      }
-      throw updateError
-    }
-
     if (action === "push_to_hr_executive") {
       actionHandled = true
       if (!canDoLoanOffice(role, deptName, deptCode)) {
@@ -985,17 +965,26 @@ export async function POST(request: NextRequest) {
       if (req_body.disbursement_date) update.disbursement_date = req_body.disbursement_date
       if (req_body.recovery_start_date) update.recovery_start_date = req_body.recovery_start_date
       if (req_body.reference_number) update.reference_number = req_body.reference_number
+    }
 
-      // Log to timeline
-      await timeline(admin, {
-        loan_request_id: req.id,
-        actor_id: user.id,
-        actor_role: "loan_office",
-        action_key: "push_to_hr_executive",
-        from_status: "pending_hr_loan_office",
-        to_status: "pending_hr_executive_review",
-        note: req_body.hr_loan_office_memo || "Forwarded to HR Executive for signing and approval",
-      })
+    if (!actionHandled) {
+      return NextResponse.json({ error: "Unknown or unsupported action" }, { status: 400 })
+    }
+
+    let updateQuery: any = admin.from("loan_requests").update(update).eq("id", id)
+    if (action !== "loan_office_update_request") {
+      // First-action-wins lock: once status changes, later approvers cannot overwrite.
+      updateQuery = updateQuery.eq("status", req.status)
+    }
+
+    const { data: updated, error: updateError } = await updateQuery.select("*").single()
+
+    if (updateError) {
+      const msg = String(updateError?.message || "")
+      if (msg.toLowerCase().includes("no rows")) {
+        return NextResponse.json({ error: "Request was already processed by another approver. Refresh queue." }, { status: 409 })
+      }
+      throw updateError
     }
 
     if (action === "mark_payment_completed") {
