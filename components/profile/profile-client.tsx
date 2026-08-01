@@ -20,6 +20,7 @@ import { SecureInput } from "@/components/ui/secure-input"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
+import { displayRole } from "@/lib/role-mapping"
 import { toast } from "sonner"
 
 interface UserProfile {
@@ -625,8 +626,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                 <div>
                   <Label>Role</Label>
                   <div className="p-2">
-                    <Badge variant={profile.role === "admin" ? "default" : "secondary"}>
-                      {profile.role.replace("_", " ").toUpperCase()}
+                    <Badge variant={displayRole(profile.role) === "admin" ? "default" : "secondary"}>
+                      {displayRole(profile.role).replace(/_/g, " ").toUpperCase()}
                     </Badge>
                   </div>
                 </div>
@@ -1244,8 +1245,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Role:</span>
-                    <Badge variant={profile.role === "admin" ? "default" : "secondary"} className="text-xs">
-                      {profile.role.replace("_", " ").toUpperCase()}
+                    <Badge variant={displayRole(profile.role) === "admin" ? "default" : "secondary"} className="text-xs">
+                      {displayRole(profile.role).replace(/_/g, " ").toUpperCase()}
                     </Badge>
                   </div>
                   <div className="flex justify-between">

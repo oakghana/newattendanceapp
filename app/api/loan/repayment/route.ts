@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - Retrieve outstanding balance for a loan or all loans
+// GET - Retrieve repayment schedule entries from loan_repayment_schedule (the real table)
 export async function GET(request: NextRequest) {
   try {
     const admin = await createAdminClient()
@@ -66,31 +66,43 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const loanRequestId = searchParams.get("loanRequestId")
-    const staffId = searchParams.get("staffId")
 
-    let query = admin.from("loan_outstanding_balance").select("*")
+    // Use loan_repayment_schedule which is confirmed to exist in the schema
+    let query = admin
+      .from("loan_repayment_schedule")
+      .select(`
+        id,
+        loan_request_id,
+        installment_number,
+        due_date,
+        monthly_amount,
+        paid_amount,
+        paid_date,
+        payment_record_id,
+        status,
+        created_at,
+        updated_at
+      `)
+      .order("due_date", { ascending: true })
 
     if (loanRequestId) {
       query = query.eq("loan_request_id", loanRequestId)
     }
 
-    if (staffId) {
-      query = query.eq("staff_id", staffId)
-    }
-
     const { data, error } = await query
 
     if (error) {
-      console.error("[v0] Error fetching outstanding balance:", error)
-      return NextResponse.json({ error: "Failed to fetch balance data" }, { status: 500 })
+      console.error("[v0] Error fetching repayment schedule:", error)
+      return NextResponse.json({ error: "Failed to fetch repayment data", details: error.message }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       data: data || [],
+      message: data?.length ? `Found ${data.length} repayment entries` : "No repayment schedule found yet",
     })
   } catch (err) {
-    console.error("[v0] Outstanding balance GET error:", err)
+    console.error("[v0] Repayment GET error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
