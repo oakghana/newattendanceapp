@@ -447,6 +447,11 @@ function loanTypeGroupKey(loanType: LoanType) {
 }
 
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
+  // IMPORTANT: If loan category is "other", it's available to everyone
+  if (loanType.category === "other") {
+    return true
+  }
+  
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
   
   // If loan has no tier restriction, include it for everyone
@@ -454,7 +459,7 @@ function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | nul
     return true
   }
   
-  // If user has no tier, include all loans (don't filter by category)
+  // If user has no tier set, show all loans (don't restrict)
   if (!userTier) {
     return true
   }
@@ -1119,18 +1124,7 @@ export default function LoanAppPage() {
       loan_label: normalizeLoanTypeLabel(type, rawTypes),
     }))
 
-    const filtered = normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
-    
-    // IMPORTANT: If filtering returns nothing but we have loan types,
-    // it means the filtering is too restrictive - show all for debugging
-    if (filtered.length === 0 && normalizedTypes.length > 0) {
-      console.warn("[v0] Filtering excluded all loans! Showing all loans for debugging.")
-      console.warn("[v0] User tier:", userTier)
-      console.warn("[v0] Available loan types:", normalizedTypes.map(t => ({ label: t.loan_label, category: t.category })))
-      return normalizedTypes // Fallback: show all loans
-    }
-    
-    return filtered
+    return normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
