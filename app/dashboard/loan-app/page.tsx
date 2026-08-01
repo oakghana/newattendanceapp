@@ -955,6 +955,9 @@ export default function LoanAppPage() {
   const [modalHodLocation, setModalHodLocation] = useState("")
   const [modalHodTelephone, setModalHodTelephone] = useState("")
   const [modalMemoRef, setModalMemoRef] = useState("")
+  const [modalCcRecipients, setModalCcRecipients] = useState("")
+  const [modalAccountSignatory, setModalAccountSignatory] = useState("")
+  const [modalHrSignatory, setModalHrSignatory] = useState("")
   const [modalMemoRecipient, setModalMemoRecipient] = useState("Deputy Director Finance")
   const [modalMemoText, setModalMemoText] = useState("")
   const [modalStaffFullName, setModalStaffFullName] = useState("")
@@ -2624,6 +2627,9 @@ export default function LoanAppPage() {
         setModalHodLocation("")
         setModalHodTelephone("")
         setModalMemoRef("")
+        setModalCcRecipients("")
+        setModalAccountSignatory("")
+        setModalHrSignatory("")
         setModalMemoText("")
         setModalStaffFullName("")
         setModalStaffNumber("")
@@ -7218,6 +7224,38 @@ export default function LoanAppPage() {
                   placeholder="e.g. QCC/HR/LOAN/2024/001" 
                   className="h-8 text-xs"
                 />
+
+                <div className="border-t border-slate-200 pt-4 mt-4">
+                  <Label className="text-sm font-semibold mb-3 block">Memo CC Recipients</Label>
+                  <Textarea 
+                    value={modalCcRecipients} 
+                    onChange={(e) => setModalCcRecipients(e.target.value)} 
+                    placeholder="Names and titles of CC recipients (one per line)" 
+                    rows={3} 
+                    className="text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-semibold">Account Executive Signatory *</Label>
+                    <Input 
+                      value={modalAccountSignatory} 
+                      onChange={(e) => setModalAccountSignatory(e.target.value)} 
+                      placeholder="Name & Title" 
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold">HR Executive Signatory *</Label>
+                    <Input 
+                      value={modalHrSignatory} 
+                      onChange={(e) => setModalHrSignatory(e.target.value)} 
+                      placeholder="Name & Title" 
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
               </>
             )}
           </DialogFooter>
