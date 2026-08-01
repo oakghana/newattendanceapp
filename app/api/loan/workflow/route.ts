@@ -283,8 +283,12 @@ export async function GET() {
     
     console.log("[v0] Workflow API - Final yearsOfService:", yearsOfService)
 
+    // Provide safe defaults for missing welfare fields
+    if (!staffCategory) staffCategory = "Staff"
+    if (!yearsOfService) yearsOfService = 0
+    
     // Normalise staffCategory to Title Case and only derive from position when NOT explicitly set in DB
-    if (staffCategory) {
+    if (staffCategory && staffCategory !== "Staff") {
       const raw = staffCategory.toLowerCase().trim()
       if (raw === "senior" || raw === "senior staff") staffCategory = "Senior"
       else if (raw === "junior" || raw === "junior staff") staffCategory = "Junior"
@@ -762,22 +766,22 @@ export async function GET() {
       degraded: false,
       profile: {
         id: (profile as any).id,
-        firstName: (profile as any).first_name,
-        lastName: (profile as any).last_name,
-        employeeId: (profile as any).employee_id,
-        email: (profile as any).email || user.email,
-        role: (profile as any).role,
-        position: (profile as any).position,
-        staffCategory,
-        yearsOfService,
-        dateOfAppointment,
+        firstName: (profile as any).first_name || "Not set",
+        lastName: (profile as any).last_name || "Not set",
+        employeeId: (profile as any).employee_id || "Not set",
+        email: (profile as any).email || user.email || "Not set",
+        role: (profile as any).role || "Not assigned",
+        position: (profile as any).position || "Not set",
+        staffCategory: staffCategory || "Not assigned",
+        yearsOfService: yearsOfService || 0,
+        dateOfAppointment: dateOfAppointment || null,
         departmentId: (profile as any).department_id,
         assignedLocationId: (profile as any).assigned_location_id,
-        departmentName: (profile as any)?.departments?.name || null,
-        assignedLocationName: (profile as any)?.geofence_locations?.name || null,
-        assignedLocationAddress: (profile as any)?.geofence_locations?.address || null,
-        assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || null,
-        linkedHodName,
+        departmentName: (profile as any)?.departments?.name || "Not assigned",
+        assignedLocationName: (profile as any)?.geofence_locations?.name || "Not assigned",
+        assignedLocationAddress: (profile as any)?.geofence_locations?.address || "Not set",
+        assignedDistrictName: (profile as any)?.geofence_locations?.districts?.name || "Not assigned",
+        linkedHodName: linkedHodName || "Not yet assigned",
         currentHodProfile,
       },
       role,
