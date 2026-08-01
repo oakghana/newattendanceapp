@@ -34,11 +34,112 @@ interface FDReview {
   supporting_docs_url?: string
   submission_date: string
   submission_memo: string
+  fd_note?: string
   status?: string
   review_status: 'pending_review' | 'approved' | 'rejected'
 }
 
-export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
+// Helper to parse and display FD calculation details
+function FDCalculationDetails({ fdNote }: { fdNote?: string }) {
+  if (!fdNote) return null
+  
+  try {
+    // Try to parse as JSON first (structured data)
+    const data = JSON.parse(fdNote)
+    return (
+      <div className="space-y-3 p-4 bg-emerald-50 border border-emerald-200 rounded">
+        <div className="text-sm font-semibold text-emerald-900">FD Calculation Breakdown</div>
+        
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {data.salary_per_annum && (
+            <>
+              <div><span className="text-emerald-700">Annual Salary:</span></div>
+              <div className="font-medium">₵ {Number(data.salary_per_annum).toLocaleString()}</div>
+            </>
+          )}
+          {data.consolidated_salary_per_month && (
+            <>
+              <div><span className="text-emerald-700">Monthly Salary:</span></div>
+              <div className="font-medium">₵ {Number(data.consolidated_salary_per_month).toLocaleString()}</div>
+            </>
+          )}
+          {data.other_allowances && (
+            <>
+              <div><span className="text-emerald-700">Allowances:</span></div>
+              <div className="font-medium">₵ {Number(data.other_allowances).toLocaleString()}</div>
+            </>
+          )}
+          {data.gross_salary_monthly && (
+            <>
+              <div><span className="text-emerald-700">Gross Monthly:</span></div>
+              <div className="font-medium">₵ {Number(data.gross_salary_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.gross_deductions_monthly && (
+            <>
+              <div><span className="text-red-700">Gross Deductions:</span></div>
+              <div className="font-medium text-red-600">₵ {Number(data.gross_deductions_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.loan_installment_monthly && (
+            <>
+              <div><span className="text-red-700">Loan Installment:</span></div>
+              <div className="font-medium text-red-600">₵ {Number(data.loan_installment_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.total_deductions_monthly && (
+            <>
+              <div><span className="text-red-700 font-semibold">Total Deduction:</span></div>
+              <div className="font-semibold text-red-600">₵ {Number(data.total_deductions_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.net_salary_monthly && (
+            <>
+              <div><span className="text-emerald-700 font-semibold">Net Monthly Salary:</span></div>
+              <div className="font-semibold text-emerald-700">₵ {Number(data.net_salary_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.net_to_gross_ratio && (
+            <>
+              <div><span className="text-emerald-700">Net/Gross Ratio:</span></div>
+              <div className="font-medium">{(data.net_to_gross_ratio * 100).toFixed(2)}%</div>
+            </>
+          )}
+          {data.total_outstanding_loans && (
+            <>
+              <div><span className="text-amber-700 font-semibold">Outstanding Loans:</span></div>
+              <div className="font-semibold text-amber-700">₵ {Number(data.total_outstanding_loans).toLocaleString()}</div>
+            </>
+          )}
+        </div>
+
+        {data.outstanding_loans && Object.keys(data.outstanding_loans).length > 0 && (
+          <div className="border-t border-emerald-200 pt-3 mt-3">
+            <div className="text-xs font-semibold text-emerald-900 mb-2">Outstanding Loans Detail:</div>
+            <div className="space-y-1 text-xs">
+              {Object.entries(data.outstanding_loans).map(([key, value]) => (
+                <div key={key} className="flex justify-between">
+                  <span className="text-emerald-700">{String(key).replace(/_/g, ' ')}:</span>
+                  <span className="font-medium">₵ {Number(value as number).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  } catch (e) {
+    // If not JSON, display as plain text
+    return (
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+        <p className="text-xs font-semibold text-blue-900 mb-1">FD Calculation Details:</p>
+        <p className="text-blue-800 whitespace-pre-wrap">{fdNote}</p>
+      </div>
+    )
+  }
+}
+
+export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: string; userRole: string }) {
   const [reviews, setReviews] = useState<FDReview[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedReview, setSelectedReview] = useState<FDReview | null>(null)
@@ -304,13 +405,21 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    onClick={() => setSelectedReview(review)}
-                    className="w-full"
-                    variant="outline"
-                  >
-                    Review & Approve
-                  </Button>
+                  <>
+                    {['accounts_executive', 'admin', 'director_hr'].includes(userRole) ? (
+                      <Button
+                        onClick={() => setSelectedReview(review)}
+                        className="w-full"
+                        variant="outline"
+                      >
+                        Review & Approve
+                      </Button>
+                    ) : (
+                      <div className="w-full px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-center text-amber-700 font-medium">
+                        Awaiting Accounts Executive Review
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -347,6 +456,11 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
                   )}
                 </div>
               </div>
+
+              {/* FD Calculation Details from Accounts Loan Office */}
+              {selectedReview.fd_note && (
+                <FDCalculationDetails fdNote={selectedReview.fd_note} />
+              )}
 
               <div>
                 <label className="text-sm font-semibold">FD Verification Memo</label>

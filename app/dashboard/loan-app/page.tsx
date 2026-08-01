@@ -5271,7 +5271,7 @@ export default function LoanAppPage() {
 
         {/* ── FD Approval Tab (Accounts Executive) ── */}
         <TabsContent value="fd-approval" className="space-y-4">
-          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} />
+          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} userRole={data?.profile?.role || "user"} />
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
