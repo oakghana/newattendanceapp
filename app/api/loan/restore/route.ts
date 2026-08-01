@@ -25,8 +25,7 @@ export async function PUT(request: NextRequest) {
       .maybeSingle()
 
     const userRole = normalizeRole((userProfile as any)?.role || "")
-    // Include both database role ("accounts") and UI role ("accounts_executive")
-    const isAuthorized = ["hr_executive", "accounts_executive", "accounts", "loan_office", "admin"].includes(userRole)
+    const isAuthorized = ["hr_executive", "accounts_executive", "loan_office", "admin"].includes(userRole)
 
     if (!isAuthorized) {
       return NextResponse.json(

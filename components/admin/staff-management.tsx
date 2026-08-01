@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { displayRole } from "@/lib/role-mapping"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -19,10 +18,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2, Link2Off } from "lucide-react"
+import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2 } from "lucide-react"
 import { PasswordManagement } from "./password-management"
 import { useNotifications } from "@/components/ui/notification-system"
-import { ManageHODLinkagesModal } from "./manage-hod-linkages-modal"
 
 const authenticatedFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   return fetch(input, {
@@ -85,6 +83,11 @@ interface Location {
 }
 
 export function StaffManagement() {
+  const canonicalRole = (role: string | null | undefined) => {
+    const normalized = String(role || "").toLowerCase().trim()
+    return normalized === "hr_office" ? "hr_leave_office" : normalized
+  }
+
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -168,7 +171,7 @@ export function StaffManagement() {
 
       if (result.success) {
         const rows = Array.isArray(result.data)
-          ? result.data.map((row: StaffMember) => ({ ...row, role: displayRole(row.role) }))
+          ? result.data.map((row: StaffMember) => ({ ...row, role: canonicalRole(row.role) }))
           : []
         setStaff(rows)
         setTotalPages(result.pagination?.totalPages || 1)
@@ -514,7 +517,7 @@ export function StaffManagement() {
         setStaff((prev) =>
           prev.map((s) =>
             s.id === editingStaff.id
-              ? { ...s, ...updatedMember, role: displayRole(updatedMember.role ?? s.role) }
+              ? { ...s, ...updatedMember, role: canonicalRole(updatedMember.role ?? s.role) }
               : s
           )
         )
@@ -566,19 +569,17 @@ export function StaffManagement() {
     setHodLinkError(null)
     try {
       // Fetch all roles that act as head of department in parallel
-      const [resDH, resRM, resMHR, resDHR, resHodLinks] = await Promise.all([
+      const [resDH, resRM, resMHR, resDHR] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
         authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
-        authenticatedFetch(`/api/loan/hod-linkages?staff_id=${member.id}`),
       ])
-      const [dh, rm, mhr, dhr, hodLinksData]: any[] = await Promise.all([
+      const [dh, rm, mhr, dhr]: StaffMember[][] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
         resMHR.json().then((d: any) => d.data || []),
         resDHR.json().then((d: any) => d.data || []),
-        resHodLinks.json(),
       ])
       // Deduplicate by id and sort by name
       const all = [...dh, ...rm, ...mhr, ...dhr]
@@ -591,13 +592,6 @@ export function StaffManagement() {
         `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
       )
       setHodCandidates(unique)
-      
-      // Update staff member with HOD links data
-      if (hodLinksData?.linkedHods && hodLinksData.linkedHods.length > 0) {
-        setHodLinkStaff((prev) => 
-          prev ? { ...prev, hod_links: hodLinksData.linkedHods } : null
-        )
-      }
     } catch {
       setHodCandidates([])
     }
@@ -1117,7 +1111,7 @@ export function StaffManagement() {
                       onValueChange={(value) => setEditingStaff({ ...editingStaff, role: value })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={editingStaff.role || "Select Role"} />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {currentUserRole === "it-admin" ? (
@@ -1375,10 +1369,10 @@ export function StaffManagement() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setEditingStaff({ ...member, role: displayRole(member.role) })}
+                            onClick={() => setEditingStaff({ ...member, role: canonicalRole(member.role) })}
                             className="h-8 w-8 p-0 hover:bg-primary/10 hover:border-primary/20"
                             disabled={
-                              currentUserRole === "it-admin" && (displayRole(member.role) === "admin" || displayRole(member.role) === "it-admin")
+                              currentUserRole === "it-admin" && (member.role === "admin" || member.role === "it-admin")
                             }
                           >
                             <Edit className="h-3 w-3" />
@@ -1403,29 +1397,15 @@ export function StaffManagement() {
                             <Trash2 className="h-3 w-3" />
                           </Button>
                           {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                title="Link to HOD"
-                                onClick={() => openHodLinkDialog(member)}
-                                className="h-8 w-8 p-0 hover:bg-blue-50 hover:border-blue-300"
-                              >
-                                <Link2 className="h-3 w-3" />
-                              </Button>
-                              {/* Deselect HOD button - only show when HODs are linked */}
-                              {(member as any).hod_links && (member as any).hod_links.length > 0 && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  title="Manage or remove linked HODs"
-                                  onClick={() => openHodLinkDialog(member)}
-                                  className="h-8 w-8 p-0 hover:bg-amber-50 hover:border-amber-300"
-                                >
-                                  <Link2Off className="h-3 w-3 text-amber-600" />
-                                </Button>
-                              )}
-                            </>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              title="Link to HOD"
+                              onClick={() => openHodLinkDialog(member)}
+                              className="h-8 w-8 p-0 hover:bg-blue-50 hover:border-blue-300"
+                            >
+                              <Link2 className="h-3 w-3" />
+                            </Button>
                           )}
                         </div>
                       </TableCell>
@@ -1450,64 +1430,102 @@ export function StaffManagement() {
       </Card>
     </div>
 
-      {/* HOD Linkage Management Modal - now supports add and remove */}
-      <ManageHODLinkagesModal
-        open={!!hodLinkStaff}
-        onOpenChange={(open) => {
-          if (!open) {
-            setHodLinkStaff(null)
-            setHodSearchQuery("")
-            setHodLinkHodIds([])
-            setHodLinkError(null)
-          }
-        }}
-        staffMember={hodLinkStaff ? {
-          id: hodLinkStaff.id,
-          first_name: hodLinkStaff.first_name,
-          last_name: hodLinkStaff.last_name,
-          email: hodLinkStaff.email || '',
-        } : null}
-        currentLinks={(hodLinkStaff as any)?.hod_links?.map((hod: any) => ({
-          id: hod.id,
-          name: hod.name || `${hod.first_name || ''} ${hod.last_name || ''}`.trim() || 'Unknown HOD',
-          employee_id: hod.employee_id || '',
-          role: hod.role,
-          department: hod.department || hod.departments?.name || '',
-        })) || []}
-        availableHODs={hodCandidates.map((hod: any) => ({
-          id: hod.id,
-          name: `${hod.first_name} ${hod.last_name}`,
-          employee_id: hod.employee_id || '',
-          role: hod.role,
-          department: hod.departments?.name || '',
-        }))}
-        onAddLink={async (hodId: string) => {
-          setHodLinkHodIds([...hodLinkHodIds, hodId])
-          await handleHodLink()
-        }}
-        onRemoveLink={async (hodId: string) => {
-          // Call the delink API
-          try {
-            const response = await authenticatedFetch('/api/admin/delink-hod', {
-              method: 'POST',
-              body: JSON.stringify({
-                staff_user_id: hodLinkStaff?.id,
-                hod_user_id: hodId,
-              }),
-            })
-            const data = await response.json()
-            if (!response.ok) throw new Error(data.error || 'Failed to delink HOD')
-            
-            // Refresh the staff data
-            await fetchStaff()
-            showSuccess('HOD removed and requests withdrawn.', 'HOD Successfully Delinked')
-          } catch (error) {
-            showError(String(error), 'Delink Failed')
-            throw error
-          }
-        }}
-        loading={hodLinkLoading}
-      />
+      {/* HOD Linkage Dialog */}
+      <Dialog open={!!hodLinkStaff} onOpenChange={(open) => {
+        if (!open) {
+          setHodLinkStaff(null)
+          setHodSearchQuery("")
+          setHodLinkHodIds([])
+          setHodLinkError(null)
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link Staff to HOD</DialogTitle>
+            <DialogDescription>
+              Assign <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong> to a Department Head or Regional Manager for loan routing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {hodLinkError && (
+              <Alert variant="destructive"><AlertDescription>{hodLinkError}</AlertDescription></Alert>
+            )}
+            <div className="space-y-2.5">
+              <Label htmlFor="hod-search" className="text-sm font-medium">Search HOD / Regional Manager</Label>
+              <Input
+                id="hod-search"
+                placeholder="Search by name, staff ID, or department..."
+                value={hodSearchQuery}
+                onChange={(e) => setHodSearchQuery(e.target.value.toLowerCase())}
+                className="h-10"
+              />
+              <p className="text-xs text-muted-foreground">
+                {hodCandidates.length > 0
+                  ? `Found ${hodCandidates.filter((h) => 
+                      `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                      (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                      (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                    ).length} of ${hodCandidates.length} HODs`
+                  : "No HODs available"}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Select HODs (can choose multiple)</Label>
+              <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+                {hodCandidates.filter((h) =>
+                  hodSearchQuery === "" ||
+                  `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                  (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                  (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                ).length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4 text-center">
+                    {hodSearchQuery ? "No matching HODs found" : "No HODs available"}
+                  </p>
+                ) : (
+                  hodCandidates.filter((h) =>
+                    hodSearchQuery === "" ||
+                    `${h.first_name} ${h.last_name}`.toLowerCase().includes(hodSearchQuery) ||
+                    (h.employee_id && h.employee_id.includes(hodSearchQuery)) ||
+                    (h.departments?.name && h.departments.name.toLowerCase().includes(hodSearchQuery))
+                  ).map((hod) => (
+                    <div key={hod.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id={`hod-${hod.id}`}
+                        checked={hodLinkHodIds.includes(hod.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setHodLinkHodIds([...hodLinkHodIds, hod.id])
+                          } else {
+                            setHodLinkHodIds(hodLinkHodIds.filter((id) => id !== hod.id))
+                          }
+                        }}
+                        className="h-4 w-4 rounded"
+                      />
+                      <label htmlFor={`hod-${hod.id}`} className="flex-1 cursor-pointer text-sm">
+                        <div className="font-medium">{hod.first_name} {hod.last_name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {hod.employee_id && `ID: ${hod.employee_id} • `}
+                          {hod.role.replace("_", " ")} {hod.departments?.name ? `• ${hod.departments.name}` : ""}
+                        </div>
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              {hodLinkHodIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">Selected: {hodLinkHodIds.length} HOD(s)</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHodLinkStaff(null)}>Cancel</Button>
+            <Button onClick={handleHodLink} disabled={hodLinkHodIds.length === 0 || hodLinkLoading}>
+              {hodLinkLoading ? "Linking..." : `Link (${hodLinkHodIds.length})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

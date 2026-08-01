@@ -200,13 +200,13 @@ async function sendWarningNotification(
   daysOverdue: number,
   supervisors: any[]
 ) {
-  const message = `⚠️ Staff member ${staff.full_name} from ${staff.department} has not resumed duty ${daysOverdue} days after their leave ended.`
+  const message = `Staff member ${staff.full_name} from ${staff.department} has not resumed duty ${daysOverdue} days after their leave ended.`
 
   // Send to staff - dashboard alert
   await sendNotification({
     userId: staff.id,
-    title: '⚠️ Non-Resumption Warning (Day 2)',
-    message: `📍 You have not resumed duty for ${daysOverdue} days. Please check in immediately to avoid escalation.`,
+    title: '⚠ Non-Resumption Warning',
+    message: `You have not resumed duty for ${daysOverdue} days. Please check in immediately to avoid escalation.`,
     type: 'warning',
     severity: 'high',
   })
@@ -215,7 +215,7 @@ async function sendWarningNotification(
   for (const supervisor of supervisors || []) {
     await sendNotification({
       userId: supervisor.id,
-      title: '⚠️ Non-Resumption Alert',
+      title: 'Non-Resumption Alert',
       message,
       type: 'alert',
       severity: 'medium',
@@ -236,7 +236,7 @@ async function sendWarningLetter(
   // Send to staff - email
   await sendEmail({
     to: staff.email,
-    subject: '⚠️ FORMAL WARNING - Non-Resumption of Duty (Day 5)',
+    subject: 'FORMAL WARNING - Non-Resumption of Duty',
     html: letterHtml,
     cc: supervisors?.map((s: any) => s.email).join(','),
   })
@@ -245,8 +245,8 @@ async function sendWarningLetter(
   for (const supervisor of supervisors || []) {
     await sendNotification({
       userId: supervisor.id,
-      title: '📨 ⚠️ Warning Letter Issued (Day 5)',
-      message: `📧 Warning letter issued to ${staff.full_name} for non-resumption (${daysOverdue} days overdue) 🔴`,
+      title: 'Warning Letter Issued',
+      message: `Warning letter issued to ${staff.full_name} for non-resumption (${daysOverdue} days overdue)`,
       type: 'alert',
       severity: 'high',
     })
@@ -266,7 +266,7 @@ async function sendQueryMemo(
   // Send to staff - email
   await sendEmail({
     to: staff.email,
-    subject: '🚨 URGENT: QUERY MEMO - Investigation Required for Non-Resumption (Day 10)',
+    subject: 'QUERY MEMO - Investigation Required for Non-Resumption',
     html: memoHtml,
     cc: supervisors?.filter((s: any) => ['director_hr', 'hr_executive'].includes(s.role))
       .map((s: any) => s.email)
@@ -278,8 +278,8 @@ async function sendQueryMemo(
   for (const supervisor of supervisors?.filter((s: any) => hrRoles.includes(s.role)) || []) {
     await sendNotification({
       userId: supervisor.id,
-      title: '🚨 CRITICAL: Query Memo Issued (Day 10)',
-      message: `🔴 Query memo issued to ${staff.full_name} for investigation (${daysOverdue} days non-resumption). Disciplinary action pending. ⏰`,
+      title: 'Query Memo Issued',
+      message: `Query memo issued to ${staff.full_name} for investigation (${daysOverdue} days non-resumption). Disciplinary action pending.`,
       type: 'alert',
       severity: 'critical',
     })
@@ -323,8 +323,8 @@ async function generateAndSendResumptionMemo(
     // Send dashboard notification about memo
     await sendNotification({
       userId: staff.id,
-      title: '📋 Return to Work Memo Generated ✅',
-      message: `🎉 Your return to work memo has been generated and is available for download. Reference: ${memoResult.memo_id} 📥`,
+      title: 'Return to Work Memo Generated',
+      message: `Your return to work memo has been generated and is available for download. Reference: ${memoResult.memo_id}`,
       type: 'info',
       severity: 'medium',
     })
@@ -344,12 +344,12 @@ async function notifySupervisorsOfResumption(staff: any, record: any) {
     .select('*')
     .or(`id.eq.${staff.supervisor_id},role.in.("department_head","regional_manager","hr_executive","hr_leave_office")`)
 
-  const message = `👋 ${staff.full_name} from ${staff.department} has resumed duty on ${format(new Date(record.first_check_in_date), 'dd MMM yyyy')} ✅`
+  const message = `${staff.full_name} from ${staff.department} has resumed duty on ${format(new Date(record.first_check_in_date), 'dd MMM yyyy')}`
 
   for (const supervisor of supervisors || []) {
     await sendNotification({
       userId: supervisor.id,
-      title: '🎉 Leave Resumption Notification - Welcome Back!',
+      title: 'Leave Resumption Notification',
       message,
       type: 'info',
       severity: 'low',

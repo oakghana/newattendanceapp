@@ -17,18 +17,15 @@ export default function RepaymentTrackingPage() {
   const [loading, setLoading] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [authorized, setAuthorized] = useState<boolean | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   // Check authorization on mount
   useEffect(() => {
     const checkAuthorization = async () => {
       try {
-        const response = await fetch("/api/auth/current-user")
+        const response = await fetch("/api/auth/me")
         if (response.ok) {
-          const { user } = await response.json()
-          // Check for both database role ('accounts') and UI role ('accounts_executive')
-          const authorizedRoles = ["loan_office", "accounts_executive", "accounts", "admin"]
-          if (user && authorizedRoles.includes(user.role)) {
+          const { profile } = await response.json()
+          if (profile && ["loan_office", "accounts_executive", "admin"].includes(profile.role)) {
             setAuthorized(true)
           } else {
             setAuthorized(false)
@@ -54,23 +51,14 @@ export default function RepaymentTrackingPage() {
 
     const fetchRepaymentData = async () => {
       setLoading(true)
-      setError(null)
       try {
         const response = await fetch("/api/loan/repayment")
         if (response.ok) {
           const result = await response.json()
-          console.log("[v0] Repayment data:", result)
           setRepaymentData(result.data || [])
-        } else {
-          const errorData = await response.json().catch(() => ({}))
-          console.error("[v0] Repayment API error:", response.status, errorData)
-          setError(`Failed to load repayment data: ${errorData.error || 'Unknown error'}`)
-          setRepaymentData([])
         }
       } catch (err) {
         console.error("[v0] Error fetching repayment data:", err)
-        setError(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
-        setRepaymentData([])
       } finally {
         setLoading(false)
       }
@@ -78,23 +66,14 @@ export default function RepaymentTrackingPage() {
 
     // Fetch outstanding balance data
     const fetchBalanceData = async () => {
-      setError(null)
       try {
         const response = await fetch("/api/loan/repayment")
         if (response.ok) {
           const result = await response.json()
-          console.log("[v0] Balance data:", result)
           setBalanceData(result.data || [])
-        } else {
-          const errorData = await response.json().catch(() => ({}))
-          console.error("[v0] Balance API error:", response.status, errorData)
-          setError(`Failed to load balance data: ${errorData.error || 'Unknown error'}`)
-          setBalanceData([])
         }
       } catch (err) {
         console.error("[v0] Error fetching balance data:", err)
-        setError(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
-        setBalanceData([])
       }
     }
 
@@ -134,13 +113,6 @@ export default function RepaymentTrackingPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Error Display */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
-            {error}
-          </div>
-        )}
-        
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <Button
@@ -194,16 +166,6 @@ export default function RepaymentTrackingPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {repaymentData.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <Calendar className="h-12 w-12 text-slate-300 mb-4" />
-                    <p className="text-slate-600 font-medium mb-2">No Repayment Data Available</p>
-                    <p className="text-slate-500 text-sm max-w-md">
-                      Repayment schedules will appear here once loans have been approved and repayment terms have been generated.
-                    </p>
-                  </div>
-                ) : (
-                <>
                 {/* Calendar Grid */}
                 <div className="space-y-4">
                   {/* Day headers */}
@@ -258,8 +220,6 @@ export default function RepaymentTrackingPage() {
                     })}
                   </div>
                 </div>
-                </>
-                )}
               </CardContent>
             </Card>
 

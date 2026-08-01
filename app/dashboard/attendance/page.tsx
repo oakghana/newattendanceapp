@@ -8,8 +8,6 @@ import { PersonalAttendanceHistory } from "@/components/attendance/personal-atte
 import { LocationPreviewCard } from "@/components/attendance/location-preview-card"
 import { LeaveStatusCard } from "@/components/leave/leave-status-card"
 import { StaffStatusBadge } from "@/components/attendance/staff-status-badge"
-import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
-import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -133,14 +131,6 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-8">
-      {/* Global Warning Toasts */}
-      <GlobalWarningsToasts />
-
-      {/* Leave Resumption Badge */}
-      <div className="px-1">
-        <LeaveResumptionBadge />
-      </div>
-
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" asChild className="gap-2 hover:bg-primary/5">
           <Link href="/dashboard">

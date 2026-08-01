@@ -90,29 +90,25 @@ export async function POST(request: NextRequest) {
     const notificationPromises = notifyRoles.map(async (role) => {
       let roleTitle = "";
       let recipientNote = "";
-      let emoji = "";
 
       switch (role.toLowerCase()) {
         case "hod":
           roleTitle = "Head of Department";
-          emoji = "👥";
-          recipientNote = `👋 ${staffData.first_name} ${staffData.last_name} has returned from ${leaveType} leave 🎉`;
+          recipientNote = `${staffData.first_name} ${staffData.last_name} has returned from ${leaveType} leave`;
           break;
         case "hr_office":
           roleTitle = "HR Leave Office";
-          emoji = "📋";
-          recipientNote = `📍 Staff resumption notification for ${staffData.first_name} ${staffData.last_name} ✅`;
+          recipientNote = `Staff resumption notification for ${staffData.first_name} ${staffData.last_name}`;
           break;
         case "hr_executive":
           roleTitle = "HR Executive";
-          emoji = "📝";
-          recipientNote = `📋 Resumption memo available for signing: ${staffData.first_name} ${staffData.last_name} 🖊️`;
+          recipientNote = `Resumption memo available for signing: ${staffData.first_name} ${staffData.last_name}`;
           break;
       }
 
       return supabase.from("notifications").insert({
         type: "leave_resumption",
-        title: `${emoji} ${staffData.first_name} ${staffData.last_name} - Return to Work Notification`,
+        title: `${staffData.first_name} ${staffData.last_name} - Return to Work Notification`,
         body: recipientNote,
         recipient_role: role,
         related_data: { memo_id: memoId, staff_user_id: staffUserId },

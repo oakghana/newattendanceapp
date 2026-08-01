@@ -659,22 +659,21 @@ export async function notifyLeaveResumeReminder(
 
     // ── Email to the staff member ──
     if (staffEmail) {
-      const subject = `📅 Reminder: You Return from Leave in ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"}`
-      const warningEmoji = opts.daysLeft <= 3 ? "⚠️" : "📬"
+      const subject = `Reminder: You Return from Leave in ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"}`
       const html = baseLayout(
-        `${warningEmoji} Return to Work — ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"} Remaining`,
+        `Return to Work — ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"} Remaining`,
         `<p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong>${opts.staffName}</strong>,</p>
-        <p style="margin:0 0 6px;font-size:14px;color:#374151;">Your approved leave ends in <strong>${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}</strong> 📆. Please prepare to resume duties on <strong>${opts.resumeDate}</strong>.</p>
-        <p style="margin:0 0 22px;">${statusBadge(`📍 Resume Date: ${opts.resumeDate}`, "info")}</p>
-        ${sectionHeading("📋 Leave Summary")}
+        <p style="margin:0 0 6px;font-size:14px;color:#374151;">Your approved leave ends in <strong>${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}</strong>. Please prepare to resume duties on <strong>${opts.resumeDate}</strong>.</p>
+        <p style="margin:0 0 22px;">${statusBadge(`Resume Date: ${opts.resumeDate}`, "info")}</p>
+        ${sectionHeading("Leave Summary")}
         ${table(
-          row("🏖️ Leave Type", opts.leaveType) +
-          row("📅 Leave End Date", opts.endDate) +
-          row("🚀 Resume Date", opts.resumeDate) +
-          row("⏱️ Days Remaining", String(opts.daysLeft))
+          row("Leave Type", opts.leaveType) +
+          row("Leave End Date", opts.endDate) +
+          row("Resume Date", opts.resumeDate) +
+          row("Days Remaining", String(opts.daysLeft))
         )}
         <p style="margin:0;font-size:13px;color:#6b7280;">
-          💡 If you need to extend your leave, please contact HR as soon as possible.
+          If you need to extend your leave, please contact HR as soon as possible.
         </p>`,
       )
       await send(admin, staffEmail, subject, html, "leave resume reminder staff")
@@ -682,20 +681,20 @@ export async function notifyLeaveResumeReminder(
 
     // ── Email to HOD / RM ──
     if (hodEmails.length) {
-      const subject = `👥 Staff Return Notice: ${opts.staffName} resumes in ${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}`
+      const subject = `Staff Return Notice: ${opts.staffName} resumes in ${opts.daysLeft} day${opts.daysLeft === 1 ? "" : "s"}`
       const html = baseLayout(
-        "👋 Staff Returning from Leave",
+        "Staff Returning from Leave",
         `<p style="margin:0 0 6px;font-size:14px;color:#374151;">A staff member under your supervision will be returning from leave soon.</p>
-        <p style="margin:0 0 22px;">${statusBadge(`📍 Returning in ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"}`, "info")}</p>
-        ${sectionHeading("📋 Return Details")}
+        <p style="margin:0 0 22px;">${statusBadge(`Returning in ${opts.daysLeft} Day${opts.daysLeft === 1 ? "" : "s"}`, "info")}</p>
+        ${sectionHeading("Return Details")}
         ${table(
-          row("👤 Staff Member", opts.staffName) +
-          row("🏖️ Leave Type", opts.leaveType) +
-          row("📅 Leave End Date", opts.endDate) +
-          row("🚀 Expected Resume Date", opts.resumeDate)
+          row("Staff Member", opts.staffName) +
+          row("Leave Type", opts.leaveType) +
+          row("Leave End Date", opts.endDate) +
+          row("Expected Resume Date", opts.resumeDate)
         )}
         <p style="margin:0;font-size:13px;color:#6b7280;">
-          ✅ Please ensure the staff member's workspace and duties are prepared for their return.
+          Please ensure the staff member's workspace and duties are prepared for their return.
         </p>
         ${btn(dashLink, "View Leave Dashboard")}`,
       )
