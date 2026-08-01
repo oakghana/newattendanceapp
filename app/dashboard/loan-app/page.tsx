@@ -1211,6 +1211,16 @@ export default function LoanAppPage() {
       })
     }
 
+    // Loan Office tab: for HR Loan Office staff to process HOD-approved loans and perform FD checks
+    if (canAccessLoanOfficeWorkspace && p?.loanOffice) {
+      tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
+    }
+
+    // Accounts tab: for Accounts staff to review and approve FD values
+    if (p?.accounts) {
+      tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
+    }
+
     // Repayment Tracking tab: only for Loan Office and Accounts executives
     if (canAccessLoanOfficeWorkspace || isAccountsExecutive) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
