@@ -21,6 +21,7 @@ import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
+import { calculateFD, validateFDInput, type FDCalculationResult, type OutstandingLoans, OUTSTANDING_LOAN_LABELS } from "@/lib/fd-calculator"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -943,6 +944,13 @@ export default function LoanAppPage() {
   const [modalFdScore, setModalFdScore] = useState("")
   const [modalFdNote, setModalFdNote] = useState("")
   const [modalFdProof, setModalFdProof] = useState<File | null>(null)
+  const [modalFdSalaryAnnum, setModalFdSalaryAnnum] = useState("")
+  const [modalFdOtherAllowances, setModalFdOtherAllowances] = useState("")
+  const [modalFdGrossDeduction, setModalFdGrossDeduction] = useState("")
+  const [modalFdOutstanding, setModalFdOutstanding] = useState<Partial<Record<keyof OutstandingLoans, string>>>({})
+  const [modalFdOutstandingOpen, setModalFdOutstandingOpen] = useState(false)
+  const [modalFdCalcResult, setModalFdCalcResult] = useState<FDCalculationResult | null>(null)
+  const [modalFdCalcErrors, setModalFdCalcErrors] = useState<string[]>([])
   const [modalDisbursement, setModalDisbursement] = useState("")
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
@@ -1254,23 +1262,28 @@ export default function LoanAppPage() {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
-    // Analytics tab for Loan Office and Accounts executives
-    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
-    if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
+    // Analytics tab for Loan Office, Accounts executives, and HR Loan Office (view only)
+    if (canAccessLoanOfficeWorkspace || p?.accounts || isHRLoanOffice) tabs.push({ key: "analytics", label: "Analytics" })
+    // Leave Payment: Accounts executives, viewAllTabs, and HR Loan Office
+    if (p?.accounts || p?.viewAllTabs || isHRLoanOffice) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    // Payment Approvals: HR/Accounts executives and HR Loan Office
+    if (isHrExecutive || isAccountsExecutive || isHRLoanOffice) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
     // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
     if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
-    if (p?.allLoans || p?.viewAllTabs) {
+    // All Loans: admins, viewAllTabs, and HR Loan Office (read-only view)
+    if (p?.allLoans || p?.viewAllTabs || isHRLoanOffice) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
       if (c.archived > 0) {
         tabs.push({ key: "archive", label: `Archive (${c.archived})` })
       }
+    } else if (normalizedRole !== "hr_loan_office" && (p?.allLoans || p?.viewAllTabs)) {
+      tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs
   }, [data, canAccessLoanOfficeWorkspace, isAdmin])
@@ -2626,6 +2639,13 @@ export default function LoanAppPage() {
           const fd = fdInputs[row.id]
           setModalFdScore(fd?.score || "")
           setModalFdNote(fd?.note || "")
+          setModalFdSalaryAnnum("")
+          setModalFdOtherAllowances("")
+          setModalFdGrossDeduction(row.monthly_deduction ? String(row.monthly_deduction) : "")
+          setModalFdOutstanding({})
+          setModalFdOutstandingOpen(false)
+          setModalFdCalcResult(null)
+          setModalFdCalcErrors([])
         }
         if (actionType === "hr_terms") {
           const entry = hrInputs[row.id]
@@ -6610,7 +6630,7 @@ export default function LoanAppPage() {
 
       {/* ── Action Modal ──────────────────────��─────────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className={actionModal.actionType === "accounts" ? "max-w-2xl" : "max-w-lg"}>
           <DialogHeader>
             <DialogTitle>
               {actionModal.actionType === "hod" && "HOD Review & Decision"}
@@ -6702,25 +6722,130 @@ export default function LoanAppPage() {
                 <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Managing Director&#10;Deputy Director Finance" rows={2} className="text-xs" />
               </>
             )}
-            {/* Accounts FD */}
-            {actionModal.actionType === "accounts" && (
+            {/* Accounts FD — full inline FD calculation form */}
+            {actionModal.actionType === "accounts" && actionModal.row && (
               <>
-                <Label className="text-xs">FD Score (Mark out of 100)</Label>
-                <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
-                <Label className="text-xs">Proof of Concept / Supporting Document * <span className="text-red-500">Required</span></Label>
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 hover:border-slate-400 transition-colors">
-                  <input
-                    type="file"
-                    onChange={(e) => setModalFdProof(e.target.files?.[0] || null)}
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                    className="w-full text-xs"
-                  />
-                  <p className="text-xs text-slate-500 mt-2">
-                    {modalFdProof ? `Selected: ${modalFdProof.name}` : "Upload proof (PDF, Word, or Image)"}
-                  </p>
+                {/* Salary Inputs */}
+                <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Salary Information (from HANA / Payroll)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Salary Per Annum (GH&cent;) <span className="text-destructive">*</span></Label>
+                      <Input type="number" min={0} step="0.01" placeholder="e.g. 125831.00" className="h-7 text-xs"
+                        value={modalFdSalaryAnnum} onChange={e => setModalFdSalaryAnnum(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Other Monthly Allowances (GH&cent;)</Label>
+                      <Input type="number" min={0} step="0.01" placeholder="e.g. 4318.39" className="h-7 text-xs"
+                        value={modalFdOtherAllowances} onChange={e => setModalFdOtherAllowances(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Existing Gross Deductions / Month (GH&cent;)</Label>
+                      <Input type="number" min={0} step="0.01" placeholder="e.g. 6698.08" className="h-7 text-xs"
+                        value={modalFdGrossDeduction} onChange={e => setModalFdGrossDeduction(e.target.value)} />
+                    </div>
+                  </div>
                 </div>
-                <Label className="text-xs">Your Comments (optional)</Label>
-                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} className="text-xs" />
+
+                {/* Outstanding Loans toggle */}
+                <div className="rounded-md border overflow-hidden">
+                  <button type="button"
+                    onClick={() => setModalFdOutstandingOpen(p => !p)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium bg-muted/40 hover:bg-muted/60 transition-colors">
+                    Balance Outstanding Loans (optional — enter any that apply)
+                    {modalFdOutstandingOpen
+                      ? <ChevronDown className="h-3.5 w-3.5 rotate-180" />
+                      : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                  {modalFdOutstandingOpen && (
+                    <div className="grid grid-cols-3 gap-2 p-3">
+                      {(Object.keys(OUTSTANDING_LOAN_LABELS) as Array<keyof OutstandingLoans>).map(key => (
+                        <div key={key} className="space-y-1">
+                          <Label className="text-[11px] text-muted-foreground leading-tight block">{OUTSTANDING_LOAN_LABELS[key]}</Label>
+                          <Input type="number" min={0} step="0.01" placeholder="0.00" className="h-7 text-xs"
+                            value={modalFdOutstanding[key] ?? ""}
+                            onChange={e => setModalFdOutstanding(prev => ({ ...prev, [key]: e.target.value }))} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Validation errors */}
+                {modalFdCalcErrors.length > 0 && (
+                  <div className="rounded-md bg-destructive/10 border border-destructive/20 p-2 space-y-1">
+                    {modalFdCalcErrors.map((e, i) => (
+                      <p key={i} className="text-xs text-destructive flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />{e}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Calculate button */}
+                <Button type="button" variant="outline" size="sm" className="w-full text-xs"
+                  disabled={!modalFdSalaryAnnum}
+                  onClick={() => {
+                    if (!actionModal.row) return
+                    setModalFdCalcErrors([])
+                    const parsedOutstanding = Object.fromEntries(
+                      Object.entries(modalFdOutstanding)
+                        .map(([k, v]) => [k, parseFloat(v as string) || 0])
+                        .filter(([, v]) => (v as number) > 0)
+                    ) as OutstandingLoans
+                    const input = {
+                      staffNumber: actionModal.row.staff_number || "",
+                      staffName: actionModal.row.staff_full_name || "",
+                      salary_per_annum: parseFloat(modalFdSalaryAnnum) || 0,
+                      other_allowances_monthly: parseFloat(modalFdOtherAllowances) || 0,
+                      gross_deduction_monthly: parseFloat(modalFdGrossDeduction) || 0,
+                      requested_loan_amount: actionModal.row.fixed_amount || actionModal.row.requested_amount || 0,
+                      recovery_period_months: actionModal.row.repayment_duration_months || 12,
+                      loan_type: actionModal.row.loan_type_label,
+                      outstanding_loans: parsedOutstanding,
+                    }
+                    const errs = validateFDInput(input)
+                    if (errs.length > 0) { setModalFdCalcErrors(errs); return }
+                    const result = calculateFD(input)
+                    setModalFdCalcResult(result)
+                    setModalFdScore(String(result.fd_score))
+                  }}>
+                  <Calculator className="h-3.5 w-3.5 mr-1.5" />
+                  {modalFdCalcResult ? "Recalculate FD Score" : "Calculate FD Score"}
+                </Button>
+
+                {/* Calculation results preview */}
+                {modalFdCalcResult && (
+                  <div className={`rounded-md border p-3 space-y-2 ${modalFdCalcResult.fd_good ? "border-green-300 bg-green-50/50" : "border-amber-300 bg-amber-50/50"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        {modalFdCalcResult.fd_good
+                          ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          : <AlertCircle className="h-4 w-4 text-amber-600" />}
+                        <span className={`text-xs font-semibold ${modalFdCalcResult.fd_good ? "text-green-800" : "text-amber-800"}`}>
+                          {modalFdCalcResult.fd_good ? "Good Financial Standing" : "Financial Standing: Needs Review"}
+                        </span>
+                      </div>
+                      <span className={`text-sm font-bold px-2 py-0.5 rounded ${modalFdCalcResult.fd_good ? "bg-green-600 text-white" : "bg-amber-500 text-white"}`}>
+                        {modalFdCalcResult.fd_score}/100
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div className="flex justify-between"><span className="text-muted-foreground">Gross Monthly</span><span className="font-medium">GH¢ {modalFdCalcResult.gross_salary_per_month.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Total Deductions</span><span className="font-medium text-red-600">GH¢ {modalFdCalcResult.total_deduction_monthly.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Net Monthly</span><span className={`font-bold ${modalFdCalcResult.fd_good ? "text-green-700" : "text-amber-700"}`}>GH¢ {modalFdCalcResult.net_salary_monthly.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">½ of Gross</span><span className="font-medium">GH¢ {modalFdCalcResult.half_gross_salary_per_month.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Loan Installment</span><span className="font-medium">GH¢ {modalFdCalcResult.loan_installment_monthly.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Net/Gross Ratio</span><span className="font-medium">{modalFdCalcResult.net_to_gross_ratio.toFixed(1)}%</span></div>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1 border-t">
+                      Review the figures above. If correct, click <strong>Confirm &amp; Send to Accounts Executive</strong> below.
+                    </p>
+                  </div>
+                )}
+
+                <Label className="text-xs">HR Loan Office Remarks (optional)</Label>
+                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Any observations or remarks before forwarding..." rows={2} className="text-xs" />
               </>
             )}
             {/* Committee - Further Information */}
@@ -6858,40 +6983,44 @@ export default function LoanAppPage() {
               </>
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
-              <Button 
-                disabled={!modalFdProof}
+              <Button
+                disabled={!modalFdCalcResult}
                 onClick={async () => {
-                  if (!modalFdProof) {
-                    toast({ title: "Missing Attachment", description: "Please upload a proof document before saving the FD score.", variant: "destructive" })
+                  if (!modalFdCalcResult) {
+                    toast({ title: "Calculate First", description: "Please calculate the FD score before confirming.", variant: "destructive" })
                     return
                   }
-                  // Upload FD proof document to storage first
-                  let fdDocumentUrl: string | null = null
-                  try {
-                    const formData = new FormData()
-                    formData.append("file", modalFdProof)
-                    formData.append("folder", "fd-documents")
-                    const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
-                    if (uploadRes.ok) {
-                      const uploadData = await uploadRes.json()
-                      fdDocumentUrl = uploadData.url || null
-                    } else {
-                      const uploadErr = await uploadRes.json()
-                      if (uploadErr.code === "BLOB_NOT_CONFIGURED") {
-                        // Blob not configured — proceed without URL, note will still be saved
-                        fdDocumentUrl = null
-                      } else {
-                        toast({ title: "Upload Failed", description: uploadErr.error || "Could not upload FD document.", variant: "destructive" })
-                        return
-                      }
-                    }
-                  } catch {
-                    toast({ title: "Upload Error", description: "Failed to upload FD document.", variant: "destructive" })
-                    return
-                  }
-                  await runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null, fd_document_url: fdDocumentUrl })
+                  const parsedOutstanding = Object.fromEntries(
+                    Object.entries(modalFdOutstanding)
+                      .map(([k, v]) => [k, parseFloat(v as string) || 0])
+                      .filter(([, v]) => (v as number) > 0)
+                  ) as OutstandingLoans
+                  await runAction({
+                    action: "accounts_fd_update",
+                    id: actionModal.row!.id,
+                    fd_score: modalFdCalcResult.fd_score,
+                    fd_good: modalFdCalcResult.fd_good,
+                    note: modalFdNote || null,
+                    fd_document_url: null,
+                    fd_calculation_data: {
+                      salary_per_annum: modalFdCalcResult.salary_per_annum,
+                      consolidated_salary_per_month: modalFdCalcResult.consolidated_salary_per_month,
+                      other_allowances: modalFdCalcResult.other_allowances_per_month,
+                      gross_salary_monthly: modalFdCalcResult.gross_salary_per_month,
+                      gross_deductions_monthly: modalFdCalcResult.gross_deduction_monthly,
+                      loan_installment_monthly: modalFdCalcResult.loan_installment_monthly,
+                      total_deductions_monthly: modalFdCalcResult.total_deduction_monthly,
+                      net_salary_monthly: modalFdCalcResult.net_salary_monthly,
+                      half_gross_monthly: modalFdCalcResult.half_gross_salary_per_month,
+                      net_to_gross_ratio: modalFdCalcResult.net_to_gross_ratio,
+                      total_outstanding_loans: modalFdCalcResult.total_outstanding,
+                      outstanding_loans: parsedOutstanding,
+                    },
+                  })
                   setActionModal((s) => ({ ...s, open: false }))
-                }}>Save FD Score</Button>
+                }}>
+                Confirm &amp; Send to Accounts Executive
+              </Button>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
               <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
