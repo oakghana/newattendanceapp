@@ -83,7 +83,14 @@ export function canDoHodReview(role: string): boolean {
 }
 
 export function canDoLoanOffice(role: string, deptName?: string | null, deptCode?: string | null): boolean {
-  return isAdminRole(role) || role === "loan_officer" || role === "loan_office" || role === "manager_hr" || isLoanOfficeDepartment(deptName, deptCode)
+  const normalizedRole = normalizeRole(role)
+  // Support both new (hr_loan_office) and legacy (loan_office) role names
+  return isAdminRole(normalizedRole) || 
+         normalizedRole === "loan_officer" || 
+         normalizedRole === "loan_office" ||
+         normalizedRole === "hr_loan_office" ||
+         normalizedRole === "manager_hr" || 
+         isLoanOfficeDepartment(deptName, deptCode)
 }
 
 export function canDoAccounts(role: string, deptName?: string | null, deptCode?: string | null): boolean {
@@ -92,6 +99,7 @@ export function canDoAccounts(role: string, deptName?: string | null, deptCode?:
     isAdminRole(normalizedRole) ||
     normalizedRole === "accounts" ||
     normalizedRole === "accounts_executive" ||
+    normalizedRole === "accounts_loan_office" ||  // New department-specific role
     normalizedRole.includes("account") ||
     isAccountsDepartment(deptName, deptCode)
   )
