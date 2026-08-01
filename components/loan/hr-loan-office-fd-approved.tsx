@@ -10,6 +10,7 @@ import { Eye, FileCheck, CreditCard, Download, AlertCircle, Send, CheckCircle2 }
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
+import { useEffect } from 'react'
 
 interface FDApprovedLoan {
   id: string
@@ -34,6 +35,32 @@ export function HRLoanOfficeFDApproved() {
   const [pushMemo, setPushMemo] = useState('')
   const [pushing, setPushing] = useState(false)
   const { toast } = useToast()
+
+  // Fetch FD-approved loans from API
+  const fetchFdApprovedLoans = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/loan/workflow?inbox=true')
+      const data = await res.json()
+      
+      if (data.inbox?.loanOffice) {
+        // Filter for loans in pending_hr_loan_office status (approved FD from Accounts Executive)
+        const approvedFdLoans = data.inbox.loanOffice.filter(
+          (loan: any) => loan.status === 'pending_hr_loan_office'
+        )
+        setFdApprovedLoans(approvedFdLoans)
+      }
+    } catch (error) {
+      console.error('[v0] Error fetching FD-approved loans:', error)
+      toast({ title: 'Error', description: 'Failed to fetch FD-approved loans', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchFdApprovedLoans()
+  }, [])
 
   // Filter loans based on search
   const filteredLoans = useMemo(() => {
@@ -107,7 +134,7 @@ export function HRLoanOfficeFDApproved() {
         setSelectedForPush(null)
         setPushMemo('')
         // Refresh the loans list
-        // await fetchFdApprovedLoans()
+        await fetchFdApprovedLoans()
       } else {
         toast({ title: 'Error', description: data.error || 'Failed to push to HR Executive', variant: 'destructive' })
       }
