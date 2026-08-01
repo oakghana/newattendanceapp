@@ -18,7 +18,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
-import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
@@ -2831,7 +2830,6 @@ export default function LoanAppPage() {
 
   return (
     <>
-      <GlobalWarningsToasts />
       <div className="px-2">
         <LeaveResumptionBadge />
       </div>
