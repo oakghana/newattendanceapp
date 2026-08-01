@@ -5390,6 +5390,7 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Attachment</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
                         <TableHead className="whitespace-nowrap">Memo</TableHead>
+                        <TableHead className="whitespace-nowrap">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -5420,6 +5421,14 @@ export default function LoanAppPage() {
                             {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status)
                               ? <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                               : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {row.status === "pending_hod" && (
+                              <Button size="sm" onClick={() => openActionModal(row, "hod")} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                Review
+                              </Button>
+                            )}
+                            {!["pending_hod"].includes(row.status) && <span className="text-muted-foreground text-xs">—</span>}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -5455,6 +5464,13 @@ export default function LoanAppPage() {
                   {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
                     <div className="pt-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
+                    </div>
+                  )}
+                  {row.status === "pending_hod" && (
+                    <div className="pt-2">
+                      <Button size="sm" onClick={() => openActionModal(row, "hod")} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+                        Review & Make Decision
+                      </Button>
                     </div>
                   )}
                 </div>
