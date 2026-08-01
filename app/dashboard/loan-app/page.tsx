@@ -7387,235 +7387,230 @@ export default function LoanAppPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Memo Review Modal (Director HR + HR Terms Preview) ──────── */}
+      {/* ── Memo Review Modal (Executive HR / Director HR) ──────────── */}
       <Dialog open={memoReviewModal.open} onOpenChange={(o) => setMemoReviewModal((s) => ({ ...s, open: o }))}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="border-b pb-4">
+        <DialogContent className="max-w-5xl w-full p-0 gap-0 overflow-hidden" style={{ height: "90vh", maxHeight: "90vh" }}>
+
+          {/* ── Header bar ─────────────────────────────────────────────── */}
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3 shrink-0">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-6 w-6 text-blue-600" />
+              <FileText className="h-5 w-5 text-indigo-600" />
               <div>
-                <DialogTitle className="text-lg">Loan Request Approval</DialogTitle>
-                <DialogDescription className="mt-1">
-                  Review the memo and staff details below. Your signature will finalize this approval.
-                </DialogDescription>
+                <h2 className="text-sm font-semibold text-slate-900 leading-tight">Executive HR — Review &amp; Sign Memo</h2>
+                {memoReviewModal.row && (
+                  <p className="text-xs text-slate-500">
+                    {memoReviewModal.row.request_number} &nbsp;·&nbsp; {memoReviewModal.row.staff_full_name} &nbsp;·&nbsp; GHc {fmtAmount(memoReviewModal.row.fixed_amount || memoReviewModal.row.requested_amount)}
+                  </p>
+                )}
               </div>
             </div>
-          </DialogHeader>
-
-          {/* Request Summary Card */}
-          {memoReviewModal.row && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mb-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-slate-600">Reference Number:</span>
-                  <div className="font-semibold text-slate-900">{memoReviewModal.row.request_number}</div>
-                </div>
-                <div>
-                  <span className="text-slate-600">Loan Type:</span>
-                  <div className="font-semibold text-slate-900">{memoReviewModal.row.loan_type_label || memoReviewModal.row.loan_type_key}</div>
-                </div>
-                <div>
-                  <span className="text-slate-600">Staff Name:</span>
-                  <div className="font-semibold text-slate-900">{memoReviewModal.row.staff_full_name}</div>
-                </div>
-                <div>
-                  <span className="text-slate-600">Amount (GHc):</span>
-                  <div className="font-semibold text-green-700">{fmtAmount(memoReviewModal.row.fixed_amount || memoReviewModal.row.requested_amount)}</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Warning banner for missing signature */}
-          {isSignatureMissing && p?.directorHr && (
-            <div className="mb-4 rounded-lg border-l-4 border-amber-500 bg-amber-50 p-4">
-              <div className="flex gap-3">
-                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-semibold text-amber-900">Signature Setup Required</h4>
-                  <p className="text-sm text-amber-800 mt-1">You haven&apos;t saved your signature yet. You&apos;ll need to save your signature before you can approve loan requests.</p>
-                  <Button size="sm" variant="outline" className="mt-3 text-amber-700 border-amber-300 hover:bg-amber-100" onClick={() => {
-                    setMemoReviewModal((s) => ({ ...s, open: false }))
-                    setActiveTab("setup")
-                  }}>
-                    Go to Setup & Linkage
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Styled letterhead preview */}
-          <div className="mx-auto w-full max-w-[794px] border border-slate-200 bg-white px-10 py-8 shadow-sm print:border-0 print:shadow-none" id="memo-preview-content">
-            <div className="relative min-h-[88px] border-b border-slate-300 pb-4">
-              <img src="/images/qcc-logo.png" alt="QCC logo" className="absolute left-0 top-3 h-14 w-14 object-contain" draggable={false} />
-              <div className="text-center font-serif">
-                <div className="text-[18px] font-bold uppercase tracking-[0.02em] text-green-800">QUALITY CONTROL COMPANY LTD.</div>
-                <div className="text-[18px] font-bold uppercase tracking-[0.02em] text-green-800">(COCOBOD)</div>
-              </div>
-              <div className="absolute right-0 top-4 text-right font-serif text-[10px] italic text-slate-700">
-                <div>P.O Box M14</div>
-                <div>Accra Ghana</div>
-              </div>
-            </div>
-            <Textarea
-              value={modalMemoText}
-              onChange={(e) => setModalMemoText(e.target.value)}
-              rows={28}
-              className="mt-6 min-h-[720px] w-full resize-y border-0 p-0 font-serif text-[13px] leading-7 shadow-none focus-visible:ring-0"
-              placeholder="Memo text will appear here..."
-            />
-            {(modalSignatureMode === "typed" && modalSignatureText) && (
-              <div className="mt-4 font-serif">
-                <div className="w-52 border-b border-slate-400 pb-1 text-lg font-bold italic">{modalSignatureText}</div>
-                <div className="mt-2 text-[13px] font-semibold">DEPUTY DIRECTOR HUMAN RESOURCE</div>
-                <div className="text-[13px] font-semibold">FOR: MANAGING DIRECTOR</div>
-              </div>
-            )}
-            {(modalSignatureMode !== "typed" && modalSignatureDataUrl) && (
-              <div className="mt-4 font-serif">
-                <img src={modalSignatureDataUrl} alt="Director signature" className="max-h-20 border-b border-slate-400 pb-1" draggable={false} />
-                <div className="mt-2 text-[13px] font-semibold">DEPUTY DIRECTOR HUMAN RESOURCE</div>
-                <div className="text-[13px] font-semibold">FOR: MANAGING DIRECTOR</div>
-              </div>
-            )}
+            <button
+              onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
+              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            >
+              <XCircle className="h-5 w-5" />
+            </button>
           </div>
 
-          {/* Signature & Decision Setup — Modern Card Layout */}
-          {memoReviewModal.row && (
-            <div className="space-y-6 border-t border-slate-200 pt-6">
-              {/* Signature Section */}
-              <div className="rounded-lg border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold">1</div>
-                  <Label className="text-base font-semibold text-slate-900">Your Signature</Label>
-                </div>
-                <p className="text-sm text-slate-600 mb-4">Select how you'd like to sign this approval</p>
-                <Select value={modalSignatureMode} onValueChange={(v: "typed" | "draw" | "upload") => setModalSignatureMode(v)}>
-                  <SelectTrigger className="border-slate-300 bg-white"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="typed">Type your name</SelectItem>
-                    <SelectItem value="draw">Draw your signature</SelectItem>
-                    <SelectItem value="upload">Upload signature image</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="mt-4 space-y-3">
-                  {modalSignatureMode === "typed" && (
-                    <Input 
-                      value={modalSignatureText} 
-                      onChange={(e) => setModalSignatureText(e.target.value)} 
-                      placeholder="Your full name (e.g. OHENEBA BOAMAH)"
-                      className="border-slate-300"
-                    />
-                  )}
-                  {modalSignatureMode === "upload" && (
-                    <div className="rounded-lg border-2 border-dashed border-slate-300 p-4 hover:border-slate-400 transition-colors">
-                      <Input 
-                        type="file" 
-                        accept="image/png,image/jpeg,image/webp" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (!file) return
-                          const reader = new FileReader()
-                          reader.onload = (ev) => setModalSignatureDataUrl(ev.target?.result as string)
-                          reader.readAsDataURL(file)
-                        }}
-                        className="cursor-pointer"
-                      />
-                      <p className="text-xs text-slate-500 mt-2">PNG, JPEG, or WebP (max 5MB)</p>
-                    </div>
-                  )}
-                  {modalSignatureMode === "draw" && (
-                    <div className="rounded-lg border border-slate-300 overflow-hidden bg-white">
-                      <SignaturePad value={modalSignatureDataUrl} onChange={setModalSignatureDataUrl} />
-                    </div>
-                  )}
-                </div>
-              </div>
+          {/* ── Two-panel body ──────────────────────────────────────────── */}
+          <div className="flex flex-1 overflow-hidden" style={{ height: "calc(90vh - 57px - 57px)" }}>
 
-              {/* Decision Section */}
-              <div className="rounded-lg border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold">2</div>
-                  <Label className="text-base font-semibold text-slate-900">Final Decision</Label>
+            {/* LEFT — scrollable memo preview */}
+            <div className="flex-1 overflow-y-auto bg-slate-50 p-4 border-r border-slate-200">
+              <div className="mx-auto max-w-[680px] border border-slate-200 bg-white px-8 py-6 shadow-sm" id="memo-preview-content">
+                {/* Letterhead */}
+                <div className="relative min-h-[72px] border-b border-slate-300 pb-3">
+                  <img src="/images/qcc-logo.png" alt="QCC logo" className="absolute left-0 top-2 h-12 w-12 object-contain" draggable={false} />
+                  <div className="text-center font-serif">
+                    <div className="text-[15px] font-bold uppercase tracking-wide text-green-800">QUALITY CONTROL COMPANY LTD.</div>
+                    <div className="text-[15px] font-bold uppercase tracking-wide text-green-800">(COCOBOD)</div>
+                  </div>
+                  <div className="absolute right-0 top-3 text-right font-serif text-[10px] italic text-slate-600">
+                    <div>P.O Box M14</div>
+                    <div>Accra Ghana</div>
+                  </div>
                 </div>
-                <p className="text-sm text-slate-600 mb-4">Choose to approve or reject this loan request</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setModalDecision("approve")}
-                    className={`relative p-4 rounded-lg border-2 transition-all ${
-                      modalDecision === "approve"
-                        ? "border-green-500 bg-green-50 shadow-lg"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <CheckCircle2 className={`h-5 w-5 ${modalDecision === "approve" ? "text-green-600" : "text-slate-400"}`} />
-                      <span className={`font-semibold ${modalDecision === "approve" ? "text-green-700" : "text-slate-700"}`}>Approve</span>
-                    </div>
-                    <p className={`text-xs ${modalDecision === "approve" ? "text-green-600" : "text-slate-500"}`}>Grant the loan request</p>
-                  </button>
-                  <button
-                    onClick={() => setModalDecision("reject")}
-                    className={`relative p-4 rounded-lg border-2 transition-all ${
-                      modalDecision === "reject"
-                        ? "border-red-500 bg-red-50 shadow-lg"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <XCircle className={`h-5 w-5 ${modalDecision === "reject" ? "text-red-600" : "text-slate-400"}`} />
-                      <span className={`font-semibold ${modalDecision === "reject" ? "text-red-700" : "text-slate-700"}`}>Reject</span>
-                    </div>
-                    <p className={`text-xs ${modalDecision === "reject" ? "text-red-600" : "text-slate-500"}`}>Deny the request</p>
-                  </button>
-                </div>
+                {/* Editable body */}
+                <Textarea
+                  value={modalMemoText}
+                  onChange={(e) => setModalMemoText(e.target.value)}
+                  className="mt-4 min-h-[560px] w-full resize-y border-0 p-0 font-serif text-[12.5px] leading-7 shadow-none focus-visible:ring-0"
+                  placeholder="Memo text will appear here..."
+                />
+                {/* Signature block */}
+                {modalSignatureMode === "typed" && modalSignatureText && (
+                  <div className="mt-4 font-serif">
+                    <div className="w-48 border-b border-slate-400 pb-1 text-base font-bold italic">{modalSignatureText}</div>
+                    <div className="mt-1 text-[12px] font-semibold">DEPUTY DIRECTOR HUMAN RESOURCE</div>
+                    <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
+                  </div>
+                )}
+                {modalSignatureMode !== "typed" && modalSignatureDataUrl && (
+                  <div className="mt-4 font-serif">
+                    <img src={modalSignatureDataUrl} alt="Signature" className="max-h-16 border-b border-slate-400 pb-1" draggable={false} />
+                    <div className="mt-1 text-[12px] font-semibold">DEPUTY DIRECTOR HUMAN RESOURCE</div>
+                    <div className="text-[12px] font-semibold">FOR: MANAGING DIRECTOR</div>
+                  </div>
+                )}
               </div>
             </div>
-          )}
 
-          {/* Modern Footer with Clear Action Hierarchy */}
-          <DialogFooter className="gap-2 flex-wrap border-t border-slate-200 pt-6">
-            <div className="flex gap-2 flex-1 flex-wrap">
-              <Button 
-                variant="outline" 
+            {/* RIGHT — compact controls panel */}
+            <div className="w-72 shrink-0 flex flex-col overflow-y-auto bg-white">
+              <div className="flex-1 p-4 space-y-4">
+
+                {/* Missing signature warning */}
+                {isSignatureMissing && p?.directorHr && (
+                  <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 p-3">
+                    <div className="flex gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-amber-900">Signature required</p>
+                        <p className="text-xs text-amber-700 mt-0.5">Save your signature in Setup before approving.</p>
+                        <Button size="sm" variant="outline" className="mt-2 h-7 text-xs text-amber-700 border-amber-300 hover:bg-amber-100" onClick={() => {
+                          setMemoReviewModal((s) => ({ ...s, open: false }))
+                          setActiveTab("setup")
+                        }}>
+                          Go to Setup
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 1 — Signature */}
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="h-6 w-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">1</span>
+                    <span className="text-sm font-semibold text-slate-800">Your Signature</span>
+                  </div>
+                  <Select value={modalSignatureMode} onValueChange={(v: "typed" | "draw" | "upload") => setModalSignatureMode(v)}>
+                    <SelectTrigger className="h-8 text-xs border-slate-300 bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="typed">Type your name</SelectItem>
+                      <SelectItem value="draw">Draw signature</SelectItem>
+                      <SelectItem value="upload">Upload image</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="mt-3">
+                    {modalSignatureMode === "typed" && (
+                      <Input
+                        value={modalSignatureText}
+                        onChange={(e) => setModalSignatureText(e.target.value)}
+                        placeholder="Full name"
+                        className="h-8 text-xs border-slate-300"
+                      />
+                    )}
+                    {modalSignatureMode === "upload" && (
+                      <div className="rounded border-2 border-dashed border-slate-300 p-2">
+                        <Input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const reader = new FileReader()
+                            reader.onload = (ev) => setModalSignatureDataUrl(ev.target?.result as string)
+                            reader.readAsDataURL(file)
+                          }}
+                          className="h-7 text-xs cursor-pointer"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">PNG / JPEG / WebP</p>
+                      </div>
+                    )}
+                    {modalSignatureMode === "draw" && (
+                      <div className="rounded border border-slate-300 overflow-hidden bg-white">
+                        <SignaturePad value={modalSignatureDataUrl} onChange={setModalSignatureDataUrl} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Step 2 — Decision */}
+                {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr" || memoReviewModal.row.status === "pending_hr_executive_review") && (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="h-6 w-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">2</span>
+                      <span className="text-sm font-semibold text-slate-800">Decision</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setModalDecision("approve")}
+                        className={`p-2.5 rounded-md border-2 transition-all text-center ${
+                          modalDecision === "approve"
+                            ? "border-green-500 bg-green-50"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <CheckCircle2 className={`h-5 w-5 mx-auto mb-1 ${modalDecision === "approve" ? "text-green-600" : "text-slate-400"}`} />
+                        <span className={`block text-xs font-semibold ${modalDecision === "approve" ? "text-green-700" : "text-slate-600"}`}>Approve</span>
+                        <span className={`block text-[10px] ${modalDecision === "approve" ? "text-green-600" : "text-slate-400"}`}>Send to MD</span>
+                      </button>
+                      <button
+                        onClick={() => setModalDecision("reject")}
+                        className={`p-2.5 rounded-md border-2 transition-all text-center ${
+                          modalDecision === "reject"
+                            ? "border-red-500 bg-red-50"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <XCircle className={`h-5 w-5 mx-auto mb-1 ${modalDecision === "reject" ? "text-red-600" : "text-slate-400"}`} />
+                        <span className={`block text-xs font-semibold ${modalDecision === "reject" ? "text-red-700" : "text-slate-600"}`}>Reject</span>
+                        <span className={`block text-[10px] ${modalDecision === "reject" ? "text-red-600" : "text-slate-400"}`}>Deny request</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Footer action bar ───────────────────────────────────────── */}
+          <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
-                className="border-slate-300 text-slate-700 hover:bg-slate-50"
+                className="h-8 text-xs"
               >
-                Close
+                Cancel
               </Button>
               {memoReviewModal.row && (
-                <Button 
+                <Button
                   variant="outline"
-                  onClick={() => {
-                    if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText)
-                  }}
-                  className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2"
+                  size="sm"
+                  onClick={() => { if (memoReviewModal.row) void generateMemoPdf(memoReviewModal.row, modalMemoText, modalSignatureText) }}
+                  className="h-8 text-xs gap-1.5"
                 >
-                  <Download className="h-4 w-4" /> Preview PDF
+                  <Download className="h-3.5 w-3.5" /> Preview PDF
                 </Button>
               )}
               {memoReviewModal.row && (
-                <Button 
-                  variant="secondary"
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => saveMemoChanges()}
                   disabled={isSavingMemo}
-                  className="gap-2 flex-1 min-w-fit"
+                  className="h-8 text-xs gap-1.5"
                 >
-                  {isSavingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSavingMemo ? "Saving..." : "Save Draft Changes"}
+                  {isSavingMemo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  {isSavingMemo ? "Saving..." : "Save Draft"}
                 </Button>
               )}
             </div>
+
+            {/* Primary approve / reject CTA */}
             {memoReviewModal.row && (memoReviewModal.row.status === "awaiting_hr_executives" || memoReviewModal.row.status === "awaiting_director_hr" || memoReviewModal.row.status === "pending_hr_executive_review") && (
               <Button
-                className={`gap-2 font-semibold text-base py-5 px-6 flex-1 min-w-fit ${
+                size="sm"
+                className={`h-8 text-xs font-semibold gap-1.5 px-4 ${
                   modalDecision === "approve"
-                    ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
-                    : "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-lg"
+                    ? "bg-green-600 hover:bg-green-700 text-white shadow"
+                    : "bg-red-600 hover:bg-red-700 text-white shadow"
                 }`}
                 disabled={isSignatureMissing && modalDecision === "approve"}
-                title={isSignatureMissing && modalDecision === "approve" ? "Please save your signature in Setup & Linkage before approving" : ""}
+                title={isSignatureMissing && modalDecision === "approve" ? "Save your signature first in Setup & Linkage" : ""}
                 onClick={async () => {
                   const sigText = modalSignatureMode === "typed" ? modalSignatureText : null
                   const sigUrl = modalSignatureMode !== "typed" ? modalSignatureDataUrl : null
@@ -7627,25 +7622,24 @@ export default function LoanAppPage() {
                     signature_text: sigText,
                     signature_data_url: sigUrl,
                     director_letter: modalMemoText,
-                    note: memoReviewModal.row?.status === "awaiting_hr_executives" ? "HR Executive decision via memo review" : memoReviewModal.row?.status === "pending_hr_executive_review" ? "HR Executive approval via memo review" : "Director HR final decision via memo review",
+                    note: memoReviewModal.row?.status === "pending_hr_executive_review"
+                      ? "HR Executive approval via memo review"
+                      : memoReviewModal.row?.status === "awaiting_hr_executives"
+                      ? "HR Executive decision via memo review"
+                      : "Director HR final decision via memo review",
                   })
                   setMemoReviewModal((s) => ({ ...s, open: false }))
                 }}
               >
                 {modalDecision === "approve" ? (
-                  <>
-                    <CheckCircle2 className="h-5 w-5" />
-                    {memoReviewModal.row?.status === "pending_hr_executive_review" ? "Sign & Send to MD" : "Finalize Approval"}
-                  </>
+                  <><CheckCircle2 className="h-3.5 w-3.5" /> Sign &amp; Send to MD</>
                 ) : (
-                  <>
-                    <XCircle className="h-5 w-5" />
-                    Reject & Notify Staff
-                  </>
+                  <><XCircle className="h-3.5 w-3.5" /> Reject &amp; Notify Staff</>
                 )}
               </Button>
             )}
-          </DialogFooter>
+          </div>
+
         </DialogContent>
       </Dialog>
 
