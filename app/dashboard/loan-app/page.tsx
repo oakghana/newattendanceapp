@@ -1212,7 +1212,7 @@ export default function LoanAppPage() {
     }
 
     // Loan Office tab: for HR Loan Office staff to process HOD-approved loans and perform FD checks
-    if (canAccessLoanOfficeWorkspace && p?.loanOffice) {
+    if (canAccessLoanOfficeWorkspace || p?.loanOffice) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
 
@@ -3131,7 +3131,7 @@ export default function LoanAppPage() {
                   <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-3 ${isApproved ? "bg-emerald-600" : isRejected ? "bg-red-600" : "bg-gradient-to-r from-violet-700 to-purple-600"} text-white`}>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-widest opacity-80">{req.request_number}</p>
-                      <h3 className="text-lg font-bold leading-tight">{req.loan_type_label}</h3>
+                      <h3 className="text-lg font-bold leading-tight">{req.loan_type_label} - {req.staff_full_name || "REQUESTING STAFF"}</h3>
                       <p className="text-sm opacity-90 mt-0.5">GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
