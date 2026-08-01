@@ -1473,10 +1473,10 @@ export function StaffManagement() {
         } : null}
         currentLinks={(hodLinkStaff as any)?.hod_links?.map((hod: any) => ({
           id: hod.id,
-          name: `${hod.first_name} ${hod.last_name}`,
+          name: hod.name || `${hod.first_name || ''} ${hod.last_name || ''}`.trim() || 'Unknown HOD',
           employee_id: hod.employee_id || '',
           role: hod.role,
-          department: hod.departments?.name || '',
+          department: hod.department || hod.departments?.name || '',
         })) || []}
         availableHODs={hodCandidates.map((hod: any) => ({
           id: hod.id,
