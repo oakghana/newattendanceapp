@@ -319,9 +319,22 @@ export async function GET() {
     }
     const reviewerScopedStaffIds = Array.from(new Set(linkedStaffIds))
 
-    // Also fetch ALL HODs linked to THIS user (if staff) so requests broadcast to all linked HODs
+    // Fetch staff linked to THIS user
+    // If user is HOD: fetch all STAFF linked to them (to show their requests in myTasks)
+    // If user is STAFF: fetch all HODs linked to them (to broadcast requests to all HODs)
     let linkedHodIds: string[] = []
-    if (role !== "admin" && !isRegionalManager && !isDepartmentHead) {
+    let staffLinkedToHodIds: string[] = []
+    
+    if (isRegionalManager || isDepartmentHead || role === "admin" || (permissions.hod && !isRegionalManager && !isDepartmentHead)) {
+      // User IS a HOD - fetch all STAFF linked to them
+      const { data: staffLinkageRows } = await admin
+        .from("loan_hod_linkages")
+        .select("staff_user_id")
+        .eq("hod_user_id", user.id)
+        .limit(5000)
+      staffLinkedToHodIds = (staffLinkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
+    } else {
+      // User is STAFF - fetch all HODs linked to them
       const { data: hodLinkageRows } = await admin
         .from("loan_hod_linkages")
         .select("hod_user_id")
@@ -329,7 +342,7 @@ export async function GET() {
         .limit(5000)
       linkedHodIds = (hodLinkageRows || []).map((row: any) => row.hod_user_id).filter(Boolean)
     }
-    const staffLinkedHodIds = Array.from(new Set(linkedHodIds))
+    const staffLinkedHodIds = Array.from(new Set(staffLinkedToHodIds))
 
     const loanTypesWithTermsQuery = () =>
       admin
