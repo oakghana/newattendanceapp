@@ -551,46 +551,42 @@ export async function GET() {
         ? admin.from("loan_request_timeline").select("*").in("loan_request_id", myRequestIds).order("created_at", { ascending: true })
         : Promise.resolve({ data: [], error: null } as any),
       // myTasks: requests where user is explicitly assigned as reviewer
-      // PLUS: if user is HOD, also include pending_hod requests from staff linked to them
-      (async () => {
-        const explicitTasksPromise = admin
-          .from("loan_requests")
-          .select("*")
-          .or(
-            [
-              `hod_reviewer_id.eq.${user.id}`,
-              `loan_office_reviewer_id.eq.${user.id}`,
-              `accounts_reviewer_id.eq.${user.id}`,
-              `committee_reviewer_id.eq.${user.id}`,
-              `hr_officer_id.eq.${user.id}`,
-              `director_hr_id.eq.${user.id}`,
-            ].join(","),
-          )
-          .order("updated_at", { ascending: false })
-
-        // If user is a HOD, also fetch pending_hod requests from their linked staff
-        let linkedStaffTasksPromise = Promise.resolve({ data: [], error: null } as any)
-        if ((permissions.hod || viewAllTabs) && staffLinkedHodIds.length > 0) {
-          linkedStaffTasksPromise = admin
-            .from("loan_requests")
-            .select("*")
-            .in("user_id", staffLinkedHodIds)
-            .eq("status", "pending_hod")
-            .order("created_at", { ascending: false })
-        }
-
-        const [explicit, linkedStaff] = await Promise.all([explicitTasksPromise, linkedStaffTasksPromise])
-
-        // Merge and deduplicate by request ID
-        const merged = [...(explicit.data || []), ...(linkedStaff.data || [])]
-        const uniqueMap = new Map(merged.map((r: any) => [r.id, r]))
-        const unique = Array.from(uniqueMap.values()).sort((a: any, b: any) => 
-          new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+      admin
+        .from("loan_requests")
+        .select("*")
+        .or(
+          [
+            `hod_reviewer_id.eq.${user.id}`,
+            `loan_office_reviewer_id.eq.${user.id}`,
+            `accounts_reviewer_id.eq.${user.id}`,
+            `committee_reviewer_id.eq.${user.id}`,
+            `hr_officer_id.eq.${user.id}`,
+            `director_hr_id.eq.${user.id}`,
+          ].join(","),
         )
-
-        return { data: unique, error: explicit.error || linkedStaff.error }
-      })(),
+        .order("updated_at", { ascending: false }),
     ])
+
+    // After explicit tasks are fetched, get linked staff tasks if user is HOD
+    let linkedStaffRes = { data: [], error: null } as any
+    if ((permissions.hod || viewAllTabs) && staffLinkedHodIds && staffLinkedHodIds.length > 0) {
+      linkedStaffRes = await admin
+        .from("loan_requests")
+        .select("*")
+        .in("user_id", staffLinkedHodIds)
+        .eq("status", "pending_hod")
+        .order("created_at", { ascending: false })
+    }
+
+    // Merge explicit tasks with linked staff tasks and deduplicate
+    if (linkedStaffRes.data && linkedStaffRes.data.length > 0 && myTasksRes.data) {
+      const merged = [...myTasksRes.data, ...linkedStaffRes.data]
+      const uniqueMap = new Map(merged.map((r: any) => [r.id, r]))
+      const uniqueTasks = Array.from(uniqueMap.values()).sort((a: any, b: any) => 
+        new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+      )
+      myTasksRes.data = uniqueTasks
+    }
 
     const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes]
     const schemaError = responses.find((r: any) => r?.error && isSchemaIssue(r.error))
