@@ -1108,6 +1108,7 @@ export default function LoanAppPage() {
   const [allSearch, setAllSearch] = useState("")
   const [allStatus, setAllStatus] = useState("all")
   const [allSort, setAllSort] = useState<"newest" | "oldest">("newest")
+  const [allFdFilter, setAllFdFilter] = useState<"all" | "good" | "poor" | "archive">("all")
   const [allPage, setAllPage] = useState(1)
   const [allLocation, setAllLocation] = useState("all")
   const [allDept, setAllDept] = useState("all")
@@ -1512,10 +1513,22 @@ export default function LoanAppPage() {
   }, [data?.myTasks, tasksSearch, tasksStatus, tasksSort])
 
   const filteredAllLoans = useMemo(() => {
-    // Exclude archived loans from active view
-    const activeLoans = (data?.inbox?.allLoans || []).filter(loan => loan.status !== "archived")
-    return filterAndSortRows(activeLoans, allSearch, allStatus, allSort, allLocation, allDept)
-  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept])
+    let loans = data?.inbox?.allLoans || []
+    
+    // Apply FD filter
+    if (allFdFilter === "good") {
+      loans = loans.filter(loan => loan.fd_good === true)
+    } else if (allFdFilter === "poor") {
+      loans = loans.filter(loan => loan.fd_good === false && loan.fd_score != null)
+    } else if (allFdFilter === "archive") {
+      loans = loans.filter(loan => loan.status === "archived")
+    } else {
+      // 'all' - exclude archived loans from active view
+      loans = loans.filter(loan => loan.status !== "archived")
+    }
+    
+    return filterAndSortRows(loans, allSearch, allStatus, allSort, allLocation, allDept)
+  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept, allFdFilter])
 
   const filteredArchivedLoans = useMemo(() => {
     // Show only archived loans
@@ -5628,6 +5641,38 @@ export default function LoanAppPage() {
               })()}
             </CardHeader>
             <CardContent className="space-y-3 pt-2">
+              {/* FD Status Filter Tabs */}
+              <div className="flex gap-2 flex-wrap">
+                <Badge 
+                  variant={allFdFilter === "all" ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => setAllFdFilter("all")}
+                >
+                  All Loans
+                </Badge>
+                <Badge 
+                  variant={allFdFilter === "good" ? "default" : "outline"}
+                  className="bg-green-600 hover:bg-green-700 cursor-pointer"
+                  onClick={() => setAllFdFilter("good")}
+                >
+                  Good FD
+                </Badge>
+                <Badge 
+                  variant={allFdFilter === "poor" ? "default" : "outline"}
+                  className="bg-amber-600 hover:bg-amber-700 cursor-pointer"
+                  onClick={() => setAllFdFilter("poor")}
+                >
+                  Poor FD
+                </Badge>
+                <Badge 
+                  variant={allFdFilter === "archive" ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => setAllFdFilter("archive")}
+                >
+                  Archive
+                </Badge>
+              </div>
+
               {/* Filters row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-center bg-slate-50 rounded-lg p-3 border">
                 <Input
