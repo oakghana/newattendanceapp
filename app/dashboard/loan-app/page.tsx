@@ -179,6 +179,7 @@ type WorkflowResponse = {
     hrOffice: LoanRequest[]
     directorHr: LoanRequest[]
     directorGoodFd: LoanRequest[]
+    hrExecutive: LoanRequest[]
     allLoans: LoanRequest[]
   }
 }
@@ -1205,7 +1206,7 @@ export default function LoanAppPage() {
       accounts: data?.inbox?.accounts?.length || 0,
       committee: data?.inbox?.committee?.length || 0,
       hr: data?.inbox?.hrOffice?.length || 0,
-      director: data?.inbox?.directorHr?.length || 0,
+      director: data?.inbox?.hrExecutive?.length || 0,
       all: activeLoansCount,
       archived: archivedLoansCount,
       mine: data?.myTasks?.length || 0,
