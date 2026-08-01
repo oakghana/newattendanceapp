@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,10 +48,12 @@ export function FDCalculationSubmission({ loanRequest, onSubmitComplete }: FDCal
   const [fdTab, setFdTab] = useState('salary')
   const [calculating, setCalculating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [sending, setSending] = useState(false)
   const [result, setResult] = useState<FDCalculationResult | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [outstandingOpen, setOutstandingOpen] = useState(false)
   const [accountsNotes, setAccountsNotes] = useState('')
+  const [isSentForApproval, setIsSentForApproval] = useState(false)
 
   const [salaryPerAnnum, setSalaryPerAnnum] = useState('')
   const [otherAllowances, setOtherAllowances] = useState('')
@@ -68,6 +70,41 @@ export function FDCalculationSubmission({ loanRequest, onSubmitComplete }: FDCal
       .map(([k, v]) => [k, parseFloat(v as string) || 0])
       .filter(([, v]) => (v as number) > 0)
   ) as OutstandingLoans
+
+  // Auto-recalculate FD when any field changes (real-time calculation)
+  useEffect(() => {
+    const autoRecalculate = () => {
+      if (!salaryPerAnnum && !otherAllowances && !grossDeduction && Object.keys(outstanding).length === 0) {
+        return // Don't calculate with empty fields
+      }
+      
+      setErrors([])
+      try {
+        const input: FDCalculationInput = {
+          staffNumber: loanRequest.staff_number,
+          staffName: loanRequest.staff_full_name,
+          salary_per_annum: parseFloat(salaryPerAnnum) || 0,
+          other_allowances_monthly: parseFloat(otherAllowances) || 0,
+          gross_deduction_monthly: parseFloat(grossDeduction) || 0,
+          requested_loan_amount: loanRequest.requested_amount,
+          recovery_period_months: loanRequest.repayment_duration_months,
+          loan_type: loanRequest.loan_type_label,
+          outstanding_loans: parsedOutstanding,
+        }
+        const validationErrors = validateFDInput(input)
+        if (validationErrors.length === 0) {
+          const calc = calculateFD(input)
+          setResult(calc)
+        }
+      } catch (err) {
+        console.error('[v0] FD auto-calculation error:', err)
+      }
+    }
+
+    // Debounce auto-calculation to avoid excessive re-renders
+    const timer = setTimeout(autoRecalculate, 500)
+    return () => clearTimeout(timer)
+  }, [salaryPerAnnum, otherAllowances, grossDeduction, outstanding, loanRequest])
 
   const handleCalculate = () => {
     setCalculating(true)
@@ -137,6 +174,47 @@ export function FDCalculationSubmission({ loanRequest, onSubmitComplete }: FDCal
       toast({ title: 'Network Error', description: 'Could not reach server', variant: 'destructive' })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleSendForApproval = async () => {
+    if (!result) return
+    setSending(true)
+    try {
+      const res = await fetch('/api/loan/fd-send-approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loan_request_id: loanRequest.id,
+          fd_score: result.fd_score,
+          fd_good: result.fd_good,
+          fd_calculation_data: {
+            salary_per_annum: result.salary_per_annum,
+            consolidated_salary_per_month: result.consolidated_salary_per_month,
+            other_allowances: result.other_allowances_per_month,
+            gross_salary_monthly: result.gross_salary_per_month,
+            gross_deductions_monthly: result.gross_deduction_monthly,
+            loan_installment_monthly: result.loan_installment_monthly,
+            total_deductions_monthly: result.total_deduction_monthly,
+            net_salary_monthly: result.net_salary_monthly,
+            half_gross_monthly: result.half_gross_salary_per_month,
+            net_to_gross_ratio: result.net_to_gross_ratio,
+            total_outstanding_loans: result.total_outstanding,
+            outstanding_loans: parsedOutstanding,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast({ title: 'Sent for Approval', description: `FD Score ${result.fd_score}/100 sent to Accounts Executive` })
+        setIsSentForApproval(true)
+      } else {
+        toast({ title: 'Send Failed', description: data.error || 'Unknown error', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network Error', description: 'Could not reach server', variant: 'destructive' })
+    } finally {
+      setSending(false)
     }
   }
 
@@ -362,9 +440,29 @@ export function FDCalculationSubmission({ loanRequest, onSubmitComplete }: FDCal
                     className="min-h-[64px] text-sm" />
                 </div>
 
-                <Button onClick={handleSubmit} disabled={submitting} size="lg" className="w-full">
-                  {submitting ? 'Submitting...' : 'Submit FD to Accounts Review'}
-                </Button>
+                <div className="space-y-2">
+                  <Button onClick={handleSubmit} disabled={submitting} size="lg" className="w-full">
+                    {submitting ? 'Submitting...' : 'Submit FD to Accounts Review'}
+                  </Button>
+                  
+                  {!isSentForApproval && (
+                    <Button 
+                      onClick={handleSendForApproval} 
+                      disabled={sending || isSentForApproval} 
+                      size="lg" 
+                      variant="outline"
+                      className="w-full border-green-300 text-green-700 hover:bg-green-50"
+                    >
+                      {sending ? 'Sending...' : '✓ Send for Approval'}
+                    </Button>
+                  )}
+                  
+                  {isSentForApproval && (
+                    <div className="w-full px-3 py-2 bg-green-100 border border-green-300 rounded text-xs text-center text-green-700 font-medium">
+                      ✓ Sent for Accounts Executive Approval
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs text-center text-muted-foreground">
                   No attachment required — calculation is automatically captured and recorded
                 </p>
