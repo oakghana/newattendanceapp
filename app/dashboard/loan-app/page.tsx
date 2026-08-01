@@ -20,10 +20,12 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
+import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
+import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-approved"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, CheckCircle2, ChevronDown, Clock, Download, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -98,6 +100,9 @@ type LoanRequest = {
   updated_at?: string
   hr_note?: string | null
   
+  // FD / Accounts fields
+  monthly_deduction?: number | null
+
   // Repayment tracking
   repayment_plan_generated_at?: string | null
   repayment_duration_months?: number
@@ -925,8 +930,8 @@ export default function LoanAppPage() {
   const [directorLetter, setDirectorLetter] = useState("")
   const [memoPreviewLoanId, setMemoPreviewLoanId] = useState<string | null>(null)
 
-  // ── Action modal state ──────────────────────────────────────────────
-  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
+  // ── Action modal state ──────────────────���───────────────────────────
+  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed" | "push_to_hr_executive"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
   const [isRestoringAll, setIsRestoringAll] = useState(false)
@@ -939,6 +944,7 @@ export default function LoanAppPage() {
   const [modalFdScore, setModalFdScore] = useState("")
   const [modalFdNote, setModalFdNote] = useState("")
   const [modalFdProof, setModalFdProof] = useState<File | null>(null)
+
   const [modalDisbursement, setModalDisbursement] = useState("")
   const [modalRecovery, setModalRecovery] = useState("")
   const [modalMonths, setModalMonths] = useState("")
@@ -1103,6 +1109,7 @@ export default function LoanAppPage() {
   const [allSearch, setAllSearch] = useState("")
   const [allStatus, setAllStatus] = useState("all")
   const [allSort, setAllSort] = useState<"newest" | "oldest">("newest")
+  const [allFdFilter, setAllFdFilter] = useState<"all" | "good" | "poor" | "archive">("all")
   const [allPage, setAllPage] = useState(1)
   const [allLocation, setAllLocation] = useState("all")
   const [allDept, setAllDept] = useState("all")
@@ -1227,7 +1234,12 @@ export default function LoanAppPage() {
       // For now, display FD Approval tab without count
       tabs.push({ 
         key: "fd-approval", 
-        label: "FD Approval"
+        label: `FD Approval (${c.fdApproval || 0})`
+      })
+      // Add FD Completed tab for archived/historical FD records
+      tabs.push({
+        key: "fd-completed",
+        label: "FD Completed/Archived"
       })
     }
 
@@ -1245,28 +1257,33 @@ export default function LoanAppPage() {
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     }
 
-    // Repayment Tracking tab: only for Loan Office and Accounts executives
-    if (canAccessLoanOfficeWorkspace || isAccountsExecutive) {
+    // Repayment Tracking tab: for Loan Office, Accounts executives, and HR Loan Office
+    if (canAccessLoanOfficeWorkspace || isAccountsExecutive || isHRLoanOffice) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
-    // Analytics tab for Loan Office and Accounts executives
-    if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
-    if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
+    // Analytics tab for Loan Office, Accounts executives, and HR Loan Office (view only)
+    if (canAccessLoanOfficeWorkspace || p?.accounts || isHRLoanOffice) tabs.push({ key: "analytics", label: "Analytics" })
+    // Leave Payment: Accounts executives, viewAllTabs, and HR Loan Office
+    if (p?.accounts || p?.viewAllTabs || isHRLoanOffice) tabs.push({ key: "leave-payment", label: "Leave Payment" })
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-    if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    // Payment Approvals: HR/Accounts executives and HR Loan Office
+    if (isHrExecutive || isAccountsExecutive || isHRLoanOffice) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
-    // My Tasks: hidden for pure HR Executives — they act via the Executive HR queue, not the tasks inbox
-    if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
+    // My Tasks: hidden for pure HR Executives and HR Loan Office — they work on forwarded queues, not personal tasks
+    if (!isHrExecutiveOnly && !isHRLoanOffice && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
-    if (p?.allLoans || p?.viewAllTabs) {
+    // All Loans: admins, viewAllTabs, and HR Loan Office (read-only view with download access)
+    if (p?.allLoans || p?.viewAllTabs || isHRLoanOffice) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
       if (c.archived > 0) {
         tabs.push({ key: "archive", label: `Archive (${c.archived})` })
       }
+    } else if (normalizedRole !== "hr_loan_office" && (p?.allLoans || p?.viewAllTabs)) {
+      tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     return tabs
   }, [data, canAccessLoanOfficeWorkspace, isAdmin])
@@ -1359,6 +1376,8 @@ export default function LoanAppPage() {
       isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
     const isPending = (row: LoanRequest) =>
       row.fd_good === null && row.fd_score === null && !isArchivableStatus(row.status) && !isArchivedStatus(row.status)
+    const isFdApprovedByAccounts = (row: LoanRequest) =>
+      row.status === "pending_hr_loan_office"
 
     return {
       pending: loanOfficeRowsForSelectedType.filter((row) => isPending(row)),
@@ -1366,6 +1385,7 @@ export default function LoanAppPage() {
       "poor-fd": loanOfficeRowsForSelectedType.filter((row) => isPoorFd(row)),
       "good-fd-not-pushed": loanOfficeRowsForSelectedType.filter((row) => isGoodFdNotPushed(row)),
       "sent-for-approval": loanOfficeRowsForSelectedType.filter((row) => row.status === "awaiting_director_hr"),
+      "fd-approved-accounts-exec": loanOfficeRowsForSelectedType.filter((row) => isFdApprovedByAccounts(row)),
       archivable: loanOfficeRowsForSelectedType.filter((row) => isArchivableStatus(row.status)),
       archived: loanOfficeRowsForSelectedType.filter((row) => isArchivedStatus(row.status)),
     }
@@ -1418,7 +1438,7 @@ export default function LoanAppPage() {
   const loanOfficeAnalytics = useMemo(() => {
     const rows = loanOfficeWorkspaceRows
     const terminalStatuses = new Set(["approved_director", "director_rejected", "rejected_fd", "committee_rejected", "hod_rejected"])
-    const pendingStatuses = new Set(["pending_hod", "hod_approved"])
+    const pendingStatuses = new Set(["pending_hod", "hod_approved", "pending_hr_loan_office"])
 
     const stageBreakdown = Array.from(
       rows.reduce((map, row) => {
@@ -1502,10 +1522,22 @@ export default function LoanAppPage() {
   }, [data?.myTasks, tasksSearch, tasksStatus, tasksSort])
 
   const filteredAllLoans = useMemo(() => {
-    // Exclude archived loans from active view
-    const activeLoans = (data?.inbox?.allLoans || []).filter(loan => loan.status !== "archived")
-    return filterAndSortRows(activeLoans, allSearch, allStatus, allSort, allLocation, allDept)
-  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept])
+    let loans = data?.inbox?.allLoans || []
+    
+    // Apply FD filter
+    if (allFdFilter === "good") {
+      loans = loans.filter(loan => loan.fd_good === true)
+    } else if (allFdFilter === "poor") {
+      loans = loans.filter(loan => loan.fd_good === false && loan.fd_score != null)
+    } else if (allFdFilter === "archive") {
+      loans = loans.filter(loan => loan.status === "archived")
+    } else {
+      // 'all' - exclude archived loans from active view
+      loans = loans.filter(loan => loan.status !== "archived")
+    }
+    
+    return filterAndSortRows(loans, allSearch, allStatus, allSort, allLocation, allDept)
+  }, [data?.inbox?.allLoans, allSearch, allStatus, allSort, allLocation, allDept, allFdFilter])
 
   const filteredArchivedLoans = useMemo(() => {
     // Show only archived loans
@@ -3489,13 +3521,14 @@ export default function LoanAppPage() {
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
-                { key: "pending",           label: "Pending FD" },
-                { key: "good-fd",           label: "Good FD" },
-                { key: "poor-fd",           label: "Poor FD" },
-                { key: "good-fd-not-pushed",label: "Not Pushed" },
-                { key: "sent-for-approval", label: "Sent for Approval" },
-                { key: "archivable",        label: "Archivable" },
-                { key: "archived",          label: "Archived" },
+                { key: "pending",                    label: "Pending FD" },
+                { key: "good-fd",                    label: "Good FD" },
+                { key: "poor-fd",                    label: "Poor FD" },
+                { key: "good-fd-not-pushed",        label: "Not Pushed" },
+                { key: "sent-for-approval",         label: "Sent for Approval" },
+                { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
+                { key: "archivable",                label: "Archivable" },
+                { key: "archived",                  label: "Archived" },
               ] as const).map(({ key, label }) => {
                 const count = (loanOfficeStageBuckets as any)[key]?.length ?? 0
                 const isActive = loanOfficeStageTab === key
@@ -3510,7 +3543,13 @@ export default function LoanAppPage() {
                     }`}
                   >
                     {label}
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${isActive ? "bg-white/25" : "bg-slate-100 text-slate-500"}`}>{count}</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                      isActive 
+                        ? "bg-white/25" 
+                        : (["pending", "good-fd", "fd-approved-accounts-exec"].includes(key) && count > 0)
+                        ? "bg-red-100 text-red-700"
+                        : "bg-slate-100 text-slate-500"
+                    }`}>{count}</span>
                   </button>
                 )
               })}
@@ -3650,6 +3689,10 @@ export default function LoanAppPage() {
                               <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>
                                 Review &amp; Forward
                               </Button>
+                            ) : row.status === "pending_hr_loan_office" ? (
+                              <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>
+                                Push to HR Exec
+                              </Button>
                             ) : (
                               <span className="text-[11px] text-slate-400">{statusText(row.status)}</span>
                             )}
@@ -3666,6 +3709,8 @@ export default function LoanAppPage() {
                   <StageCard key={row.id} row={row}>
                     {row.status === "hod_approved" && p?.loanOffice
                       ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>Review &amp; Forward</Button>
+                      : row.status === "pending_hr_loan_office" && p?.loanOffice
+                      ? <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>Push to HR Exec</Button>
                       : <span className="text-xs text-slate-500">{statusText(row.status)}</span>
                     }
                   </StageCard>
@@ -3803,7 +3848,7 @@ export default function LoanAppPage() {
             )}
           </div>
 
-          {/* ── Payment Completion Queue ── */}
+          {/* ── Payment Completion Queue ─��� */}
           {p?.hrOffice && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-5 py-3.5">
@@ -3922,48 +3967,106 @@ export default function LoanAppPage() {
               </div>
             </div>
           </div>
+
+          {/* ── FD-Approved from Accounts Executive ── */}
+          {loanOfficeStageTab === "fd-approved-accounts-exec" && (
+            <div className="mt-6 pt-6 border-t">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">FD-Approved Loans from Accounts Executive</h3>
+                <p className="text-sm text-slate-500">Loans with approved FD scores ready for HR Loan Office processing and disbursement</p>
+              </div>
+              <HRLoanOfficeFDApproved />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="accounts" className="space-y-3">
           <ReadOnlyHint canAct={Boolean(p?.accounts)} roleLabel="Accounts" />
           
-          {/* Accounts Approvals Section for Accounts Executives */}
-          {p?.accounts && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-amber-900">
-                  <CheckCircle2 className="h-5 w-5" />
-                  Loan FD Approvals for Accounts Review
-                </CardTitle>
-                <CardDescription className="text-amber-800">
-                  Loans ready for Accounts executive review and FD score approval
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {loanOfficeWorkspaceRows.filter(r => r.status === "sent_to_accounts" && !r.fd_score).length === 0 ? (
-                  <p className="text-sm text-amber-700">No loans pending Accounts FD review.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {loanOfficeWorkspaceRows
-                      .filter(r => r.status === "sent_to_accounts" && !r.fd_score)
-                      .slice(0, 5)
-                      .map(row => (
-                        <div key={row.id} className="rounded-lg border border-amber-200 bg-white p-3 flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="text-sm font-semibold text-slate-900">{row.request_number} - {row.staff_full_name}</div>
-                            <div className="text-xs text-slate-600 mt-1">{row.loan_type_label} • GHc {Number(row.fixed_amount || row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</div>
-                          </div>
-                          <Button size="sm" className="ml-2 bg-amber-600 hover:bg-amber-700" onClick={() => openActionModal(row, "accounts")}>
-                            Set FD Score
-                          </Button>
-                        </div>
+          {/* FD Calculation Submission for Accounts Loan Office Staff */}
+          {normalizedRole === "accounts_loan_office" && (
+            <>
+              {/* New FD Calculations (Pending) */}
+              <Card className="border-blue-200 bg-blue-50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-blue-900">
+                    <Calculator className="h-5 w-5" />
+                    Submit FD Calculation for Loan Request
+                  </CardTitle>
+                  <CardDescription className="text-blue-800">
+                    Enter staff financial information to automatically calculate their Financial Due Diligence (FD) score. No attachment needed.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {data?.inbox?.accounts && data.inbox.accounts.filter(r => !r.fd_score).length > 0 ? (
+                    <div className="space-y-4">
+                      {data.inbox.accounts.filter(r => !r.fd_score).map(loanReq => (
+                        <FDCalculationSubmission 
+                          key={loanReq.id}
+                          loanRequest={{
+                            id: loanReq.id,
+                            request_number: loanReq.request_number || "",
+                            staff_number: loanReq.staff_number || "",
+                            staff_full_name: loanReq.staff_full_name || "",
+                            requested_amount: loanReq.requested_amount || 0,
+                            repayment_duration_months: loanReq.repayment_duration_months || 12,
+                            loan_type_label: loanReq.loan_type_label,
+                            monthly_deduction: loanReq.monthly_deduction ?? undefined,
+                            status: loanReq.status,
+                            fd_calculated: !!loanReq.fd_score,
+                          }}
+                          onSubmitComplete={() => void loadData()}
+                        />
                       ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-blue-700">No loans awaiting FD calculation submission.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Edit Already-Calculated FD Scores */}
+              {data?.inbox?.accounts && data.inbox.accounts.filter(r => r.fd_score).length > 0 && (
+                <Card className="border-purple-200 bg-purple-50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-purple-900">
+                      <Edit3 className="h-5 w-5" />
+                      Edit FD Calculations
+                    </CardTitle>
+                    <CardDescription className="text-purple-800">
+                      Already-calculated FD scores can be edited here to adjust financial data or re-calculate.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {data.inbox.accounts.filter(r => r.fd_score).map(loanReq => (
+                        <FDCalculationSubmission 
+                          key={`edit-${loanReq.id}`}
+                          loanRequest={{
+                            id: loanReq.id,
+                            request_number: loanReq.request_number || "",
+                            staff_number: loanReq.staff_number || "",
+                            staff_full_name: loanReq.staff_full_name || "",
+                            requested_amount: loanReq.requested_amount || 0,
+                            repayment_duration_months: loanReq.repayment_duration_months || 12,
+                            loan_type_label: loanReq.loan_type_label,
+                            monthly_deduction: loanReq.monthly_deduction ?? undefined,
+                            status: loanReq.status,
+                            fd_calculated: !!loanReq.fd_score,
+                            fd_score: loanReq.fd_score || undefined,
+                            fd_note: loanReq.fd_note || undefined,
+                          }}
+                          onSubmitComplete={() => void loadData()}
+                        />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
           
+
           <Card>
             <CardHeader>
               <CardTitle>Accounts FD Queue</CardTitle>
@@ -4048,7 +4151,7 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "���"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.supporting_document_url ? (
@@ -5201,7 +5304,22 @@ export default function LoanAppPage() {
 
         {/* ── FD Approval Tab (Accounts Executive) ── */}
         <TabsContent value="fd-approval" className="space-y-4">
-          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} />
+          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} userRole={data?.profile?.role || "user"} />
+        </TabsContent>
+
+        {/* ── FD Completed/Archived Tab (Accounts Executive) ── */}
+        <TabsContent value="fd-completed" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle>FD Completed & Archived Records</CardTitle>
+              <CardDescription>Historical FD calculations that have been approved or rejected for archival and record-keeping.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-lg border p-4 text-center text-sm text-slate-500">
+                <p>FD completed records component - Ready for implementation with filtering and archive management</p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
@@ -5424,6 +5542,7 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Loan Type</TableHead>
                         <TableHead className="whitespace-nowrap">Amount (GHc)</TableHead>
                         <TableHead className="whitespace-nowrap">Status</TableHead>
+                        <TableHead className="whitespace-nowrap">Action</TableHead>
                         <TableHead className="whitespace-nowrap">Location</TableHead>
                         <TableHead className="whitespace-nowrap">Attachment</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
@@ -5432,7 +5551,12 @@ export default function LoanAppPage() {
                     </TableHeader>
                     <TableBody>
                       {pagedMyTasks.map((row) => (
-                        <TableRow key={`my-task-${row.id}`}>
+                        <TableRow 
+                          key={`my-task-${row.id}`}
+                          onDoubleClick={() => row.status === "pending_hod" && openActionModal(row, "hod")}
+                          title={row.status === "pending_hod" ? "Double-click or use buttons to Review / Endorse" : ""}
+                          className={row.status === "pending_hod" ? "cursor-pointer hover:bg-emerald-50 transition-colors" : ""}
+                        >
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
                           <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
@@ -5440,6 +5564,29 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {row.status === "pending_hod" ? (
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2 font-semibold"
+                                  onClick={(e) => { e.stopPropagation(); openActionModal(row, "hod") }}
+                                  title="Click to open Review & Decision modal"
+                                >
+                                  Review
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 bg-blue-600 hover:bg-blue-700 text-white text-xs px-2"
+                                  onClick={(e) => { e.stopPropagation(); openActionModal(row, "hod") }}
+                                >
+                                  Endorse
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.staff_location_name || "—"}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.supporting_document_url ? (
@@ -5493,6 +5640,24 @@ export default function LoanAppPage() {
                   {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
                     <div className="pt-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
+                    </div>
+                  )}
+                  {row.status === "pending_hod" && (
+                    <div className="pt-2 flex gap-2">
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => openActionModal(row, "hod")}
+                      >
+                        Review
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => openActionModal(row, "hod")}
+                      >
+                        Endorse
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -5571,6 +5736,38 @@ export default function LoanAppPage() {
               })()}
             </CardHeader>
             <CardContent className="space-y-3 pt-2">
+              {/* FD Status Filter Tabs */}
+              <div className="flex gap-2 flex-wrap">
+                <Badge 
+                  variant={allFdFilter === "all" ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => setAllFdFilter("all")}
+                >
+                  All Loans
+                </Badge>
+                <Badge 
+                  variant={allFdFilter === "good" ? "default" : "outline"}
+                  className="bg-green-600 hover:bg-green-700 cursor-pointer"
+                  onClick={() => setAllFdFilter("good")}
+                >
+                  Good FD
+                </Badge>
+                <Badge 
+                  variant={allFdFilter === "poor" ? "default" : "outline"}
+                  className="bg-amber-600 hover:bg-amber-700 cursor-pointer"
+                  onClick={() => setAllFdFilter("poor")}
+                >
+                  Poor FD
+                </Badge>
+                <Badge 
+                  variant={allFdFilter === "archive" ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => setAllFdFilter("archive")}
+                >
+                  Archive
+                </Badge>
+              </div>
+
               {/* Filters row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-center bg-slate-50 rounded-lg p-3 border">
                 <Input
@@ -6565,7 +6762,7 @@ export default function LoanAppPage() {
 
       {/* ── Action Modal ──────────────────────��─────────────────────── */}
       <Dialog open={actionModal.open} onOpenChange={(o) => setActionModal((s) => ({ ...s, open: o }))}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className={actionModal.actionType === "accounts" ? "max-w-2xl" : "max-w-lg"}>
           <DialogHeader>
             <DialogTitle>
               {actionModal.actionType === "hod" && "HOD Review & Decision"}
@@ -6574,6 +6771,7 @@ export default function LoanAppPage() {
               {actionModal.actionType === "committee" && "Employee Further Information"}
               {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Executive HR"}
               {actionModal.actionType === "payment_completed" && "Mark Loan Payment Completed"}
+              {actionModal.actionType === "push_to_hr_executive" && "Push Approved FD to HR Executive for Signing"}
             </DialogTitle>
             {actionModal.row && (
               <DialogDescription>
@@ -6657,25 +6855,21 @@ export default function LoanAppPage() {
                 <Textarea value={modalMemoCC} onChange={(e) => setModalMemoCC(e.target.value)} placeholder="Managing Director&#10;Deputy Director Finance" rows={2} className="text-xs" />
               </>
             )}
-            {/* Accounts FD */}
-            {actionModal.actionType === "accounts" && (
+            {/* Accounts FD — simple form, full calculation done in Accounts Loan Office */}
+            {actionModal.actionType === "accounts" && actionModal.row && (
               <>
-                <Label className="text-xs">FD Score (Mark out of 100)</Label>
-                <Input type="number" value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
-                <Label className="text-xs">Proof of Concept / Supporting Document * <span className="text-red-500">Required</span></Label>
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 hover:border-slate-400 transition-colors">
-                  <input
-                    type="file"
-                    onChange={(e) => setModalFdProof(e.target.files?.[0] || null)}
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                    className="w-full text-xs"
-                  />
-                  <p className="text-xs text-slate-500 mt-2">
-                    {modalFdProof ? `Selected: ${modalFdProof.name}` : "Upload proof (PDF, Word, or Image)"}
+                <div className="rounded-md border bg-blue-50 p-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>Note:</strong> FD calculations with outstanding loans are handled by the Accounts Loan Office. 
+                    This form is for reference only if already calculated.
                   </p>
                 </div>
-                <Label className="text-xs">Your Comments (optional)</Label>
-                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Anything else you want to say" rows={2} className="text-xs" />
+
+                <Label className="text-xs">FD Score (Mark out of 100)</Label>
+                <Input type="number" min={0} max={100} value={modalFdScore} onChange={(e) => setModalFdScore(e.target.value)} placeholder="e.g. 75" className="h-7 text-xs" />
+
+                <Label className="text-xs">HR Loan Office Remarks (optional)</Label>
+                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Any observations or remarks..." rows={2} className="text-xs" />
               </>
             )}
             {/* Committee - Further Information */}
@@ -6813,40 +7007,24 @@ export default function LoanAppPage() {
               </>
             )}
             {actionModal.actionType === "accounts" && actionModal.row && (
-              <Button 
-                disabled={!modalFdProof}
+              <Button
+                disabled={!modalFdScore}
                 onClick={async () => {
-                  if (!modalFdProof) {
-                    toast({ title: "Missing Attachment", description: "Please upload a proof document before saving the FD score.", variant: "destructive" })
+                  if (!modalFdScore) {
+                    toast({ title: "Enter FD Score", description: "Please enter an FD score before saving.", variant: "destructive" })
                     return
                   }
-                  // Upload FD proof document to storage first
-                  let fdDocumentUrl: string | null = null
-                  try {
-                    const formData = new FormData()
-                    formData.append("file", modalFdProof)
-                    formData.append("folder", "fd-documents")
-                    const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
-                    if (uploadRes.ok) {
-                      const uploadData = await uploadRes.json()
-                      fdDocumentUrl = uploadData.url || null
-                    } else {
-                      const uploadErr = await uploadRes.json()
-                      if (uploadErr.code === "BLOB_NOT_CONFIGURED") {
-                        // Blob not configured — proceed without URL, note will still be saved
-                        fdDocumentUrl = null
-                      } else {
-                        toast({ title: "Upload Failed", description: uploadErr.error || "Could not upload FD document.", variant: "destructive" })
-                        return
-                      }
-                    }
-                  } catch {
-                    toast({ title: "Upload Error", description: "Failed to upload FD document.", variant: "destructive" })
-                    return
-                  }
-                  await runAction({ action: "accounts_fd_update", id: actionModal.row!.id, fd_score: Number(modalFdScore), note: modalFdNote || null, fd_document_url: fdDocumentUrl })
+                  await runAction({
+                    action: "accounts_fd_update",
+                    id: actionModal.row!.id,
+                    fd_score: Number(modalFdScore),
+                    note: modalFdNote || null,
+                    fd_document_url: null,
+                  })
                   setActionModal((s) => ({ ...s, open: false }))
-                }}>Save FD Score</Button>
+                }}>
+                Save FD Score
+              </Button>
             )}
             {actionModal.actionType === "committee" && actionModal.row && (
               <Button variant="outline" onClick={() => setActionModal((s) => ({ ...s, open: false }))}>Close</Button>
@@ -6907,6 +7085,68 @@ export default function LoanAppPage() {
               >
                 Submit Payment Evidence
               </Button>
+            )}
+            {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef}
+                onClick={async () => {
+                  if (!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef) {
+                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields before pushing to HR Executive.", variant: "destructive" })
+                    return
+                  }
+                  await runAction({
+                    action: "push_to_hr_executive",
+                    id: actionModal.row!.id,
+                    hr_loan_office_memo: modalNote,
+                    disbursement_date: modalDisbursement,
+                    recovery_start_date: modalRecovery,
+                    reference_number: modalMemoRef,
+                  })
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}
+              >
+                Push to HR Executive
+              </Button>
+            )}
+            {/* Push to HR Executive */}
+            {actionModal.actionType === "push_to_hr_executive" && (
+              <>
+                <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+                  <p className="text-xs text-blue-900">
+                    This approved FD loan will be forwarded to HR Executive for review, signing, and approval. After HR Executive signs, it will appear on the MD's dashboard for final authorization.
+                  </p>
+                </div>
+                <Label className="text-sm font-semibold">Processing Memo *</Label>
+                <Textarea 
+                  value={modalNote} 
+                  onChange={(e) => setModalNote(e.target.value)} 
+                  placeholder="Add any processing notes or requirements for HR Executive review (e.g., special conditions, disbursement instructions)..." 
+                  rows={3} 
+                  className="text-xs"
+                />
+                <Label className="text-sm font-semibold">Disbursement Date *</Label>
+                <Input 
+                  type="date"
+                  value={modalDisbursement} 
+                  onChange={(e) => setModalDisbursement(e.target.value)} 
+                  className="h-8 text-xs"
+                />
+                <Label className="text-sm font-semibold">Recovery Start Date *</Label>
+                <Input 
+                  type="date"
+                  value={modalRecovery} 
+                  onChange={(e) => setModalRecovery(e.target.value)} 
+                  className="h-8 text-xs"
+                />
+                <Label className="text-sm font-semibold">Reference Number *</Label>
+                <Input 
+                  value={modalMemoRef} 
+                  onChange={(e) => setModalMemoRef(e.target.value)} 
+                  placeholder="e.g. QCC/HR/LOAN/2024/001" 
+                  className="h-8 text-xs"
+                />
+              </>
             )}
           </DialogFooter>
         </DialogContent>

@@ -30,6 +30,7 @@ type ActionKey =
   | "director_finalize"
   | "save_memo_draft"
   | "mark_payment_completed"
+  | "push_to_hr_executive"
 
 function normalizeReferenceNumber(value: string | null | undefined): string | null {
   const raw = String(value || "").trim()
@@ -964,6 +965,37 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request was already processed by another approver. Refresh queue." }, { status: 409 })
       }
       throw updateError
+    }
+
+    if (action === "push_to_hr_executive") {
+      actionHandled = true
+      if (!canDoLoanOffice(role, deptName, deptCode)) {
+        return NextResponse.json({ error: "Only Loan Office staff can push loans to HR Executive" }, { status: 403 })
+      }
+
+      if (req.status !== "pending_hr_loan_office") {
+        return NextResponse.json({ error: "Loan must be in FD-approved status to push to HR Executive" }, { status: 400 })
+      }
+
+      // Update status to pending_hr_executive_review
+      update.status = "pending_hr_executive_review"
+      toStatus = "pending_hr_executive_review"
+
+      // Store the disbursement and recovery dates
+      if (req_body.disbursement_date) update.disbursement_date = req_body.disbursement_date
+      if (req_body.recovery_start_date) update.recovery_start_date = req_body.recovery_start_date
+      if (req_body.reference_number) update.reference_number = req_body.reference_number
+
+      // Log to timeline
+      await timeline(admin, {
+        loan_request_id: req.id,
+        actor_id: user.id,
+        actor_role: "loan_office",
+        action_key: "push_to_hr_executive",
+        from_status: "pending_hr_loan_office",
+        to_status: "pending_hr_executive_review",
+        note: req_body.hr_loan_office_memo || "Forwarded to HR Executive for signing and approval",
+      })
     }
 
     if (action === "mark_payment_completed") {

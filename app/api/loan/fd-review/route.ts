@@ -100,12 +100,35 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Database query failed", details: queryError.message }, { status: 500 })
     }
 
+    // Fetch user profiles to get complete staff names
+    const userIds = (loanRequests || []).map(lr => lr.user_id).filter(Boolean)
+    const { data: userProfiles, error: profilesError } = userIds.length > 0
+      ? await admin
+          .from("user_profiles")
+          .select("id, first_name, last_name, employee_id")
+          .in("id", userIds)
+      : { data: [], error: null }
+
+    if (profilesError) {
+      console.warn("[v0] Warning fetching user profiles:", profilesError)
+    }
+
+    // Create a map of user profiles for easy lookup
+    const profileMap = new Map((userProfiles || []).map(p => [p.id, p]))
+
     // Map to the shape the FD dashboard component expects
-    const reviews = (loanRequests || []).map(loan => ({
+    const reviews = (loanRequests || []).map(loan => {
+      // Get staff name from profile if loan_requests.staff_full_name is missing
+      const profile = profileMap.get(loan.user_id)
+      const staffName = loan.staff_full_name || 
+        (profile ? `${profile.first_name} ${profile.last_name}`.trim() : undefined) ||
+        "Unknown Staff"
+      
+      return {
       id: loan.id,
       loan_request_id: loan.id,
       staff_user_id: loan.user_id,
-      staff_name: loan.staff_full_name,
+      staff_name: staffName,
       staff_number: loan.staff_number,
       loan_type: loan.loan_type_label || loan.loan_type_key,
       requested_amount: loan.requested_amount,
@@ -118,10 +141,12 @@ export async function GET(request: Request) {
       supporting_docs_url: loan.fd_document_url,
       submission_date: loan.loan_office_forwarded_at || loan.created_at,
       submission_memo: loan.loan_office_note || loan.fd_note || "",
-      request_number: loan.request_number || loan.reference_number,
-      review_status: statusParam === "pending_review" ? "pending_review" : statusParam,
-      status: loan.status,
-    }))
+      fd_note: loan.fd_note,
+        request_number: loan.request_number || loan.reference_number,
+        review_status: statusParam === "pending_review" ? "pending_review" : statusParam,
+        status: loan.status,
+      }
+    })
 
     return NextResponse.json({
       success: true,
@@ -172,6 +197,25 @@ export async function PATCH(request: Request) {
 
     const isApproved = review_status === "approved"
 
+    // First, fetch the current loan to preserve original fd_note with calculation details
+    const { data: currentLoan, error: fetchError } = await admin
+      .from("loan_requests")
+      .select("fd_note, staff_full_name")
+      .eq("id", review_id)
+      .single()
+
+    if (fetchError) {
+      console.error("[v0] Error fetching current loan:", fetchError)
+      return NextResponse.json({ error: "Failed to fetch loan details", details: fetchError.message }, { status: 500 })
+    }
+
+    // Preserve original calculation in fd_note, add approval decision at the end
+    const originalNote = currentLoan?.fd_note || ""
+    const approvalMemo = [fd_verification_memo, review_decision].filter(Boolean).join(" | ")
+    const updatedNote = originalNote 
+      ? `${originalNote}\n\n--- Accounts Executive Review (${new Date().toLocaleDateString()}) ---\n${approvalMemo}`
+      : approvalMemo
+
     // Update the loan_requests row directly
     const { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
@@ -180,7 +224,7 @@ export async function PATCH(request: Request) {
         // Move to next stage: approved FD goes to HR loan office; rejected goes back
         status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
         accounts_reviewer_id: user.id,
-        fd_note: [fd_verification_memo, review_decision].filter(Boolean).join(" | "),
+        fd_note: updatedNote,
         fd_checked_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -194,7 +238,7 @@ export async function PATCH(request: Request) {
     }
 
     // Log to loan_request_timeline for audit trail
-    await admin
+    const { error: timelineError } = await admin
       .from("loan_request_timeline")
       .insert({
         loan_request_id: review_id,
@@ -205,7 +249,11 @@ export async function PATCH(request: Request) {
         to_status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
         note: review_decision || (isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive"),
       })
-      .catch(err => console.error("[v0] Timeline log error:", err))
+
+    if (timelineError) {
+      console.warn("[v0] Timeline log error (non-critical):", timelineError)
+      // Don't fail the whole operation if timeline logging fails
+    }
 
     return NextResponse.json({
       success: true,
@@ -215,8 +263,12 @@ export async function PATCH(request: Request) {
         : "FD rejected. Loan Office has been notified.",
     })
   } catch (error) {
-    console.error("[v0] FD review PATCH error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Internal server error"
+    console.error("[v0] FD review PATCH error:", errorMessage)
+    return NextResponse.json({ 
+      error: "Failed to process FD approval",
+      details: errorMessage
+    }, { status: 500 })
   }
 }
 
@@ -250,17 +302,60 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { loan_request_id, fd_score, fd_note, fd_document_url } = body
+    const { 
+      loan_request_id, 
+      fd_score, 
+      fd_good,
+      fd_note, 
+      fd_document_url,
+      fd_calculation_data,
+      accounts_notes,
+      submission_type // 'automated_calculation' or 'manual_upload'
+    } = body
 
     if (!loan_request_id || fd_score === undefined || fd_score === null) {
       return NextResponse.json({ error: "Missing required fields: loan_request_id, fd_score" }, { status: 400 })
+    }
+
+    // Build the notes string with calculation data if automated
+    let finalNotes = fd_note || ""
+    if (submission_type === "automated_calculation" && fd_calculation_data) {
+      // Format outstanding loans if present
+      let outstandingSection = ""
+      if (fd_calculation_data.outstanding_loans && Object.keys(fd_calculation_data.outstanding_loans).length > 0) {
+        const outstandingItems = Object.entries(fd_calculation_data.outstanding_loans)
+          .map(([key, value]) => {
+            // Convert snake_case to Title Case for display
+            const label = key.replace(/_/g, ' ').split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+            return `  - ${label}: GH¢ ${(value as number).toFixed(2)}`
+          })
+          .join('\n')
+        outstandingSection = `\nBalance Outstanding Loans:\n${outstandingItems}`
+      }
+      
+      const calcNotes = `
+Automated FD Calculation (HR Loan Office):
+- Salary Per Annum: GH¢ ${fd_calculation_data.salary_per_annum?.toFixed(2)}
+- Consolidated Monthly Salary: GH¢ ${fd_calculation_data.consolidated_salary_per_month?.toFixed(2)}
+- Other Monthly Allowances: GH¢ ${fd_calculation_data.other_allowances?.toFixed(2)}
+- Gross Monthly Salary: GH¢ ${fd_calculation_data.gross_salary_monthly?.toFixed(2)}
+- Existing Gross Deductions: GH¢ ${fd_calculation_data.gross_deductions_monthly?.toFixed(2)}
+- Approx Loan Installment: GH¢ ${fd_calculation_data.loan_installment_monthly?.toFixed(2)}
+- Total Monthly Deductions: GH¢ ${fd_calculation_data.total_deductions_monthly?.toFixed(2)}
+- Net Monthly Salary: GH¢ ${fd_calculation_data.net_salary_monthly?.toFixed(2)}
+- ½ of Gross Monthly Salary: GH¢ ${fd_calculation_data.half_gross_monthly?.toFixed(2)}
+- Net to Gross Ratio: ${fd_calculation_data.net_to_gross_ratio?.toFixed(1)}%${outstandingSection}
+${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}
+      `.trim()
+      finalNotes = calcNotes
     }
 
     const { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
       .update({
         fd_score,
-        fd_note,
+        fd_good: fd_good !== undefined ? fd_good : (fd_score >= 50),
+        fd_note: finalNotes,
         fd_document_url,
         fd_checked_at: new Date().toISOString(),
         // Set to pending Accounts Executive FD review
@@ -284,10 +379,10 @@ export async function POST(request: Request) {
       .insert({
         loan_request_id,
         actor_id: user.id,
-        actor_role: "loan_office",
+        actor_role: submission_type === "automated_calculation" ? "accounts_loan_office" : "loan_office",
         action_key: "fd_submitted",
         to_status: "pending_accounts_fd_review",
-        note: `FD score ${fd_score} submitted by Loan Office`,
+        note: `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
       })
       .catch(err => console.error("[v0] Timeline log error:", err))
 

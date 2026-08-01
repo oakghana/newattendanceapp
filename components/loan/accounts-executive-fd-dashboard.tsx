@@ -34,11 +34,112 @@ interface FDReview {
   supporting_docs_url?: string
   submission_date: string
   submission_memo: string
+  fd_note?: string
   status?: string
   review_status: 'pending_review' | 'approved' | 'rejected'
 }
 
-export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
+// Helper to parse and display FD calculation details
+function FDCalculationDetails({ fdNote }: { fdNote?: string }) {
+  if (!fdNote) return null
+  
+  try {
+    // Try to parse as JSON first (structured data)
+    const data = JSON.parse(fdNote)
+    return (
+      <div className="space-y-3 p-4 bg-emerald-50 border border-emerald-200 rounded">
+        <div className="text-sm font-semibold text-emerald-900">FD Calculation Breakdown</div>
+        
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {data.salary_per_annum && (
+            <>
+              <div><span className="text-emerald-700">Annual Salary:</span></div>
+              <div className="font-medium">₵ {Number(data.salary_per_annum).toLocaleString()}</div>
+            </>
+          )}
+          {data.consolidated_salary_per_month && (
+            <>
+              <div><span className="text-emerald-700">Monthly Salary:</span></div>
+              <div className="font-medium">₵ {Number(data.consolidated_salary_per_month).toLocaleString()}</div>
+            </>
+          )}
+          {data.other_allowances && (
+            <>
+              <div><span className="text-emerald-700">Allowances:</span></div>
+              <div className="font-medium">₵ {Number(data.other_allowances).toLocaleString()}</div>
+            </>
+          )}
+          {data.gross_salary_monthly && (
+            <>
+              <div><span className="text-emerald-700">Gross Monthly:</span></div>
+              <div className="font-medium">₵ {Number(data.gross_salary_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.gross_deductions_monthly && (
+            <>
+              <div><span className="text-red-700">Gross Deductions:</span></div>
+              <div className="font-medium text-red-600">₵ {Number(data.gross_deductions_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.loan_installment_monthly && (
+            <>
+              <div><span className="text-red-700">Loan Installment:</span></div>
+              <div className="font-medium text-red-600">₵ {Number(data.loan_installment_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.total_deductions_monthly && (
+            <>
+              <div><span className="text-red-700 font-semibold">Total Deduction:</span></div>
+              <div className="font-semibold text-red-600">₵ {Number(data.total_deductions_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.net_salary_monthly && (
+            <>
+              <div><span className="text-emerald-700 font-semibold">Net Monthly Salary:</span></div>
+              <div className="font-semibold text-emerald-700">₵ {Number(data.net_salary_monthly).toLocaleString()}</div>
+            </>
+          )}
+          {data.net_to_gross_ratio && (
+            <>
+              <div><span className="text-emerald-700">Net/Gross Ratio:</span></div>
+              <div className="font-medium">{(data.net_to_gross_ratio * 100).toFixed(2)}%</div>
+            </>
+          )}
+          {data.total_outstanding_loans && (
+            <>
+              <div><span className="text-amber-700 font-semibold">Outstanding Loans:</span></div>
+              <div className="font-semibold text-amber-700">₵ {Number(data.total_outstanding_loans).toLocaleString()}</div>
+            </>
+          )}
+        </div>
+
+        {data.outstanding_loans && Object.keys(data.outstanding_loans).length > 0 && (
+          <div className="border-t border-emerald-200 pt-3 mt-3">
+            <div className="text-xs font-semibold text-emerald-900 mb-2">Outstanding Loans Detail:</div>
+            <div className="space-y-1 text-xs">
+              {Object.entries(data.outstanding_loans).map(([key, value]) => (
+                <div key={key} className="flex justify-between">
+                  <span className="text-emerald-700">{String(key).replace(/_/g, ' ')}:</span>
+                  <span className="font-medium">₵ {Number(value as number).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  } catch (e) {
+    // If not JSON, display as plain text
+    return (
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+        <p className="text-xs font-semibold text-blue-900 mb-1">FD Calculation Details:</p>
+        <p className="text-blue-800 whitespace-pre-wrap">{fdNote}</p>
+      </div>
+    )
+  }
+}
+
+export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: string; userRole: string }) {
   const [reviews, setReviews] = useState<FDReview[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedReview, setSelectedReview] = useState<FDReview | null>(null)
@@ -134,11 +235,14 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
         setReviewDecision('')
         fetchPendingReviews()
       } else {
-        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+        const errorMsg = data.details || data.error || 'Unknown error'
+        console.error('[v0] FD approval error:', errorMsg)
+        toast({ title: 'Error', description: errorMsg, variant: 'destructive' })
       }
     } catch (error) {
-      console.error('[v0] Error approving FD:', error)
-      toast({ title: 'Error', description: 'Failed to approve FD request', variant: 'destructive' })
+      const errorMsg = error instanceof Error ? error.message : 'Failed to approve FD request'
+      console.error('[v0] Error approving FD:', errorMsg)
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
@@ -319,82 +423,151 @@ export function AccountsExecutiveFDDashboard({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Review Dialog */}
+      {/* Review Dialog - Modern Compact Layout */}
       <Dialog open={!!selectedReview} onOpenChange={open => !open && setSelectedReview(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>FD Verification Review</DialogTitle>
-            <DialogDescription>
-              Verify the FD calculation and supporting documentation. Add your verification memo before approval/rejection.
-            </DialogDescription>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-3 border-b">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle className="text-lg">FD Verification Review</DialogTitle>
+                <DialogDescription className="text-xs mt-1">Review calculation and approve or reject</DialogDescription>
+              </div>
+              {selectedReview && (
+                <div className={`px-3 py-1 rounded text-sm font-semibold whitespace-nowrap ${(selectedReview.fd_score ?? 0) >= 39 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  Score: {selectedReview.fd_score ?? 'N/A'}/100
+                </div>
+              )}
+            </div>
           </DialogHeader>
 
           {selectedReview && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded">
-                <div>
-                  <p className="text-xs font-semibold text-slate-600">Staff / Loan</p>
-                  <p className="text-sm font-medium">{selectedReview.staff_name || 'N/A'}</p>
-                  <p className="text-xs text-slate-500">{selectedReview.loan_type} &bull; Ref: {selectedReview.request_number || selectedReview.id.slice(0, 8)}</p>
+            <div className="space-y-3">
+              {/* Quick Info Row */}
+              <div className="grid grid-cols-4 gap-3">
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Staff</p>
+                  <p className="text-sm font-medium truncate">{selectedReview.staff_name || 'N/A'}</p>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-600">FD Score</p>
-                  <p className={`text-lg font-bold ${(selectedReview.fd_score ?? 0) >= 39 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {selectedReview.fd_score ?? 'N/A'}
-                  </p>
-                  {selectedReview.requested_amount && (
-                    <p className="text-xs text-slate-500">Loan: ₵{Number(selectedReview.requested_amount).toLocaleString()}</p>
-                  )}
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Loan Type</p>
+                  <p className="text-sm font-medium truncate">{selectedReview.loan_type || 'N/A'}</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Amount</p>
+                  <p className="text-sm font-medium">₵{Number(selectedReview.requested_amount || 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Ref</p>
+                  <p className="text-sm font-mono truncate">{selectedReview.request_number || selectedReview.id.slice(0, 8)}</p>
                 </div>
               </div>
 
-              <div>
-                <label className="text-sm font-semibold">FD Verification Memo</label>
-                <Textarea
-                  placeholder="Enter your verification findings and calculations..."
-                  value={verificationMemo}
-                  onChange={e => setVerificationMemo(e.target.value)}
-                  className="mt-2 min-h-24"
-                />
-              </div>
+              {/* Collapsible Calculation Details */}
+              {selectedReview.fd_note && (
+                <details className="group border rounded-lg cursor-pointer">
+                  <summary className="px-4 py-3 bg-emerald-50 hover:bg-emerald-100 font-semibold text-sm flex items-center justify-between select-none">
+                    <span>FD Calculation Details</span>
+                    <span className="text-xs group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <div className="p-4 bg-white border-t">
+                    <FDCalculationDetails fdNote={selectedReview.fd_note} />
+                  </div>
+                </details>
+              )}
 
-              <div>
-                <label className="text-sm font-semibold">Decision Notes</label>
-                <Textarea
-                  placeholder="Enter your decision notes (approval or rejection reason)..."
-                  value={reviewDecision}
-                  onChange={e => setReviewDecision(e.target.value)}
-                  className="mt-2 min-h-16"
-                />
-              </div>
+              {/* Notes Section */}
+              {(selectedReview.submission_memo || selectedReview.fd_note) && (
+                <details className="group border rounded-lg cursor-pointer">
+                  <summary className="px-4 py-3 bg-blue-50 hover:bg-blue-100 font-semibold text-sm flex items-center justify-between select-none">
+                    <span>Supporting Documents</span>
+                    <span className="text-xs group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <div className="p-4 bg-white border-t space-y-3 text-sm">
+                    {selectedReview.submission_memo && (
+                      <div>
+                        <p className="text-xs font-semibold text-slate-600 mb-1">Loan Office Notes</p>
+                        <p className="text-slate-700 bg-slate-50 p-2 rounded text-xs leading-relaxed">{selectedReview.submission_memo}</p>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
 
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-                <p className="text-xs font-semibold text-blue-900 mb-1">Original Loan Office Memo:</p>
-                <p className="text-blue-800">{selectedReview.submission_memo}</p>
+              {/* Decision Section */}
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                <p className="font-semibold text-sm text-slate-900">Your Decision</p>
+                
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Verification Findings *</label>
+                  <Textarea
+                    placeholder="Enter your verification findings and calculations..."
+                    value={verificationMemo}
+                    onChange={e => setVerificationMemo(e.target.value)}
+                    className="mt-2 min-h-16 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Decision Reason *</label>
+                  <Textarea
+                    placeholder="Enter approval or rejection reason..."
+                    value={reviewDecision}
+                    onChange={e => setReviewDecision(e.target.value)}
+                    className="mt-2 min-h-12 text-sm"
+                  />
+                </div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 pt-4 border-t">
             <Button
               variant="outline"
               onClick={() => setSelectedReview(null)}
               disabled={submitting}
+              size="sm"
             >
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={submitting || !reviewDecision}
-            >
-              <XCircle className="h-4 w-4 mr-1" />
-              Reject
-            </Button>
+            {/* Calculate if rejection is allowed based on FD score and loan type */}
+            {(() => {
+              const exceptionLoanTypes = ["Funeral", "Insurance", "Repair"]
+              const loanTypeLC = (selectedReview?.loan_type || "").toLowerCase()
+              const isExceptionLoanType = exceptionLoanTypes.some(type => 
+                loanTypeLC.includes(type.toLowerCase())
+              )
+              const fdScore = selectedReview?.fd_score ?? 0
+              const canReject = !isExceptionLoanType && fdScore < 40
+
+              return (
+                <>
+                  <Button
+                    variant="destructive"
+                    onClick={handleReject}
+                    disabled={submitting || !reviewDecision || !canReject}
+                    size="sm"
+                    title={!canReject ? (isExceptionLoanType ? `${selectedReview?.loan_type} loans cannot be rejected - must be pushed to HR Loan Office` : "FD scores of 40% or higher cannot be rejected") : ""}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Reject
+                  </Button>
+                  {!canReject && (
+                    <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                      <AlertCircle className="h-4 w-4 inline mr-1" />
+                      {isExceptionLoanType 
+                        ? `${selectedReview?.loan_type} loans must be approved and pushed to HR Loan Office regardless of FD score.`
+                        : `FD Score ${fdScore}% is acceptable. Only scores below 39% can be rejected.`
+                      }
+                    </div>
+                  )}
+                </>
+              )
+            })()}
             <Button
               onClick={handleApprove}
               disabled={submitting || !verificationMemo}
               className="bg-emerald-600 hover:bg-emerald-700"
+              size="sm"
             >
               <CheckCircle className="h-4 w-4 mr-1" />
               Approve
