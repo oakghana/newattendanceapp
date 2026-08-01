@@ -1,52 +1,65 @@
--- Migration: Rename loan_office role to department-specific roles
--- Reason: Eliminate confusion by making role names include department context
--- Date: 2026-08-01
+-- ============================================================
+-- Migration: 099_rename_loan_office_roles.sql
+-- Splits the generic 'loan_office' role into two department-specific roles:
+--   HR dept       → hr_loan_office        (3 users affected)
+--   Accounts dept → accounts_loan_office  (1 user affected)
+--
+-- APPLIED to production database on 2026-08-01
+-- Role column is VARCHAR with a CHECK constraint on public.user_profiles
+-- ============================================================
 
-BEGIN;
+-- STEP 1: Drop the old role check constraint
+ALTER TABLE public.user_profiles
+DROP CONSTRAINT IF EXISTS user_profiles_role_check;
 
--- Step 1: Rename loan_office role in auth.app_role enum
-ALTER TYPE auth.app_role RENAME VALUE 'loan_office' TO 'hr_loan_office';
-
--- Step 2: Create new accounts_loan_office role value
--- First, we need to create a new enum type with both values, then swap
-CREATE TYPE auth.app_role_new AS ENUM (
+-- STEP 2: Recreate constraint with both new roles added
+ALTER TABLE public.user_profiles
+ADD CONSTRAINT user_profiles_role_check
+CHECK (role::text = ANY (ARRAY[
   'staff',
-  'manager',
-  'director',
   'admin',
-  'hr_leave_office',
-  'hr_executive',
-  'manager_hr',
-  'director_hr',
+  'it-admin',
+  'department_head',
+  'regional_manager',
+  'regional_hr',
+  'nsp',
+  'intern',
+  'contract',
+  'audit_staff',
   'accounts',
-  'accounts_executive',
-  'hr_loan_office',
-  'accounts_loan_office',
-  'regional_loan_office'
-);
+  'loan_office',           -- legacy: kept for backward compatibility
+  'hr_loan_office',        -- NEW: HR department loan office staff
+  'accounts_loan_office',  -- NEW: Accounts department loan office staff
+  'hr_office',
+  'hr_leave_office',
+  'leave_admin',
+  'director_hr',
+  'manager_hr',
+  'loan_committee',
+  'committee',
+  'managing_director',
+  'secretary'
+]::text[]));
 
--- Step 3: Alter the column to use new type
-ALTER TABLE auth.users 
-  ALTER COLUMN role DROP DEFAULT,
-  ALTER COLUMN role TYPE auth.app_role_new USING role::text::auth.app_role_new,
-  ALTER COLUMN role SET DEFAULT 'staff'::auth.app_role_new;
-
--- Step 4: Drop old enum type and rename new one
-DROP TYPE auth.app_role;
-ALTER TYPE auth.app_role_new RENAME TO app_role;
-
--- Step 5: Update existing users to have accounts_loan_office if they're in Accounts department
-UPDATE auth.users u
-SET role = 'accounts_loan_office'::auth.app_role
-WHERE role = 'hr_loan_office'::auth.app_role
-  AND u.id IN (
-    SELECT p.id 
-    FROM auth.user_profiles p 
-    WHERE LOWER(p.department_name) LIKE '%account%' 
-       OR LOWER(p.department_name) LIKE '%finance%'
+-- STEP 3: Migrate HR department loan_office users → hr_loan_office
+UPDATE public.user_profiles
+SET role = 'hr_loan_office'
+WHERE role = 'loan_office'
+  AND department_id IN (
+    SELECT id FROM public.departments
+    WHERE name ILIKE '%hr%' OR name ILIKE '%human resource%'
   );
 
--- Add comment documenting the change
-COMMENT ON TYPE auth.app_role IS 'Application roles with department context. HR_LOAN_OFFICE and ACCOUNTS_LOAN_OFFICE are department-specific to prevent cross-department access.';
+-- STEP 4: Migrate Accounts department loan_office users → accounts_loan_office
+UPDATE public.user_profiles
+SET role = 'accounts_loan_office'
+WHERE role = 'loan_office'
+  AND department_id IN (
+    SELECT id FROM public.departments
+    WHERE name ILIKE '%account%' OR name ILIKE '%finance%'
+  );
 
-COMMIT;
+-- STEP 5: Fallback — any remaining loan_office users (no matching dept) → hr_loan_office
+UPDATE public.user_profiles
+SET role = 'hr_loan_office'
+WHERE role = 'loan_office';
