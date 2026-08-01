@@ -449,12 +449,23 @@ function loanTypeGroupKey(loanType: LoanType) {
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
   
-  // If no user tier or no loan tier restriction, include it
-  if (!userTier || !loanTier) {
+  // If loan has no tier restriction, include it for everyone
+  if (!loanTier) {
     return true
   }
   
-  return loanTier === userTier
+  // If user has no tier, include all loans (don't filter by category)
+  if (!userTier) {
+    return true
+  }
+  
+  // If both have tiers, match them or show loans below user tier
+  // Example: Manager tier users can see manager tier loans AND senior AND junior
+  const tierOrder = { junior: 1, senior: 2, manager: 3 }
+  const userTierLevel = tierOrder[userTier as keyof typeof tierOrder] || 0
+  const loanTierLevel = tierOrder[loanTier as keyof typeof tierOrder] || 0
+  
+  return loanTierLevel <= userTierLevel
 }
 
 function isQualifiedForLoan(loanTypeKey: string, staffRank?: string | null): boolean {
@@ -1137,10 +1148,10 @@ export default function LoanAppPage() {
     }
   }, [actionModal.open, actionModal.actionType, actionModal.row])
 
-  const p = data?.permissions
+  const p = data?.permissions || {}
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
-  const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
+  const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs || false
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
   // Accounts-dept loan_office users get Accounts tab, not Loan Office tab
   const userDeptName = data?.profile?.departmentName || ""
@@ -1149,7 +1160,7 @@ export default function LoanAppPage() {
     isAdmin ||
     (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) ||
     (normalizedRole === "manager_hr" && !userDeptIsAccounts)
-  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs)
+  const canDirectLinkageUpdate = Boolean(isAdmin || p?.hrOffice || p?.loanOffice || p?.viewAllTabs || false)
   const canSaveLoanRequest = !LOAN_SUBMISSION_LOCKED
   const templateOptions = useMemo(
     () => (registryData?.templates || []).filter((template) => template.workflow_domain === selectedTemplateDomain),
