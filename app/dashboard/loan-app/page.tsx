@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { GOOD_FD_THRESHOLD, isPoorFdScore } from "@/lib/loan-workflow"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
-import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
+import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Save, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type LoanType = {
@@ -7390,12 +7390,41 @@ export default function LoanAppPage() {
       {/* ── Memo Review Modal (Director HR + HR Terms Preview) ──────── */}
       <Dialog open={memoReviewModal.open} onOpenChange={(o) => setMemoReviewModal((s) => ({ ...s, open: o }))}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Memo Review — Executive HR Final Approval</DialogTitle>
-            <DialogDescription>
-              Review and edit the memo below before signing and approving. This letter will be sent to the staff member, Accounts, and Loan Office upon approval.
-            </DialogDescription>
+          <DialogHeader className="border-b pb-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-6 w-6 text-blue-600" />
+              <div>
+                <DialogTitle className="text-lg">Loan Request Approval</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Review the memo and staff details below. Your signature will finalize this approval.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
+
+          {/* Request Summary Card */}
+          {memoReviewModal.row && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mb-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-slate-600">Reference Number:</span>
+                  <div className="font-semibold text-slate-900">{memoReviewModal.row.request_number}</div>
+                </div>
+                <div>
+                  <span className="text-slate-600">Loan Type:</span>
+                  <div className="font-semibold text-slate-900">{memoReviewModal.row.loan_type_label || memoReviewModal.row.loan_type_key}</div>
+                </div>
+                <div>
+                  <span className="text-slate-600">Staff Name:</span>
+                  <div className="font-semibold text-slate-900">{memoReviewModal.row.staff_full_name}</div>
+                </div>
+                <div>
+                  <span className="text-slate-600">Amount (GHc):</span>
+                  <div className="font-semibold text-green-700">{fmtAmount(memoReviewModal.row.fixed_amount || memoReviewModal.row.requested_amount)}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Warning banner for missing signature */}
           {isSignatureMissing && p?.directorHr && (
@@ -7553,7 +7582,7 @@ export default function LoanAppPage() {
                 onClick={() => setMemoReviewModal((s) => ({ ...s, open: false }))}
                 className="border-slate-300 text-slate-700 hover:bg-slate-50"
               >
-                Cancel
+                Close
               </Button>
               {memoReviewModal.row && (
                 <Button 
@@ -7563,18 +7592,18 @@ export default function LoanAppPage() {
                   }}
                   className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2"
                 >
-                  <Download className="h-4 w-4" /> Download PDF
+                  <Download className="h-4 w-4" /> Preview PDF
                 </Button>
               )}
               {memoReviewModal.row && (
                 <Button 
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => saveMemoChanges()}
                   disabled={isSavingMemo}
-                  className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-2 flex-1 min-w-fit"
+                  className="gap-2 flex-1 min-w-fit"
                 >
-                  {isSavingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  {isSavingMemo ? "Saving..." : "Save Memo Changes"}
+                  {isSavingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {isSavingMemo ? "Saving..." : "Save Draft Changes"}
                 </Button>
               )}
             </div>
@@ -7606,12 +7635,12 @@ export default function LoanAppPage() {
                 {modalDecision === "approve" ? (
                   <>
                     <CheckCircle2 className="h-5 w-5" />
-                    Approve & Send Letter
+                    {memoReviewModal.row?.status === "pending_hr_executive_review" ? "Sign & Send to MD" : "Finalize Approval"}
                   </>
                 ) : (
                   <>
                     <XCircle className="h-5 w-5" />
-                    Reject Request
+                    Reject & Notify Staff
                   </>
                 )}
               </Button>

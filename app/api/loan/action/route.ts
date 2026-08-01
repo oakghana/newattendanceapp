@@ -754,7 +754,7 @@ export async function POST(request: NextRequest) {
         "director_hr", "manager_hr", "hr_director", "managing_director", "admin",
       ].includes(role)
 
-      if (req.status === "awaiting_hr_executives") {
+      if (req.status === "awaiting_hr_executives" || req.status === "pending_hr_executive_review") {
         if (!isHrExecutive) {
           return NextResponse.json({ error: "Only HR Executive staff can approve at this stage" }, { status: 403 })
         }
@@ -800,12 +800,12 @@ export async function POST(request: NextRequest) {
       }
 
       // ─── STAGE-AWARE status transition ───────────────────────────────
-      // Stage 1: HR Executive signs at "awaiting_hr_executives"
+      // Stage 1: HR Executive signs at "awaiting_hr_executives" or "pending_hr_executive_review"
       //          → approve pushes to "awaiting_director_hr" (MD queue)
       //          → reject closes as "director_rejected"
       // Stage 2: Director HR / MD stamps at "awaiting_director_hr"
       //          → approve = "approved_director"  |  reject = "director_rejected"
-      const isHrExecutiveStage = req.status === "awaiting_hr_executives"
+      const isHrExecutiveStage = req.status === "awaiting_hr_executives" || req.status === "pending_hr_executive_review"
 
       if (isHrExecutiveStage) {
         toStatus = decision === "approve" ? "awaiting_director_hr" : "director_rejected"
