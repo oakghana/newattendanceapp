@@ -201,7 +201,7 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
+      .select("id, first_name, last_name, employee_id, email, role, position, department_id, assigned_location_id, staff_category, years_of_service, date_of_appointment, departments(name, code), geofence_locations!assigned_location_id(name, address, districts(name))")
       .eq("id", user.id)
       .maybeSingle()
 
