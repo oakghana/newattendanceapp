@@ -6,7 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Eye, FileCheck, CreditCard, Download, AlertCircle } from 'lucide-react'
+import { Eye, FileCheck, CreditCard, Download, AlertCircle, Send, CheckCircle2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { useToast } from '@/hooks/use-toast'
 
 interface FDApprovedLoan {
   id: string
@@ -27,6 +30,10 @@ export function HRLoanOfficeFDApproved() {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
+  const [selectedForPush, setSelectedForPush] = useState<FDApprovedLoan | null>(null)
+  const [pushMemo, setPushMemo] = useState('')
+  const [pushing, setPushing] = useState(false)
+  const { toast } = useToast()
 
   // Filter loans based on search
   const filteredLoans = useMemo(() => {
@@ -70,6 +77,46 @@ export function HRLoanOfficeFDApproved() {
   const handleApproveDisbursement = (loan: FDApprovedLoan) => {
     // TODO: Approve for disbursement
     console.log('[v0] Approve disbursement for:', loan.id)
+  }
+
+  const handlePushToHRExecutive = async () => {
+    if (!selectedForPush || !pushMemo.trim()) {
+      toast({ title: 'Error', description: 'Please enter a memo before pushing to HR Executive', variant: 'destructive' })
+      return
+    }
+
+    try {
+      setPushing(true)
+      const res = await fetch('/api/loan/push-to-hr-executive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loan_request_id: selectedForPush.id,
+          hr_loan_office_memo: pushMemo,
+          action: 'push_to_hr_executive',
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        toast({ 
+          title: 'Success', 
+          description: 'Loan memo pushed to HR Executive for signing and approval. Will be forwarded to MD dashboard for final approval.' 
+        })
+        setSelectedForPush(null)
+        setPushMemo('')
+        // Refresh the loans list
+        // await fetchFdApprovedLoans()
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed to push to HR Executive', variant: 'destructive' })
+      }
+    } catch (error) {
+      console.error('[v0] Error pushing to HR Executive:', error)
+      toast({ title: 'Error', description: 'Failed to push to HR Executive', variant: 'destructive' })
+    } finally {
+      setPushing(false)
+    }
   }
 
   const getFDStatusColor = (score?: number) => {
@@ -205,12 +252,12 @@ export function HRLoanOfficeFDApproved() {
                               </Button>
                               <Button
                                 size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                title="Approve for Disbursement"
-                                onClick={() => handleApproveDisbursement(loan)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                title="Push to HR Executive for Signing and Approval"
+                                onClick={() => setSelectedForPush(loan)}
                               >
-                                <CreditCard className="h-4 w-4 mr-1" />
-                                Approve
+                                <Send className="h-4 w-4 mr-1" />
+                                Push to HR Exec
                               </Button>
                             </>
                           )}
@@ -224,6 +271,85 @@ export function HRLoanOfficeFDApproved() {
           </CardContent>
         </Card>
       )}
+
+      {/* Push to HR Executive Dialog */}
+      <Dialog open={!!selectedForPush} onOpenChange={(open) => !open && setSelectedForPush(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Push to HR Executive for Signing & Approval</DialogTitle>
+            <DialogDescription>
+              Send this approved FD loan to HR Executive for signing. The loan memo will then be forwarded to MD's dashboard for final approval and disbursement authorization.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedForPush && (
+            <div className="space-y-4">
+              {/* Loan Summary */}
+              <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 rounded">
+                <div>
+                  <p className="text-xs text-slate-600 font-semibold">Staff</p>
+                  <p className="text-sm font-medium">{selectedForPush.staff_name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 font-semibold">Loan Amount</p>
+                  <p className="text-sm font-medium">₵{Number(selectedForPush.requested_amount || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 font-semibold">FD Score</p>
+                  <p className={`text-sm font-medium ${(selectedForPush.fd_score ?? 0) >= 40 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {selectedForPush.fd_score}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Info Box */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                <p className="text-xs text-blue-900">
+                  <CheckCircle2 className="h-4 w-4 inline mr-2" />
+                  This loan has been approved by Accounts Executive with an acceptable FD score. Once you push to HR Executive, they will review and sign. The loan memo will then appear on MD's dashboard for final approval before disbursement.
+                </p>
+              </div>
+
+              {/* Memo Input */}
+              <div>
+                <label className="text-sm font-semibold text-slate-900">HR Loan Office Processing Memo *</label>
+                <p className="text-xs text-slate-500 mb-2">Add any processing notes or requirements for HR Executive review</p>
+                <Textarea
+                  placeholder="Enter memo for HR Executive (e.g., specific disbursement instructions, conditions, notes)..."
+                  value={pushMemo}
+                  onChange={(e) => setPushMemo(e.target.value)}
+                  className="min-h-20"
+                />
+              </div>
+
+              {/* Process Flow */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded">
+                <p className="text-xs font-semibold text-emerald-900 mb-2">Approval Flow:</p>
+                <div className="text-xs text-emerald-800 space-y-1">
+                  <p>1️⃣ HR Loan Office sends to HR Executive for signing</p>
+                  <p>2️⃣ HR Executive reviews, signs, and approves</p>
+                  <p>3️⃣ Loan memo forwarded to MD's dashboard</p>
+                  <p>4️⃣ MD reviews and approves for final disbursement</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedForPush(null)} disabled={pushing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePushToHRExecutive}
+              disabled={pushing || !pushMemo.trim()}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {pushing ? 'Pushing...' : 'Push to HR Executive'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
