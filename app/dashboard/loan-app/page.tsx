@@ -747,7 +747,27 @@ function filterAndSortRows(
       return d === dept
     })
   }
+  // Prioritize pending/high-action-needed statuses first, then sort by date
+  const priorityMap: Record<string, number> = {
+    'pending_fd': 0,        // Most urgent - pending FD check
+    'pending_hod': 1,       // HOD pending approval
+    'hod_approved': 2,      // Approved but needs action
+    'sent_for_approval': 3, // Sent for approval
+    'good_fd': 4,           // Good FD but not yet processed
+    'poor_fd': 5,           // Poor FD - needs review
+  }
+  
   next.sort((a, b) => {
+    const aStatus = String(a.status || '')
+    const bStatus = String(b.status || '')
+    
+    // First, sort by priority (pending items on top)
+    const aPriority = priorityMap[aStatus] ?? 999
+    const bPriority = priorityMap[bStatus] ?? 999
+    
+    if (aPriority !== bPriority) return aPriority - bPriority
+    
+    // Then sort by date within same priority
     const ad = new Date(a.updated_at || a.created_at).getTime()
     const bd = new Date(b.updated_at || b.created_at).getTime()
     return sort === "newest" ? bd - ad : ad - bd
@@ -1209,6 +1229,20 @@ export default function LoanAppPage() {
         key: "fd-approval", 
         label: "FD Approval"
       })
+    }
+
+    // Loan Office tab: ONLY for HR department loan office staff to process HOD-approved loans and perform FD checks
+    // Show ONLY if: (has loan_office/manager_hr/hr_executive role in HR department) OR (has direct permission AND not in Accounts)
+    const isHRLoanOffice = (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) || (p?.loanOffice && !userDeptIsAccounts)
+    if (isHRLoanOffice) {
+      tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
+    }
+
+    // Accounts tab: ONLY for Accounts department loan office staff OR users with direct accounts permission
+    // Show ONLY if: (has loan_office role in Accounts department) OR (has direct accounts permission)
+    const isAccountsOffice = (normalizedRole === "loan_office" && userDeptIsAccounts) || p?.accounts
+    if (isAccountsOffice) {
+      tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     }
 
     // Repayment Tracking tab: only for Loan Office and Accounts executives
@@ -3121,7 +3155,7 @@ export default function LoanAppPage() {
                   <div className={`px-5 py-4 flex flex-wrap items-center justify-between gap-3 ${isApproved ? "bg-emerald-600" : isRejected ? "bg-red-600" : "bg-gradient-to-r from-violet-700 to-purple-600"} text-white`}>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-widest opacity-80">{req.request_number}</p>
-                      <h3 className="text-lg font-bold leading-tight">{req.loan_type_label}</h3>
+                      <h3 className="text-lg font-bold leading-tight">{req.loan_type_label} - {req.staff_full_name || "REQUESTING STAFF"}</h3>
                       <p className="text-sm opacity-90 mt-0.5">GHc {fmtAmount(req.fixed_amount || req.requested_amount)}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
@@ -3566,8 +3600,12 @@ export default function LoanAppPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {pagedLoanOfficeStage.map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
+                    {pagedLoanOfficeStage.map((row) => {
+                      // Highlight priority/pending records
+                      const pendingStatuses = ['pending_fd', 'pending_hod', 'hod_approved', 'sent_for_approval']
+                      const isPending = pendingStatuses.includes(String(row.status || ''))
+                      return (
+                      <tr key={row.id} className={`transition-colors ${isPending ? 'bg-yellow-50/40 hover:bg-yellow-50/60 border-l-4 border-l-yellow-400' : 'hover:bg-slate-50/70'}`}>
                         <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
@@ -3618,7 +3656,7 @@ export default function LoanAppPage() {
                           </td>
                         )}
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
@@ -5390,7 +5428,6 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Attachment</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
                         <TableHead className="whitespace-nowrap">Memo</TableHead>
-                        <TableHead className="whitespace-nowrap">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -5421,14 +5458,6 @@ export default function LoanAppPage() {
                             {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status)
                               ? <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                               : <span className="text-muted-foreground">—</span>}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {row.status === "pending_hod" && (
-                              <Button size="sm" onClick={() => openActionModal(row, "hod")} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                                Review
-                              </Button>
-                            )}
-                            {!["pending_hod"].includes(row.status) && <span className="text-muted-foreground text-xs">—</span>}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -5464,13 +5493,6 @@ export default function LoanAppPage() {
                   {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
                     <div className="pt-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
-                    </div>
-                  )}
-                  {row.status === "pending_hod" && (
-                    <div className="pt-2">
-                      <Button size="sm" onClick={() => openActionModal(row, "hod")} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
-                        Review & Make Decision
-                      </Button>
                     </div>
                   )}
                 </div>
