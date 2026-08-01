@@ -172,6 +172,25 @@ export async function PATCH(request: Request) {
 
     const isApproved = review_status === "approved"
 
+    // First, fetch the current loan to preserve original fd_note with calculation details
+    const { data: currentLoan, error: fetchError } = await admin
+      .from("loan_requests")
+      .select("fd_note, staff_full_name")
+      .eq("id", review_id)
+      .single()
+
+    if (fetchError) {
+      console.error("[v0] Error fetching current loan:", fetchError)
+      return NextResponse.json({ error: "Failed to fetch loan details", details: fetchError.message }, { status: 500 })
+    }
+
+    // Preserve original calculation in fd_note, add approval decision at the end
+    const originalNote = currentLoan?.fd_note || ""
+    const approvalMemo = [fd_verification_memo, review_decision].filter(Boolean).join(" | ")
+    const updatedNote = originalNote 
+      ? `${originalNote}\n\n--- Accounts Executive Review (${new Date().toLocaleDateString()}) ---\n${approvalMemo}`
+      : approvalMemo
+
     // Update the loan_requests row directly
     const { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
@@ -180,7 +199,7 @@ export async function PATCH(request: Request) {
         // Move to next stage: approved FD goes to HR loan office; rejected goes back
         status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
         accounts_reviewer_id: user.id,
-        fd_note: [fd_verification_memo, review_decision].filter(Boolean).join(" | "),
+        fd_note: updatedNote,
         fd_checked_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
