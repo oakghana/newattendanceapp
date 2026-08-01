@@ -307,6 +307,7 @@ export async function GET() {
     const isRegionalManager = role === "regional_manager"
     const isDepartmentHead = role === "department_head"
 
+    // Fetch ALL linked staff for this HOD (not just one)
     let linkedStaffIds: string[] = []
     if (isRegionalManager || isDepartmentHead) {
       const { data: linkageRows } = await admin
@@ -317,6 +318,18 @@ export async function GET() {
       linkedStaffIds = (linkageRows || []).map((row: any) => row.staff_user_id).filter(Boolean)
     }
     const reviewerScopedStaffIds = Array.from(new Set(linkedStaffIds))
+
+    // Also fetch ALL HODs linked to THIS user (if staff) so requests broadcast to all linked HODs
+    let linkedHodIds: string[] = []
+    if (role !== "admin" && !isRegionalManager && !isDepartmentHead) {
+      const { data: hodLinkageRows } = await admin
+        .from("loan_hod_linkages")
+        .select("hod_user_id")
+        .eq("staff_user_id", user.id)
+        .limit(5000)
+      linkedHodIds = (hodLinkageRows || []).map((row: any) => row.hod_user_id).filter(Boolean)
+    }
+    const staffLinkedHodIds = Array.from(new Set(linkedHodIds))
 
     const loanTypesWithTermsQuery = () =>
       admin
@@ -447,6 +460,7 @@ export async function GET() {
     }
 
     // HOD query: include requests explicitly assigned to this HOD, plus linked-staff fallback for legacy data.
+    // ALSO: If staff has multiple linked HODs, broadcast to ALL of them (not just primary)
     const hodPromise: Promise<any> = (async () => {
       if (!(permissions.hod || viewAllTabs)) return { data: [], error: null }
       if (viewAllTabs || !["department_head", "regional_manager"].includes(role)) {
@@ -461,11 +475,17 @@ export async function GET() {
         ? `,user_id.in.(${reviewerScopedStaffIds.join(",")})`
         : ""
 
+      // For HOD-role users: also include requests where they're one of multiple linked HODs
+      // This ensures all linked HODs see staff requests (multi-HOD support)
+      const allLinkedHodFilter = staffLinkedHodIds.length > 0
+        ? `,hod_reviewer_id.in.(${[user.id, ...staffLinkedHodIds].join(",")})`
+        : ""
+
       return admin
         .from("loan_requests")
         .select("*")
         .eq("status", "pending_hod")
-        .or(`hod_reviewer_id.eq.${user.id}${scopedFilter}`)
+        .or(`hod_reviewer_id.eq.${user.id}${scopedFilter}${allLinkedHodFilter}`)
         .order("created_at", { ascending: false })
     })()
 
