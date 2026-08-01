@@ -7153,6 +7153,42 @@ export default function LoanAppPage() {
                     This approved FD loan will be forwarded to HR Executive for review, signing, and approval. After HR Executive signs, it will appear on the MD's dashboard for final authorization.
                   </p>
                 </div>
+
+                {/* FD approval summary from the Account Executive (read-only) */}
+                {actionModal.row && actionModal.row.fd_score != null && (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 mb-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-emerald-900">FD Approval — from Account Executive</span>
+                      <Badge className={actionModal.row.fd_good ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}>
+                        {actionModal.row.fd_good ? "Good Standing" : "Below Threshold"}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-700">
+                      <div>FD Score: <strong className="text-slate-900">{actionModal.row.fd_score}</strong> / 100</div>
+                      <div>Reviewed by: <strong className="text-slate-900">{actionModal.row.accounts_reviewer_name || "—"}</strong></div>
+                      {actionModal.row.fd_checked_at && (
+                        <div className="col-span-2">Reviewed on: <strong className="text-slate-900">{new Date(actionModal.row.fd_checked_at).toLocaleDateString()}</strong></div>
+                      )}
+                    </div>
+                    {actionModal.row.fd_note && (
+                      <div className="text-xs text-slate-700 pt-1 border-t border-emerald-200">
+                        <span className="font-medium">Account Executive&apos;s comments:</span>
+                        <p className="mt-0.5 whitespace-pre-wrap text-slate-800">{actionModal.row.fd_note}</p>
+                      </div>
+                    )}
+                    {actionModal.row.fd_document_url && (
+                      <a
+                        href={actionModal.row.fd_document_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-900 underline pt-1"
+                      >
+                        View FD supporting document
+                      </a>
+                    )}
+                  </div>
+                )}
+
                 <Label className="text-sm font-semibold">Processing Memo *</Label>
                 <Textarea 
                   value={modalNote} 
