@@ -955,6 +955,9 @@ export default function LoanAppPage() {
   const [modalHodLocation, setModalHodLocation] = useState("")
   const [modalHodTelephone, setModalHodTelephone] = useState("")
   const [modalMemoRef, setModalMemoRef] = useState("")
+  const [modalCcRecipients, setModalCcRecipients] = useState("")
+  const [modalAccountSignatory, setModalAccountSignatory] = useState("")
+  const [modalHrSignatory, setModalHrSignatory] = useState("")
   const [modalMemoRecipient, setModalMemoRecipient] = useState("Deputy Director Finance")
   const [modalMemoText, setModalMemoText] = useState("")
   const [modalStaffFullName, setModalStaffFullName] = useState("")
@@ -2624,6 +2627,9 @@ export default function LoanAppPage() {
         setModalHodLocation("")
         setModalHodTelephone("")
         setModalMemoRef("")
+        setModalCcRecipients("")
+        setModalAccountSignatory("")
+        setModalHrSignatory("")
         setModalMemoText("")
         setModalStaffFullName("")
         setModalStaffNumber("")
@@ -3540,7 +3546,9 @@ export default function LoanAppPage() {
                     onClick={() => setLoanOfficeStageTab(key)}
                     className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       isActive
-                        ? "border-violet-700 bg-violet-700 text-white"
+                        ? key === "fd-approved-accounts-exec"
+                          ? "border-emerald-700 bg-emerald-700 text-white"
+                          : "border-violet-700 bg-violet-700 text-white"
                         : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700"
                     }`}
                   >
@@ -3645,8 +3653,9 @@ export default function LoanAppPage() {
                       // Highlight priority/pending records
                       const pendingStatuses = ['pending_fd', 'pending_hod', 'hod_approved', 'sent_for_approval']
                       const isPending = pendingStatuses.includes(String(row.status || ''))
+                      const isFdApproved = row.fd_good === true && row.status === "pending_hr_loan_office"
                       return (
-                      <tr key={row.id} className={`transition-colors ${isPending ? 'bg-yellow-50/40 hover:bg-yellow-50/60 border-l-4 border-l-yellow-400' : 'hover:bg-slate-50/70'}`}>
+                      <tr key={row.id} className={`transition-colors ${isFdApproved ? 'bg-emerald-50/70 hover:bg-emerald-50/90 border-l-4 border-l-emerald-500' : isPending ? 'bg-yellow-50/40 hover:bg-yellow-50/60 border-l-4 border-l-yellow-400' : 'hover:bg-slate-50/70'}`}>
                         <td className="px-5 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <p className="font-medium text-slate-900 text-xs">{row.staff_full_name || "—"}</p>
@@ -7125,10 +7134,10 @@ export default function LoanAppPage() {
             {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
               <Button 
                 className="bg-blue-600 hover:bg-blue-700"
-                disabled={!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef}
+                disabled={!modalDisbursement || !modalRecovery || !modalMemoRef}
                 onClick={async () => {
-                  if (!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef) {
-                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields before pushing to HR Executive.", variant: "destructive" })
+                  if (!modalDisbursement || !modalRecovery || !modalMemoRef) {
+                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields (Disbursement Date, Recovery Start Date, Reference Number) before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
                   await runAction({
@@ -7138,6 +7147,10 @@ export default function LoanAppPage() {
                     disbursement_date: modalDisbursement,
                     recovery_start_date: modalRecovery,
                     reference_number: modalMemoRef,
+                    memo_recipient: modalAccountSignatory,
+                    memo_cc: modalCcRecipients,
+                    accounts_signatory: modalAccountSignatory,
+                    hr_executive_signatory: modalHrSignatory,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}
@@ -7153,7 +7166,43 @@ export default function LoanAppPage() {
                     This approved FD loan will be forwarded to HR Executive for review, signing, and approval. After HR Executive signs, it will appear on the MD's dashboard for final authorization.
                   </p>
                 </div>
-                <Label className="text-sm font-semibold">Processing Memo *</Label>
+
+                {/* FD Approval Summary from Account Executive */}
+                {actionModal.row && actionModal.row.fd_score != null && (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 mb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-emerald-900">FD Approval — from Account Executive</span>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${actionModal.row.fd_good ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}`}>
+                        {actionModal.row.fd_good ? "Good Standing" : "Below Threshold"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-700">
+                      <div>FD Score: <strong>{actionModal.row.fd_score}/100</strong></div>
+                      <div>Reviewed by: <strong>{actionModal.row.accounts_reviewer_name || "—"}</strong></div>
+                      {actionModal.row.fd_checked_at && (
+                        <div><strong>{new Date(actionModal.row.fd_checked_at).toLocaleDateString()}</strong></div>
+                      )}
+                    </div>
+                    {actionModal.row.fd_note && (
+                      <details className="mt-2 text-xs">
+                        <summary className="font-medium text-emerald-700 cursor-pointer hover:text-emerald-900">View comments & details</summary>
+                        <div className="mt-1 whitespace-pre-wrap text-slate-800 text-xs bg-white p-2 rounded border border-emerald-100 max-h-40 overflow-y-auto">{actionModal.row.fd_note}</div>
+                      </details>
+                    )}
+                    {actionModal.row.fd_document_url && (
+                      <a
+                        href={actionModal.row.fd_document_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-900 underline mt-2"
+                      >
+                        📎 FD Document
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                <Label className="text-sm font-semibold">Processing Memo</Label>
                 <Textarea 
                   value={modalNote} 
                   onChange={(e) => setModalNote(e.target.value)} 
@@ -7163,14 +7212,14 @@ export default function LoanAppPage() {
                 />
                 <Label className="text-sm font-semibold">Disbursement Date *</Label>
                 <Input 
-                  type="date"
+                  type="month"
                   value={modalDisbursement} 
                   onChange={(e) => setModalDisbursement(e.target.value)} 
                   className="h-8 text-xs"
                 />
                 <Label className="text-sm font-semibold">Recovery Start Date *</Label>
                 <Input 
-                  type="date"
+                  type="month"
                   value={modalRecovery} 
                   onChange={(e) => setModalRecovery(e.target.value)} 
                   className="h-8 text-xs"
@@ -7182,6 +7231,47 @@ export default function LoanAppPage() {
                   placeholder="e.g. QCC/HR/LOAN/2024/001" 
                   className="h-8 text-xs"
                 />
+
+                <div className="border-t border-slate-200 pt-4 mt-4">
+                  <Label className="text-sm font-semibold mb-3 block">Memo CC Recipients</Label>
+                  <Textarea 
+                    value={modalCcRecipients} 
+                    onChange={(e) => setModalCcRecipients(e.target.value)} 
+                    placeholder="Names and titles of CC recipients (one per line)" 
+                    rows={3} 
+                    className="text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-semibold">Account Executive Signatory *</Label>
+                    <Select value={modalAccountSignatory} onValueChange={setModalAccountSignatory}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Select signatory" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Accounts Manager">Accounts Manager</SelectItem>
+                        <SelectItem value="Deputy Director Finance">Deputy Director Finance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold">HR Executive Signatory *</Label>
+                    <Select value={modalHrSignatory} onValueChange={setModalHrSignatory}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Select HR Executive" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {data?.hrExecutives?.map((exec: any) => (
+                          <SelectItem key={exec.id} value={`${exec.position || "HR Executive"} — ${exec.full_name}`}>
+                            {exec.position || "HR Executive"} — {exec.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </>
             )}
           </DialogFooter>

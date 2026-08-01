@@ -947,6 +947,32 @@ export async function POST(request: NextRequest) {
       update.director_note = note || "Memo saved by HR personnel for review"
     }
 
+    if (action === "push_to_hr_executive") {
+      actionHandled = true
+      if (!canDoLoanOffice(role, deptName, deptCode)) {
+        return NextResponse.json({ error: "Only Loan Office staff can push loans to HR Executive" }, { status: 403 })
+      }
+
+      if (req.status !== "pending_hr_loan_office") {
+        return NextResponse.json({ error: "Loan must be in FD-approved status to push to HR Executive" }, { status: 400 })
+      }
+
+      // Update status to pending_hr_executive_review
+      update.status = "pending_hr_executive_review"
+      toStatus = "pending_hr_executive_review"
+
+      // Store the disbursement and recovery dates (convert YYYY-MM to YYYY-MM-01)
+      if (body.disbursement_date) {
+        const disbursementMonth = body.disbursement_date.trim()
+        update.disbursement_date = disbursementMonth.length === 7 ? `${disbursementMonth}-01` : body.disbursement_date
+      }
+      if (body.recovery_start_date) {
+        const recoveryMonth = body.recovery_start_date.trim()
+        update.recovery_start_date = recoveryMonth.length === 7 ? `${recoveryMonth}-01` : body.recovery_start_date
+      }
+      if (body.reference_number) update.reference_number = body.reference_number
+    }
+
     if (!actionHandled) {
       return NextResponse.json({ error: "Unknown or unsupported action" }, { status: 400 })
     }
@@ -965,37 +991,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Request was already processed by another approver. Refresh queue." }, { status: 409 })
       }
       throw updateError
-    }
-
-    if (action === "push_to_hr_executive") {
-      actionHandled = true
-      if (!canDoLoanOffice(role, deptName, deptCode)) {
-        return NextResponse.json({ error: "Only Loan Office staff can push loans to HR Executive" }, { status: 403 })
-      }
-
-      if (req.status !== "pending_hr_loan_office") {
-        return NextResponse.json({ error: "Loan must be in FD-approved status to push to HR Executive" }, { status: 400 })
-      }
-
-      // Update status to pending_hr_executive_review
-      update.status = "pending_hr_executive_review"
-      toStatus = "pending_hr_executive_review"
-
-      // Store the disbursement and recovery dates
-      if (req_body.disbursement_date) update.disbursement_date = req_body.disbursement_date
-      if (req_body.recovery_start_date) update.recovery_start_date = req_body.recovery_start_date
-      if (req_body.reference_number) update.reference_number = req_body.reference_number
-
-      // Log to timeline
-      await timeline(admin, {
-        loan_request_id: req.id,
-        actor_id: user.id,
-        actor_role: "loan_office",
-        action_key: "push_to_hr_executive",
-        from_status: "pending_hr_loan_office",
-        to_status: "pending_hr_executive_review",
-        note: req_body.hr_loan_office_memo || "Forwarded to HR Executive for signing and approval",
-      })
     }
 
     if (action === "mark_payment_completed") {
