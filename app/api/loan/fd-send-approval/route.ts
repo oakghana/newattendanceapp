@@ -50,14 +50,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields: loan_request_id, fd_score" }, { status: 400 })
     }
 
-    // Update the loan request with FD data and set status to sent for approval
+    // Update the loan request with FD data and set status to pending accounts FD review
     const { error: updateError } = await admin
       .from("loan_requests")
       .update({
         fd_score,
         fd_good: fd_good ?? false,
         fd_note: JSON.stringify(fd_calculation_data || {}),
-        status: "sent_for_fd_approval",
+        status: "pending_accounts_fd_review",
         loan_office_forwarded_at: new Date().toISOString(),
       })
       .eq("id", loan_request_id)

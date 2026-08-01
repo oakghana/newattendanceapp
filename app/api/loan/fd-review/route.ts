@@ -118,6 +118,7 @@ export async function GET(request: Request) {
       supporting_docs_url: loan.fd_document_url,
       submission_date: loan.loan_office_forwarded_at || loan.created_at,
       submission_memo: loan.loan_office_note || loan.fd_note || "",
+      fd_note: loan.fd_note,
       request_number: loan.request_number || loan.reference_number,
       review_status: statusParam === "pending_review" ? "pending_review" : statusParam,
       status: loan.status,
