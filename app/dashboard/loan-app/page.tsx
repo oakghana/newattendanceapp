@@ -7133,8 +7133,8 @@ export default function LoanAppPage() {
                 className="bg-blue-600 hover:bg-blue-700"
                 disabled={!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef}
                 onClick={async () => {
-                  if (!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef) {
-                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields before pushing to HR Executive.", variant: "destructive" })
+                  if (!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef || !modalAccountSignatory || !modalHrSignatory) {
+                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields including signatories before pushing to HR Executive.", variant: "destructive" })
                     return
                   }
                   await runAction({
@@ -7144,6 +7144,10 @@ export default function LoanAppPage() {
                     disbursement_date: modalDisbursement,
                     recovery_start_date: modalRecovery,
                     reference_number: modalMemoRef,
+                    memo_recipient: modalAccountSignatory,
+                    memo_cc: modalCcRecipients,
+                    accounts_signatory: modalAccountSignatory,
+                    hr_executive_signatory: modalHrSignatory,
                   })
                   setActionModal((s) => ({ ...s, open: false }))
                 }}
@@ -7239,21 +7243,30 @@ export default function LoanAppPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-semibold">Account Executive Signatory *</Label>
-                    <Input 
-                      value={modalAccountSignatory} 
-                      onChange={(e) => setModalAccountSignatory(e.target.value)} 
-                      placeholder="Name & Title" 
-                      className="h-8 text-xs"
-                    />
+                    <Select value={modalAccountSignatory} onValueChange={setModalAccountSignatory}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Select signatory" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Accounts Manager">Accounts Manager</SelectItem>
+                        <SelectItem value="Deputy Director Finance">Deputy Director Finance</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label className="text-sm font-semibold">HR Executive Signatory *</Label>
-                    <Input 
-                      value={modalHrSignatory} 
-                      onChange={(e) => setModalHrSignatory(e.target.value)} 
-                      placeholder="Name & Title" 
-                      className="h-8 text-xs"
-                    />
+                    <Select value={modalHrSignatory} onValueChange={setModalHrSignatory}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Select HR Executive" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {data?.hrExecutives?.map((exec: any) => (
+                          <SelectItem key={exec.id} value={`${exec.position || "HR Executive"} — ${exec.full_name}`}>
+                            {exec.position || "HR Executive"} — {exec.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </>

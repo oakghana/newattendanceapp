@@ -815,6 +815,18 @@ export async function GET() {
       myTimelines,
       directorApprovers,
       myTasks: attachDirectorName(attachAccountsReviewerName(attachName(myTasksRes.data || []))),
+      hrExecutives: (await admin
+        .from("user_profiles")
+        .select("id, first_name, last_name, position, role")
+        .in("role", ["director_hr", "manager_hr", "hr_director", "hr_executive"])
+        .eq("is_active", true)
+        .order("first_name", { ascending: true })
+      ).data?.map((exec: any) => ({
+        id: exec.id,
+        full_name: `${exec.first_name} ${exec.last_name}`.trim(),
+        position: exec.position || "HR Executive",
+        role: exec.role,
+      })) || [],
       inbox: {
         hod: attachAccountsReviewerName(attachName(hodRes.data || [])),
         loanOffice: attachAccountsReviewerName(attachName(loanOfficeRes.data || [])),
