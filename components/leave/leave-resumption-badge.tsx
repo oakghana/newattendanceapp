@@ -36,11 +36,18 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
 
         if (profile?.leave_status === 'on_leave' && profile?.leave_end_date) {
           const days = calculateDaysRemaining(profile.leave_end_date)
+          // Show badge when 5 days OR LESS remain (including today and yesterday for past resumption)
           if (days <= 5) {
             setDaysRemaining(days)
             setLeaveEndDate(profile.leave_end_date)
             setIsOnLeave(true)
           }
+        } else if (profile?.leave_status === 'resumption' && profile?.leave_end_date) {
+          // Also show for users in "resumption" status (recently returned from leave)
+          const days = calculateDaysRemaining(profile.leave_end_date)
+          setDaysRemaining(0)
+          setLeaveEndDate(profile.leave_end_date)
+          setIsOnLeave(true)
         }
       } catch (error) {
         console.error('Error checking leave status:', error)
@@ -60,20 +67,28 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
     }
   }, [])
 
-  if (loading || !isOnLeave || daysRemaining === null) return null
+  // Show badge if:
+  // - Still on leave and resuming within 5 days
+  // - Already past resumption (negative days, user forgot to update status)
+  // - Currently on the resumption day (0 days)
+  if (loading || !isOnLeave || daysRemaining === null || (daysRemaining > 5 && daysRemaining > 0)) {
+    return null
+  }
 
   const getUrgencyColor = (days: number) => {
-    if (days <= 0) return 'bg-red-500 text-white'
+    if (days < 0) return 'bg-red-600 text-white' // Past resumption date - urgent!
+    if (days === 0) return 'bg-green-600 text-white' // Resumption today
     if (days === 1) return 'bg-orange-500 text-white'
-    if (days <= 2) return 'bg-amber-500 text-white'
+    if (days <= 3) return 'bg-amber-500 text-white'
     return 'bg-blue-500 text-white'
   }
 
   const getUrgencyEmoji = (days: number) => {
-    if (days <= 0) return '🔴'
-    if (days === 1) return '🎉'
-    if (days <= 2) return '⏰'
-    return '📅'
+    if (days < 0) return '🚨' // Past date alert
+    if (days === 0) return '🎉' // Today!
+    if (days === 1) return '⏰' // Tomorrow
+    if (days <= 3) return '📅' // Soon
+    return '📆' // A bit longer
   }
 
   const urgencyClass = getUrgencyColor(daysRemaining)
@@ -81,14 +96,22 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
 
   const formattedDate = leaveEndDate ? new Date(leaveEndDate).toLocaleDateString('en-US', {
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
+    year: 'numeric',
   }) : ''
+
+  const getResumptionText = (days: number) => {
+    if (days < 0) return `Should have resumed ${Math.abs(days)} day${Math.abs(days) > 1 ? 's' : ''} ago`
+    if (days === 0) return 'Resume Today!'
+    if (days === 1) return 'Resume Tomorrow'
+    return `Resume in ${days} Day${days > 1 ? 's' : ''}`
+  }
 
   if (compact) {
     return (
       <Badge className={`${urgencyClass} px-2 py-1 text-xs font-semibold gap-1 flex items-center whitespace-nowrap`}>
         <span>{emoji}</span>
-        <span>{daysRemaining === 0 ? 'Today' : `${daysRemaining}d`}</span>
+        <span>{daysRemaining === 0 ? 'Today' : daysRemaining < 0 ? 'Overdue' : `${daysRemaining}d`}</span>
       </Badge>
     )
   }
@@ -99,7 +122,7 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
         <span className="text-lg">{emoji}</span>
         <div className="flex flex-col">
           <span className="font-bold">
-            {daysRemaining === 0 ? 'Resume Today!' : `Resume in ${daysRemaining} Day${daysRemaining > 1 ? 's' : ''}`}
+            {getResumptionText(daysRemaining)}
           </span>
           <span className="text-xs opacity-90 flex items-center gap-1">
             <Calendar className="w-3 h-3" />
