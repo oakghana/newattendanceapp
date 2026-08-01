@@ -420,81 +420,109 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
         </div>
       )}
 
-      {/* Review Dialog */}
+      {/* Review Dialog - Modern Compact Layout */}
       <Dialog open={!!selectedReview} onOpenChange={open => !open && setSelectedReview(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>FD Verification Review</DialogTitle>
-            <DialogDescription>
-              Verify the FD calculation and supporting documentation. Add your verification memo before approval/rejection.
-            </DialogDescription>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-3 border-b">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle className="text-lg">FD Verification Review</DialogTitle>
+                <DialogDescription className="text-xs mt-1">Review calculation and approve or reject</DialogDescription>
+              </div>
+              {selectedReview && (
+                <div className={`px-3 py-1 rounded text-sm font-semibold whitespace-nowrap ${(selectedReview.fd_score ?? 0) >= 39 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  Score: {selectedReview.fd_score ?? 'N/A'}/100
+                </div>
+              )}
+            </div>
           </DialogHeader>
 
           {selectedReview && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded">
-                <div>
-                  <p className="text-xs font-semibold text-slate-600">Staff / Loan</p>
-                  <p className="text-sm font-medium">{selectedReview.staff_name || 'N/A'}</p>
-                  <p className="text-xs text-slate-500">{selectedReview.loan_type} &bull; Ref: {selectedReview.request_number || selectedReview.id.slice(0, 8)}</p>
+            <div className="space-y-3">
+              {/* Quick Info Row */}
+              <div className="grid grid-cols-4 gap-3">
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Staff</p>
+                  <p className="text-sm font-medium truncate">{selectedReview.staff_name || 'N/A'}</p>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-600">FD Score</p>
-                  <p className={`text-lg font-bold ${(selectedReview.fd_score ?? 0) >= 39 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {selectedReview.fd_score ?? 'N/A'}
-                  </p>
-                  {selectedReview.requested_amount && (
-                    <p className="text-xs text-slate-500">Loan: ₵{Number(selectedReview.requested_amount).toLocaleString()}</p>
-                  )}
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Loan Type</p>
+                  <p className="text-sm font-medium truncate">{selectedReview.loan_type || 'N/A'}</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Amount</p>
+                  <p className="text-sm font-medium">₵{Number(selectedReview.requested_amount || 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded">
+                  <p className="text-xs font-semibold text-slate-600">Ref</p>
+                  <p className="text-sm font-mono truncate">{selectedReview.request_number || selectedReview.id.slice(0, 8)}</p>
                 </div>
               </div>
 
-              {/* FD Calculation Details from Accounts Loan Office */}
+              {/* Collapsible Calculation Details */}
               {selectedReview.fd_note && (
-                <FDCalculationDetails fdNote={selectedReview.fd_note} />
-              )}
-
-              <div>
-                <label className="text-sm font-semibold">FD Verification Memo</label>
-                <Textarea
-                  placeholder="Enter your verification findings and calculations..."
-                  value={verificationMemo}
-                  onChange={e => setVerificationMemo(e.target.value)}
-                  className="mt-2 min-h-24"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold">Decision Notes</label>
-                <Textarea
-                  placeholder="Enter your decision notes (approval or rejection reason)..."
-                  value={reviewDecision}
-                  onChange={e => setReviewDecision(e.target.value)}
-                  className="mt-2 min-h-16"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-                  <p className="text-xs font-semibold text-blue-900 mb-1">Loan Office Notes:</p>
-                  <p className="text-blue-800 whitespace-pre-wrap">{selectedReview.submission_memo || 'No additional notes provided'}</p>
-                </div>
-
-                {selectedReview.fd_note && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded text-sm">
-                    <p className="text-xs font-semibold text-slate-900 mb-2">FD Calculation Memo - Supporting Document</p>
+                <details className="group border rounded-lg cursor-pointer">
+                  <summary className="px-4 py-3 bg-emerald-50 hover:bg-emerald-100 font-semibold text-sm flex items-center justify-between select-none">
+                    <span>FD Calculation Details</span>
+                    <span className="text-xs group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <div className="p-4 bg-white border-t">
                     <FDCalculationDetails fdNote={selectedReview.fd_note} />
                   </div>
-                )}
+                </details>
+              )}
+
+              {/* Notes Section */}
+              {(selectedReview.submission_memo || selectedReview.fd_note) && (
+                <details className="group border rounded-lg cursor-pointer">
+                  <summary className="px-4 py-3 bg-blue-50 hover:bg-blue-100 font-semibold text-sm flex items-center justify-between select-none">
+                    <span>Supporting Documents</span>
+                    <span className="text-xs group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <div className="p-4 bg-white border-t space-y-3 text-sm">
+                    {selectedReview.submission_memo && (
+                      <div>
+                        <p className="text-xs font-semibold text-slate-600 mb-1">Loan Office Notes</p>
+                        <p className="text-slate-700 bg-slate-50 p-2 rounded text-xs leading-relaxed">{selectedReview.submission_memo}</p>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
+
+              {/* Decision Section */}
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                <p className="font-semibold text-sm text-slate-900">Your Decision</p>
+                
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Verification Findings *</label>
+                  <Textarea
+                    placeholder="Enter your verification findings and calculations..."
+                    value={verificationMemo}
+                    onChange={e => setVerificationMemo(e.target.value)}
+                    className="mt-2 min-h-16 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Decision Reason *</label>
+                  <Textarea
+                    placeholder="Enter approval or rejection reason..."
+                    value={reviewDecision}
+                    onChange={e => setReviewDecision(e.target.value)}
+                    className="mt-2 min-h-12 text-sm"
+                  />
+                </div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 pt-4 border-t">
             <Button
               variant="outline"
               onClick={() => setSelectedReview(null)}
               disabled={submitting}
+              size="sm"
             >
               Cancel
             </Button>
@@ -502,6 +530,7 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
               variant="destructive"
               onClick={handleReject}
               disabled={submitting || !reviewDecision}
+              size="sm"
             >
               <XCircle className="h-4 w-4 mr-1" />
               Reject
@@ -510,6 +539,7 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
               onClick={handleApprove}
               disabled={submitting || !verificationMemo}
               className="bg-emerald-600 hover:bg-emerald-700"
+              size="sm"
             >
               <CheckCircle className="h-4 w-4 mr-1" />
               Approve
