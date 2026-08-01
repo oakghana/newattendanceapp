@@ -1,5 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { LeaveManagementModuleClient } from "./leave-management-module-client"
+import { LeaveManagementPageWrapper } from "@/components/leave/leave-management-page-wrapper"
+import { Suspense } from "react"
 
 
 export default async function LeaveManagementPage() {
@@ -90,6 +92,7 @@ export default async function LeaveManagementPage() {
 
   try {
     return (
+      <LeaveManagementPageWrapper>
       <div className="leave-theme">
         <LeaveManagementModuleClient
           userId={user.id}
@@ -107,6 +110,7 @@ export default async function LeaveManagementPage() {
           initialApprovedStaffRequests={approvedStaffRequests}
         />
       </div>
+      </LeaveManagementPageWrapper>
     )
   } catch (renderErr: any) {
     console.error("[v0] Leave management render error:", renderErr?.message, renderErr?.stack)

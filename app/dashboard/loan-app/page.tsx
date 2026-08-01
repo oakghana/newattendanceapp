@@ -17,6 +17,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
+import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
+import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
+import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -1180,13 +1183,32 @@ export default function LoanAppPage() {
     const isAccountsExecutive = !isAdminUser && !!p?.accounts
     const isHrExecutiveOnly = !isAdminUser && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.hrOffice && !p?.viewAllTabs
 
-    const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: "My Loans" }]
+    // Get loan type name for "My Loans" tab if a loan is selected
+    let myLoansLabel = "My Loans"
+    if (loanTypeKey && data?.loanTypes) {
+      const selectedLoanType = data.loanTypes.find((lt: any) => lt.key === loanTypeKey)
+      if (selectedLoanType?.name) {
+        myLoansLabel = `My Loans - ${selectedLoanType.name}`
+      }
+    }
+
+    const tabs: { key: string; label: string; href?: string }[] = [{ key: "staff", label: myLoansLabel }]
     // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
 
     // Payment Approvals tab: only for HR and Accounts executives
     if (isHrExecutive || isAccountsExecutive) {
       tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    }
+
+    // FD Approval tab: only for Accounts executives to review FD values from Loan Office
+    if (isAccountsExecutive) {
+      // TODO: Update when API is integrated to return pending FD count
+      // For now, display FD Approval tab without count
+      tabs.push({ 
+        key: "fd-approval", 
+        label: "FD Approval"
+      })
     }
 
     // Repayment Tracking tab: only for Loan Office and Accounts executives
@@ -2808,7 +2830,12 @@ export default function LoanAppPage() {
   }
 
   return (
-    <div className="space-y-6 p-2 loan-theme">
+    <>
+      <GlobalWarningsToasts />
+      <div className="px-2">
+        <LeaveResumptionBadge />
+      </div>
+      <div className="space-y-6 p-2 loan-theme">
       <Card className="overflow-hidden border border-violet-100 bg-[radial-gradient(circle_at_top_left,_rgba(168,85,247,0.14),_transparent_30%),linear-gradient(135deg,_#fcfaff_0%,_#f4efff_45%,_#ffffff_100%)] shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
         <CardHeader className="border-b border-violet-100/80 bg-white/80 backdrop-blur">
           <div className="flex flex-col gap-5">
@@ -5134,6 +5161,11 @@ export default function LoanAppPage() {
           </Card>
         </TabsContent>
 
+        {/* ── FD Approval Tab (Accounts Executive) ── */}
+        <TabsContent value="fd-approval" className="space-y-4">
+          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} />
+        </TabsContent>
+
         <TabsContent value="director" className="space-y-3">
                     <ReadOnlyHint canAct={Boolean(p?.directorHr)} roleLabel="Executive HR" />
           <Card>
@@ -7444,7 +7476,8 @@ export default function LoanAppPage() {
       </Dialog>
 
       </Tabs>
-    </div>
+      </div>
+    </>
   )
 }
 
