@@ -1102,15 +1102,38 @@ export default function LoanAppPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   const filteredLoanTypes = useMemo(() => {
+    if (!data) {
+      console.log("[v0] Loan types: data not loaded yet")
+      return []
+    }
+    
     const rawTypes = data?.loanTypes || []
     const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
+    
+    console.log("[v0] Loan types debug:", {
+      rawTypesCount: rawTypes.length,
+      userTier,
+      userPosition: data?.profile?.position,
+      userRole: data?.profile?.role,
+    })
+
+    if (rawTypes.length === 0) {
+      console.log("[v0] No loan types returned from API")
+      return []
+    }
 
     const normalizedTypes = rawTypes.map((type) => ({
       ...type,
       loan_label: normalizeLoanTypeLabel(type, rawTypes),
     }))
 
-    return normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
+    const filtered = normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
+    console.log("[v0] Filtered loan types:", {
+      normalizedCount: normalizedTypes.length,
+      filteredCount: filtered.length,
+    })
+    
+    return filtered
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
