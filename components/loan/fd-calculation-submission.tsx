@@ -242,32 +242,40 @@ export function FDCalculationSubmission({ loanRequest, onSubmitComplete }: FDCal
 
             {/* Tab 2: Outstanding Loans */}
             <TabsContent value="outstanding" className="space-y-3 p-4">
+              <p className="text-xs text-muted-foreground mb-3">Enter any outstanding loan balances that apply to this staff member. Leave blank if none apply.</p>
+              
               <div className="border rounded-md overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setOutstandingOpen(p => !p)}
                   className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium bg-muted/40 hover:bg-muted/60 transition-colors"
                 >
-                  {outstandingOpen ? 'Hide Loans' : 'Show All Available Loans'}
+                  <span>{outstandingOpen ? 'Hide' : 'Show'} All {Object.keys(OUTSTANDING_LOAN_LABELS).length} Available Loan Types</span>
                   {outstandingOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </button>
                 {outstandingOpen && (
-                  <div className="grid grid-cols-3 gap-2 p-3 bg-muted/20">
-                    {(Object.keys(OUTSTANDING_LOAN_LABELS) as Array<keyof OutstandingLoans>).map(key => (
-                      <div key={key} className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground leading-tight block">
-                          {OUTSTANDING_LOAN_LABELS[key]}
-                        </Label>
-                        <Input type="number" min={0} step="0.01" placeholder="0.00"
-                          value={outstanding[key] ?? ''}
-                          onChange={e => setOutstandingField(key, e.target.value)}
-                          className="h-7 text-xs" />
-                      </div>
-                    ))}
+                  <div className="bg-muted/20 p-4 max-h-96 overflow-y-auto">
+                    <div className="grid grid-cols-3 gap-3">
+                      {(Object.keys(OUTSTANDING_LOAN_LABELS) as Array<keyof OutstandingLoans>).map(key => (
+                        <div key={key} className="space-y-1.5 p-2 rounded border border-border/40 bg-background/50 hover:bg-background transition-colors">
+                          <Label className="text-[11px] text-muted-foreground leading-tight block font-medium">
+                            {OUTSTANDING_LOAN_LABELS[key]}
+                          </Label>
+                          <Input 
+                            type="number" 
+                            min={0} 
+                            step="0.01" 
+                            placeholder="0.00"
+                            value={outstanding[key] ?? ''}
+                            onChange={e => setOutstandingField(key, e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Enter any outstanding loan balances that apply to this staff member</p>
             </TabsContent>
 
             {/* Tab 3: Results */}
