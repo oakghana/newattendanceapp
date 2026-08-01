@@ -238,7 +238,7 @@ export async function PATCH(request: Request) {
     }
 
     // Log to loan_request_timeline for audit trail
-    await admin
+    const { error: timelineError } = await admin
       .from("loan_request_timeline")
       .insert({
         loan_request_id: review_id,
@@ -249,7 +249,11 @@ export async function PATCH(request: Request) {
         to_status: isApproved ? "pending_hr_loan_office" : "fd_rejected",
         note: review_decision || (isApproved ? "FD approved by Accounts Executive" : "FD rejected by Accounts Executive"),
       })
-      .catch(err => console.error("[v0] Timeline log error:", err))
+
+    if (timelineError) {
+      console.warn("[v0] Timeline log error (non-critical):", timelineError)
+      // Don't fail the whole operation if timeline logging fails
+    }
 
     return NextResponse.json({
       success: true,
@@ -259,8 +263,12 @@ export async function PATCH(request: Request) {
         : "FD rejected. Loan Office has been notified.",
     })
   } catch (error) {
-    console.error("[v0] FD review PATCH error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Internal server error"
+    console.error("[v0] FD review PATCH error:", errorMessage)
+    return NextResponse.json({ 
+      error: "Failed to process FD approval",
+      details: errorMessage
+    }, { status: 500 })
   }
 }
 

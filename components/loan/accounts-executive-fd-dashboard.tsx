@@ -235,11 +235,14 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
         setReviewDecision('')
         fetchPendingReviews()
       } else {
-        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+        const errorMsg = data.details || data.error || 'Unknown error'
+        console.error('[v0] FD approval error:', errorMsg)
+        toast({ title: 'Error', description: errorMsg, variant: 'destructive' })
       }
     } catch (error) {
-      console.error('[v0] Error approving FD:', error)
-      toast({ title: 'Error', description: 'Failed to approve FD request', variant: 'destructive' })
+      const errorMsg = error instanceof Error ? error.message : 'Failed to approve FD request'
+      console.error('[v0] Error approving FD:', errorMsg)
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
