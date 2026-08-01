@@ -179,7 +179,6 @@ type WorkflowResponse = {
     hrOffice: LoanRequest[]
     directorHr: LoanRequest[]
     directorGoodFd: LoanRequest[]
-    hrExecutive: LoanRequest[]
     allLoans: LoanRequest[]
   }
 }
@@ -2904,21 +2903,6 @@ export default function LoanAppPage() {
     )
   }
 
-  // Safety check: don't render if data failed to load and isn't currently loading
-  if (!data && !loading) {
-    return (
-      <div className="space-y-6 p-6">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
-          <p className="font-semibold">Unable to load loan module</p>
-          <p className="text-sm text-red-700 mt-1">Please try refreshing the page or contact support if the problem persists.</p>
-          <button onClick={() => window.location.reload()} className="mt-3 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm">
-            Refresh Page
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <>
       <GlobalWarningsToasts />
@@ -2957,22 +2941,23 @@ export default function LoanAppPage() {
                       ? <span className="inline-block h-5 w-20 animate-pulse rounded-full bg-slate-200 align-middle" />
                       : data?.profile.staffCategory
                         ? <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                            data?.profile?.staffCategory === "Manager" ? "bg-indigo-100 text-indigo-800" :
-                            data?.profile?.staffCategory === "Senior" ? "bg-blue-100 text-blue-800" :
+                            data.profile.staffCategory === "Manager" ? "bg-indigo-100 text-indigo-800" :
+                            data.profile.staffCategory === "Senior" ? "bg-blue-100 text-blue-800" :
                             "bg-slate-100 text-slate-700"
-                          }`}>{data?.profile?.staffCategory?.charAt(0).toUpperCase()}{data?.profile?.staffCategory?.slice(1)}</span>
+                          }`}>{data.profile.staffCategory?.charAt(0).toUpperCase()}{data.profile.staffCategory?.slice(1)}</span>
                         : <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700">Junior</span>}
                   </div>
                   <div><strong>Length of Service:</strong>{" "}
                     {loading
                       ? <span className="inline-block h-4 w-20 animate-pulse rounded bg-slate-200 align-middle" />
                       : (() => {
-                          const yrs = data?.profile?.yearsOfService != null 
+                          const yrs = data?.profile.yearsOfService != null 
                             ? data.profile.yearsOfService
-                            : data?.profile?.dateOfAppointment
+                            : data?.profile.dateOfAppointment
                               ? Math.floor((Date.now() - new Date(data.profile.dateOfAppointment).getTime()) / (365.25 * 24 * 3600 * 1000))
                               : 0
-                          return <span className="text-slate-600">{yrs}y{data?.profile?.dateOfAppointment && !data?.profile?.yearsOfService ? <span className="text-slate-400 text-xs"> (since {fmtDate(data?.profile?.dateOfAppointment)})</span> : null}</span>
+                          console.log("[v0] Loan Admin YoS - yearsOfService:", data?.profile.yearsOfService, "dateOfAppointment:", data?.profile.dateOfAppointment, "calculated yrs:", yrs)
+                          return <span className="text-slate-600">{yrs}y{data?.profile.dateOfAppointment && !data?.profile.yearsOfService ? <span className="text-slate-400 text-xs"> (since {fmtDate(data.profile.dateOfAppointment)})</span> : null}</span>
                         })()}
                   </div>
                   <div><strong>Assigned Location:</strong>{" "}
