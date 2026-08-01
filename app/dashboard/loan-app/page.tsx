@@ -5551,7 +5551,16 @@ export default function LoanAppPage() {
                     </TableHeader>
                     <TableBody>
                       {pagedMyTasks.map((row) => (
-                        <TableRow key={`my-task-${row.id}`}>
+                        <TableRow 
+                          key={`my-task-${row.id}`}
+                          onDoubleClick={() => {
+                            if (isHod && row.status === "pending_hod") {
+                              openActionModal(row, "hod")
+                            }
+                          }}
+                          title={isHod && row.status === "pending_hod" ? "Double-click to open Review & Endorse dialog" : ""}
+                          className={isHod && row.status === "pending_hod" ? "cursor-pointer hover:bg-purple-50 transition-colors" : ""}
+                        >
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
                           <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.staff_number || "—"}</TableCell>
