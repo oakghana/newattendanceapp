@@ -100,12 +100,35 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Database query failed", details: queryError.message }, { status: 500 })
     }
 
+    // Fetch user profiles to get complete staff names
+    const userIds = (loanRequests || []).map(lr => lr.user_id).filter(Boolean)
+    const { data: userProfiles, error: profilesError } = userIds.length > 0
+      ? await admin
+          .from("user_profiles")
+          .select("id, first_name, last_name, employee_id")
+          .in("id", userIds)
+      : { data: [], error: null }
+
+    if (profilesError) {
+      console.warn("[v0] Warning fetching user profiles:", profilesError)
+    }
+
+    // Create a map of user profiles for easy lookup
+    const profileMap = new Map((userProfiles || []).map(p => [p.id, p]))
+
     // Map to the shape the FD dashboard component expects
-    const reviews = (loanRequests || []).map(loan => ({
+    const reviews = (loanRequests || []).map(loan => {
+      // Get staff name from profile if loan_requests.staff_full_name is missing
+      const profile = profileMap.get(loan.user_id)
+      const staffName = loan.staff_full_name || 
+        (profile ? `${profile.first_name} ${profile.last_name}`.trim() : undefined) ||
+        "Unknown Staff"
+      
+      return {
       id: loan.id,
       loan_request_id: loan.id,
       staff_user_id: loan.user_id,
-      staff_name: loan.staff_full_name,
+      staff_name: staffName,
       staff_number: loan.staff_number,
       loan_type: loan.loan_type_label || loan.loan_type_key,
       requested_amount: loan.requested_amount,
@@ -119,10 +142,11 @@ export async function GET(request: Request) {
       submission_date: loan.loan_office_forwarded_at || loan.created_at,
       submission_memo: loan.loan_office_note || loan.fd_note || "",
       fd_note: loan.fd_note,
-      request_number: loan.request_number || loan.reference_number,
-      review_status: statusParam === "pending_review" ? "pending_review" : statusParam,
-      status: loan.status,
-    }))
+        request_number: loan.request_number || loan.reference_number,
+        review_status: statusParam === "pending_review" ? "pending_review" : statusParam,
+        status: loan.status,
+      }
+    })
 
     return NextResponse.json({
       success: true,

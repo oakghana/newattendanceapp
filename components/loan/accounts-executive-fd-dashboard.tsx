@@ -405,21 +405,13 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                     </Button>
                   </div>
                 ) : (
-                  <>
-                    {['accounts_executive', 'admin', 'director_hr'].includes(userRole) ? (
-                      <Button
-                        onClick={() => setSelectedReview(review)}
-                        className="w-full"
-                        variant="outline"
-                      >
-                        Review & Approve
-                      </Button>
-                    ) : (
-                      <div className="w-full px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-center text-amber-700 font-medium">
-                        Awaiting Accounts Executive Review
-                      </div>
-                    )}
-                  </>
+                  <Button
+                    onClick={() => setSelectedReview(review)}
+                    className="w-full"
+                    variant="outline"
+                  >
+                    Review & Approve
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -482,9 +474,18 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                 />
               </div>
 
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-                <p className="text-xs font-semibold text-blue-900 mb-1">Original Loan Office Memo:</p>
-                <p className="text-blue-800">{selectedReview.submission_memo}</p>
+              <div className="space-y-3">
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                  <p className="text-xs font-semibold text-blue-900 mb-1">Loan Office Notes:</p>
+                  <p className="text-blue-800 whitespace-pre-wrap">{selectedReview.submission_memo || 'No additional notes provided'}</p>
+                </div>
+
+                {selectedReview.fd_note && (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded text-sm">
+                    <p className="text-xs font-semibold text-slate-900 mb-2">FD Calculation Memo - Supporting Document</p>
+                    <FDCalculationDetails fdNote={selectedReview.fd_note} />
+                  </div>
+                )}
               </div>
             </div>
           )}
