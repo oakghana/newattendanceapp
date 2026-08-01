@@ -929,7 +929,7 @@ export default function LoanAppPage() {
   const [directorLetter, setDirectorLetter] = useState("")
   const [memoPreviewLoanId, setMemoPreviewLoanId] = useState<string | null>(null)
 
-  // ── Action modal state ──────────────────────────────────────────────
+  // ── Action modal state ──────────────────���───────────────────────────
   type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
@@ -6687,73 +6687,6 @@ export default function LoanAppPage() {
 
                 <Label className="text-xs">HR Loan Office Remarks (optional)</Label>
                 <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Any observations or remarks..." rows={2} className="text-xs" />
-              </>
-            )}
-
-                {/* Calculate button */}
-                <Button type="button" variant="outline" size="sm" className="w-full text-xs"
-                  disabled={!modalFdSalaryAnnum}
-                  onClick={() => {
-                    if (!actionModal.row) return
-                    setModalFdCalcErrors([])
-                    const parsedOutstanding = Object.fromEntries(
-                      Object.entries(modalFdOutstanding)
-                        .map(([k, v]) => [k, parseFloat(v as string) || 0])
-                        .filter(([, v]) => (v as number) > 0)
-                    ) as OutstandingLoans
-                    const input = {
-                      staffNumber: actionModal.row.staff_number || "",
-                      staffName: actionModal.row.staff_full_name || "",
-                      salary_per_annum: parseFloat(modalFdSalaryAnnum) || 0,
-                      other_allowances_monthly: parseFloat(modalFdOtherAllowances) || 0,
-                      gross_deduction_monthly: parseFloat(modalFdGrossDeduction) || 0,
-                      requested_loan_amount: actionModal.row.fixed_amount || actionModal.row.requested_amount || 0,
-                      recovery_period_months: actionModal.row.repayment_duration_months || 12,
-                      loan_type: actionModal.row.loan_type_label,
-                      outstanding_loans: parsedOutstanding,
-                    }
-                    const errs = validateFDInput(input)
-                    if (errs.length > 0) { setModalFdCalcErrors(errs); return }
-                    const result = calculateFD(input)
-                    setModalFdCalcResult(result)
-                    setModalFdScore(String(result.fd_score))
-                  }}>
-                  <Calculator className="h-3.5 w-3.5 mr-1.5" />
-                  {modalFdCalcResult ? "Recalculate FD Score" : "Calculate FD Score"}
-                </Button>
-
-                {/* Calculation results preview */}
-                {modalFdCalcResult && (
-                  <div className={`rounded-md border p-3 space-y-2 ${modalFdCalcResult.fd_good ? "border-green-300 bg-green-50/50" : "border-amber-300 bg-amber-50/50"}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        {modalFdCalcResult.fd_good
-                          ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          : <AlertCircle className="h-4 w-4 text-amber-600" />}
-                        <span className={`text-xs font-semibold ${modalFdCalcResult.fd_good ? "text-green-800" : "text-amber-800"}`}>
-                          {modalFdCalcResult.fd_good ? "Good Financial Standing" : "Financial Standing: Needs Review"}
-                        </span>
-                      </div>
-                      <span className={`text-sm font-bold px-2 py-0.5 rounded ${modalFdCalcResult.fd_good ? "bg-green-600 text-white" : "bg-amber-500 text-white"}`}>
-                        {modalFdCalcResult.fd_score}/100
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                      <div className="flex justify-between"><span className="text-muted-foreground">Gross Monthly</span><span className="font-medium">GH¢ {modalFdCalcResult.gross_salary_per_month.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Total Deductions</span><span className="font-medium text-red-600">GH¢ {modalFdCalcResult.total_deduction_monthly.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Net Monthly</span><span className={`font-bold ${modalFdCalcResult.fd_good ? "text-green-700" : "text-amber-700"}`}>GH¢ {modalFdCalcResult.net_salary_monthly.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">½ of Gross</span><span className="font-medium">GH¢ {modalFdCalcResult.half_gross_salary_per_month.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Loan Installment</span><span className="font-medium">GH¢ {modalFdCalcResult.loan_installment_monthly.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Net/Gross Ratio</span><span className="font-medium">{modalFdCalcResult.net_to_gross_ratio.toFixed(1)}%</span></div>
-                    </div>
-                    <p className="text-xs text-muted-foreground pt-1 border-t">
-                      Review the figures above. If correct, click <strong>Confirm &amp; Send to Accounts Executive</strong> below.
-                    </p>
-                  </div>
-                )}
-
-                <Label className="text-xs">HR Loan Office Remarks (optional)</Label>
-                <Textarea value={modalFdNote} onChange={(e) => setModalFdNote(e.target.value)} placeholder="Any observations or remarks before forwarding..." rows={2} className="text-xs" />
               </>
             )}
             {/* Committee - Further Information */}
