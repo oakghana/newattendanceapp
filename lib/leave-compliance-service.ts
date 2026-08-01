@@ -8,7 +8,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/server'
-import { differenceInDays, startOfSeptember, subDays } from 'date-fns'
+import { differenceInDays, subDays } from 'date-fns'
 
 interface LeaveComplianceCheckResult {
   isAnnualLeaveReminder: boolean
@@ -27,7 +27,12 @@ export function isAnnualLeaveReminderPeriod(): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   
-  const septemberFirst = startOfSeptember(today)
+  // Calculate September 1st of the current or next year
+  let septemberFirst = new Date(today.getFullYear(), 8, 1) // Month is 0-indexed, so 8 = September
+  if (today > septemberFirst) {
+    septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
+  }
+  
   const reminderStart = subDays(septemberFirst, 14)
   
   return today >= reminderStart && today < septemberFirst

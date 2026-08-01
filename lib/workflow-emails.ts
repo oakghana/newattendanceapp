@@ -960,8 +960,8 @@ export async function notifyStaffOfLeaveReminder(opts: {
   leaveYearPeriod: string
 }): Promise<void> {
   try {
-    const link = ${APP_URL}/dashboard/leave-planning
-    const subject = 📅 Annual Leave Submission Reminder -  days left
+    const link = `${APP_URL}/dashboard/leave-planning`
+    const subject = `📅 Annual Leave Submission Reminder - ${daysLeft} days left`
     const html = baseLayout(
       'Annual Leave Submission Reminder',
       <p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong></strong>,</p>
