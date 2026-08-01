@@ -7164,18 +7164,18 @@ export default function LoanAppPage() {
                   </p>
                 </div>
 
-                {/* FD approval summary from the Account Executive (read-only) */}
+                {/* FD Approval Summary from Account Executive */}
                 {actionModal.row && actionModal.row.fd_score != null && (
                   <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 mb-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-emerald-900">FD Approval — from Account Executive</span>
-                      <Badge className={actionModal.row.fd_good ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${actionModal.row.fd_good ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}`}>
                         {actionModal.row.fd_good ? "Good Standing" : "Below Threshold"}
-                      </Badge>
+                      </span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-700 mt-2">
+                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-700">
                       <div>FD Score: <strong>{actionModal.row.fd_score}/100</strong></div>
-                      <div>Reviewed: <strong>{actionModal.row.accounts_reviewer_name || "—"}</strong></div>
+                      <div>Reviewed by: <strong>{actionModal.row.accounts_reviewer_name || "—"}</strong></div>
                       {actionModal.row.fd_checked_at && (
                         <div><strong>{new Date(actionModal.row.fd_checked_at).toLocaleDateString()}</strong></div>
                       )}
