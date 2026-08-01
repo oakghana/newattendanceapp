@@ -5546,6 +5546,7 @@ export default function LoanAppPage() {
                         <TableHead className="whitespace-nowrap">Attachment</TableHead>
                         <TableHead className="whitespace-nowrap">Updated</TableHead>
                         <TableHead className="whitespace-nowrap">Memo</TableHead>
+                        <TableHead className="whitespace-nowrap">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -5576,6 +5577,22 @@ export default function LoanAppPage() {
                             {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status)
                               ? <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                               : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            {isHod && row.status === "pending_hod_decision" && (
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => openActionModal(row, "hod")}
+                                >
+                                  Review
+                                </Button>
+                              </div>
+                            )}
+                            {isHod && row.status !== "pending_hod_decision" && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -5611,6 +5628,17 @@ export default function LoanAppPage() {
                   {["rejected_fd", "director_rejected", "approved_director", "awaiting_director_hr"].includes(row.status) && (
                     <div className="pt-2">
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
+                    </div>
+                  )}
+                  {isHod && row.status === "pending_hod_decision" && (
+                    <div className="pt-2 flex gap-2">
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => openActionModal(row, "hod")}
+                      >
+                        Review
+                      </Button>
                     </div>
                   )}
                 </div>
