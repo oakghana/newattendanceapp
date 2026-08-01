@@ -494,9 +494,33 @@ export function AttendanceRecorder({
 
 
 
-  // SMART LEAVE HANDLING: Disable check-in/check-out when user is on leave
-  // Note: 'active' means working/at post, 'on_leave' or 'sick_leave' means actually on leave
-  const isOnLeave = userLeaveStatus === "on_leave" || userLeaveStatus === "sick_leave"
+  // SMART LEAVE HANDLING: query leave_plan_requests directly because
+  // user_profiles.leave_status is not reliably updated on HR approval.
+  const [isOnLeave, setIsOnLeave] = useState(false)
+  useEffect(() => {
+    let active = true
+    const checkActiveLeave = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const today = new Date().toISOString().split('T')[0]
+        const { data } = await supabase
+          .from('leave_plan_requests')
+          .select('id')
+          .eq('user_id', user.id)
+          .in('status', ['hr_approved', 'on_leave'])
+          .lte('adjusted_start_date', today)
+          .gte('adjusted_end_date', today)
+          .limit(1)
+        if (active) setIsOnLeave(!!(data && data.length > 0))
+      } catch {
+        // Silently fail — default is not-on-leave so check-in isn't incorrectly blocked
+      }
+    }
+    void checkActiveLeave()
+    return () => { active = false }
+  }, [])
   
   // Default canCheckIn to true if not explicitly set, allowing staff to check in any time after midnight
   // MUST also verify user is within proximity range (matches checkout validation logic)

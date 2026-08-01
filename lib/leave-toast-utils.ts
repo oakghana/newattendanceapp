@@ -15,8 +15,8 @@ export function calculateDaysRemaining(endDateString: string): number {
   today.setHours(0, 0, 0, 0)
   const endDate = new Date(endDateString)
   endDate.setHours(0, 0, 0, 0)
-
-  return Math.max(0, differenceInCalendarDays(endDate, today) + 1)
+  // Do NOT clamp to 0 — callers need the sign to detect overdue cases
+  return differenceInCalendarDays(endDate, today) + 1
 }
 
 /**
