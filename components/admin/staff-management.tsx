@@ -570,17 +570,19 @@ export function StaffManagement() {
     setHodLinkError(null)
     try {
       // Fetch all roles that act as head of department in parallel
-      const [resDH, resRM, resMHR, resDHR] = await Promise.all([
+      const [resDH, resRM, resMHR, resDHR, resHodLinks] = await Promise.all([
         authenticatedFetch("/api/admin/staff?role=department_head&limit=200"),
         authenticatedFetch("/api/admin/staff?role=regional_manager&limit=200"),
         authenticatedFetch("/api/admin/staff?role=manager_hr&limit=200"),
         authenticatedFetch("/api/admin/staff?role=director_hr&limit=200"),
+        authenticatedFetch(`/api/loan/hod-linkages?staff_id=${member.id}`),
       ])
-      const [dh, rm, mhr, dhr]: StaffMember[][] = await Promise.all([
+      const [dh, rm, mhr, dhr, hodLinksData]: any[] = await Promise.all([
         resDH.json().then((d: any) => d.data || []),
         resRM.json().then((d: any) => d.data || []),
         resMHR.json().then((d: any) => d.data || []),
         resDHR.json().then((d: any) => d.data || []),
+        resHodLinks.json(),
       ])
       // Deduplicate by id and sort by name
       const all = [...dh, ...rm, ...mhr, ...dhr]
@@ -593,6 +595,13 @@ export function StaffManagement() {
         `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
       )
       setHodCandidates(unique)
+      
+      // Update staff member with HOD links data
+      if (hodLinksData?.linkedHods && hodLinksData.linkedHods.length > 0) {
+        setHodLinkStaff((prev) => 
+          prev ? { ...prev, hod_links: hodLinksData.linkedHods } : null
+        )
+      }
     } catch {
       setHodCandidates([])
     }
@@ -1495,7 +1504,7 @@ export function StaffManagement() {
             
             // Refresh the staff data
             await fetchStaff()
-            showSuccess('HOD Successfully Delinked', 'HOD removed and requests withdrawn.')
+            showSuccess('HOD removed and requests withdrawn.', 'HOD Successfully Delinked')
           } catch (error) {
             showError(String(error), 'Delink Failed')
             throw error

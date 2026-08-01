@@ -136,9 +136,11 @@ export function ManageHODLinkagesModal({
                       className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
                     >
                       <div className="flex-1">
-                        <div className="font-medium">{hod.name}</div>
+                        <div className="font-medium">{hod.name || 'Unknown HOD'}</div>
                         <div className="text-sm text-muted-foreground">
-                          {hod.employee_id} • {hod.role.replace('_', ' ')} • {hod.department}
+                          {hod.employee_id && `ID: ${hod.employee_id} • `}
+                          {hod.role?.replace('_', ' ') || 'Unknown'} 
+                          {hod.department && ` • ${hod.department}`}
                         </div>
                       </div>
                       <Badge variant="secondary" className="mr-3">
