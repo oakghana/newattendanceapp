@@ -56,6 +56,15 @@ export async function POST(request: NextRequest) {
       .eq('hod_reviewer_id', hod_user_id)
 
     if (loanRequests && loanRequests.length > 0) {
+      // Fetch HOD name for the description
+      const { data: hodProfile } = await admin
+        .from('user_profiles')
+        .select('first_name, last_name')
+        .eq('id', hod_user_id)
+        .maybeSingle()
+
+      const hodName = hodProfile ? `${hodProfile.first_name} ${hodProfile.last_name}` : 'Unknown HOD'
+
       // Withdraw these requests (move back to draft or reject them)
       await admin
         .from('loan_requests')
@@ -66,7 +75,7 @@ export async function POST(request: NextRequest) {
       const timelineEntries = loanRequests.map((req: any) => ({
         loan_request_id: req.id,
         action: 'withdrawn',
-        description: `Request withdrawn from ${(await admin.from('user_profiles').select('first_name, last_name').eq('id', hod_user_id).maybeSingle()).data?.first_name} due to HOD delink`,
+        description: `Request withdrawn from ${hodName} due to HOD delink`,
         changed_by: user.id,
         created_at: new Date().toISOString(),
       }))
