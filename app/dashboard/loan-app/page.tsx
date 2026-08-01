@@ -5553,13 +5553,9 @@ export default function LoanAppPage() {
                       {pagedMyTasks.map((row) => (
                         <TableRow 
                           key={`my-task-${row.id}`}
-                          onDoubleClick={() => {
-                            if (p?.hod && row.status === "pending_hod") {
-                              openActionModal(row, "hod")
-                            }
-                          }}
-                          title={p?.hod && row.status === "pending_hod" ? "Double-click to Review & Endorse" : ""}
-                          className={p?.hod && row.status === "pending_hod" ? "cursor-pointer hover:bg-purple-50 transition-colors" : ""}
+                          onDoubleClick={() => row.status === "pending_hod" && openActionModal(row, "hod")}
+                          title={row.status === "pending_hod" ? "Double-click or use buttons to Review / Endorse" : ""}
+                          className={row.status === "pending_hod" ? "cursor-pointer hover:bg-emerald-50 transition-colors" : ""}
                         >
                           <TableCell className="font-mono text-xs whitespace-nowrap">{row.request_number || row.id.slice(0, 8)}</TableCell>
                           <TableCell className="whitespace-nowrap font-medium">{row.staff_full_name || "—"}</TableCell>
@@ -5569,7 +5565,7 @@ export default function LoanAppPage() {
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="whitespace-nowrap">
-                            {p?.hod && row.status === "pending_hod" ? (
+                            {row.status === "pending_hod" ? (
                               <div className="flex gap-1">
                                 <Button 
                                   size="sm" 
@@ -5645,7 +5641,7 @@ export default function LoanAppPage() {
                       <Button variant="outline" size="sm" onClick={() => openSecureMemo(row.id)}>Open Memo</Button>
                     </div>
                   )}
-                  {p?.hod && row.status === "pending_hod" && (
+                  {row.status === "pending_hod" && (
                     <div className="pt-2 flex gap-2">
                       <Button 
                         size="sm" 
