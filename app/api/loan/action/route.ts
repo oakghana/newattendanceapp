@@ -754,7 +754,7 @@ export async function POST(request: NextRequest) {
         "director_hr", "manager_hr", "hr_director", "managing_director", "admin",
       ].includes(role)
 
-      if (req.status === "awaiting_hr_executives") {
+      if (req.status === "awaiting_hr_executives" || req.status === "pending_hr_executive_review") {
         if (!isHrExecutive) {
           return NextResponse.json({ error: "Only HR Executive staff can approve at this stage" }, { status: 403 })
         }
@@ -771,9 +771,38 @@ export async function POST(request: NextRequest) {
       const decision = body.decision === "reject" ? "reject" : "approve"
       const directorLetter = String(body.director_letter || "").trim() || null
       const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
+
+      // ── Persist signature submitted from the modal into registry ────────
+      // This ensures every HR Executive's drawn/uploaded/typed signature is
+      // always saved against their account for future memos and PDF rendering.
+      const bodySignatureMode = String(body.signature_mode || "typed").trim()
+      const bodySignatureText = String(body.signature_text || "").trim()
+      const bodySignatureDataUrl = String(body.signature_data_url || "").trim()
+      if (bodySignatureMode || bodySignatureText || bodySignatureDataUrl) {
+        try {
+          await admin
+            .from("approval_signature_registry")
+            .upsert(
+              {
+                user_id: user.id,
+                workflow_domain: "loan",
+                approval_stage: "director_hr",
+                signature_mode: bodySignatureMode || "typed",
+                signature_text: bodySignatureText || directorName,
+                signature_data_url: bodySignatureDataUrl || null,
+                is_active: true,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,workflow_domain,approval_stage" },
+            )
+        } catch (sigError) {
+          console.warn("[v0] Could not persist HR executive signature:", sigError)
+        }
+      }
+
       let savedSignature = await getDirectorSavedSignature(admin, user.id)
 
-      // If no signature saved yet, auto-save a text signature for this director
+      // If still no signature, auto-save a typed fallback
       if (!savedSignature) {
         try {
           await admin
@@ -790,22 +819,28 @@ export async function POST(request: NextRequest) {
               },
               { onConflict: "user_id,workflow_domain,approval_stage" },
             )
-          // Try to fetch the newly saved signature
           savedSignature = await getDirectorSavedSignature(admin, user.id)
-          console.log("[v0] Director signature auto-saved and fetched:", savedSignature)
         } catch (sigError) {
           console.warn("[v0] Could not auto-save director signature:", sigError)
-          // Continue anyway - signature will be marked [DIGITALLY SIGNED] in memo
+        }
+      }
+
+      // Always prefer the body's data URL when present (freshly drawn/uploaded)
+      if (bodySignatureDataUrl && !savedSignature?.dataUrl) {
+        savedSignature = {
+          mode: bodySignatureMode || "draw",
+          text: bodySignatureText || directorName,
+          dataUrl: bodySignatureDataUrl,
         }
       }
 
       // ─── STAGE-AWARE status transition ───────────────────────────────
-      // Stage 1: HR Executive signs at "awaiting_hr_executives"
+      // Stage 1: HR Executive signs at "awaiting_hr_executives" or "pending_hr_executive_review"
       //          → approve pushes to "awaiting_director_hr" (MD queue)
       //          → reject closes as "director_rejected"
       // Stage 2: Director HR / MD stamps at "awaiting_director_hr"
       //          → approve = "approved_director"  |  reject = "director_rejected"
-      const isHrExecutiveStage = req.status === "awaiting_hr_executives"
+      const isHrExecutiveStage = req.status === "awaiting_hr_executives" || req.status === "pending_hr_executive_review"
 
       if (isHrExecutiveStage) {
         toStatus = decision === "approve" ? "awaiting_director_hr" : "director_rejected"

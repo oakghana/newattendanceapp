@@ -224,30 +224,35 @@ function buildMemoBody(loan: any): { subject: string; paragraphs: string[] } {
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const admin = await createAdminClient()
-    const { user, authError } = await createClientAndGetUser()
-
-    if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
     const token = request.nextUrl.searchParams.get("token") || ""
     const params = await context.params
     const loanId = params.id
 
-    // Try to verify token if provided, but allow authenticated users who have access
+    // ── Token path: validate HMAC token first — no session cookie required ──
+    // This allows staff to open the memo PDF in a new tab via a signed URL.
+    let tokenUserId: string | null = null
     if (token) {
       const verified = verifyMemoToken(token)
       if (!verified) return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 })
-
-      if (verified.loanId !== loanId || verified.userId !== user.id) {
-        return NextResponse.json({ error: "Token does not match request" }, { status: 403 })
-      }
+      if (verified.loanId !== loanId) return NextResponse.json({ error: "Token does not match request" }, { status: 403 })
+      tokenUserId = verified.userId
     }
-    // If no token, we'll check access permissions below instead
+
+    // ── Session path: fall back to authenticated user if no token ───────────
+    let userId: string
+    if (tokenUserId) {
+      userId = tokenUserId
+    } else {
+      const { user, authError } = await createClientAndGetUser()
+      if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      userId = user.id
+    }
 
     const [{ data: profile, error: profileError }, { data: loan, error: loanError }] = await Promise.all([
       admin
         .from("user_profiles")
         .select("id, role, departments(name, code)")
-        .eq("id", user.id)
+        .eq("id", userId)
         .single(),
       admin
         .from("loan_requests")
@@ -264,7 +269,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const deptCode = (profile as any)?.departments?.code || null
 
     const canAccess =
-      loan.user_id === user.id ||
+      loan.user_id === userId ||
       role === "admin" ||
       role === "managing_director" ||
       role === "secretary" ||
@@ -275,12 +280,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       canDoHrOffice(role, deptName, deptCode) ||
       canDoDirectorHr(role, deptName, deptCode) ||
       canDoAccounts(role, deptName, deptCode) ||
-      [loan.hod_reviewer_id, loan.committee_reviewer_id, loan.hr_officer_id, loan.director_hr_id].includes(user.id)
+      [loan.hod_reviewer_id, loan.committee_reviewer_id, loan.hr_officer_id, loan.director_hr_id].includes(userId)
 
     if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-    // Include md_approved and all post-approval statuses so download works across the full workflow
-    const memoEligibleStatuses = ["approved_director", "md_approved", "director_rejected", "rejected_fd", "awaiting_director_hr", "staff_receiving_funds", "partially_recovered", "fully_recovered"]
+    // Include all active workflow stages so download works end-to-end
+    const memoEligibleStatuses = [
+      "approved_director", "md_approved", "director_rejected", "rejected_fd",
+      "awaiting_director_hr", "pending_hr_executive_review", "awaiting_hr_executives",
+      "staff_receiving_funds", "partially_recovered", "fully_recovered",
+    ]
     if (!memoEligibleStatuses.includes(String(loan.status || ""))) {
       return NextResponse.json({ error: "Memo is not available for this current stage" }, { status: 400 })
     }

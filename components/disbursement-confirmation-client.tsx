@@ -218,15 +218,27 @@ export function DisbursementConfirmationClient({ loans: initialLoans, userProfil
                       </p>
                     </div>
                   </div>
-                  <a
-                    href={`/api/loan/memo/${loan.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/loan/memo-link", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: loan.id }),
+                        })
+                        const data = await res.json()
+                        if (data.path) window.open(data.path, "_blank")
+                        else alert(data.error || "Could not generate memo link")
+                      } catch {
+                        alert("Failed to open memo")
+                      }
+                    }}
                     className="ml-2 inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-white hover:bg-slate-50 border border-slate-200 rounded text-slate-700 font-medium transition-colors flex-shrink-0"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Memo
-                  </a>
+                  </button>
                 </div>
               ))}
             </div>

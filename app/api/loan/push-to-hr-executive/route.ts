@@ -43,11 +43,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update loan status to pending_hr_executive_review
+    // Update loan status to awaiting_director_hr
     const { data: updatedLoan, error: updateError } = await admin
       .from('loan_requests')
       .update({
-        status: 'pending_hr_executive_review',
+        status: 'awaiting_director_hr',
         hr_loan_office_processing_memo: hr_loan_office_memo,
         updated_at: new Date().toISOString(),
       })
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         actor_role: 'hr_loan_office',
         action_key: 'pushed_to_hr_executive',
         from_status: 'pending_hr_loan_office',
-        to_status: 'pending_hr_executive_review',
+        to_status: 'awaiting_director_hr',
         note: `HR Loan Office pushed approved FD loan to HR Executive for signing and approval. Memo: ${hr_loan_office_memo}`,
       })
 
