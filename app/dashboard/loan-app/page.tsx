@@ -7587,10 +7587,10 @@ export default function LoanAppPage() {
                 }`}
                 disabled={isSignatureMissing && modalDecision === "approve"}
                 title={isSignatureMissing && modalDecision === "approve" ? "Please save your signature in Setup & Linkage before approving" : ""}
-                onClick={() => {
+                onClick={async () => {
                   const sigText = modalSignatureMode === "typed" ? modalSignatureText : null
                   const sigUrl = modalSignatureMode !== "typed" ? modalSignatureDataUrl : null
-                  runAction({
+                  await runAction({
                     action: "director_finalize",
                     id: memoReviewModal.row!.id,
                     decision: modalDecision,
