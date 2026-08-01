@@ -1250,8 +1250,8 @@ export default function LoanAppPage() {
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     }
 
-    // Repayment Tracking tab: only for Loan Office and Accounts executives
-    if (canAccessLoanOfficeWorkspace || isAccountsExecutive) {
+    // Repayment Tracking tab: for Loan Office, Accounts executives, and HR Loan Office
+    if (canAccessLoanOfficeWorkspace || isAccountsExecutive || isHRLoanOffice) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
@@ -1269,7 +1269,7 @@ export default function LoanAppPage() {
     if (!isHrExecutiveOnly && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
-    // All Loans: admins, viewAllTabs, and HR Loan Office (read-only view)
+    // All Loans: admins, viewAllTabs, and HR Loan Office (read-only view with download access)
     if (p?.allLoans || p?.viewAllTabs || isHRLoanOffice) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
       if (c.archived > 0) {
