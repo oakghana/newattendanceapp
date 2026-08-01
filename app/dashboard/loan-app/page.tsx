@@ -15,10 +15,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { SignaturePad } from "@/components/leave/signature-pad"
 import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payment-advice-tab"
-import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
-import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -2830,9 +2827,6 @@ export default function LoanAppPage() {
 
   return (
     <>
-      <div className="px-2">
-        <LeaveResumptionBadge />
-      </div>
       <div className="space-y-6 p-2 loan-theme">
       <Card className="overflow-hidden border border-violet-100 bg-[radial-gradient(circle_at_top_left,_rgba(168,85,247,0.14),_transparent_30%),linear-gradient(135deg,_#fcfaff_0%,_#f4efff_45%,_#ffffff_100%)] shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
         <CardHeader className="border-b border-violet-100/80 bg-white/80 backdrop-blur">
@@ -5161,7 +5155,9 @@ export default function LoanAppPage() {
 
         {/* ── FD Approval Tab (Accounts Executive) ── */}
         <TabsContent value="fd-approval" className="space-y-4">
-          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} />
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground">FD Approval dashboard component will be added here</p>
+          </Card>
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
@@ -5914,8 +5910,8 @@ export default function LoanAppPage() {
 
                 {signatureMode === "draw" && (
                   <div className="space-y-2">
-                    <Label>Draw your signature below</Label>
-                    <SignaturePad value={signatureDataUrl} onChange={setSignatureDataUrl} />
+                    <Label>Signature (text)</Label>
+                    <Input placeholder="Enter signature text" value={signatureDataUrl} onChange={(e) => setSignatureDataUrl(e.target.value)} />
                   </div>
                 )}
 
@@ -6982,8 +6978,8 @@ export default function LoanAppPage() {
                     </div>
                   )}
                   {modalSignatureMode === "draw" && (
-                    <div className="rounded-lg border border-slate-300 overflow-hidden bg-white">
-                      <SignaturePad value={modalSignatureDataUrl} onChange={setModalSignatureDataUrl} />
+                    <div className="rounded-lg border border-slate-300 p-4">
+                      <Input placeholder="Enter signature text" value={modalSignatureDataUrl} onChange={(e) => setModalSignatureDataUrl(e.target.value)} />
                     </div>
                   )}
                 </div>
