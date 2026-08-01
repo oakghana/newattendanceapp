@@ -532,38 +532,6 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null } as any),
       // HR Executive queue - all pending_hr_executive_review requests
       admin.from("loan_requests").select("*").eq("status", "pending_hr_executive_review").order("created_at", { ascending: false }),
-      (async () => {
-        // First, get all staff members where the current user is a linked HOD
-        const { data: hodLinkages } = await admin
-          .from("loan_hod_linkages")
-          .select("staff_user_id")
-          .eq("hod_user_id", user.id)
-        
-        const linkedStaffIds = hodLinkages?.map((l) => l.staff_user_id) || []
-        
-        // Then query loans where user is reviewer OR is linked as HOD to staff
-        const orConditions: string[] = [
-          `hod_reviewer_id.eq.${user.id}`,
-          `loan_office_reviewer_id.eq.${user.id}`,
-          `accounts_reviewer_id.eq.${user.id}`,
-          `committee_reviewer_id.eq.${user.id}`,
-          `hr_officer_id.eq.${user.id}`,
-          `director_hr_id.eq.${user.id}`,
-        ]
-        
-        // If user has linked HOD relationships, also include pending_hod loans for those staff
-        if (linkedStaffIds.length > 0) {
-          orConditions.push(`and(user_id.in.(${linkedStaffIds.join(",")}),status.eq.pending_hod)`)
-        }
-        
-        const query = admin
-          .from("loan_requests")
-          .select("*")
-          .or(orConditions.join(","))
-          .order("updated_at", { ascending: false })
-        
-        return query
-      })(),
     ])
 
     const responses = [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes, hrExecutiveRes]
