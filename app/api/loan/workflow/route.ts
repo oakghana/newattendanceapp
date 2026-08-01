@@ -807,7 +807,6 @@ export async function GET() {
         hrOffice: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(hrRes.data || [])))),
         directorHr: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorRes.data || [])))),
         directorGoodFd: attachDirectorName(attachAccountsReviewerName(attachHodInfo(attachName(directorGoodFdRes.data || [])))),
-        hrExecutive: attachDirectorName(attachAccountsReviewerName(attachName(hrExecutiveRes.data || []))),
         allLoans: attachDirectorName(attachAccountsReviewerName(attachName(allLoansRes.data || []))),
       },
     })
