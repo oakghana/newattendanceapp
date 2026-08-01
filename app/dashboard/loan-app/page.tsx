@@ -5569,8 +5569,9 @@ export default function LoanAppPage() {
                               <div className="flex gap-1">
                                 <Button 
                                   size="sm" 
-                                  className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2"
+                                  className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2 font-semibold"
                                   onClick={(e) => { e.stopPropagation(); openActionModal(row, "hod") }}
+                                  title="Click to open Review & Decision modal"
                                 >
                                   Review
                                 </Button>
