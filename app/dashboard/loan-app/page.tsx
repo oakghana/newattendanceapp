@@ -931,7 +931,7 @@ export default function LoanAppPage() {
   const [memoPreviewLoanId, setMemoPreviewLoanId] = useState<string | null>(null)
 
   // ── Action modal state ──────────────────���───────────────────────────
-  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed"
+  type ActionType = "hod" | "loan_office" | "accounts" | "committee" | "hr_terms" | "director" | "payment_completed" | "push_to_hr_executive"
   const [actionModal, setActionModal] = useState<{ open: boolean; row: LoanRequest | null; actionType: ActionType | null }>({ open: false, row: null, actionType: null })
   const [restoringLoanId, setRestoringLoanId] = useState<string | null>(null)
   const [isRestoringAll, setIsRestoringAll] = useState(false)
@@ -3690,7 +3690,7 @@ export default function LoanAppPage() {
                                 Review &amp; Forward
                               </Button>
                             ) : row.status === "pending_hr_loan_office" ? (
-                              <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => console.log('[v0] Push to HR Executive for:', row.id)}>
+                              <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>
                                 Push to HR Exec
                               </Button>
                             ) : (
@@ -3710,7 +3710,7 @@ export default function LoanAppPage() {
                     {row.status === "hod_approved" && p?.loanOffice
                       ? <Button size="sm" className="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800" onClick={() => openActionModal(row, "loan_office")}>Review &amp; Forward</Button>
                       : row.status === "pending_hr_loan_office" && p?.loanOffice
-                      ? <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => console.log('[v0] Push to HR Executive for:', row.id)}>Push to HR Exec</Button>
+                      ? <Button size="sm" className="h-7 bg-blue-600 text-xs text-white hover:bg-blue-700" onClick={() => openActionModal(row, "push_to_hr_executive")}>Push to HR Exec</Button>
                       : <span className="text-xs text-slate-500">{statusText(row.status)}</span>
                     }
                   </StageCard>
@@ -6724,6 +6724,7 @@ export default function LoanAppPage() {
               {actionModal.actionType === "committee" && "Employee Further Information"}
               {actionModal.actionType === "hr_terms" && "Set HR Terms & Forward to Executive HR"}
               {actionModal.actionType === "payment_completed" && "Mark Loan Payment Completed"}
+              {actionModal.actionType === "push_to_hr_executive" && "Push Approved FD to HR Executive for Signing"}
             </DialogTitle>
             {actionModal.row && (
               <DialogDescription>
@@ -7037,6 +7038,68 @@ export default function LoanAppPage() {
               >
                 Submit Payment Evidence
               </Button>
+            )}
+            {actionModal.actionType === "push_to_hr_executive" && actionModal.row && (
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef}
+                onClick={async () => {
+                  if (!modalNote || !modalDisbursement || !modalRecovery || !modalMemoRef) {
+                    toast({ title: "Missing Required Fields", description: "Please fill in all required fields before pushing to HR Executive.", variant: "destructive" })
+                    return
+                  }
+                  await runAction({
+                    action: "push_to_hr_executive",
+                    id: actionModal.row!.id,
+                    hr_loan_office_memo: modalNote,
+                    disbursement_date: modalDisbursement,
+                    recovery_start_date: modalRecovery,
+                    reference_number: modalMemoRef,
+                  })
+                  setActionModal((s) => ({ ...s, open: false }))
+                }}
+              >
+                Push to HR Executive
+              </Button>
+            )}
+            {/* Push to HR Executive */}
+            {actionModal.actionType === "push_to_hr_executive" && (
+              <>
+                <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
+                  <p className="text-xs text-blue-900">
+                    This approved FD loan will be forwarded to HR Executive for review, signing, and approval. After HR Executive signs, it will appear on the MD's dashboard for final authorization.
+                  </p>
+                </div>
+                <Label className="text-sm font-semibold">Processing Memo *</Label>
+                <Textarea 
+                  value={modalNote} 
+                  onChange={(e) => setModalNote(e.target.value)} 
+                  placeholder="Add any processing notes or requirements for HR Executive review (e.g., special conditions, disbursement instructions)..." 
+                  rows={3} 
+                  className="text-xs"
+                />
+                <Label className="text-sm font-semibold">Disbursement Date *</Label>
+                <Input 
+                  type="date"
+                  value={modalDisbursement} 
+                  onChange={(e) => setModalDisbursement(e.target.value)} 
+                  className="h-8 text-xs"
+                />
+                <Label className="text-sm font-semibold">Recovery Start Date *</Label>
+                <Input 
+                  type="date"
+                  value={modalRecovery} 
+                  onChange={(e) => setModalRecovery(e.target.value)} 
+                  className="h-8 text-xs"
+                />
+                <Label className="text-sm font-semibold">Reference Number *</Label>
+                <Input 
+                  value={modalMemoRef} 
+                  onChange={(e) => setModalMemoRef(e.target.value)} 
+                  placeholder="e.g. QCC/HR/LOAN/2024/001" 
+                  className="h-8 text-xs"
+                />
+              </>
             )}
           </DialogFooter>
         </DialogContent>
