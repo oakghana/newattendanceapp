@@ -1211,13 +1211,17 @@ export default function LoanAppPage() {
       })
     }
 
-    // Loan Office tab: for HR Loan Office staff to process HOD-approved loans and perform FD checks
-    if (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) || canAccessLoanOfficeWorkspace || p?.loanOffice) {
+    // Loan Office tab: for HR department loan office staff to process HOD-approved loans and perform FD checks
+    // Show if: has loan_office/manager_hr/hr_executive role in HR department, OR has direct permission
+    const isHRLoanOffice = (["loan_office", "manager_hr", "hr_executive"].includes(normalizedRole) && !userDeptIsAccounts) || canAccessLoanOfficeWorkspace || p?.loanOffice
+    if (isHRLoanOffice) {
       tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
     }
 
-    // Accounts tab: for Accounts staff to review and approve FD values
-    if (p?.accounts) {
+    // Accounts tab: for Accounts department loan office staff OR users with accounts permission
+    // Show if: has loan_office role in Accounts department, OR has direct accounts permission
+    const isAccountsOffice = (normalizedRole === "loan_office" && userDeptIsAccounts) || p?.accounts
+    if (isAccountsOffice) {
       tabs.push({ key: "accounts", label: `Accounts (${c.accounts})` })
     }
 
