@@ -21,6 +21,7 @@ import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
 import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
+import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-approved"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
@@ -1233,7 +1234,12 @@ export default function LoanAppPage() {
       // For now, display FD Approval tab without count
       tabs.push({ 
         key: "fd-approval", 
-        label: "FD Approval"
+        label: `FD Approval (${c.fdApproval || 0})`
+      })
+      // Add FD Completed tab for archived/historical FD records
+      tabs.push({
+        key: "fd-completed",
+        label: "FD Completed/Archived"
       })
     }
 
@@ -3512,13 +3518,14 @@ export default function LoanAppPage() {
             {/* stage pills */}
             <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5">
               {([ 
-                { key: "pending",           label: "Pending FD" },
-                { key: "good-fd",           label: "Good FD" },
-                { key: "poor-fd",           label: "Poor FD" },
-                { key: "good-fd-not-pushed",label: "Not Pushed" },
-                { key: "sent-for-approval", label: "Sent for Approval" },
-                { key: "archivable",        label: "Archivable" },
-                { key: "archived",          label: "Archived" },
+                { key: "pending",                    label: "Pending FD" },
+                { key: "good-fd",                    label: "Good FD" },
+                { key: "poor-fd",                    label: "Poor FD" },
+                { key: "good-fd-not-pushed",        label: "Not Pushed" },
+                { key: "sent-for-approval",         label: "Sent for Approval" },
+                { key: "fd-approved-accounts-exec", label: "✓ FD Approved by Accounts" },
+                { key: "archivable",                label: "Archivable" },
+                { key: "archived",                  label: "Archived" },
               ] as const).map(({ key, label }) => {
                 const count = (loanOfficeStageBuckets as any)[key]?.length ?? 0
                 const isActive = loanOfficeStageTab === key
@@ -3533,7 +3540,13 @@ export default function LoanAppPage() {
                     }`}
                   >
                     {label}
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${isActive ? "bg-white/25" : "bg-slate-100 text-slate-500"}`}>{count}</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                      isActive 
+                        ? "bg-white/25" 
+                        : (["pending", "good-fd", "fd-approved-accounts-exec"].includes(key) && count > 0)
+                        ? "bg-red-100 text-red-700"
+                        : "bg-slate-100 text-slate-500"
+                    }`}>{count}</span>
                   </button>
                 )
               })}
@@ -3826,7 +3839,7 @@ export default function LoanAppPage() {
             )}
           </div>
 
-          {/* ── Payment Completion Queue ── */}
+          {/* ── Payment Completion Queue ─��� */}
           {p?.hrOffice && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-5 py-3.5">
@@ -3945,6 +3958,17 @@ export default function LoanAppPage() {
               </div>
             </div>
           </div>
+
+          {/* ── FD-Approved from Accounts Executive ── */}
+          {loanOfficeStageTab === "fd-approved-accounts-exec" && (
+            <div className="mt-6 pt-6 border-t">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">FD-Approved Loans from Accounts Executive</h3>
+                <p className="text-sm text-slate-500">Loans with approved FD scores ready for HR Loan Office processing and disbursement</p>
+              </div>
+              <HRLoanOfficeFDApproved />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="accounts" className="space-y-3">
@@ -4118,7 +4142,7 @@ export default function LoanAppPage() {
                           <TableCell className="text-xs">{row.loan_type_label || row.loan_type_key}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{row.requested_amount != null ? Number(row.requested_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : row.fixed_amount != null ? Number(row.fixed_amount).toLocaleString("en-GH", { minimumFractionDigits: 2 }) : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs font-semibold">{row.fd_score ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{row.accounts_reviewer_name || "���"}</TableCell>
                           <TableCell><Badge className={statusBadgeClass(row.status, "solid")}>{statusText(row.status)}</Badge></TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.supporting_document_url ? (
@@ -5272,6 +5296,21 @@ export default function LoanAppPage() {
         {/* ── FD Approval Tab (Accounts Executive) ── */}
         <TabsContent value="fd-approval" className="space-y-4">
           <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} userRole={data?.profile?.role || "user"} />
+        </TabsContent>
+
+        {/* ── FD Completed/Archived Tab (Accounts Executive) ── */}
+        <TabsContent value="fd-completed" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle>FD Completed & Archived Records</CardTitle>
+              <CardDescription>Historical FD calculations that have been approved or rejected for archival and record-keeping.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-lg border p-4 text-center text-sm text-slate-500">
+                <p>FD completed records component - Ready for implementation with filtering and archive management</p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">

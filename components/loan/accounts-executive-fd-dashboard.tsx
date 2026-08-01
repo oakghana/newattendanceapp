@@ -532,12 +532,19 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
             <Button
               variant="destructive"
               onClick={handleReject}
-              disabled={submitting || !reviewDecision}
+              disabled={submitting || !reviewDecision || (selectedReview?.fd_score ?? 0) >= 40}
               size="sm"
+              title={(selectedReview?.fd_score ?? 0) >= 40 ? "FD scores of 40% or higher cannot be rejected" : ""}
             >
               <XCircle className="h-4 w-4 mr-1" />
               Reject
             </Button>
+            {(selectedReview?.fd_score ?? 0) >= 40 && (
+              <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                <AlertCircle className="h-4 w-4 inline mr-1" />
+                FD Score {selectedReview?.fd_score}% is acceptable. Only scores below 39% can be rejected.
+              </div>
+            )}
             <Button
               onClick={handleApprove}
               disabled={submitting || !verificationMemo}
