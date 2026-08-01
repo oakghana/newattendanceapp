@@ -44,10 +44,15 @@ function validateStaffHodRule(staff: any, hod: any): { ok: boolean; reason?: str
   const hodLoc = String(hod?.assigned_location_id || "")
   const hodRole = normalizeRole(String(hod?.role || ""))
 
+  // CRITICAL: Reject staff-to-staff linkages - staff members cannot be linked as HODs
+  if (hodRole === "staff" || hodRole === "nsp" || hodRole === "intern" || hodRole === "contract") {
+    return { ok: false, reason: "Staff members cannot be linked as HODs. Only Department Heads, Regional Managers, HR Directors, or HR Managers can be linked." }
+  }
+
   // Head-office staff can be linked to any HOD role (department_head, manager_hr, director_hr, admin)
   if (isHeadOfficeStaff(staff)) {
-    if (!HOD_ROLES.has(hodRole)) {
-      return { ok: false, reason: "Head-office staff can only be linked to a Department Head, HR Manager, or HR Director." }
+    if (!HOD_ROLES.has(hodRole) && hodRole !== "regional_manager") {
+      return { ok: false, reason: "Head-office staff can only be linked to a Department Head, HR Manager, HR Director, or Regional Manager." }
     }
     return { ok: true }
   }
