@@ -250,17 +250,43 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { loan_request_id, fd_score, fd_note, fd_document_url } = body
+    const { 
+      loan_request_id, 
+      fd_score, 
+      fd_good,
+      fd_note, 
+      fd_document_url,
+      fd_calculation_data,
+      accounts_notes,
+      submission_type // 'automated_calculation' or 'manual_upload'
+    } = body
 
     if (!loan_request_id || fd_score === undefined || fd_score === null) {
       return NextResponse.json({ error: "Missing required fields: loan_request_id, fd_score" }, { status: 400 })
+    }
+
+    // Build the notes string with calculation data if automated
+    let finalNotes = fd_note || ""
+    if (submission_type === "automated_calculation" && fd_calculation_data) {
+      const calcNotes = `
+Automated FD Calculation (Accounts Loan Office):
+- Gross Monthly Salary: GH¢ ${fd_calculation_data.gross_salary_monthly?.toFixed(2)}
+- Total Monthly Deductions: GH¢ ${fd_calculation_data.total_deductions_monthly?.toFixed(2)}
+- Net Monthly Salary: GH¢ ${fd_calculation_data.net_salary_monthly?.toFixed(2)}
+- Net to Gross Ratio: ${fd_calculation_data.net_to_gross_ratio?.toFixed(1)}%
+- Monthly Loan Installment: GH¢ ${fd_calculation_data.loan_installment_monthly?.toFixed(2)}
+- Total Outstanding Loans: GH¢ ${fd_calculation_data.total_outstanding_loans?.toFixed(2)}
+${accounts_notes ? `\nAccounts Notes: ${accounts_notes}` : ""}
+      `.trim()
+      finalNotes = calcNotes
     }
 
     const { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
       .update({
         fd_score,
-        fd_note,
+        fd_good: fd_good !== undefined ? fd_good : (fd_score >= 50),
+        fd_note: finalNotes,
         fd_document_url,
         fd_checked_at: new Date().toISOString(),
         // Set to pending Accounts Executive FD review
@@ -284,10 +310,10 @@ export async function POST(request: Request) {
       .insert({
         loan_request_id,
         actor_id: user.id,
-        actor_role: "loan_office",
+        actor_role: submission_type === "automated_calculation" ? "accounts_loan_office" : "loan_office",
         action_key: "fd_submitted",
         to_status: "pending_accounts_fd_review",
-        note: `FD score ${fd_score} submitted by Loan Office`,
+        note: `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
       })
       .catch(err => console.error("[v0] Timeline log error:", err))
 
