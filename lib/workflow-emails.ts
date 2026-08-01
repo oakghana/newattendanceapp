@@ -948,3 +948,76 @@ export async function notifyLoanRejected(
     console.warn("[workflow-emails] notifyLoanRejected failed:", e)
   }
 }
+
+/**
+ * Reminder to staff who haven't submitted annual leave plan
+ * Sent during the 14-day pre-Sept 1 reminder period
+ */
+export async function notifyStaffOfLeaveReminder(opts: {
+  staffEmail: string
+  staffName: string
+  daysLeft: number
+  leaveYearPeriod: string
+}): Promise<void> {
+  try {
+    const link = ${APP_URL}/dashboard/leave-planning
+    const subject = 📅 Annual Leave Submission Reminder -  days left
+    const html = baseLayout(
+      'Annual Leave Submission Reminder',
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong></strong>,</p>
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;">You have <strong> day</strong> left to submit your annual leave plan for the <strong></strong> year.</p>
+      <p style="margin:0 0 22px;"></p>
+      <p style="margin:0 0 12px;font-size:13px;color:#374151;"><strong>Why this matters:</strong></p>
+      <ul style="margin:0 0 18px 16px;padding:0;font-size:13px;color:#374151;line-height:1.6;">
+        <li>Your leave payment processing depends on submitting an approved leave plan</li>
+        <li>COCOBOD leave grant payments require timely submission</li>
+        <li>Early submission allows time for HOD and HR reviews</li>
+      </ul>
+      ,
+    )
+    
+    await emailService.sendEmail(opts.staffEmail, {
+      subject,
+      html,
+      text: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    }, {})
+  } catch (e) {
+    console.warn('[workflow-emails] notifyStaffOfLeaveReminder failed:', e)
+  }
+}
+
+/**
+ * Escalation notification to managers about overdue endorsements
+ */
+export async function notifyManagerOfEscalation(opts: {
+  managerEmail: string
+  managerName: string
+  escalationCount: number
+  escalationType: string
+}): Promise<void> {
+  try {
+    const link = ${APP_URL}/dashboard/leave-planning
+    const subject = ⚠️ Escalation:  Overdue Leave Endorsement
+    const html = baseLayout(
+      'Overdue Leave Endorsement Escalation',
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;">Dear <strong></strong>,</p>
+      <p style="margin:0 0 6px;font-size:14px;color:#374151;"><strong style="color:#991b1b;"></strong> leave request you are reviewing have been pending for over 7 days without a decision.</p>
+      <p style="margin:0 0 22px;"></p>
+      <p style="margin:0 0 12px;font-size:13px;color:#374151;"><strong>Next Steps:</strong></p>
+      <ul style="margin:0 0 18px 16px;padding:0;font-size:13px;color:#374151;line-height:1.6;">
+        <li>Review and approve/reject the pending requests</li>
+        <li>Add any necessary comments or requested changes</li>
+        <li>Staff members are waiting for your endorsement to proceed</li>
+      </ul>
+      ,
+    )
+    
+    await emailService.sendEmail(opts.managerEmail, {
+      subject,
+      html,
+      text: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    }, {})
+  } catch (e) {
+    console.warn('[workflow-emails] notifyManagerOfEscalation failed:', e)
+  }
+}

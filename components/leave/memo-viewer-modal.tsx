@@ -281,21 +281,89 @@ export function MemoViewerModal({
                 </div>
 
                 {/* Signature Display */}
-                {(memo?.signature_image_url || memo?.memo_body?.signature_text) && (
-                  <div className="bg-slate-50 border border-slate-200 rounded p-4">
-                    <p className="text-xs font-semibold text-slate-600 mb-3">SIGNATURE</p>
-                    {memo?.signature_image_url && (
-                      <img 
-                        src={memo.signature_image_url} 
-                        alt="Signature" 
-                        className="h-20 object-contain"
-                      />
-                    )}
-                    {memo?.memo_body?.signature_text && (
-                      <p className="text-2xl font-script italic text-slate-700">{memo.memo_body.signature_text}</p>
-                    )}
-                  </div>
-                )}
+                <div className="border-t pt-4">
+                  <p className="text-xs font-semibold text-slate-600 mb-4">APPROVAL SIGNATURES</p>
+                  
+                  {/* HR Signature */}
+                  {(memo?.hr_signature_data_url || memo?.hr_signature_text || memo?.signer_name) && (
+                    <div className="bg-white border border-slate-200 rounded p-4 mb-3">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide">Approved By (HR)</p>
+                          <p className="font-semibold text-slate-900">{memo?.signer_name || memo?.hr_approver_name || 'HR Executive'}</p>
+                          <p className="text-xs text-slate-600">{memo?.signer_position || memo?.hr_approver_position || 'HR Executive'}</p>
+                        </div>
+                        
+                        {memo?.hr_signature_data_url && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-200 flex items-center justify-center min-h-[60px]">
+                            <img 
+                              src={memo.hr_signature_data_url} 
+                              alt="HR Signature" 
+                              className="max-h-16 max-w-xs object-contain"
+                            />
+                          </div>
+                        )}
+                        
+                        {memo?.hr_signature_text && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-200">
+                            <p className="text-xl font-script italic text-slate-700">{memo.hr_signature_text}</p>
+                          </div>
+                        )}
+                        
+                        {memo?.hr_approved_at && (
+                          <p className="text-xs text-slate-600">
+                            Approved on {format(new Date(memo.hr_approved_at), 'dd MMM yyyy')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* HOD Signature (if available) */}
+                  {(memo?.hod_signature_data_url || memo?.hod_signature_text || memo?.hod_reviewer_name) && (
+                    <div className="bg-white border border-slate-200 rounded p-4 mb-3">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide">Endorsed By (HOD)</p>
+                          <p className="font-semibold text-slate-900">{memo?.hod_reviewer_name || 'Head of Department'}</p>
+                          <p className="text-xs text-slate-600">{memo?.hod_position || 'HOD'}</p>
+                        </div>
+                        
+                        {memo?.hod_signature_data_url && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-200 flex items-center justify-center min-h-[60px]">
+                            <img 
+                              src={memo.hod_signature_data_url} 
+                              alt="HOD Signature" 
+                              className="max-h-16 max-w-xs object-contain"
+                            />
+                          </div>
+                        )}
+                        
+                        {memo?.hod_signature_text && (
+                          <div className="bg-slate-50 p-2 rounded border border-slate-200">
+                            <p className="text-xl font-script italic text-slate-700">{memo.hod_signature_text}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Legacy signature display (fallback) */}
+                  {!memo?.hr_signature_data_url && !memo?.hr_signature_text && (memo?.signature_image_url || memo?.memo_body?.signature_text) && (
+                    <div className="bg-slate-50 border border-slate-200 rounded p-4">
+                      {memo?.signature_image_url && (
+                        <img 
+                          src={memo.signature_image_url} 
+                          alt="Signature" 
+                          className="h-20 object-contain"
+                        />
+                      )}
+                      {memo?.memo_body?.signature_text && (
+                        <p className="text-2xl font-script italic text-slate-700">{memo.memo_body.signature_text}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}

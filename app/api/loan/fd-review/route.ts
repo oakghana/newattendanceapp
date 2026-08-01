@@ -1,5 +1,6 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { canRejectFdByScore, GOOD_FD_THRESHOLD, isFdExemptLoanType } from "@/lib/loan-workflow"
 
 export const runtime = 'nodejs'
 
@@ -48,11 +49,24 @@ export async function GET(request: Request) {
     // Accounts Executive sees loans where Loan Office has set FD and is awaiting AE decision
     let statusFilter: string[]
     if (statusParam === "pending_review") {
-      statusFilter = ["pending_accounts_fd_review", "fd_review_pending"]
+      // Include sent_to_accounts when FD score already present (legacy path)
+      statusFilter = ["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts"]
     } else if (statusParam === "approved") {
-      statusFilter = ["fd_approved", "pending_hr_loan_office"]
+      // Everything Accounts Exec approved / forwarded toward HR Loan Office and beyond
+      statusFilter = [
+        "fd_approved",
+        "pending_hr_loan_office",
+        "awaiting_hr_terms",
+        "awaiting_director_hr",
+        "awaiting_committee",
+        "approved_director",
+        "md_final_approved",
+        "staff_receiving_funds",
+        "partially_recovered",
+        "payment_completed",
+      ]
     } else if (statusParam === "rejected") {
-      statusFilter = ["fd_rejected"]
+      statusFilter = ["fd_rejected", "rejected_fd"]
     } else {
       // Return all loans that have fd_score set (Loan Office computed it)
       statusFilter = []
@@ -134,9 +148,12 @@ export async function GET(request: Request) {
       requested_amount: loan.requested_amount,
       monthly_deduction: loan.monthly_deduction,
       repayment_months: loan.repayment_duration_months,
-      fd_value: loan.fd_score ?? 0,
-      fd_score: loan.fd_score,
-      fd_good: loan.fd_good,
+      // FD is a percent (net-to-gross), not currency — keep fd_value === fd_score for UI
+      fd_value: Number(loan.fd_score ?? 0),
+      fd_score: Number(loan.fd_score ?? 0),
+      fd_good: typeof loan.fd_score === "number" || loan.fd_score != null
+        ? Number(loan.fd_score) >= 39
+        : loan.fd_good,
       fd_document_url: loan.fd_document_url,
       supporting_docs_url: loan.fd_document_url,
       submission_date: loan.loan_office_forwarded_at || loan.created_at,
@@ -200,13 +217,34 @@ export async function PATCH(request: Request) {
     // First, fetch the current loan to preserve original fd_note with calculation details
     const { data: currentLoan, error: fetchError } = await admin
       .from("loan_requests")
-      .select("fd_note, staff_full_name")
+      .select("fd_note, staff_full_name, fd_score, fd_good, loan_type_key, loan_type_label")
       .eq("id", review_id)
       .single()
 
     if (fetchError) {
       console.error("[v0] Error fetching current loan:", fetchError)
       return NextResponse.json({ error: "Failed to fetch loan details", details: fetchError.message }, { status: 500 })
+    }
+
+    // Block illegal rejections: exempt loan types and scores >= threshold
+    if (!isApproved) {
+      const loanType = currentLoan?.loan_type_label || currentLoan?.loan_type_key
+      if (isFdExemptLoanType(currentLoan?.loan_type_key, currentLoan?.loan_type_label)) {
+        return NextResponse.json(
+          {
+            error: `${loanType || "This"} loans (funeral / insurance / repair) cannot be rejected for FD. Approve and forward instead.`,
+          },
+          { status: 400 },
+        )
+      }
+      if (!canRejectFdByScore(currentLoan?.fd_score, currentLoan?.loan_type_key, currentLoan?.fd_good, currentLoan?.loan_type_label)) {
+        return NextResponse.json(
+          {
+            error: `FD score ${currentLoan?.fd_score}% is at or above the ${GOOD_FD_THRESHOLD}% threshold and cannot be rejected.`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
     // Preserve original calculation in fd_note, add approval decision at the end
@@ -317,6 +355,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields: loan_request_id, fd_score" }, { status: 400 })
     }
 
+    // Accounts Loan Office may correct FD only while AE has not decided yet
+    const { data: existingLoan, error: existingErr } = await admin
+      .from("loan_requests")
+      .select("id, status, fd_score, fd_note")
+      .eq("id", loan_request_id)
+      .single()
+
+    if (existingErr || !existingLoan) {
+      return NextResponse.json({ error: "Loan request not found" }, { status: 404 })
+    }
+
+    const currentStatus = String(existingLoan.status || "").toLowerCase()
+    const editableStatuses = new Set([
+      "pending_accounts_fd_review",
+      "fd_review_pending",
+      "sent_to_accounts",
+      "rejected_fd",
+      "fd_rejected",
+      "hod_approved",
+    ])
+    // First-time submit from accounts queue may still be hod_approved / sent_to_accounts
+    if (existingLoan.fd_score != null && !editableStatuses.has(currentStatus)) {
+      return NextResponse.json(
+        {
+          error:
+            "FD values are locked after Accounts Executive decision. Accounts Loan Office can only correct pending (not-yet-approved) FD submissions.",
+        },
+        { status: 400 },
+      )
+    }
+
+    const isCorrection = Boolean(body.is_correction) || (existingLoan.fd_score != null && editableStatuses.has(currentStatus))
+    const correctionReason = String(body.correction_reason || "").trim()
+    if (isCorrection && !correctionReason && roleNorm === "accounts_loan_office") {
+      return NextResponse.json(
+        { error: "Correction reason is required when updating a pending FD submission." },
+        { status: 400 },
+      )
+    }
+
     // Build the notes string with calculation data if automated
     let finalNotes = fd_note || ""
     if (submission_type === "automated_calculation" && fd_calculation_data) {
@@ -350,15 +428,28 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}
       finalNotes = calcNotes
     }
 
+    if (isCorrection && correctionReason) {
+      const stamp = new Date().toISOString()
+      finalNotes = [
+        finalNotes,
+        "",
+        `--- FD CORRECTION (${stamp}) ---`,
+        `Reason: ${correctionReason}`,
+        existingLoan.fd_note ? `Previous note retained above.` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    }
+
     const { data: updatedLoan, error: updateError } = await admin
       .from("loan_requests")
       .update({
         fd_score,
-        fd_good: fd_good !== undefined ? fd_good : (fd_score >= 50),
+        fd_good: fd_good !== undefined ? Boolean(fd_good) : Number(fd_score) >= 39,
         fd_note: finalNotes,
         fd_document_url,
         fd_checked_at: new Date().toISOString(),
-        // Set to pending Accounts Executive FD review
+        // Remain / return to pending Accounts Executive FD review (LO cannot approve)
         status: "pending_accounts_fd_review",
         loan_office_reviewer_id: user.id,
         loan_office_forwarded_at: new Date().toISOString(),
@@ -380,16 +471,20 @@ ${accounts_notes ? `\nHR Loan Office Remarks: ${accounts_notes}` : ""}
         loan_request_id,
         actor_id: user.id,
         actor_role: submission_type === "automated_calculation" ? "accounts_loan_office" : "loan_office",
-        action_key: "fd_submitted",
+        action_key: isCorrection ? "fd_corrected" : "fd_submitted",
         to_status: "pending_accounts_fd_review",
-        note: `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
+        note: isCorrection
+          ? `FD score corrected to ${fd_score}% by Accounts Loan Office (pending AE). Reason: ${correctionReason || "n/a"}`
+          : `FD score ${fd_score} submitted by ${submission_type === "automated_calculation" ? "Accounts" : "Loan"} Office${submission_type === "automated_calculation" ? " (Automated Calculation)" : ""}`,
       })
       .catch(err => console.error("[v0] Timeline log error:", err))
 
     return NextResponse.json({
       success: true,
       loan: updatedLoan,
-      message: "FD values submitted. Awaiting Accounts Executive review.",
+      message: isCorrection
+        ? "FD correction saved. Still awaiting Accounts Executive approval (Loan Office cannot approve)."
+        : "FD values submitted. Awaiting Accounts Executive review.",
     })
   } catch (error) {
     console.error("[v0] FD review POST error:", error)

@@ -12,6 +12,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="antialiased">
+      <head>
+        <link rel="stylesheet" href="/print-styles.css" media="print" />
+      </head>
       <body className="font-sans">
         <RootLayoutClient>{children}</RootLayoutClient>
       </body>

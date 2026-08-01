@@ -13,18 +13,67 @@ export type LoanWorkflowStatus =
   // Managing Director final stamp — set when md_approved_at is populated
   | "md_final_approved"
 
+/**
+ * Acceptable FD threshold (percent of net-to-gross).
+ * Scores at or above this value are acceptable and must never be auto-rejected.
+ * Example: 39%, 42%, 49% are all reviewable / approvable.
+ */
 export const GOOD_FD_THRESHOLD = 39
 
 /**
- * Funeral, Insurance, and Repair loans are FD-exempt:
- * they proceed to HR Loan Office as long as FD score >= 0.
- * They must NEVER receive a rejection memo for sub-threshold FD.
+ * Funeral, Insurance, and any Repair loans (incl. vehicle repair) are FD-exempt:
+ * Accounts Loan Office / Accounts Executive must not reject them for low FD.
+ * They remain reviewable and should be pushed forward.
  */
 export function isFdExemptLoanType(loanTypeKey: string | null | undefined, loanTypeLabel?: string | null): boolean {
   const key = String(loanTypeKey || "").toLowerCase()
   const label = String(loanTypeLabel || "").toLowerCase()
+  // "repair" covers vehicle repair, car repair, etc.
   const EXEMPT = /funeral|repair|insurance/
   return EXEMPT.test(key) || EXEMPT.test(label)
+}
+
+/** Coerce FD score from number | string safely. */
+export function coerceFdScore(score: number | string | null | undefined): number | null {
+  if (typeof score === "number" && Number.isFinite(score)) return score
+  if (score == null || score === "") return null
+  const n = Number(score)
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * True when score is below the acceptable FD threshold (poor).
+ * Numeric score is authoritative — ignores stale fd_good flags.
+ */
+export function isPoorFdScore(
+  score: number | string | null | undefined,
+  fdGood?: boolean | null,
+): boolean {
+  const n = coerceFdScore(score)
+  if (n != null) return n < GOOD_FD_THRESHOLD
+  return fdGood === false
+}
+
+/**
+ * Whether Accounts may reject this FD on score grounds.
+ * Exempt types (funeral / insurance / repairs) are never rejectable for FD.
+ * Non-exempt types with score >= GOOD_FD_THRESHOLD are never rejectable.
+ */
+export function canRejectFdByScore(
+  score: number | string | null | undefined,
+  loanTypeKeyOrLabel?: string | null,
+  fdGood?: boolean | null,
+  loanTypeLabel?: string | null,
+): boolean {
+  if (isFdExemptLoanType(loanTypeKeyOrLabel, loanTypeLabel ?? loanTypeKeyOrLabel)) return false
+  return isPoorFdScore(score, fdGood)
+}
+
+/** Format FD score/value as a percent string (never currency). */
+export function formatFdPercent(score: number | string | null | undefined): string {
+  const n = coerceFdScore(score)
+  if (n == null) return "N/A"
+  return `${Math.round(n)}%`
 }
 
 export const SCHEMA_MISSING_CODES = new Set(["PGRST200", "PGRST204", "PGRST205", "42P01", "42703"])

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useEffect } from 'react'
+import { GOOD_FD_THRESHOLD } from '@/lib/loan-workflow'
 
 interface FDApprovedLoan {
   id: string
@@ -32,6 +33,7 @@ export function HRLoanOfficeFDApproved() {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
   const [selectedForPush, setSelectedForPush] = useState<FDApprovedLoan | null>(null)
+  const [selectedDetailLoan, setSelectedDetailLoan] = useState<FDApprovedLoan | null>(null)
   const [pushMemo, setPushMemo] = useState('')
   const [pushing, setPushing] = useState(false)
   const { toast } = useToast()
@@ -91,19 +93,27 @@ export function HRLoanOfficeFDApproved() {
     }
   }, [fdApprovedLoans])
 
+  const openHandoffDialog = (loan: FDApprovedLoan, defaultMemo: string) => {
+    setSelectedForPush(loan)
+    setPushMemo(defaultMemo)
+  }
+
   const handleViewDetails = (loan: FDApprovedLoan) => {
-    // TODO: Open detailed view modal
-    console.log('[v0] View FD details for loan:', loan.id)
+    setSelectedDetailLoan(loan)
   }
 
   const handleProcessLoan = (loan: FDApprovedLoan) => {
-    // TODO: Open loan processing modal
-    console.log('[v0] Process loan:', loan.id)
+    openHandoffDialog(
+      loan,
+      `Process ${loan.request_number || loan.id}: confirm FD approval status and prepare the HR Executive handoff.`,
+    )
   }
 
   const handleApproveDisbursement = (loan: FDApprovedLoan) => {
-    // TODO: Approve for disbursement
-    console.log('[v0] Approve disbursement for:', loan.id)
+    openHandoffDialog(
+      loan,
+      `Approve disbursement readiness for ${loan.request_number || loan.id}. Confirm the memo and supporting details before forwarding.`,
+    )
   }
 
   const handlePushToHRExecutive = async () => {
@@ -147,8 +157,8 @@ export function HRLoanOfficeFDApproved() {
   }
 
   const getFDStatusColor = (score?: number) => {
-    if (!score) return 'bg-slate-100 text-slate-700'
-    return score >= 40 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+    if (!score && score !== 0) return 'bg-slate-100 text-slate-700'
+    return score >= GOOD_FD_THRESHOLD ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
   }
 
   const getStatusBadge = (status: string) => {
@@ -279,6 +289,15 @@ export function HRLoanOfficeFDApproved() {
                               </Button>
                               <Button
                                 size="sm"
+                                variant="outline"
+                                title="Approve the handoff for HR Executive review"
+                                onClick={() => handleApproveDisbursement(loan)}
+                              >
+                                <CreditCard className="h-4 w-4 mr-1" />
+                                Ready for Handoff
+                              </Button>
+                              <Button
+                                size="sm"
                                 className="bg-blue-600 hover:bg-blue-700 text-white"
                                 title="Push to HR Executive for Signing and Approval"
                                 onClick={() => setSelectedForPush(loan)}
@@ -298,6 +317,54 @@ export function HRLoanOfficeFDApproved() {
           </CardContent>
         </Card>
       )}
+
+      {/* Loan Details Dialog */}
+      <Dialog open={!!selectedDetailLoan} onOpenChange={(open) => !open && setSelectedDetailLoan(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>FD Approved Loan Details</DialogTitle>
+            <DialogDescription>Review the loan summary before handing it over to HR Executive.</DialogDescription>
+          </DialogHeader>
+
+          {selectedDetailLoan && (
+            <div className="space-y-4">
+              <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Staff</p>
+                  <p className="font-medium text-slate-900">{selectedDetailLoan.staff_name}</p>
+                  <p className="text-sm text-slate-600">{selectedDetailLoan.staff_number || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Request</p>
+                  <p className="font-medium text-slate-900">{selectedDetailLoan.request_number || selectedDetailLoan.id}</p>
+                  <p className="text-sm text-slate-600">{selectedDetailLoan.loan_type || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Amount</p>
+                  <p className="font-medium text-slate-900">₵{Number(selectedDetailLoan.requested_amount || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FD Score</p>
+                  <p className={`font-medium ${Number(selectedDetailLoan.fd_score || 0) >= GOOD_FD_THRESHOLD ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {selectedDetailLoan.fd_score ?? 'N/A'}%
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                <p className="font-semibold">Next step</p>
+                <p className="mt-1">This loan is ready for the HR Executive handoff after the Loan Office memo is confirmed.</p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedDetailLoan(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Push to HR Executive Dialog */}
       <Dialog open={!!selectedForPush} onOpenChange={(open) => !open && setSelectedForPush(null)}>

@@ -1,0 +1,174 @@
+/* Print-friendly styles for leave memos and signatures */
+
+@media print {
+  /* Hide non-essential UI elements */
+  .print-hide,
+  [data-print="hide"],
+  .dialog-footer,
+  .button,
+  button,
+  .toolbar,
+  nav,
+  .sidebar {
+    display: none !important;
+  }
+
+  /* Ensure content spans full width */
+  body,
+  html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Print container */
+  .print-container,
+  .dialog-content,
+  [role="dialog"] {
+    margin: 0;
+    padding: 1cm;
+    width: 100%;
+    height: 100%;
+    box-shadow: none;
+    border: none;
+  }
+
+  /* Signature blocks */
+  .signature-block,
+  [data-signature="block"] {
+    page-break-inside: avoid;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #999;
+  }
+
+  /* Signature images */
+  img[alt*="Signature"],
+  img[alt*="signature"],
+  .signature-image {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    page-break-inside: avoid;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    padding: 5px;
+  }
+
+  /* Signature text */
+  .signature-text,
+  p.font-script {
+    font-size: 18pt;
+    font-style: italic;
+    margin: 10px 0;
+    page-break-inside: avoid;
+  }
+
+  /* Approval blocks */
+  .approval-signature-block {
+    page-break-inside: avoid;
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+  }
+
+  /* Table styling */
+  table {
+    page-break-inside: avoid;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th, td {
+    border: 1px solid #999;
+    padding: 8px;
+    text-align: left;
+  }
+
+  /* Headers */
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+
+  /* Paragraphs */
+  p {
+    orphans: 3;
+    widows: 3;
+    page-break-inside: avoid;
+  }
+
+  /* Prevent background colors and images */
+  .bg-slate-50,
+  .bg-blue-50,
+  [class*="bg-"] {
+    background: white !important;
+  }
+
+  /* Ensure text is black */
+  * {
+    color: black !important;
+    background: transparent !important;
+  }
+
+  /* Link styling */
+  a {
+    text-decoration: underline;
+    color: black !important;
+  }
+
+  /* HR lines */
+  hr {
+    border: 1px solid #999;
+  }
+
+  /* Print page breaks */
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .page-break-inside-avoid {
+    page-break-inside: avoid;
+  }
+}
+
+/* Screen media - ensure signatures are visible */
+@media screen {
+  .signature-block {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  img[alt*="Signature"],
+  img[alt*="signature"],
+  .signature-image {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 5px;
+    display: block;
+    margin: 10px 0;
+  }
+
+  .signature-text {
+    font-size: 20px;
+    font-style: italic;
+    font-family: cursive, "Brush Script MT", "Lucida Handwriting";
+    margin: 10px 0;
+    color: #1f2937;
+  }
+
+  .approval-signature-block {
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 12px;
+    background-color: #f9fafb;
+    margin-bottom: 12px;
+  }
+}

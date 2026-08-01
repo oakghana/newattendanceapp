@@ -19,6 +19,56 @@ export interface LeaveResumptionRecord {
 }
 
 /**
+ * Create a pending leave resumption tracking record when an approved leave request is created.
+ */
+export async function createLeaveResumptionTrackingForLeaveRequest(leaveRequest: {
+  id: string
+  user_id: string
+  end_date: string
+}) {
+  try {
+    const { data: existingRecord, error: existingError } = await supabase
+      .from('leave_resumption_notifications')
+      .select('id')
+      .eq('leave_request_id', leaveRequest.id)
+      .maybeSingle()
+
+    if (existingError) {
+      console.error('[v0] Error checking existing leave resumption record:', existingError)
+      return null
+    }
+
+    if (existingRecord?.id) {
+      return existingRecord
+    }
+
+    const { data: createdRecord, error: insertError } = await supabase
+      .from('leave_resumption_notifications')
+      .insert({
+        user_id: leaveRequest.user_id,
+        leave_request_id: leaveRequest.id,
+        leave_end_date: leaveRequest.end_date,
+        status: 'pending',
+        days_overdue: 0,
+      })
+      .select('id')
+      .single()
+
+    if (insertError) {
+      console.error('[v0] Error creating leave resumption record:', insertError)
+      return null
+    }
+
+    await logAuditTrail(createdRecord?.id, leaveRequest.user_id, 'created', 'Pending leave resumption tracking created for approved leave request.')
+
+    return createdRecord
+  } catch (error) {
+    console.error('[v0] Error creating leave resumption record:', error)
+    return null
+  }
+}
+
+/**
  * Track leave resumption when staff checks in after leave ends
  */
 export async function trackLeaveResumption(userId: string, checkInDate: Date) {
@@ -582,4 +632,5 @@ export default {
   markAsResumed,
   checkAndEscalateNonResumption,
   sendEscalationNotification,
+  createLeaveResumptionTrackingForLeaveRequest,
 }

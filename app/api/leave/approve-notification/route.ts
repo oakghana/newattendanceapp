@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createLeaveResumptionTrackingForLeaveRequest } from "@/lib/leave-resumption-service"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -100,6 +101,12 @@ export async function POST(request: NextRequest) {
         start_date: leaveRequest.start_date,
         end_date: leaveRequest.end_date,
         leave_request_id: leaveRequest.id,
+      })
+
+      await createLeaveResumptionTrackingForLeaveRequest({
+        id: leaveRequest.id,
+        user_id: leaveRequest.user_id,
+        end_date: leaveRequest.end_date,
       })
     } else {
       // Set status back to at_post if dismissed

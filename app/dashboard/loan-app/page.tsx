@@ -20,10 +20,13 @@ import { LoanOfficePaymentAdviceTab } from "@/components/leave/loan-office-payme
 import { LeaveResumptionBadge } from "@/components/leave/leave-resumption-badge"
 import { GlobalWarningsToasts } from "@/components/leave/global-warnings-toasts"
 import { AccountsExecutiveFDDashboard } from "@/components/loan/accounts-executive-fd-dashboard"
+import { FdCompletedArchive } from "@/components/loan/fd-completed-archive"
 import { FDCalculationSubmission } from "@/components/loan/fd-calculation-submission"
 import { HRLoanOfficeFDApproved } from "@/components/loan/hr-loan-office-fd-approved"
+import { RepaymentTrackingPanel } from "@/components/loan/repayment-tracking-panel"
 import { useToast } from "@/hooks/use-toast"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
+import { GOOD_FD_THRESHOLD, isPoorFdScore } from "@/lib/loan-workflow"
 import { generateProfessionalMemoPDF, downloadMemoPDF } from "@/lib/professional-memo-generator"
 import { Activity, AlertCircle, BarChart3, Calculator, CheckCircle2, ChevronDown, Clock, Download, Edit3, FileText, Filter, LayoutGrid, LayoutList, Loader2, MapPin, Receipt, Upload, Users, Wallet, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -542,6 +545,54 @@ function downloadCsv(rows: LoanRequest[], fileName: string) {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+function downloadFdSheetForWorkflow(row: LoanRequest) {
+  const win = window.open("", "_blank", "width=900,height=1000")
+  if (!win) return
+
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>FD Calculation Sheet - ${row.request_number}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+      h1 { font-size: 18px; margin-bottom: 6px; }
+      .meta { font-size: 12px; margin-bottom: 16px; color: #334155; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; text-align: left; }
+      th { background: #f1f5f9; }
+      .section { margin-top: 16px; }
+      pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; white-space: pre-wrap; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Financial Standing (FD) Sheet</h1>
+    <div class="meta">Staff: ${row.staff_full_name || "N/A"} | Staff No: ${row.staff_number || "N/A"} | Ref: ${row.request_number || row.id}</div>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Loan Type</td><td>${row.loan_type_label || "N/A"}</td></tr>
+        <tr><td>Requested Amount</td><td>GHS ${fmtAmount(row.fixed_amount || row.requested_amount)}</td></tr>
+        <tr><td>FD Score</td><td>${row.fd_score ?? "N/A"}%</td></tr>
+        <tr><td>Reviewed by</td><td>${row.accounts_reviewer_name || "N/A"}</td></tr>
+        <tr><td>Status</td><td>${statusText(row.status)}</td></tr>
+      </tbody>
+    </table>
+    <div class="section">
+      <strong>Account Executive Notes / Calculation Details</strong>
+      <pre>${row.fd_note || "N/A"}</pre>
+    </div>
+    <script>window.print()</script>
+  </body>
+</html>`
+
+  win.document.open()
+  win.document.write(html)
+  win.document.close()
 }
 
 async function downloadPdf(rows: LoanRequest[], fileName: string, title: string) {
@@ -1096,6 +1147,7 @@ export default function LoanAppPage() {
   const [paymentApprovalsSort, setPaymentApprovalsSort] = useState<"date" | "amount">("date")
   const [paymentRecords, setPaymentRecords] = useState<any[]>([])
   const [paymentRecordsLoading, setPaymentRecordsLoading] = useState(false)
+  const [fdPendingCount, setFdPendingCount] = useState<number | null>(null)
   const [selectedPaymentForApproval, setSelectedPaymentForApproval] = useState<any>(null)
   const [approvalModalOpen, setApprovalModalOpen] = useState(false)
   const [approvalNotes, setApprovalNotes] = useState("")
@@ -1199,6 +1251,12 @@ export default function LoanAppPage() {
     const activeLoansCount = allLoansData.filter((loan: any) => loan.status !== "archived").length
     const archivedLoansCount = allLoansData.filter((loan: any) => loan.status === "archived").length
     
+    const pendingFdStatuses = new Set(["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts"])
+    const fdApprovalCountFallback = allLoansData.filter((loan: any) => {
+      if (loan?.fd_score == null && loan?.fd_score !== 0) return false
+      return pendingFdStatuses.has(String(loan?.status || ""))
+    }).length
+
     const c = {
       hod: data?.inbox?.hod?.length || 0,
       loanOffice: data?.inbox?.loanOffice?.length || 0,
@@ -1209,6 +1267,7 @@ export default function LoanAppPage() {
       all: activeLoansCount,
       archived: archivedLoansCount,
       mine: data?.myTasks?.length || 0,
+      fdApproval: fdPendingCount ?? fdApprovalCountFallback,
     }
     // Determine if this user is ONLY an HR Executive (director_hr) with no other elevated roles
     const isHrExecutive = !isAdminUser && !!p?.directorHr
@@ -1228,23 +1287,15 @@ export default function LoanAppPage() {
     // Tracking tab: hidden for pure HR Executives — they work on forwarded loans, not the full pipeline
     if (!isHrExecutiveOnly) tabs.push({ key: "tracking", label: "Tracking" })
 
-    // Payment Approvals tab: only for HR and Accounts executives
-    if (isHrExecutive || isAccountsExecutive) {
-      tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
-    }
-
     // FD Approval tab: only for Accounts executives to review FD values from Loan Office
-    if (isAccountsExecutive) {
-      // TODO: Update when API is integrated to return pending FD count
-      // For now, display FD Approval tab without count
-      tabs.push({ 
-        key: "fd-approval", 
-        label: `FD Approval (${c.fdApproval || 0})`
+    if (isAccountsExecutive || isAdminUser) {
+      tabs.push({
+        key: "fd-approval",
+        label: `FD Approval (${c.fdApproval})`,
       })
-      // Add FD Completed tab for archived/historical FD records
       tabs.push({
         key: "fd-completed",
-        label: "FD Completed/Archived"
+        label: "FD Completed/Archived",
       })
     }
 
@@ -1263,7 +1314,7 @@ export default function LoanAppPage() {
     }
 
     // Repayment Tracking tab: for Loan Office, Accounts executives, and HR Loan Office
-    if (canAccessLoanOfficeWorkspace || isAccountsExecutive || isHRLoanOffice) {
+    if (canAccessLoanOfficeWorkspace || isAccountsExecutive || isHRLoanOffice || isAdminUser) {
       tabs.push({ key: "repayment-tracking", label: "Repayment Tracking" })
     }
 
@@ -1274,8 +1325,10 @@ export default function LoanAppPage() {
     if (canAccessLoanOfficeWorkspace && !p?.accounts && !p?.viewAllTabs) tabs.push({ key: "loan-payment-advice", label: "Payment & Download" })
     if (p?.committee || p?.viewAllTabs) tabs.push({ key: "committee", label: `Committee (${c.committee})` })
     if (p?.directorHr || p?.viewAllTabs) tabs.push({ key: "director", label: `Executive HR (${c.director})` })
-    // Payment Approvals: HR/Accounts executives and HR Loan Office
-    if (isHrExecutive || isAccountsExecutive || isHRLoanOffice) tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    // Payment Approvals: single tab only (HR/Accounts executives). Avoid second push for HR Loan Office alone.
+    if (isHrExecutive || isAccountsExecutive || isAdminUser) {
+      tabs.push({ key: "payment-approvals", label: "Payment Approvals" })
+    }
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
     // My Tasks: hidden for pure HR Executives and HR Loan Office — they work on forwarded queues, not personal tasks
     if (!isHrExecutiveOnly && !isHRLoanOffice && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
@@ -1290,13 +1343,27 @@ export default function LoanAppPage() {
     } else if (normalizedRole !== "hr_loan_office" && (p?.allLoans || p?.viewAllTabs)) {
       tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
-    return tabs
-  }, [data, canAccessLoanOfficeWorkspace, isAdmin])
+    const seen = new Set<string>()
+    return tabs.filter((tab) => {
+      if (seen.has(tab.key)) return false
+      seen.add(tab.key)
+      return true
+    })
+  }, [data, canAccessLoanOfficeWorkspace, isAdmin, normalizedRole, userDeptIsAccounts, loanTypeKey, fdPendingCount])
+
+  const uniqueVisibleTabs = useMemo(() => {
+    const seen = new Set<string>()
+    return visibleTabs.filter((tab) => {
+      if (seen.has(tab.key)) return false
+      seen.add(tab.key)
+      return true
+    })
+  }, [visibleTabs])
 
   // HR Executives land directly on their approval queue
   const defaultTab = (!isAdmin && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.committee)
     ? "director"
-    : visibleTabs[0]?.key || "staff"
+    : uniqueVisibleTabs[0]?.key || "staff"
 
   const filteredHod = useMemo(
     () => filterAndSortRows(data?.inbox?.hod || [], hodSearch, hodStatus, hodSort, hodLocation, hodDept),
@@ -1375,8 +1442,10 @@ export default function LoanAppPage() {
   const loanOfficeStageBuckets = useMemo(() => {
     const isArchivableStatus = (status: string) => ["approved_director", "director_rejected", "rejected_fd", "committee_rejected", "hod_rejected"].includes(status)
     const isArchivedStatus = (status: string) => status === "archived"
-    const isGoodFd = (row: LoanRequest) => row.fd_good === true
-    const isPoorFd = (row: LoanRequest) => row.fd_good === false || row.status === "rejected_fd" || (typeof row.fd_score === "number" && row.fd_score < 39)
+    const isGoodFd = (row: LoanRequest) =>
+      !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
+    const isPoorFd = (row: LoanRequest) =>
+      row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
     const isGoodFdNotPushed = (row: LoanRequest) =>
       isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
     const isPending = (row: LoanRequest) =>
@@ -1398,8 +1467,10 @@ export default function LoanAppPage() {
 
   const loanOfficeTypeSummary = useMemo(() => {
     const isArchivableStatus = (status: string) => ["approved_director", "director_rejected", "rejected_fd", "committee_rejected", "hod_rejected"].includes(status)
-    const isGoodFd = (row: LoanRequest) => row.fd_good === true
-    const isPoorFd = (row: LoanRequest) => row.fd_good === false || row.status === "rejected_fd" || (typeof row.fd_score === "number" && row.fd_score < 39)
+    const isGoodFd = (row: LoanRequest) =>
+      !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null
+    const isPoorFd = (row: LoanRequest) =>
+      row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)
     const isGoodFdNotPushed = (row: LoanRequest) =>
       isGoodFd(row) && !["awaiting_director_hr", "approved_director", "director_rejected"].includes(row.status)
 
@@ -1493,8 +1564,8 @@ export default function LoanAppPage() {
         yet_to_be_worked: rows.filter((row) => pendingStatuses.has(String(row.status || ""))).length,
         finalized: rows.filter((row) => terminalStatuses.has(String(row.status || ""))).length,
         active_pipeline: rows.filter((row) => !terminalStatuses.has(String(row.status || ""))).length,
-        good_fd: rows.filter((row) => row.fd_good === true).length,
-        poor_fd: rows.filter((row) => row.fd_good === false || row.status === "rejected_fd" || (typeof row.fd_score === "number" && row.fd_score < 39)).length,
+        good_fd: rows.filter((row) => !isPoorFdScore(row.fd_score, row.fd_good) && row.fd_score != null).length,
+        poor_fd: rows.filter((row) => row.status === "rejected_fd" || isPoorFdScore(row.fd_score, row.fd_good)).length,
         total_loan_value: totalLoanValue,
         total_approved_value: totalApprovedValue,
         avg_loan_amount: avgLoanAmount,
@@ -2988,17 +3059,17 @@ export default function LoanAppPage() {
 
       <Tabs value={activeTab || defaultTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-2 shadow-sm backdrop-blur">
-          {visibleTabs.map((tab) =>
+          {uniqueVisibleTabs.map((tab, index) =>
             tab.href ? (
               <a
-                key={tab.key}
+                key={`${tab.key}-${index}`}
                 href={tab.href}
                 className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
               >
                 {tab.label}
               </a>
             ) : (
-              <TabsTrigger key={tab.key} value={tab.key} className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+              <TabsTrigger key={`${tab.key}-${index}`} value={tab.key} className="rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-600 data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
                 {tab.label}
               </TabsTrigger>
             )
@@ -4036,23 +4107,33 @@ export default function LoanAppPage() {
                 </CardContent>
               </Card>
 
-              {/* Edit Already-Calculated FD Scores */}
-              {data?.inbox?.accounts && data.inbox.accounts.filter(r => r.fd_score).length > 0 && (
+              {/* Correct pending FD scores (before Accounts Executive approval only) */}
+              {data?.inbox?.accounts && data.inbox.accounts.filter((r) => {
+                if (r.fd_score == null && r.fd_score !== 0) return false
+                const st = String(r.status || "")
+                return ["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts", "rejected_fd", "fd_rejected"].includes(st)
+              }).length > 0 && (
                 <Card className="border-purple-200 bg-purple-50">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-purple-900">
                       <Edit3 className="h-5 w-5" />
-                      Edit FD Calculations
+                      Correct Pending FD (before AE approval)
                     </CardTitle>
                     <CardDescription className="text-purple-800">
-                      Already-calculated FD scores can be edited here to adjust financial data or re-calculate.
+                      Fix salary/deduction errors or adjust the FD % while the request is still awaiting Accounts Executive.
+                      Accounts Loan Office cannot approve — only correct and resubmit.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {data.inbox.accounts.filter(r => r.fd_score).map(loanReq => (
+                      {data.inbox.accounts.filter((r) => {
+                        if (r.fd_score == null && r.fd_score !== 0) return false
+                        const st = String(r.status || "")
+                        return ["pending_accounts_fd_review", "fd_review_pending", "sent_to_accounts", "rejected_fd", "fd_rejected"].includes(st)
+                      }).map(loanReq => (
                         <FDCalculationSubmission 
                           key={`edit-${loanReq.id}`}
+                          allowPendingCorrection
                           loanRequest={{
                             id: loanReq.id,
                             request_number: loanReq.request_number || "",
@@ -4063,9 +4144,10 @@ export default function LoanAppPage() {
                             loan_type_label: loanReq.loan_type_label,
                             monthly_deduction: loanReq.monthly_deduction ?? undefined,
                             status: loanReq.status,
-                            fd_calculated: !!loanReq.fd_score,
-                            fd_score: loanReq.fd_score || undefined,
+                            fd_calculated: !!loanReq.fd_score || loanReq.fd_score === 0,
+                            fd_score: loanReq.fd_score ?? undefined,
                             fd_note: loanReq.fd_note || undefined,
+                            fd_good: loanReq.fd_good,
                           }}
                           onSubmitComplete={() => void loadData()}
                         />
@@ -5315,22 +5397,29 @@ export default function LoanAppPage() {
 
         {/* ── FD Approval Tab (Accounts Executive) ── */}
         <TabsContent value="fd-approval" className="space-y-4">
-          <AccountsExecutiveFDDashboard userId={data?.profile?.id || ""} userRole={data?.profile?.role || "user"} />
+          <AccountsExecutiveFDDashboard
+            userId={data?.profile?.id || ""}
+            userRole={data?.profile?.role || "user"}
+            onPendingCountChange={setFdPendingCount}
+          />
         </TabsContent>
 
         {/* ── FD Completed/Archived Tab (Accounts Executive) ── */}
         <TabsContent value="fd-completed" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>FD Completed & Archived Records</CardTitle>
-              <CardDescription>Historical FD calculations that have been approved or rejected for archival and record-keeping.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border p-4 text-center text-sm text-slate-500">
-                <p>FD completed records component - Ready for implementation with filtering and archive management</p>
-              </div>
-            </CardContent>
-          </Card>
+          <FdCompletedArchive />
+        </TabsContent>
+
+        {/* ── Repayment Tracking ── */}
+        <TabsContent value="repayment-tracking" className="space-y-4">
+          <RepaymentTrackingPanel
+            loans={[
+              ...(data?.inbox?.allLoans || []),
+              ...(data?.inbox?.accountsSigned || []),
+              ...(data?.inbox?.loanOffice || []),
+              ...(data?.inbox?.hrOffice || []),
+              ...(data?.inbox?.directorHr || []),
+            ]}
+          />
         </TabsContent>
 
         <TabsContent value="director" className="space-y-3">
@@ -6937,6 +7026,16 @@ export default function LoanAppPage() {
                         <p className="mt-0.5 whitespace-pre-wrap text-slate-800">{actionModal.row.fd_note}</p>
                       </div>
                     )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-fit"
+                      onClick={() => downloadFdSheetForWorkflow(actionModal.row!)}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download FD Sheet (PDF)
+                    </Button>
                     {actionModal.row.fd_document_url && (
                       <a
                         href={actionModal.row.fd_document_url}
@@ -7189,6 +7288,16 @@ export default function LoanAppPage() {
                         <div className="mt-1 whitespace-pre-wrap text-slate-800 text-xs bg-white p-2 rounded border border-emerald-100 max-h-40 overflow-y-auto">{actionModal.row.fd_note}</div>
                       </details>
                     )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => downloadFdSheetForWorkflow(actionModal.row!)}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download FD Sheet (PDF)
+                    </Button>
                     {actionModal.row.fd_document_url && (
                       <a
                         href={actionModal.row.fd_document_url}

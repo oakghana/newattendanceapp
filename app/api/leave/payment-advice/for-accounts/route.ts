@@ -32,8 +32,15 @@ export async function GET(request: NextRequest) {
 
     const userRole = String(userProfile?.role || "").toLowerCase().replace(/[\s-]+/g, "_")
     
-    // Admins and Accounts users can access this data
-    if (userRole !== "accounts" && !userIsAdmin) {
+    // Admins, Accounts, Accounts Executive, and Accounts Loan Office can access this data
+    const allowedRoles = new Set([
+      "accounts",
+      "accounts_executive",
+      "accounts_loan_office",
+      "admin",
+      "super_admin",
+    ])
+    if (!allowedRoles.has(userRole) && !userIsAdmin) {
       return NextResponse.json(
         { error: "Forbidden - Accounts or Admin role required" },
         { status: 403 }

@@ -1,0 +1,343 @@
+
+> my-v0-project@2.1.23.26 build C:\Users\oheme\julyattendance2026\newattendanceapp
+> next build
+
+ΓÜá `eslint` configuration in next.config.mjs is no longer supported. See more info here: https://nextjs.org/docs/app/api-reference/cli/next#next-lint-options
+ΓÜá Invalid next.config.mjs options detected: 
+ΓÜá     Unrecognized key(s) in object: 'swcMinify', 'eslint'
+ΓÜá See more info here: https://nextjs.org/docs/messages/invalid-next-config
+ΓÜá Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\oheme\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\oheme\julyattendance2026\newattendanceapp\pnpm-lock.yaml
+
+Γû▓ Next.js 16.1.4 (Turbopack)
+- Environments: .env.local, .env.production
+- Experiments (use with caution):
+  ┬╖ optimizePackageImports
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 50s
+  Skipping validation of types
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/263) ...
+  Generating static pages using 11 workers (65/263) 
+  Generating static pages using 11 workers (131/263) 
+  Generating static pages using 11 workers (197/263) 
+Γ£ô Generating static pages using 11 workers (263/263) in 3.1s
+  Finalizing page optimization ...
+
+Route (app)
+Γöî Γùï /
+Γö£ Γùï /_not-found
+Γö£ ╞Æ /admin/qr-generator
+Γö£ ╞Æ /api/admin/analytics
+Γö£ ╞Æ /api/admin/attendance-defaulters
+Γö£ ╞Æ /api/admin/audit-logs
+Γö£ ╞Æ /api/admin/audit-logs/export
+Γö£ ╞Æ /api/admin/backup
+Γö£ ╞Æ /api/admin/bulk-import/leave
+Γö£ ╞Æ /api/admin/bulk-import/loan
+Γö£ ╞Æ /api/admin/bulk-upload
+Γö£ ╞Æ /api/admin/bulk-upload/template
+Γö£ ╞Æ /api/admin/checkin-failures
+Γö£ ╞Æ /api/admin/department-summaries
+Γö£ ╞Æ /api/admin/departments
+Γö£ ╞Æ /api/admin/device-radius-settings
+Γö£ ╞Æ /api/admin/device-violations
+Γö£ ╞Æ /api/admin/excuse-duty
+Γö£ ╞Æ /api/admin/force-attendance
+Γö£ ╞Æ /api/admin/hr-excuse-duty
+Γö£ ╞Æ /api/admin/locations
+Γö£ ╞Æ /api/admin/locations/[id]
+Γö£ ╞Æ /api/admin/notifications
+Γö£ ╞Æ /api/admin/purge-transactions
+Γö£ ╞Æ /api/admin/reports
+Γö£ ╞Æ /api/admin/reports/attendance
+Γö£ ╞Æ /api/admin/reports/export
+Γö£ ╞Æ /api/admin/reset-password
+Γö£ ╞Æ /api/admin/schedules
+Γö£ ╞Æ /api/admin/security-diagnostics
+Γö£ ╞Æ /api/admin/send-warnings
+Γö£ ╞Æ /api/admin/smtp-settings
+Γö£ ╞Æ /api/admin/staff
+Γö£ ╞Æ /api/admin/staff-activation
+Γö£ ╞Æ /api/admin/staff-attendance-details
+Γö£ ╞Æ /api/admin/staff/[id]
+Γö£ ╞Æ /api/admin/supabase-config
+Γö£ ╞Æ /api/admin/test-users
+Γö£ ╞Æ /api/admin/user-approvals
+Γö£ ╞Æ /api/admin/user-credentials
+Γö£ ╞Æ /api/admin/users
+Γö£ ╞Æ /api/admin/users/by-role
+Γö£ ╞Æ /api/admin/warnings-archive
+Γö£ ╞Æ /api/admin/weekly-device-sharing
+Γö£ ╞Æ /api/analytics/attendance-summary
+Γö£ ╞Æ /api/attendance/check-in
+Γö£ ╞Æ /api/attendance/check-in-outside-request
+Γö£ ╞Æ /api/attendance/check-out
+Γö£ ╞Æ /api/attendance/checkin-failure
+Γö£ ╞Æ /api/attendance/emergency-checkout
+Γö£ ╞Æ /api/attendance/excuse-duty
+Γö£ ╞Æ /api/attendance/fast-check-in
+Γö£ ╞Æ /api/attendance/leave-status
+Γö£ ╞Æ /api/attendance/locations
+Γö£ ╞Æ /api/attendance/offpremises/approve
+Γö£ ╞Æ /api/attendance/offpremises/approved-checkins
+Γö£ ╞Æ /api/attendance/offpremises/pending
+Γö£ ╞Æ /api/attendance/offpremises/revert
+Γö£ ╞Æ /api/attendance/offpremises/review-log
+Γö£ ╞Æ /api/attendance/personal
+Γö£ ╞Æ /api/attendance/personal-export
+Γö£ ╞Æ /api/attendance/qr-checkin
+Γö£ ╞Æ /api/attendance/qr-checkout
+Γö£ ╞Æ /api/attendance/user-location
+Γö£ ╞Æ /api/attendance/weekly-summary
+Γö£ ╞Æ /api/auth/change-password
+Γö£ ╞Æ /api/auth/check-device-binding
+Γö£ ╞Æ /api/auth/current-user
+Γö£ ╞Æ /api/auth/login-log
+Γö£ ╞Æ /api/auth/logout
+Γö£ ╞Æ /api/auth/lookup-staff
+Γö£ ╞Æ /api/auth/staff-request
+Γö£ ╞Æ /api/auth/validate-email
+Γö£ ╞Æ /api/cron/force-failed-checkout
+Γö£ ╞Æ /api/cron/hod-auto-forward
+Γö£ ╞Æ /api/cron/monthly-password-reset
+Γö£ ╞Æ /api/debug/workflow-email-preview
+Γö£ ╞Æ /api/errors
+Γö£ ╞Æ /api/hr/executives
+Γö£ ╞Æ /api/leave/activate
+Γö£ ╞Æ /api/leave/all-requests
+Γö£ ╞Æ /api/leave/analytics
+Γö£ ╞Æ /api/leave/annual-entitlement
+Γö£ ╞Æ /api/leave/approve-notification
+Γö£ ╞Æ /api/leave/approved-leaves
+Γö£ ╞Æ /api/leave/archive
+Γö£ ╞Æ /api/leave/audit/report
+Γö£ ╞Æ /api/leave/balance
+Γö£ ╞Æ /api/leave/balance/history
+Γö£ ╞Æ /api/leave/balances
+Γö£ ╞Æ /api/leave/bulk-archive
+Γö£ ╞Æ /api/leave/calculate
+Γö£ ╞Æ /api/leave/carryover/approve
+Γö£ ╞Æ /api/leave/carryover/pending
+Γö£ ╞Æ /api/leave/carryover/reject
+Γö£ ╞Æ /api/leave/carryover/submit
+Γö£ ╞Æ /api/leave/carryover/workflow
+Γö£ ╞Æ /api/leave/change-proposal
+Γö£ ╞Æ /api/leave/deferment
+Γö£ ╞Æ /api/leave/deferment-memos/my-memos
+Γö£ ╞Æ /api/leave/deferment-recall/all
+Γö£ ╞Æ /api/leave/deferment-recall/approve-deferment
+Γö£ ╞Æ /api/leave/deferment-recall/approve-memo
+Γö£ ╞Æ /api/leave/deferment-recall/approve-recall
+Γö£ ╞Æ /api/leave/deferment-recall/assign
+Γö£ ╞Æ /api/leave/deferment-recall/assign-signer
+Γö£ ╞Æ /api/leave/deferment-recall/assign-to-executive
+Γö£ ╞Æ /api/leave/deferment-recall/download-approved
+Γö£ ╞Æ /api/leave/deferment-recall/generate-pdf
+Γö£ ╞Æ /api/leave/deferment-recall/hr-executive-decision
+Γö£ ╞Æ /api/leave/deferment-recall/hr-executive-requests
+Γö£ ╞Æ /api/leave/deferment-recall/memos
+Γö£ ╞Æ /api/leave/deferment-recall/memos/get-memos
+Γö£ ╞Æ /api/leave/deferment-recall/pending-requests
+Γö£ ╞Æ /api/leave/deferment/hod-endorsement
+Γö£ ╞Æ /api/leave/deferrals
+Γö£ ╞Æ /api/leave/delete-request
+Γö£ ╞Æ /api/leave/download-memo
+Γö£ ╞Æ /api/leave/export-annual
+Γö£ ╞Æ /api/leave/filter-options
+Γö£ ╞Æ /api/leave/hod-pending-requests
+Γö£ ╞Æ /api/leave/hod-review
+Γö£ ╞Æ /api/leave/holidays
+Γö£ ╞Æ /api/leave/holidays/[id]
+Γö£ ╞Æ /api/leave/hr-admin/deferrments
+Γö£ ╞Æ /api/leave/hr-admin/memos
+Γö£ ╞Æ /api/leave/hr-admin/outstanding
+Γö£ ╞Æ /api/leave/hr-admin/outstanding/auto-populate
+Γö£ ╞Æ /api/leave/hr-admin/recalls
+Γö£ ╞Æ /api/leave/hr-deferment-recall-management
+Γö£ ╞Æ /api/leave/hr-executives
+Γö£ ╞Æ /api/leave/hr-staff-pending-requests
+Γö£ ╞Æ /api/leave/issue-warning
+Γö£ ╞Æ /api/leave/leave-types
+Γö£ ╞Æ /api/leave/leave-types/[id]
+Γö£ ╞Æ /api/leave/locations-regions
+Γö£ ╞Æ /api/leave/memo/[memoType]/[memoId]
+Γö£ ╞Æ /api/leave/my-deferment-recall-requests
+Γö£ ╞Æ /api/leave/notifications
+Γö£ ╞Æ /api/leave/payment-advice-notification
+Γö£ ╞Æ /api/leave/payment-advice/approve-secure
+Γö£ ╞Æ /api/leave/payment-advice/approved-memos
+Γö£ ╞Æ /api/leave/payment-advice/detect-staff
+Γö£ ╞Æ /api/leave/payment-advice/download
+Γö£ ╞Æ /api/leave/payment-advice/download-batch
+Γö£ ╞Æ /api/leave/payment-advice/export
+Γö£ ╞Æ /api/leave/payment-advice/for-accounts
+Γö£ ╞Æ /api/leave/payment-advice/generate-memo
+Γö£ ╞Æ /api/leave/payment-advice/monthly-summary
+Γö£ ╞Æ /api/leave/payment-advice/my-memos
+Γö£ ╞Æ /api/leave/payment-advice/my-status
+Γö£ ╞Æ /api/leave/payment-advice/pending-approval
+Γö£ ╞Æ /api/leave/payment-advice/pending-assigned
+Γö£ ╞Æ /api/leave/payment-advice/staff-memos
+Γö£ ╞Æ /api/leave/payment-advice/submit-memo
+Γö£ ╞Æ /api/leave/payment-advice/view-all
+Γö£ ╞Æ /api/leave/planning
+Γö£ ╞Æ /api/leave/planning/backfill-reviewers
+Γö£ ╞Æ /api/leave/planning/hr-approve
+Γö£ ╞Æ /api/leave/planning/hr-finalize
+Γö£ ╞Æ /api/leave/planning/hr-office
+Γö£ ╞Æ /api/leave/planning/memo/[id]
+Γö£ ╞Æ /api/leave/planning/payment-memo
+Γö£ ╞Æ /api/leave/planning/reminders
+Γö£ ╞Æ /api/leave/planning/review
+Γö£ ╞Æ /api/leave/planning/staff-category-ref-prefixes
+Γö£ ╞Æ /api/leave/planning/stagger
+Γö£ ╞Æ /api/leave/planning/stagger/hr-finalize
+Γö£ ╞Æ /api/leave/planning/stagger/review
+Γö£ ╞Æ /api/leave/plans
+Γö£ ╞Æ /api/leave/policy
+Γö£ ╞Æ /api/leave/recall
+Γö£ ╞Æ /api/leave/recall-memos/my-memos
+Γö£ ╞Æ /api/leave/regional-office
+Γö£ ╞Æ /api/leave/regional-reports
+Γö£ ╞Æ /api/leave/reminders/resume-five-days
+Γö£ ╞Æ /api/leave/reminders/resume-five-days-countdown
+Γö£ ╞Æ /api/leave/reports/monthly
+Γö£ ╞Æ /api/leave/request
+Γö£ ╞Æ /api/leave/request-leave
+Γö£ ╞Æ /api/leave/requests
+Γö£ ╞Æ /api/leave/respond-to-hod-changes
+Γö£ ╞Æ /api/leave/resumption-memo
+Γö£ ╞Æ /api/leave/resumption/escalate
+Γö£ ╞Æ /api/leave/resumption/notify
+Γö£ ╞Æ /api/leave/return-to-work-reminders
+Γö£ ╞Æ /api/leave/return-to-work-reminders/submit
+Γö£ ╞Æ /api/leave/send-hod-reminders
+Γö£ ╞Æ /api/leave/send-reminder
+Γö£ ╞Æ /api/leave/staff-approved-memos
+Γö£ ╞Æ /api/leave/staff-history
+Γö£ ╞Æ /api/leave/staff-monitoring
+Γö£ ╞Æ /api/leave/staff-requests
+Γö£ ╞Æ /api/leave/status-transition
+Γö£ ╞Æ /api/leave/team-calendar
+Γö£ ╞Æ /api/leave/templates
+Γö£ ╞Æ /api/leave/warnings-and-queries
+Γö£ ╞Æ /api/loan/action
+Γö£ ╞Æ /api/loan/bulk-archive
+Γö£ ╞Æ /api/loan/fd-review
+Γö£ ╞Æ /api/loan/fd-send-approval
+Γö£ ╞Æ /api/loan/lookups
+Γö£ ╞Æ /api/loan/md-approve
+Γö£ ╞Æ /api/loan/memo-link
+Γö£ ╞Æ /api/loan/memo/[id]
+Γö£ ╞Æ /api/loan/payment-evidence
+Γö£ ╞Æ /api/loan/payment-evidence/approval
+Γö£ ╞Æ /api/loan/payment-records
+Γö£ ╞Æ /api/loan/payment-records/approve
+Γö£ ╞Æ /api/loan/push-to-hr-executive
+Γö£ ╞Æ /api/loan/regional-office
+Γö£ ╞Æ /api/loan/repayment
+Γö£ ╞Æ /api/loan/repayment-schedule
+Γö£ ╞Æ /api/loan/request
+Γö£ ╞Æ /api/loan/restore
+Γö£ ╞Æ /api/loan/workflow
+Γö£ ╞Æ /api/locations/active
+Γö£ ╞Æ /api/locations/lookup
+Γö£ ╞Æ /api/logs
+Γö£ ╞Æ /api/migrate/document-url
+Γö£ ╞Æ /api/public/departments
+Γö£ ╞Æ /api/regional-office/export
+Γö£ ╞Æ /api/settings
+Γö£ ╞Æ /api/settings/backup
+Γö£ ╞Æ /api/settings/runtime
+Γö£ ╞Æ /api/signature/auto-populate
+Γö£ ╞Æ /api/staff/list
+Γö£ ╞Æ /api/staff/notifications
+Γö£ ╞Æ /api/staff/notifications/[id]
+Γö£ ╞Æ /api/staff/notifications/mark-all-read
+Γö£ ╞Æ /api/staff/warnings
+Γö£ ╞Æ /api/staff/warnings/[id]
+Γö£ ╞Æ /api/staff/warnings/mark-all-read
+Γö£ ╞Æ /api/system-time
+Γö£ ╞Æ /api/upload
+Γö£ ╞Æ /api/user/hr-executives
+Γö£ ╞Æ /api/user/hr-signature-save
+Γö£ ╞Æ /api/user/signature-auto-populate
+Γö£ ╞Æ /api/user/signature-check/[userId]
+Γö£ ╞Æ /api/user/signature-clear
+Γö£ ╞Æ /api/user/signature-save
+Γö£ ╞Æ /api/user/signature/[userId]
+Γö£ ╞Æ /api/workflow/registry
+Γö£ Γùï /auth/login
+Γö£ Γùï /auth/pending-approval
+Γö£ Γùï /auth/signup
+Γö£ Γùï /auth/staff-request
+Γö£ Γùï /auth/verify-email
+Γö£ ╞Æ /dashboard
+Γö£ ╞Æ /dashboard/analytics
+Γö£ Γùï /dashboard/attendance
+Γö£ Γùï /dashboard/attendance-tracking
+Γö£ ╞Æ /dashboard/audit-logs
+Γö£ ╞Æ /dashboard/checkin-failures
+Γö£ ╞Æ /dashboard/data-management
+Γö£ ╞Æ /dashboard/defaulters
+Γö£ Γùï /dashboard/demo/signature-approval
+Γö£ ╞Æ /dashboard/department-summaries
+Γö£ ╞Æ /dashboard/device-violations
+Γö£ Γùï /dashboard/diagnostics
+Γö£ ╞Æ /dashboard/disbursement-confirmation
+Γö£ Γùï /dashboard/emergency-admin
+Γö£ Γùï /dashboard/excuse-duty
+Γö£ ╞Æ /dashboard/excuse-duty-review
+Γö£ ╞Æ /dashboard/help
+Γö£ ╞Æ /dashboard/hr-excuse-duty
+Γö£ ╞Æ /dashboard/hr-leave-admin
+Γö£ ╞Æ /dashboard/instructor
+Γö£ ╞Æ /dashboard/leave-management
+Γö£ ╞Æ /dashboard/leave-management/payment-advice
+Γö£ ╞Æ /dashboard/leave-notifications
+Γö£ ╞Æ /dashboard/leave-planning
+Γö£ Γùï /dashboard/loan-app
+Γö£ Γùï /dashboard/loan-app/repayment-tracking
+Γö£ ╞Æ /dashboard/locations
+Γö£ ╞Æ /dashboard/md-approvals
+Γö£ Γùï /dashboard/missed-checkouts
+Γö£ ╞Æ /dashboard/overview
+Γö£ ╞Æ /dashboard/profile
+Γö£ Γùï /dashboard/qr-events
+Γö£ ╞Æ /dashboard/reports
+Γö£ Γùï /dashboard/schedule
+Γö£ ╞Æ /dashboard/secretary-memos
+Γö£ ╞Æ /dashboard/settings
+Γö£ Γùï /dashboard/settings/backup
+Γö£ ╞Æ /dashboard/settings/device-radius
+Γö£ ╞Æ /dashboard/settings/notifications
+Γö£ ╞Æ /dashboard/settings/runtime-controls
+Γö£ ╞Æ /dashboard/staff
+Γö£ ╞Æ /dashboard/staff-activation
+Γö£ ╞Æ /dashboard/staff-requests
+Γö£ ╞Æ /dashboard/student
+Γö£ ╞Æ /dashboard/user-approvals
+Γö£ ╞Æ /dashboard/user-management
+Γö£ ╞Æ /dashboard/warnings-archive
+Γö£ ╞Æ /dashboard/weekly-device-sharing
+Γö£ Γùï /demo/signature-approval
+Γö£ Γùï /login-info
+Γö£ Γùï /offpremises-approvals
+Γö£ ╞Æ /offpremises-review
+Γö£ ╞Æ /scan
+Γö£ Γùï /test-duplicate-checkin
+Γö£ Γùï /test-flows
+Γöö Γùï /user-lookup
+
+
+╞Æ Proxy (Middleware)
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

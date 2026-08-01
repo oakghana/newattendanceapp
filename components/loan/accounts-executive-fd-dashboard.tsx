@@ -39,6 +39,102 @@ interface FDReview {
   review_status: 'pending_review' | 'approved' | 'rejected'
 }
 
+const GOOD_FD_THRESHOLD = 39
+
+function coerceFdScoreLocal(score: number | string | null | undefined): number | null {
+  if (typeof score === 'number' && Number.isFinite(score)) return score
+  if (score == null || score === '') return null
+  const n = Number(score)
+  return Number.isFinite(n) ? n : null
+}
+
+function isPoorFdScoreLocal(score: number | string | null | undefined, fdGood?: boolean | null): boolean {
+  const n = coerceFdScoreLocal(score)
+  if (n != null) return n < GOOD_FD_THRESHOLD
+  return fdGood === false
+}
+
+function formatFdPercentLocal(score: number | string | null | undefined): string {
+  const n = coerceFdScoreLocal(score)
+  if (n == null) return 'N/A'
+  return `${Math.round(n)}%`
+}
+
+function isFdExemptLoanTypeLocal(loanTypeKey: string | null | undefined, loanTypeLabel?: string | null): boolean {
+  const key = String(loanTypeKey || '').toLowerCase()
+  const label = String(loanTypeLabel || '').toLowerCase()
+  const exemptPattern = /funeral|repair|insurance/
+  return exemptPattern.test(key) || exemptPattern.test(label)
+}
+
+function parseLoanOfficeMemo(memo?: string) {
+  if (!memo) return [] as Array<{ key: string; value: string }>
+  const pairs = Array.from(memo.matchAll(/\[([^:\]]+):([^\]]+)\]/g)).map((match) => ({
+    key: String(match[1] || '').trim().replace(/_/g, ' '),
+    value: String(match[2] || '').trim(),
+  }))
+  return pairs
+}
+
+function openFdSheetPrintView(review: FDReview) {
+  const win = window.open('', '_blank', 'width=900,height=1000')
+  if (!win) return
+
+  const rows = parseLoanOfficeMemo(review.submission_memo)
+    .map((r) => `<tr><td>${r.key}</td><td>${r.value}</td></tr>`)
+    .join('')
+
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>FD Calculation Sheet - ${review.request_number || review.id}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+      h1 { font-size: 18px; margin-bottom: 6px; }
+      .meta { font-size: 12px; margin-bottom: 16px; color: #334155; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; text-align: left; }
+      th { background: #f1f5f9; }
+      .section { margin-top: 16px; }
+      pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; white-space: pre-wrap; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Financial Standing (FD) Sheet</h1>
+    <div class="meta">Staff: ${review.staff_name || 'N/A'} | Staff No: ${review.staff_number || 'N/A'} | Ref: ${review.request_number || review.id}</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Loan Type</td><td>${review.loan_type || 'N/A'}</td></tr>
+        <tr><td>Requested Amount</td><td>GHS ${Number(review.requested_amount || 0).toLocaleString()}</td></tr>
+        <tr><td>FD Score</td><td>${formatFdPercentLocal(review.fd_score)}</td></tr>
+        <tr><td>Review Status</td><td>${review.review_status}</td></tr>
+        ${rows || '<tr><td colspan="2">No structured routing fields found</td></tr>'}
+      </tbody>
+    </table>
+    <div class="section">
+      <strong>Loan Office Notes</strong>
+      <pre>${review.submission_memo || 'N/A'}</pre>
+    </div>
+    <div class="section">
+      <strong>FD Calculation Details</strong>
+      <pre>${review.fd_note || 'N/A'}</pre>
+    </div>
+    <script>window.print()</script>
+  </body>
+</html>`
+
+  win.document.open()
+  win.document.write(html)
+  win.document.close()
+}
+
 // Helper to parse and display FD calculation details
 function FDCalculationDetails({ fdNote }: { fdNote?: string }) {
   if (!fdNote) return null
@@ -139,7 +235,15 @@ function FDCalculationDetails({ fdNote }: { fdNote?: string }) {
   }
 }
 
-export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: string; userRole: string }) {
+export function AccountsExecutiveFDDashboard({
+  userId,
+  userRole,
+  onPendingCountChange,
+}: {
+  userId: string
+  userRole: string
+  onPendingCountChange?: (count: number) => void
+}) {
   const [reviews, setReviews] = useState<FDReview[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedReview, setSelectedReview] = useState<FDReview | null>(null)
@@ -159,11 +263,15 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
       const data = await res.json()
 
       if (data.success) {
-        setReviews(data.reviews || [])
+        const queue = data.reviews || []
+        setReviews(queue)
+        onPendingCountChange?.(queue.length)
       } else {
+        onPendingCountChange?.(0)
         toast({ title: 'Error', description: data.error, variant: 'destructive' })
       }
     } catch (error) {
+      onPendingCountChange?.(0)
       console.error('[v0] Error fetching FD reviews:', error)
       toast({ title: 'Error', description: 'Failed to load FD reviews', variant: 'destructive' })
     } finally {
@@ -172,12 +280,32 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
   }
 
   const isPoorFD = (review: FDReview): boolean => {
-    // Auto-reject if FD score is below threshold or marked as poor
-    return (review.fd_good === false) || (typeof review.fd_score === 'number' && review.fd_score < 39)
+    // Numeric score is authoritative; scores >= GOOD_FD_THRESHOLD are never "poor"
+    return isPoorFdScoreLocal(review.fd_score, review.fd_good)
+  }
+
+  /** Client-safe reject rule: no reject for exempt types, reject only when score is truly poor. */
+  const canRejectByScoreRule = (review: FDReview): boolean => {
+    if (isFdExemptLoanTypeLocal(review.loan_type, review.loan_type)) return false
+    return isPoorFdScoreLocal(review.fd_score, review.fd_good)
+  }
+
+  /** Auto-reject only when score is truly poor AND loan type is not FD-exempt (funeral/insurance/repair) */
+  const canAutoReject = (review: FDReview): boolean => {
+    return canRejectByScoreRule(review)
   }
 
   const handleAutoRejectPoorFD = async (review: FDReview) => {
     try {
+      if (!canAutoReject(review)) {
+        toast({
+          title: 'Not eligible for auto-reject',
+          description: isFdExemptLoanTypeLocal(review.loan_type, review.loan_type)
+            ? `${review.loan_type} loans stay reviewable at any FD score.`
+            : `FD score ${review.fd_score} is at or above the ${GOOD_FD_THRESHOLD}% threshold and cannot be rejected.`,
+        })
+        return
+      }
       setSubmitting(true)
       const res = await fetch('/api/loan/fd-review', {
         method: 'PATCH',
@@ -185,7 +313,7 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
         body: JSON.stringify({
           review_id: review.id,
           review_status: 'rejected',
-          fd_verification_memo: 'Auto-rejected: FD score below acceptable threshold (< 39)',
+          fd_verification_memo: `Auto-rejected: FD score below acceptable threshold (< ${GOOD_FD_THRESHOLD})`,
           review_decision: `Automatic rejection due to poor FD score of ${review.fd_score || 'N/A'}. Loan Office must resubmit with corrected calculations.`,
         }),
       })
@@ -315,10 +443,12 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
       ) : (
         <div className="grid gap-4">
           {reviews.map(review => {
+            const scoreNum = Number(review.fd_score)
             const poorFD = isPoorFD(review)
-            const borderColor = poorFD ? 'border-l-red-400' : 'border-l-amber-400'
-            const badgeVariant = poorFD ? 'destructive' : 'outline'
-            const badgeClass = poorFD ? 'bg-red-50 text-red-700 border-red-300' : 'bg-amber-50 text-amber-700 border-amber-300'
+            const showAutoReject = canAutoReject(review)
+            const exempt = isFdExemptLoanTypeLocal(review.loan_type, review.loan_type)
+            const borderColor = showAutoReject ? 'border-l-red-400' : 'border-l-amber-400'
+            const badgeClass = showAutoReject ? 'bg-red-50 text-red-700 border-red-300' : 'bg-amber-50 text-amber-700 border-amber-300'
             
             return (
             <Card key={review.id} className={`border-l-4 ${borderColor}`}>
@@ -339,28 +469,34 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                     )}
                   </div>
                   <div className="flex gap-2">
-                    {poorFD && (
+                    {showAutoReject && (
                       <Badge variant="destructive" className="bg-red-50 text-red-700 border border-red-300">
                         <AlertCircle className="h-3 w-3 mr-1" />
                         Poor FD
                       </Badge>
                     )}
+                    {exempt && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                        FD-exempt type
+                      </Badge>
+                    )}
+                    {!poorFD && Number.isFinite(scoreNum) && (
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300">
+                        Acceptable FD (≥{GOOD_FD_THRESHOLD})
+                      </Badge>
+                    )}
                     <Badge variant="outline" className={badgeClass}>
                       <Clock className="h-3 w-3 mr-1" />
-                      {poorFD ? 'Action Required' : 'Pending'}
+                      {showAutoReject ? 'Action Required' : 'Pending Review'}
                     </Badge>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-4 mb-4 p-3 bg-slate-50 rounded">
+                <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-slate-50 rounded">
                   <div>
-                    <p className="text-xs text-slate-500">FD Value</p>
-                    <p className="font-bold text-lg">₵{review.fd_value.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">FD Score</p>
-                    <p className={`font-bold text-lg ${(review.fd_score ?? 0) < 39 ? 'text-red-600' : 'text-green-600'}`}>
-                      {review.fd_score ?? 'N/A'}
+                    <p className="text-xs text-slate-500">FD Score (%)</p>
+                    <p className={`font-bold text-lg ${poorFD ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatFdPercentLocal(review.fd_score)}
                     </p>
                   </div>
                   <div>
@@ -383,21 +519,35 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                 {review.submission_memo && (
                   <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
                     <p className="text-xs font-semibold text-blue-900 mb-1">Loan Office Notes:</p>
-                    <p className="text-blue-800">{review.submission_memo}</p>
+                    {parseLoanOfficeMemo(review.submission_memo).length > 0 ? (
+                      <div className="space-y-1">
+                        {parseLoanOfficeMemo(review.submission_memo).map((item, idx) => (
+                          <p key={`${review.id}-memo-${idx}`} className="text-blue-800">
+                            <span className="font-semibold uppercase text-xs mr-1">{item.key}:</span>
+                            {item.value}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-blue-800 whitespace-pre-wrap">{review.submission_memo}</p>
+                    )}
                   </div>
                 )}
 
-                {poorFD ? (
-                  <div className="space-y-2">
+                {/* Scores >= threshold always get Review; only truly poor non-exempt get Auto-Reject + optional Review */}
+                <div className="space-y-2">
+                  {showAutoReject && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded text-sm">
                       <p className="text-xs font-semibold text-red-900 mb-1">
                         <AlertCircle className="h-3 w-3 inline mr-1" />
                         Poor FD Detected
                       </p>
                       <p className="text-red-800">
-                        FD score {review.fd_score} is below the acceptable threshold (39). This will be automatically rejected.
+                        FD score {review.fd_score} is below the acceptable threshold ({GOOD_FD_THRESHOLD}). You may auto-reject or still open a manual review.
                       </p>
                     </div>
+                  )}
+                  {showAutoReject && (
                     <Button
                       onClick={() => handleAutoRejectPoorFD(review)}
                       disabled={submitting}
@@ -406,16 +556,15 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                       <XCircle className="h-4 w-4 mr-1" />
                       Auto-Reject Poor FD
                     </Button>
-                  </div>
-                ) : (
+                  )}
                   <Button
                     onClick={() => setSelectedReview(review)}
                     className="w-full"
-                    variant="outline"
+                    variant={showAutoReject ? 'outline' : 'default'}
                   >
-                    Review & Approve
+                    Review &amp; Approve
                   </Button>
-                )}
+                </div>
               </CardContent>
             </Card>
             )
@@ -433,7 +582,7 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                 <DialogDescription className="text-xs mt-1">Review calculation and approve or reject</DialogDescription>
               </div>
               {selectedReview && (
-                <div className={`px-3 py-1 rounded text-sm font-semibold whitespace-nowrap ${(selectedReview.fd_score ?? 0) >= 39 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                <div className={`px-3 py-1 rounded text-sm font-semibold whitespace-nowrap ${!isPoorFdScoreLocal(selectedReview.fd_score, selectedReview.fd_good) ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                   Score: {selectedReview.fd_score ?? 'N/A'}/100
                 </div>
               )}
@@ -493,6 +642,18 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                 </details>
               )}
 
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openFdSheetPrintView(selectedReview)}
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download FD Sheet (PDF)
+                </Button>
+              </div>
+
               {/* Decision Section */}
               <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 space-y-3">
                 <p className="font-semibold text-sm text-slate-900">Your Decision</p>
@@ -531,13 +692,9 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
             </Button>
             {/* Calculate if rejection is allowed based on FD score and loan type */}
             {(() => {
-              const exceptionLoanTypes = ["Funeral", "Insurance", "Repair"]
-              const loanTypeLC = (selectedReview?.loan_type || "").toLowerCase()
-              const isExceptionLoanType = exceptionLoanTypes.some(type => 
-                loanTypeLC.includes(type.toLowerCase())
-              )
+              const isExceptionLoanType = isFdExemptLoanTypeLocal(selectedReview?.loan_type, selectedReview?.loan_type)
               const fdScore = selectedReview?.fd_score ?? 0
-              const canReject = !isExceptionLoanType && fdScore < 40
+              const canReject = selectedReview ? canRejectByScoreRule(selectedReview) : false
 
               return (
                 <>
@@ -546,7 +703,7 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                     onClick={handleReject}
                     disabled={submitting || !reviewDecision || !canReject}
                     size="sm"
-                    title={!canReject ? (isExceptionLoanType ? `${selectedReview?.loan_type} loans cannot be rejected - must be pushed to HR Loan Office` : "FD scores of 40% or higher cannot be rejected") : ""}
+                    title={!canReject ? (isExceptionLoanType ? `${selectedReview?.loan_type} loans cannot be rejected - must be pushed to HR Loan Office` : `FD scores of ${GOOD_FD_THRESHOLD}% or higher cannot be rejected`) : ""}
                   >
                     <XCircle className="h-4 w-4 mr-1" />
                     Reject
@@ -556,7 +713,7 @@ export function AccountsExecutiveFDDashboard({ userId, userRole }: { userId: str
                       <AlertCircle className="h-4 w-4 inline mr-1" />
                       {isExceptionLoanType 
                         ? `${selectedReview?.loan_type} loans must be approved and pushed to HR Loan Office regardless of FD score.`
-                        : `FD Score ${fdScore}% is acceptable. Only scores below 39% can be rejected.`
+                        : `FD Score ${fdScore}% is acceptable. Only scores below ${GOOD_FD_THRESHOLD}% can be rejected.`
                       }
                     </div>
                   )}
