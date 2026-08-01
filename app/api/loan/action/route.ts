@@ -771,9 +771,38 @@ export async function POST(request: NextRequest) {
       const decision = body.decision === "reject" ? "reject" : "approve"
       const directorLetter = String(body.director_letter || "").trim() || null
       const directorName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "Director HR"
+
+      // ── Persist signature submitted from the modal into registry ────────
+      // This ensures every HR Executive's drawn/uploaded/typed signature is
+      // always saved against their account for future memos and PDF rendering.
+      const bodySignatureMode = String(body.signature_mode || "typed").trim()
+      const bodySignatureText = String(body.signature_text || "").trim()
+      const bodySignatureDataUrl = String(body.signature_data_url || "").trim()
+      if (bodySignatureMode || bodySignatureText || bodySignatureDataUrl) {
+        try {
+          await admin
+            .from("approval_signature_registry")
+            .upsert(
+              {
+                user_id: user.id,
+                workflow_domain: "loan",
+                approval_stage: "director_hr",
+                signature_mode: bodySignatureMode || "typed",
+                signature_text: bodySignatureText || directorName,
+                signature_data_url: bodySignatureDataUrl || null,
+                is_active: true,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,workflow_domain,approval_stage" },
+            )
+        } catch (sigError) {
+          console.warn("[v0] Could not persist HR executive signature:", sigError)
+        }
+      }
+
       let savedSignature = await getDirectorSavedSignature(admin, user.id)
 
-      // If no signature saved yet, auto-save a text signature for this director
+      // If still no signature, auto-save a typed fallback
       if (!savedSignature) {
         try {
           await admin
@@ -790,12 +819,18 @@ export async function POST(request: NextRequest) {
               },
               { onConflict: "user_id,workflow_domain,approval_stage" },
             )
-          // Try to fetch the newly saved signature
           savedSignature = await getDirectorSavedSignature(admin, user.id)
-          console.log("[v0] Director signature auto-saved and fetched:", savedSignature)
         } catch (sigError) {
           console.warn("[v0] Could not auto-save director signature:", sigError)
-          // Continue anyway - signature will be marked [DIGITALLY SIGNED] in memo
+        }
+      }
+
+      // Always prefer the body's data URL when present (freshly drawn/uploaded)
+      if (bodySignatureDataUrl && !savedSignature?.dataUrl) {
+        savedSignature = {
+          mode: bodySignatureMode || "draw",
+          text: bodySignatureText || directorName,
+          dataUrl: bodySignatureDataUrl,
         }
       }
 
