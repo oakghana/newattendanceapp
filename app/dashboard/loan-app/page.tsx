@@ -1429,7 +1429,7 @@ export default function LoanAppPage() {
   const loanOfficeAnalytics = useMemo(() => {
     const rows = loanOfficeWorkspaceRows
     const terminalStatuses = new Set(["approved_director", "director_rejected", "rejected_fd", "committee_rejected", "hod_rejected"])
-    const pendingStatuses = new Set(["pending_hod", "hod_approved"])
+    const pendingStatuses = new Set(["pending_hod", "hod_approved", "pending_hr_loan_office"])
 
     const stageBreakdown = Array.from(
       rows.reduce((map, row) => {

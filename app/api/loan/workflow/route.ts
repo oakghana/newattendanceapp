@@ -491,7 +491,7 @@ export async function GET() {
     const [hodRes, loanOfficeRes, accountsRes, accountsSignedRes, committeeRes, hrRes, directorRes, directorGoodFdRes, allLoansRes, timelinesRes, myTasksRes] = await Promise.all([
       hodPromise,
       showLoanOffice
-        ? admin.from("loan_requests").select("*").eq("status", "hod_approved").order("created_at", { ascending: false })
+        ? admin.from("loan_requests").select("*").in("status", ["hod_approved", "pending_hr_loan_office"]).order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null } as any),
       showAccounts
         ? admin.from("loan_requests").select("*").eq("status", "sent_to_accounts").order("created_at", { ascending: false })
