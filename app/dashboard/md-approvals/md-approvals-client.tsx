@@ -237,7 +237,7 @@ function LoanRow({
   )
 }
 
-// ── Period Section ────────────────────────────────────────────────────────────
+// ─�� Period Section ────────────────────────────────────────────────────────────
 function PeriodSection({
   title, loans, selected, onToggle, onSelectAll, approvedIds, defaultOpen,
 }: {
@@ -1318,30 +1318,53 @@ export function MdApprovalsClient({ profile }: Props) {
                         </div>
                         {/* Actions */}
                         <div className="flex items-center justify-end gap-1.5 flex-shrink-0">
-                          <a
-                            href={`/api/loan/memo/${memo.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                          <button
+                            type="button"
                             title="Download memo PDF"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/loan/memo-link", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ id: memo.id }),
+                                })
+                                const data = await res.json()
+                                if (data.path) window.open(data.path, "_blank")
+                                else alert(data.error || "Could not generate memo link")
+                              } catch {
+                                alert("Failed to open memo")
+                              }
+                            }}
                           >
                             <Download className="h-3.5 w-3.5" />
                             Download
-                          </a>
-                          <a
-                            href={`/api/loan/memo/${memo.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              const w = window.open(`/api/loan/memo/${memo.id}`, "_blank")
-                              w?.addEventListener("load", () => w.print())
-                            }}
-                            className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors"
+                          </button>
+                          <button
+                            type="button"
                             title="Print memo"
+                            className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/loan/memo-link", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ id: memo.id }),
+                                })
+                                const data = await res.json()
+                                if (data.path) {
+                                  const w = window.open(data.path, "_blank")
+                                  w?.addEventListener("load", () => w.print())
+                                } else {
+                                  alert(data.error || "Could not generate memo link")
+                                }
+                              } catch {
+                                alert("Failed to print memo")
+                              }
+                            }}
                           >
                             <Printer className="h-3.5 w-3.5" />
-                          </a>
+                          </button>
                         </div>
                       </div>
                     )
