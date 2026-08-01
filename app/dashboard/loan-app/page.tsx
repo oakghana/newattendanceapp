@@ -1183,6 +1183,11 @@ export default function LoanAppPage() {
       })
     }
 
+    // Loan Office tab: for Loan Office users to process HOD-approved loans
+    if (canAccessLoanOfficeWorkspace && p?.loanOffice) {
+      tabs.push({ key: "loan-office", label: `Loan Office (${c.loanOffice})` })
+    }
+
     // Analytics tab for Loan Office and Accounts executives
     if (canAccessLoanOfficeWorkspace || p?.accounts) tabs.push({ key: "analytics", label: "Analytics" })
     if (p?.accounts || p?.viewAllTabs) tabs.push({ key: "leave-payment", label: "Leave Payment" })
