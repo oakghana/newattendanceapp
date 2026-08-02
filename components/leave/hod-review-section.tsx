@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Clock, User, Calendar, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { HODResumptionConfirmations } from './hod-resumption-confirmations'
 
 interface HODReviewSectionProps {
   userDepartmentId: string
@@ -143,8 +144,12 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
   }
 
   return (
-    <div className="space-y-4">
-      {requests.map((req) => {
+    <div className="space-y-6">
+      {/* Pending HOD Review Section */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-slate-700">Pending Review</h3>
+        <div className="space-y-4">
+          {requests.map((req) => {
         const staffName =
           `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() ||
           req.staff_name ||
@@ -224,6 +229,15 @@ export function HODReviewSection({ userDepartmentId }: HODReviewSectionProps) {
           </Card>
         )
       })}
+        </div>
+      </div>
+
+      {/* HOD Resumption Confirmations Section */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-slate-700">Staff Resumption Confirmations</h3>
+        <p className="text-xs text-slate-500 mb-3">Confirm that staff members have resumed work after their approved leave</p>
+        <HODResumptionConfirmations />
+      </div>
     </div>
   )
 }
