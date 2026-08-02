@@ -43,8 +43,9 @@ export async function GET(request: NextRequest) {
       .from("leave_plan_requests")
       .select(
         `id, user_id, leave_type_key, preferred_start_date, preferred_end_date,
-         requested_days, reason, status, created_at, updated_at, hr_approved_at,
-         user_profiles!user_id (id, first_name, last_name, email, department_id, employee_id, position)`,
+         requested_days, status, created_at, updated_at, hr_approved_at,
+         staff_confirmed, hod_confirmed,
+         user_profiles!user_id (id, first_name, last_name, email, department_id)`,
         { count: "exact" }
       )
       .order("hr_approved_at", { ascending: false, nullsFirst: false })
@@ -108,25 +109,38 @@ export async function GET(request: NextRequest) {
     const formattedRequests = (requests || []).map((req: any) => {
       const prof = req.user_profiles || {}
       const deptName = deptMap[prof.department_id] || "N/A"
+
+      // Calculate days overdue (days since leave end date for HR-approved leaves)
+      let daysOverdue = 0
+      const endDateStr = req.preferred_end_date
+      if (req.status === "hr_approved" && endDateStr) {
+        const endDate = new Date(endDateStr)
+        endDate.setHours(0, 0, 0, 0)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const diff = Math.floor((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24))
+        daysOverdue = Math.max(0, diff)
+      }
+
       return {
         id: req.id,
         userId: req.user_id,
         staffName: `${prof.first_name || ""} ${prof.last_name || ""}`.trim() || "Unknown",
         staffEmail: prof.email,
-        employeeId: prof.employee_id,
-        position: prof.position,
         department: deptName,
         departmentId: prof.department_id,
         leaveType: req.leave_type_key,
         startDate: req.preferred_start_date,
         endDate: req.preferred_end_date,
         requestedDays: req.requested_days,
-        reason: req.reason,
         status: req.status,
         hrApprovedAt: req.hr_approved_at,
         createdAt: req.created_at,
         updatedAt: req.updated_at,
         hodReviewers: hodReviewersMap[req.id] || [],
+        daysOverdue,
+        staffConfirmed: req.staff_confirmed === true,
+        hodConfirmed: req.hod_confirmed === true,
       }
     })
 

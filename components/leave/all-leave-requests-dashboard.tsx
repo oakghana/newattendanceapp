@@ -12,7 +12,8 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, RotateCw, Search } from "lucide-react"
+import { CheckCircle2, RotateCw, Search, XCircle } from "lucide-react"
+
 import { SortableTable, ColumnDef } from "@/components/ui/sortable-table"
 
 interface LeaveRequest {
@@ -24,12 +25,14 @@ interface LeaveRequest {
   departmentCode?: string
   startDate: string
   endDate: string
-  reason: string
   status: string
   createdAt: string
   updatedAt: string
   hrApprovedAt?: string | null
   hodReviewers?: string[]
+  daysOverdue: number
+  staffConfirmed: boolean
+  hodConfirmed: boolean
 }
 
 interface PaginationInfo {
@@ -290,25 +293,60 @@ export function AllLeaveRequestsDashboard() {
       },
     },
     {
-      key: "reason",
-      label: "Reason",
-      getValue: (row) => row.reason || "—",
-      sortable: true,
-      filterable: true,
+      key: "staffConfirmed",
+      label: "Staff Confirmed",
+      getValue: (row) => row.staffConfirmed,
+      render: (row) => {
+        const isHrApproved = row.status?.toLowerCase() === "hr_approved"
+        if (row.staffConfirmed) {
+          return (
+            <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Confirmed
+            </Badge>
+          )
+        }
+        if (isHrApproved && row.daysOverdue > 0) {
+          return (
+            <Badge className={`border text-xs ${row.daysOverdue >= 5 ? "bg-red-100 text-red-800 border-red-300" : "bg-amber-100 text-amber-800 border-amber-300"}`}>
+              <XCircle className="h-3 w-3 mr-1" />
+              Awaiting
+            </Badge>
+          )
+        }
+        return <span className="text-slate-400 text-xs">—</span>
+      },
+      sortable: false,
+      filterable: false,
+      className: "text-center",
     },
     {
-      key: "employeeId",
-      label: "Employee ID",
-      getValue: (row) => row.employeeId || "—",
-      sortable: true,
-      filterable: true,
-    },
-    {
-      key: "position",
-      label: "Position",
-      getValue: (row) => row.position || "—",
-      sortable: true,
-      filterable: true,
+      key: "hodConfirmed",
+      label: "HOD Confirmed",
+      getValue: (row) => row.hodConfirmed,
+      render: (row) => {
+        const isHrApproved = row.status?.toLowerCase() === "hr_approved"
+        if (row.hodConfirmed) {
+          return (
+            <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Confirmed
+            </Badge>
+          )
+        }
+        if (isHrApproved && row.daysOverdue > 0) {
+          return (
+            <Badge className={`border text-xs ${row.daysOverdue >= 5 ? "bg-red-100 text-red-800 border-red-300" : "bg-amber-100 text-amber-800 border-amber-300"}`}>
+              <XCircle className="h-3 w-3 mr-1" />
+              Pending
+            </Badge>
+          )
+        }
+        return <span className="text-slate-400 text-xs">—</span>
+      },
+      sortable: false,
+      filterable: false,
+      className: "text-center",
     },
   ]
 
@@ -474,6 +512,12 @@ export function AllLeaveRequestsDashboard() {
           rowKey={(row) => row.id}
           showGlobalSearch={true}
           searchPlaceholder="Search by staff name, email, or department..."
+          getRowStyle={(row) => {
+            const isHrApproved = row.status?.toLowerCase() === "hr_approved"
+            if (isHrApproved && row.daysOverdue >= 5) return { backgroundColor: "#fee2e2" }
+            if (isHrApproved && row.daysOverdue >= 1) return { backgroundColor: "#fffbeb" }
+            return undefined
+          }}
         />
       )}
 
