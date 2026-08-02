@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SignaturePad } from "@/components/leave/signature-pad"
 import { StaffLeaveHistory } from "@/components/leave/staff-leave-history"
+import { HODResumptionConfirmations } from "@/components/leave/hod-resumption-confirmations"
 import {
   isHrApproverRole,
   isHrLeaveOfficeRole,
@@ -2891,6 +2892,23 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                     </CardContent>
                   </Card>
                 )}
+
+                {/* ── Staff Resumption Confirmations ─────────────────────── */}
+                <Card className="border border-orange-200 bg-orange-50/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-orange-900 flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-orange-500 inline-block" />
+                      Staff Resumption Confirmations
+                    </CardTitle>
+                    <p className="text-xs text-orange-700 mt-1">
+                      Confirm that staff have resumed work after their approved leave. Search by name or employee ID.
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <HODResumptionConfirmations />
+                  </CardContent>
+                </Card>
+
               </div>
             )}
           </div>}
