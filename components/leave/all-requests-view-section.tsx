@@ -323,12 +323,15 @@ export function AllRequestsViewSection() {
                 const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
                 const staffConfirmed = req.staff_confirmed === true
                 const hodConfirmed = req.hod_confirmed === true
-                const rowClass = getResumptionRowClass(
-                  req.end_date || req.preferred_end_date || '',
-                  req.confirmation_status || '',
-                  staffConfirmed,
-                  hodConfirmed
-                )
+                // Only colour rows that are HR-approved and whose leave has ended
+                const rowClass = isHrApproved
+                  ? getResumptionRowClass(
+                      req.end_date || req.preferred_end_date || '',
+                      staffConfirmed,
+                      hodConfirmed
+                    )
+                  : ''
+                const daysOver = getDaysOverdue(req.end_date || req.preferred_end_date || '')
 
                 return (
                   <TableRow key={req.id} className={rowClass}>
@@ -343,27 +346,61 @@ export function AllRequestsViewSection() {
                     <TableCell>{getHodStatusBadge(hodStatus)}</TableCell>
                     <TableCell className="text-center">
                       {staffConfirmed ? (
-                        <Badge className="bg-green-100 text-green-800 border-green-300">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Yes
-                        </Badge>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Confirmed
+                          </Badge>
+                          {req.staff_confirmed_at && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {new Date(req.staff_confirmed_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      ) : isHrApproved && daysOver > 0 ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Badge className={`border text-xs ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Not Yet
+                          </Badge>
+                          <span className={`text-[10px] font-medium ${daysOver >= 5 ? 'text-red-600' : 'text-amber-600'}`}>
+                            {daysOver}d overdue
+                          </span>
+                        </div>
                       ) : (
-                        <Badge className="bg-gray-100 text-gray-700 border-gray-300">
+                        <Badge className="bg-gray-100 text-gray-500 border border-gray-200 text-xs">
                           <XCircle className="h-3 w-3 mr-1" />
-                          No
+                          —
                         </Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
                       {hodConfirmed ? (
-                        <Badge className="bg-green-100 text-green-800 border-green-300">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Yes
-                        </Badge>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Confirmed
+                          </Badge>
+                          {req.hod_confirmed_at && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {new Date(req.hod_confirmed_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      ) : isHrApproved && daysOver > 0 ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Badge className={`border text-xs ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Pending
+                          </Badge>
+                          <span className={`text-[10px] font-medium ${daysOver >= 5 ? 'text-red-600' : 'text-amber-600'}`}>
+                            {daysOver >= 5 ? 'Urgent' : 'Awaiting'}
+                          </span>
+                        </div>
                       ) : (
-                        <Badge className="bg-gray-100 text-gray-700 border-gray-300">
+                        <Badge className="bg-gray-100 text-gray-500 border border-gray-200 text-xs">
                           <XCircle className="h-3 w-3 mr-1" />
-                          No
+                          —
                         </Badge>
                       )}
                     </TableCell>
@@ -421,9 +458,26 @@ export function AllRequestsViewSection() {
       )}
 
       {filteredRequests.length > 0 && (
-        <p className="text-xs text-muted-foreground text-center">
-          Showing {filteredRequests.length} of {requests.length} requests
-        </p>
+        <div className="flex flex-col gap-2">
+          <p className="text-xs text-muted-foreground text-center">
+            Showing {filteredRequests.length} of {requests.length} requests
+          </p>
+          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+            <span className="font-medium">Row colour key:</span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-6 rounded bg-amber-100 border border-amber-300" />
+              1-4 days since leave ended (amber)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-6 rounded bg-red-100 border border-red-300" />
+              5+ days since leave ended — urgent (red)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-6 rounded bg-white border border-gray-200" />
+              Confirmed or leave ongoing
+            </span>
+          </div>
+        </div>
       )}
 
       {/* Resumption Confirmation Modal */}

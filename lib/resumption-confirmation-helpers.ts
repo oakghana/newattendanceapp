@@ -1,62 +1,49 @@
 /**
- * Calculate days overdue since leave ended
+ * Calculate how many days have passed since the leave end date.
+ * Returns 0 if leave has not ended yet.
  */
 export function getDaysOverdue(leaveEndDate: string): number {
+  if (!leaveEndDate) return 0
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
   const endDate = new Date(leaveEndDate)
   endDate.setHours(0, 0, 0, 0)
-  
   const diffTime = today.getTime() - endDate.getTime()
-  const daysOverdue = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-  
-  return daysOverdue > 0 ? daysOverdue : 0
+  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+  return days > 0 ? days : 0
 }
 
 /**
- * Get row highlight class based on resumption status with escalating color intensity
- * Day 0-1: No color
- * Day 2-3: Light red (red-100)
- * Day 4-5: Red-200
- * Day 6-7: Red-300
- * Day 8-9: Red-400
- * Day 10+: Deep red-600 (dismissal/queries phase)
+ * Get the Tailwind row background class for a leave request based on how many
+ * days have passed since the leave end date, when the staff member has not yet
+ * been confirmed as having resumed.
+ *
+ * Rules:
+ *   - Leave not ended yet           → no colour
+ *   - Both confirmed                → no colour
+ *   - 1-4 days overdue              → amber / orange (warning)
+ *   - 5+ days overdue               → red (urgent / dismissal risk)
  */
 export function getResumptionRowClass(
   leaveEndDate: string,
-  confirmationStatus: string | null,
-  staffConfirmed: boolean = false,
-  hodConfirmed: boolean = false
+  staffConfirmed: boolean,
+  hodConfirmed: boolean
 ): string {
-  const today = new Date().toISOString().split('T')[0]
-  const endDate = new Date(leaveEndDate).toISOString().split('T')[0]
-  const leaveHasEnded = today > endDate
+  if (!leaveEndDate) return ''
 
-  // No highlighting if leave hasn't ended
-  if (!leaveHasEnded) return ''
-
-  // No highlighting if confirmed
-  if (confirmationStatus === 'confirmed' || (staffConfirmed && hodConfirmed)) return ''
-
-  // Calculate days overdue
   const daysOverdue = getDaysOverdue(leaveEndDate)
 
-  // Not yet overdue (within 1 day)
-  if (daysOverdue <= 1) return ''
+  // Leave hasn't ended yet
+  if (daysOverdue === 0) return ''
 
-  // Apply escalating red color intensity based on days overdue
-  if (daysOverdue >= 10) {
-    return 'bg-red-600 hover:bg-red-700 transition-colors text-white'
-  } else if (daysOverdue >= 8) {
-    return 'bg-red-500 hover:bg-red-600 transition-colors'
-  } else if (daysOverdue >= 6) {
-    return 'bg-red-400 hover:bg-red-500 transition-colors'
-  } else if (daysOverdue >= 4) {
-    return 'bg-red-300 hover:bg-red-400 transition-colors'
-  } else if (daysOverdue >= 2) {
-    return 'bg-red-200 hover:bg-red-300 transition-colors'
+  // Both staff and HOD have confirmed — all good
+  if (staffConfirmed && hodConfirmed) return ''
+
+  if (daysOverdue >= 5) {
+    // 5+ days overdue: escalating red
+    return 'bg-red-100 hover:bg-red-200'
   }
 
-  return ''
+  // 1-4 days overdue: amber warning
+  return 'bg-amber-50 hover:bg-amber-100'
 }
