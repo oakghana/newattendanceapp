@@ -321,6 +321,7 @@ export function AllRequestsViewSection() {
                     ? 'bg-red-100 hover:bg-red-200 transition-colors'
                     : 'bg-amber-50 hover:bg-amber-100 transition-colors'
                   : ''
+                console.log("[v0] Row class calc:", { staffName, endDate: req.end_date || req.preferred_end_date, isHrApproved, daysOver, rowClass })
 
                 return (
                   <TableRow key={req.id} className={rowClass}>
