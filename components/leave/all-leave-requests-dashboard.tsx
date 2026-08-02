@@ -298,14 +298,6 @@ export function AllLeaveRequestsDashboard() {
       className: "text-center",
     },
     {
-      key: "hrApprovedAt",
-      label: "HR Approval Date",
-      getValue: (row) => row.hrApprovedAt || "—",
-      render: (row) => (row.hrApprovedAt ? formatDate(row.hrApprovedAt) : "—"),
-      sortable: true,
-      filterable: false,
-    },
-    {
       key: "status",
       label: "Status",
       getValue: (row) => row.status,
