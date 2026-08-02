@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
-import { Clock, User, Calendar, AlertCircle, Loader2, Search, Download } from 'lucide-react'
+import { Clock, User, Calendar, AlertCircle, Loader2, Search, Download, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Table,
   TableBody,
@@ -16,10 +18,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { getResumptionRowClass } from '@/lib/resumption-confirmation-helpers'
 
 interface LeaveRequest {
   id: string
   staff_name?: string
+  user_id?: string
+  leave_resumption_id?: string
+  confirmation_status?: string
   user_profiles?: {
     first_name?: string
     last_name?: string
@@ -42,6 +48,14 @@ interface LeaveRequest {
   staff_category?: string
 }
 
+interface ConfirmationModalState {
+  isOpen: boolean
+  request: LeaveRequest | null
+  confirmationStatus: 'pending_hod_rm' | 'pending_hr_manual' | null
+  notes: string
+  isSubmitting: boolean
+}
+
 export function AllRequestsViewSection() {
   const { toast } = useToast()
   const [requests, setRequests] = useState<LeaveRequest[]>([])
@@ -50,6 +64,13 @@ export function AllRequestsViewSection() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [confirmationModal, setConfirmationModal] = useState<ConfirmationModalState>({
+    isOpen: false,
+    request: null,
+    confirmationStatus: null,
+    notes: '',
+    isSubmitting: false,
+  })
 
   useEffect(() => {
     fetchAllRequests()
@@ -168,6 +189,56 @@ export function AllRequestsViewSection() {
     }
   }
 
+  const openConfirmationModal = (request: LeaveRequest, status: 'pending_hod_rm' | 'pending_hr_manual') => {
+    setConfirmationModal({
+      isOpen: true,
+      request,
+      confirmationStatus: status,
+      notes: '',
+      isSubmitting: false,
+    })
+  }
+
+  const handleConfirmation = async (action: 'confirmed' | 'rejected') => {
+    if (!confirmationModal.request) return
+    
+    setConfirmationModal(prev => ({ ...prev, isSubmitting: true }))
+    try {
+      const res = await fetch('/api/leave/resumption/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leave_resumption_id: confirmationModal.request.leave_resumption_id,
+          action,
+          notes: confirmationModal.notes,
+          confirmation_type: confirmationModal.confirmationStatus,
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Failed to confirm resumption')
+      }
+
+      toast({
+        title: 'Success',
+        description: `Resumption ${action === 'confirmed' ? 'confirmed' : 'rejected'} successfully`,
+      })
+
+      setConfirmationModal({ isOpen: false, request: null, confirmationStatus: null, notes: '', isSubmitting: false })
+      fetchAllRequests()
+    } catch (err) {
+      console.error('[v0] Confirmation error:', err)
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to process confirmation',
+        variant: 'destructive',
+      })
+    } finally {
+      setConfirmationModal(prev => ({ ...prev, isSubmitting: false }))
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -244,9 +315,14 @@ export function AllRequestsViewSection() {
                 const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
 
                 const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
+                const rowClass = getResumptionRowClass(
+                  req.end_date || req.preferred_end_date || '',
+                  req.confirmation_status || '',
+                  false
+                )
 
                 return (
-                  <TableRow key={req.id}>
+                  <TableRow key={req.id} className={rowClass}>
                     <TableCell className="font-medium">{staffName}</TableCell>
                     <TableCell>{deptName}</TableCell>
                     <TableCell>
@@ -256,8 +332,30 @@ export function AllRequestsViewSection() {
                     <TableCell>{endDate}</TableCell>
                     <TableCell>{getStatusBadge(req.status)}</TableCell>
                     <TableCell>{getHodStatusBadge(hodStatus)}</TableCell>
-                    <TableCell className="text-right">
-                      {isHrApproved && (
+                    <TableCell className="text-right space-x-2">
+                      {isHrApproved && req.confirmation_status === 'pending_hod_rm' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
+                          onClick={() => openConfirmationModal(req, 'pending_hod_rm')}
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          Verify Resumption
+                        </Button>
+                      )}
+                      {isHrApproved && req.confirmation_status === 'pending_hr_manual' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={() => openConfirmationModal(req, 'pending_hr_manual')}
+                        >
+                          <AlertCircle className="h-4 w-4" />
+                          HR Verify
+                        </Button>
+                      )}
+                      {isHrApproved && !req.confirmation_status?.includes('pending') && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -292,6 +390,90 @@ export function AllRequestsViewSection() {
           Showing {filteredRequests.length} of {requests.length} requests
         </p>
       )}
+
+      {/* Resumption Confirmation Modal */}
+      <Dialog open={confirmationModal.isOpen} onOpenChange={(open) => {
+        if (!open) setConfirmationModal({ isOpen: false, request: null, confirmationStatus: null, notes: '', isSubmitting: false })
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {confirmationModal.confirmationStatus === 'pending_hod_rm' ? (
+                <>
+                  <AlertTriangle className="h-5 w-5 text-orange-600" />
+                  HOD/RM Verification Required
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-5 w-5 text-red-600" />
+                  HR Manual Verification
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmationModal.request && (
+                <div className="space-y-2 mt-3">
+                  <p className="font-medium text-slate-900">{confirmationModal.request.user_profiles?.first_name} {confirmationModal.request.user_profiles?.last_name}</p>
+                  <p className="text-sm text-slate-600">
+                    Leave ended: {new Date(confirmationModal.request.end_date || confirmationModal.request.preferred_end_date || '').toLocaleDateString()}
+                  </p>
+                  {confirmationModal.confirmationStatus === 'pending_hod_rm' && (
+                    <p className="text-sm text-orange-700 bg-orange-50 p-2 rounded">
+                      Please confirm if this staff member is physically present at their workstation.
+                    </p>
+                  )}
+                  {confirmationModal.confirmationStatus === 'pending_hr_manual' && (
+                    <p className="text-sm text-red-700 bg-red-50 p-2 rounded">
+                      HOD/RM did not confirm within the required timeframe. Please manually verify resumption status.
+                    </p>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Notes/Evidence</label>
+              <Textarea
+                placeholder="Add any supporting notes (e.g., 'Confirmed at desk', 'Not present', 'On site')"
+                value={confirmationModal.notes}
+                onChange={(e) => setConfirmationModal(prev => ({ ...prev, notes: e.target.value }))}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => handleConfirmation('rejected')}
+                disabled={confirmationModal.isSubmitting}
+                className="flex-1 gap-2"
+              >
+                <XCircle className="h-4 w-4" />
+                Not Resumed
+              </Button>
+              <Button
+                onClick={() => handleConfirmation('confirmed')}
+                disabled={confirmationModal.isSubmitting}
+                className="flex-1 gap-2 bg-green-600 hover:bg-green-700"
+              >
+                {confirmationModal.isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Confirming...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Confirmed
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
