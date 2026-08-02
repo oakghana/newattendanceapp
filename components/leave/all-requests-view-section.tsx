@@ -316,15 +316,19 @@ export function AllRequestsViewSection() {
                 const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
                 // Only colour rows that are HR-approved and whose leave has ended
                 const daysOver = getDaysOverdue(req.end_date || req.preferred_end_date || '')
-                const rowClass = isHrApproved && daysOver > 0
-                  ? daysOver >= 5
-                    ? 'bg-red-100 hover:bg-red-200 transition-colors'
-                    : 'bg-amber-50 hover:bg-amber-100 transition-colors'
-                  : ''
-                console.log("[v0] Row class calc:", { staffName, endDate: req.end_date || req.preferred_end_date, isHrApproved, daysOver, rowClass })
+                
+                // Use inline styles for row coloring to ensure colors are applied
+                let rowStyle: React.CSSProperties = {}
+                if (isHrApproved && daysOver > 0) {
+                  if (daysOver >= 5) {
+                    rowStyle = { backgroundColor: '#fee2e2' } // red-100
+                  } else {
+                    rowStyle = { backgroundColor: '#fffbeb' } // amber-50
+                  }
+                }
 
                 return (
-                  <TableRow key={req.id} className={rowClass}>
+                  <TableRow key={req.id} style={rowStyle}>
                     <TableCell className="font-medium">{staffName}</TableCell>
                     <TableCell>{deptName}</TableCell>
                     <TableCell>
