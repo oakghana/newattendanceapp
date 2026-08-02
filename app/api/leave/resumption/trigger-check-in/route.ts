@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 /**
  * Triggered when a staff member checks in while on/after leave.
  * Creates a leave_resumption_confirmations record and sets status to 'pending_hod_rm'

@@ -3,6 +3,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
 import { trackLeaveResumption } from "@/lib/leave-resumption-service"
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
