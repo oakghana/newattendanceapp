@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { escalateOverdueEndorsements } from '@/lib/leave-compliance-service'
 import { notifyStaffOfLeaveReminder, notifyManagerOfEscalation } from '@/lib/workflow-emails'
+import { checkAndEscalateNonResumption } from '@/lib/leave-resumption-service'
 
 /**
  * POST /api/leave/compliance/cron-daily-checks
@@ -114,6 +115,57 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ─── Step 3: Escalate non-resumptions (2-day warning, 5-day letter, 10-day memo) ──
+    // Checks leave_resumption_notifications for staff who haven't checked in
+    // after their leave ended and notifies HOD, RM, HR Executive, HR Leave Office.
+    let nonResumptionEscalated = 0
+    try {
+      await checkAndEscalateNonResumption()
+      nonResumptionEscalated = 1 // function handles its own counting internally
+    } catch (escalateErr) {
+      console.warn('[cron-daily-checks] Non-resumption escalation failed (non-fatal):', escalateErr)
+    }
+
+    // ─── Step 4: Seed resumption tracking for any hr_approved leaves missing a record ──
+    // Catches leaves approved before the tracking system was deployed.
+    try {
+      const today2 = new Date().toISOString().split('T')[0]
+      const { data: untracked } = await admin
+        .from('leave_plan_requests')
+        .select('id, user_id, adjusted_end_date, preferred_end_date')
+        .eq('status', 'hr_approved')
+        .is('id', null) // placeholder — replaced below
+
+      // Find hr_approved leaves with no matching resumption record
+      const { data: approvedLeaves } = await admin
+        .from('leave_plan_requests')
+        .select('id, user_id, adjusted_end_date, preferred_end_date')
+        .eq('status', 'hr_approved')
+        .lte('adjusted_end_date', today2)
+
+      for (const leave of approvedLeaves || []) {
+        const { data: existing } = await admin
+          .from('leave_resumption_notifications')
+          .select('id')
+          .eq('leave_request_id', leave.id)
+          .maybeSingle()
+        if (!existing) {
+          const endDate = leave.adjusted_end_date || leave.preferred_end_date
+          if (endDate) {
+            await admin.from('leave_resumption_notifications').insert({
+              user_id: leave.user_id,
+              leave_request_id: leave.id,
+              leave_end_date: endDate,
+              status: 'pending',
+              days_overdue: 0,
+            }).catch(() => {})
+          }
+        }
+      }
+    } catch (seedErr) {
+      console.warn('[cron-daily-checks] Resumption seed step failed (non-fatal):', seedErr)
+    }
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -121,6 +173,7 @@ export async function POST(request: NextRequest) {
         reminders_sent: remindersSent,
         is_reminder_period: isReminderPeriod,
         endorsements_escalated: escalationResult.escalated,
+        non_resumption_escalation_run: nonResumptionEscalated > 0,
       },
     })
   } catch (error) {

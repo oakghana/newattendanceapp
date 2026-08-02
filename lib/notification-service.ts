@@ -44,17 +44,15 @@ export async function sendNotification(options: NotificationOptions) {
       return
     }
 
-    // Create notification record in database
-    const { error } = await supabase.from('notifications').insert({
-      user_id: userId,
-      title,
+    // Create notification record in database using staff_notifications (live table)
+    const { error } = await supabase.from('staff_notifications').insert({
+      recipient_id: userId,
+      sender_id: userId,       // system notification — sender = self
+      sender_role: 'system',
+      sender_label: title,
       message,
-      type,
-      severity,
-      action_url: actionUrl,
-      data,
+      notification_type: type,
       is_read: false,
-      created_at: new Date().toISOString(),
     })
 
     if (error) {

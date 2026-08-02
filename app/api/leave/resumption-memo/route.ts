@@ -86,42 +86,63 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create memo", details: memoError.message }, { status: 500 });
     }
 
-    // Create notifications for relevant roles
-    const notificationPromises = notifyRoles.map(async (role) => {
-      let roleTitle = "";
-      let recipientNote = "";
-      let emoji = "";
+    // Fetch recipients for each notifyRole and insert into staff_notifications
+    const roleMap: Record<string, string[]> = {
+      hod: [],
+      hr_office: ["hr_leave_office"],
+      hr_executive: ["hr_executive", "director_hr"],
+    }
 
-      switch (role.toLowerCase()) {
-        case "hod":
-          roleTitle = "Head of Department";
-          emoji = "👥";
-          recipientNote = `👋 ${staffData.first_name} ${staffData.last_name} has returned from ${leaveType} leave 🎉`;
-          break;
-        case "hr_office":
-          roleTitle = "HR Leave Office";
-          emoji = "📋";
-          recipientNote = `📍 Staff resumption notification for ${staffData.first_name} ${staffData.last_name} ✅`;
-          break;
-        case "hr_executive":
-          roleTitle = "HR Executive";
-          emoji = "📝";
-          recipientNote = `📋 Resumption memo available for signing: ${staffData.first_name} ${staffData.last_name} 🖊️`;
-          break;
-      }
+    // Resolve HOD user IDs via loan_hod_linkages (same table used for loans)
+    if (notifyRoles.includes("hod")) {
+      const { data: hodLinks } = await supabase
+        .from("loan_hod_linkages")
+        .select("hod_user_id")
+        .eq("staff_user_id", staffUserId)
+      roleMap.hod = (hodLinks || []).map((h: any) => h.hod_user_id).filter(Boolean)
+    }
 
-      return supabase.from("notifications").insert({
-        type: "leave_resumption",
-        title: `${emoji} ${staffData.first_name} ${staffData.last_name} - Return to Work Notification`,
-        body: recipientNote,
-        recipient_role: role,
-        related_data: { memo_id: memoId, staff_user_id: staffUserId },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
-    });
+    // Resolve HR role user IDs
+    const hrRolesToFetch = [...new Set([...roleMap.hr_office, ...roleMap.hr_executive])]
+    let hrUserIds: string[] = []
+    if (hrRolesToFetch.length > 0) {
+      const { data: hrUsers } = await supabase
+        .from("user_profiles")
+        .select("id, role")
+        .in("role", hrRolesToFetch)
+        .eq("is_active", true)
+      hrUserIds = (hrUsers || []).map((u: any) => u.id).filter(Boolean)
+    }
 
-    await Promise.all(notificationPromises);
+    const allRecipients = [...new Set([...roleMap.hod, ...hrUserIds])].filter(
+      (id) => id !== staffUserId
+    )
+
+    const staffDisplayName = `${staffData.first_name} ${staffData.last_name}`
+    const notifRows = allRecipients.map((recipientId: string) => ({
+      recipient_id: recipientId,
+      sender_id: staffUserId,
+      sender_role: "system",
+      sender_label: "Leave Resumption",
+      message: `${staffDisplayName} has returned from ${leaveType} leave and resumed duty on ${resumptionDate}. Resumption memo ref: ${memoId}.`,
+      notification_type: "leave_resumption",
+      is_read: false,
+    }))
+
+    if (notifRows.length > 0) {
+      await supabase.from("staff_notifications").insert(notifRows)
+    }
+
+    // Also notify the staff member themselves
+    await supabase.from("staff_notifications").insert({
+      recipient_id: staffUserId,
+      sender_id: staffUserId,
+      sender_role: "system",
+      sender_label: "Leave Resumption",
+      message: `Your return-to-work memo (ref: ${memoId}) has been generated and is ready for download.`,
+      notification_type: "leave_resumption_memo_ready",
+      is_read: false,
+    }).catch(() => {})
 
     return NextResponse.json(
       { success: true, memo_id: memoId, memo_data: memoData, message: "Resumption memo created and notifications sent" },
