@@ -116,12 +116,27 @@ export async function GET(request: NextRequest) {
         .in("user_id", userIds)
       if (resumptions) {
         for (const r of resumptions) {
-          // Key by user_id + leave_end_date for matching
           const key = `${r.user_id}::${r.leave_end_date}`
           resumptionMap[key] = {
             staffConfirmed: !!r.first_check_in_date,
             hodConfirmed: !!r.first_hod_rm_check_in_date,
           }
+        }
+      }
+    }
+
+    // Fetch existing resumption memos by staff_user_id + leave_end_date
+    // (only needed for rows where both confirmations exist)
+    let memoMap: Record<string, string> = {} // key: userId::endDate -> memoId
+    if (userIds.length > 0) {
+      const { data: memos } = await admin
+        .from("leave_resumption_memos")
+        .select("id, staff_user_id, leave_end_date")
+        .in("staff_user_id", userIds)
+      if (memos) {
+        for (const m of memos) {
+          const key = `${m.staff_user_id}::${m.leave_end_date}`
+          memoMap[key] = m.id
         }
       }
     }
@@ -143,9 +158,10 @@ export async function GET(request: NextRequest) {
         daysOverdue = Math.max(0, diff)
       }
 
-      // Look up confirmation status via user_id + leave_end_date
+      // Look up confirmation status and memo ID via user_id + leave_end_date
       const resumptionKey = `${req.user_id}::${endDateStr}`
       const confirmation = resumptionMap[resumptionKey] || { staffConfirmed: false, hodConfirmed: false }
+      const resumptionMemoId = memoMap[resumptionKey] || null
 
       return {
         id: req.id,
@@ -166,6 +182,7 @@ export async function GET(request: NextRequest) {
         daysOverdue,
         staffConfirmed: confirmation.staffConfirmed,
         hodConfirmed: confirmation.hodConfirmed,
+        resumptionMemoId,
       }
     })
 
