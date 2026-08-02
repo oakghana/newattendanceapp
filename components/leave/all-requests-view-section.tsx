@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { getResumptionRowClass } from '@/lib/resumption-confirmation-helpers'
+import { getResumptionRowClass, getDaysOverdue } from '@/lib/resumption-confirmation-helpers'
 
 interface LeaveRequest {
   id: string
@@ -26,6 +26,10 @@ interface LeaveRequest {
   user_id?: string
   leave_resumption_id?: string
   confirmation_status?: string
+  staff_confirmed?: boolean
+  staff_confirmed_at?: string
+  hod_confirmed?: boolean
+  hod_confirmed_at?: string
   user_profiles?: {
     first_name?: string
     last_name?: string
@@ -292,6 +296,8 @@ export function AllRequestsViewSection() {
                 <TableHead>End Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>HOD Review</TableHead>
+                <TableHead className="text-center">Staff Confirmed</TableHead>
+                <TableHead className="text-center">HOD Confirmed</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -315,10 +321,13 @@ export function AllRequestsViewSection() {
                 const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
 
                 const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
+                const staffConfirmed = req.staff_confirmed === true
+                const hodConfirmed = req.hod_confirmed === true
                 const rowClass = getResumptionRowClass(
                   req.end_date || req.preferred_end_date || '',
                   req.confirmation_status || '',
-                  false
+                  staffConfirmed,
+                  hodConfirmed
                 )
 
                 return (
@@ -332,6 +341,32 @@ export function AllRequestsViewSection() {
                     <TableCell>{endDate}</TableCell>
                     <TableCell>{getStatusBadge(req.status)}</TableCell>
                     <TableCell>{getHodStatusBadge(hodStatus)}</TableCell>
+                    <TableCell className="text-center">
+                      {staffConfirmed ? (
+                        <Badge className="bg-green-100 text-green-800 border-green-300">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Yes
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-100 text-gray-700 border-gray-300">
+                          <XCircle className="h-3 w-3 mr-1" />
+                          No
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {hodConfirmed ? (
+                        <Badge className="bg-green-100 text-green-800 border-green-300">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Yes
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-100 text-gray-700 border-gray-300">
+                          <XCircle className="h-3 w-3 mr-1" />
+                          No
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right space-x-2">
                       {isHrApproved && req.confirmation_status === 'pending_hod_rm' && (
                         <Button
