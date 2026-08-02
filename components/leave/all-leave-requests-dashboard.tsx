@@ -514,8 +514,16 @@ export function AllLeaveRequestsDashboard() {
           searchPlaceholder="Search by staff name, email, or department..."
           getRowStyle={(row) => {
             const isHrApproved = row.status?.toLowerCase() === "hr_approved"
-            if (isHrApproved && row.daysOverdue >= 5) return { backgroundColor: "#fee2e2" }
-            if (isHrApproved && row.daysOverdue >= 1) return { backgroundColor: "#fffbeb" }
+            if (!isHrApproved || row.daysOverdue <= 0) return undefined
+            const neitherConfirmed = !row.staffConfirmed && !row.hodConfirmed
+            // Dark red: overdue with NO confirmation from either party
+            if (neitherConfirmed && row.daysOverdue >= 5)
+              return { backgroundColor: "#fca5a5", borderLeft: "4px solid #dc2626" }
+            if (neitherConfirmed && row.daysOverdue >= 1)
+              return { backgroundColor: "#fecaca", borderLeft: "4px solid #ef4444" }
+            // Amber: overdue but at least one party confirmed
+            if (row.daysOverdue >= 1)
+              return { backgroundColor: "#fffbeb", borderLeft: "4px solid #f59e0b" }
             return undefined
           }}
         />

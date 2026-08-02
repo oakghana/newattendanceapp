@@ -44,7 +44,6 @@ export async function GET(request: NextRequest) {
       .select(
         `id, user_id, leave_type_key, preferred_start_date, preferred_end_date,
          requested_days, status, created_at, updated_at, hr_approved_at,
-         staff_confirmed, hod_confirmed,
          user_profiles!user_id (id, first_name, last_name, email, department_id)`,
         { count: "exact" }
       )
@@ -106,21 +105,47 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch resumption confirmation data from leave_resumption_notifications
+    // Match by user_id + leave_end_date to link to leave_plan_requests
+    const userIds = [...new Set((requests || []).map((r: any) => r.user_id).filter(Boolean))]
+    let resumptionMap: Record<string, { staffConfirmed: boolean; hodConfirmed: boolean }> = {}
+    if (userIds.length > 0) {
+      const { data: resumptions } = await admin
+        .from("leave_resumption_notifications")
+        .select("user_id, leave_end_date, first_check_in_date, first_hod_rm_check_in_date")
+        .in("user_id", userIds)
+      if (resumptions) {
+        for (const r of resumptions) {
+          // Key by user_id + leave_end_date for matching
+          const key = `${r.user_id}::${r.leave_end_date}`
+          resumptionMap[key] = {
+            staffConfirmed: !!r.first_check_in_date,
+            hodConfirmed: !!r.first_hod_rm_check_in_date,
+          }
+        }
+      }
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
     const formattedRequests = (requests || []).map((req: any) => {
       const prof = req.user_profiles || {}
       const deptName = deptMap[prof.department_id] || "N/A"
 
-      // Calculate days overdue (days since leave end date for HR-approved leaves)
+      // Calculate days overdue: parse ISO date string without timezone issues
       let daysOverdue = 0
-      const endDateStr = req.preferred_end_date
+      const endDateStr: string = req.preferred_end_date || ""
       if (req.status === "hr_approved" && endDateStr) {
-        const endDate = new Date(endDateStr)
-        endDate.setHours(0, 0, 0, 0)
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
+        const [year, month, day] = endDateStr.split("-").map(Number)
+        const endDate = new Date(year, month - 1, day, 0, 0, 0, 0)
         const diff = Math.floor((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24))
         daysOverdue = Math.max(0, diff)
       }
+
+      // Look up confirmation status via user_id + leave_end_date
+      const resumptionKey = `${req.user_id}::${endDateStr}`
+      const confirmation = resumptionMap[resumptionKey] || { staffConfirmed: false, hodConfirmed: false }
 
       return {
         id: req.id,
@@ -139,8 +164,8 @@ export async function GET(request: NextRequest) {
         updatedAt: req.updated_at,
         hodReviewers: hodReviewersMap[req.id] || [],
         daysOverdue,
-        staffConfirmed: req.staff_confirmed === true,
-        hodConfirmed: req.hod_confirmed === true,
+        staffConfirmed: confirmation.staffConfirmed,
+        hodConfirmed: confirmation.hodConfirmed,
       }
     })
 
