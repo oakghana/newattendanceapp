@@ -108,6 +108,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch confirmation data from leave_resumption_notifications
+    let confirmationMap: Record<string, any> = {}
+    const requestIds = (planRequests || []).map((r: any) => r.id).filter(Boolean)
+    if (requestIds.length > 0) {
+      const { data: confirmations } = await supabase
+        .from("leave_resumption_notifications")
+        .select("leave_request_id, first_check_in_date, first_hod_rm_check_in_date")
+        .in("leave_request_id", requestIds)
+      
+      if (confirmations) {
+        confirmations.forEach((c: any) => {
+          confirmationMap[c.leave_request_id] = {
+            staff_confirmed: !!c.first_check_in_date,
+            staff_confirmed_at: c.first_check_in_date,
+            hod_confirmed: !!c.first_hod_rm_check_in_date,
+            hod_confirmed_at: c.first_hod_rm_check_in_date,
+          }
+        })
+      }
+    }
+
     const data = (planRequests || []).map((req: any) => {
       const hrApprover = hrApproverMap[req.hr_approver_id] || null
       // Resolution order for signature:
@@ -124,12 +145,23 @@ export async function GET(request: NextRequest) {
         ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
         : (req.hr_approver_name || null)
       
+      const confirmation = confirmationMap[req.id] || {
+        staff_confirmed: false,
+        staff_confirmed_at: null,
+        hod_confirmed: false,
+        hod_confirmed_at: null,
+      }
+
       return {
         ...req,
         leave_type: req.leave_type_key || "Annual",
         start_date: req.adjusted_start_date || req.preferred_start_date,
         end_date: req.adjusted_end_date || req.preferred_end_date,
         hod_review_status: req.hod_decision || "pending",
+        staff_confirmed: confirmation.staff_confirmed,
+        staff_confirmed_at: confirmation.staff_confirmed_at,
+        hod_confirmed: confirmation.hod_confirmed,
+        hod_confirmed_at: confirmation.hod_confirmed_at,
         user_profiles: userMap[req.user_id] ? {
           first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
           last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",

@@ -25,6 +25,10 @@ interface LeaveRequest {
   staff_name?: string
   user_id?: string
   leave_resumption_id?: string
+  staff_confirmed?: boolean
+  staff_confirmed_at?: string
+  hod_confirmed?: boolean
+  hod_confirmed_at?: string
   user_profiles?: {
     first_name?: string
     last_name?: string
@@ -291,6 +295,8 @@ export function AllRequestsViewSection() {
                 <TableHead>End Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>HOD Review</TableHead>
+                <TableHead className="text-center">Staff Confirmed</TableHead>
+                <TableHead className="text-center">HOD Confirmed</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -338,6 +344,36 @@ export function AllRequestsViewSection() {
                     <TableCell>{endDate}</TableCell>
                     <TableCell>{getStatusBadge(req.status)}</TableCell>
                     <TableCell>{getHodStatusBadge(hodStatus)}</TableCell>
+                    <TableCell className="text-center">
+                      {req.staff_confirmed ? (
+                        <Badge className="bg-green-100 text-green-800 border border-green-300">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Yes
+                        </Badge>
+                      ) : isHrApproved && daysOver > 0 ? (
+                        <Badge className={`border ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
+                          <XCircle className="h-3 w-3 mr-1" />
+                          No
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-100 text-gray-600 border border-gray-200">—</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {req.hod_confirmed ? (
+                        <Badge className="bg-green-100 text-green-800 border border-green-300">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Yes
+                        </Badge>
+                      ) : isHrApproved && daysOver > 0 ? (
+                        <Badge className={`border ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
+                          <XCircle className="h-3 w-3 mr-1" />
+                          No
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-100 text-gray-600 border border-gray-200">—</Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right space-x-2">
                       {isHrApproved && req.confirmation_status === 'pending_hod_rm' && (
                         <Button
