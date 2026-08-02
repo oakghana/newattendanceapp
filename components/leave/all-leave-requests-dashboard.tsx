@@ -12,7 +12,8 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, RotateCw, Search } from "lucide-react"
+import { CheckCircle2, Download, Loader2, RotateCw, Search, XCircle } from "lucide-react"
+import { ResumptionMemoModal } from "@/components/leave/resumption-memo-modal"
 import { SortableTable, ColumnDef } from "@/components/ui/sortable-table"
 
 interface LeaveRequest {
@@ -24,12 +25,15 @@ interface LeaveRequest {
   departmentCode?: string
   startDate: string
   endDate: string
-  reason: string
   status: string
   createdAt: string
   updatedAt: string
   hrApprovedAt?: string | null
   hodReviewers?: string[]
+  daysOverdue: number
+  staffConfirmed: boolean
+  hodConfirmed: boolean
+  resumptionMemoId: string | null
 }
 
 interface PaginationInfo {
@@ -65,6 +69,38 @@ export function AllLeaveRequestsDashboard() {
   const [searchTerm, setSearchTerm] = useState("")
   const [departments, setDepartments] = useState<string[]>([])
   const [leaveTypes, setLeaveTypes] = useState<string[]>([])
+  const [memoModal, setMemoModal] = useState<{ open: boolean; memoId: string | null }>({ open: false, memoId: null })
+  const [generatingMemoFor, setGeneratingMemoFor] = useState<string | null>(null) // rowId being generated
+
+  const handleViewMemo = useCallback(async (row: LeaveRequest) => {
+    // If memo already exists, open it directly
+    if (row.resumptionMemoId) {
+      setMemoModal({ open: true, memoId: row.resumptionMemoId })
+      return
+    }
+    // Otherwise generate it on demand via POST to /api/leave/resumption-memo
+    setGeneratingMemoFor(row.id)
+    try {
+      const res = await fetch("/api/leave/resumption-memo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffUserId: row.userId,
+          leaveEndDate: row.endDate,
+          leaveType: row.leaveType || "leave",
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to generate memo")
+      // Refresh the row so next time it has the memo ID
+      setRequests(prev => prev.map(r => r.id === row.id ? { ...r, resumptionMemoId: data.memo_id } : r))
+      setMemoModal({ open: true, memoId: data.memo_id })
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" })
+    } finally {
+      setGeneratingMemoFor(null)
+    }
+  }, [toast])
 
   const fetchRequests = useCallback(async (
     page = 1,
@@ -262,14 +298,6 @@ export function AllLeaveRequestsDashboard() {
       className: "text-center",
     },
     {
-      key: "hrApprovedAt",
-      label: "HR Approval Date",
-      getValue: (row) => row.hrApprovedAt || "—",
-      render: (row) => (row.hrApprovedAt ? formatDate(row.hrApprovedAt) : "—"),
-      sortable: true,
-      filterable: false,
-    },
-    {
       key: "status",
       label: "Status",
       getValue: (row) => row.status,
@@ -290,25 +318,89 @@ export function AllLeaveRequestsDashboard() {
       },
     },
     {
-      key: "reason",
-      label: "Reason",
-      getValue: (row) => row.reason || "—",
-      sortable: true,
-      filterable: true,
+      key: "staffConfirmed",
+      label: "Staff Confirmed",
+      getValue: (row) => row.staffConfirmed,
+      render: (row) => {
+        const isHrApproved = row.status?.toLowerCase() === "hr_approved"
+        if (row.staffConfirmed) {
+          return (
+            <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Confirmed
+            </Badge>
+          )
+        }
+        if (isHrApproved && row.daysOverdue > 0) {
+          return (
+            <Badge className={`border text-xs ${row.daysOverdue >= 5 ? "bg-red-100 text-red-800 border-red-300" : "bg-amber-100 text-amber-800 border-amber-300"}`}>
+              <XCircle className="h-3 w-3 mr-1" />
+              Awaiting
+            </Badge>
+          )
+        }
+        return <span className="text-slate-400 text-xs">—</span>
+      },
+      sortable: false,
+      filterable: false,
+      className: "text-center",
     },
     {
-      key: "employeeId",
-      label: "Employee ID",
-      getValue: (row) => row.employeeId || "—",
-      sortable: true,
-      filterable: true,
+      key: "hodConfirmed",
+      label: "HOD Confirmed",
+      getValue: (row) => row.hodConfirmed,
+      render: (row) => {
+        const isHrApproved = row.status?.toLowerCase() === "hr_approved"
+        if (row.hodConfirmed) {
+          return (
+            <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Confirmed
+            </Badge>
+          )
+        }
+        if (isHrApproved && row.daysOverdue > 0) {
+          return (
+            <Badge className={`border text-xs ${row.daysOverdue >= 5 ? "bg-red-100 text-red-800 border-red-300" : "bg-amber-100 text-amber-800 border-amber-300"}`}>
+              <XCircle className="h-3 w-3 mr-1" />
+              Pending
+            </Badge>
+          )
+        }
+        return <span className="text-slate-400 text-xs">—</span>
+      },
+      sortable: false,
+      filterable: false,
+      className: "text-center",
     },
     {
-      key: "position",
-      label: "Position",
-      getValue: (row) => row.position || "—",
-      sortable: true,
-      filterable: true,
+      key: "resumptionMemo",
+      label: "Resumption Memo",
+      getValue: (row) => (row.staffConfirmed && row.hodConfirmed ? "ready" : ""),
+      render: (row) => {
+        if (!row.staffConfirmed || !row.hodConfirmed) {
+          return <span className="text-slate-400 text-xs">—</span>
+        }
+        const isGenerating = generatingMemoFor === row.id
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            onClick={() => handleViewMemo(row)}
+            disabled={isGenerating}
+          >
+            {isGenerating ? (
+              <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+            ) : (
+              <><Download className="h-3 w-3" /> View & Download</>
+            )}
+          </Button>
+        )
+      },
+      sortable: false,
+      filterable: false,
+      className: "text-center",
     },
   ]
 
@@ -461,6 +553,13 @@ export function AllLeaveRequestsDashboard() {
         Total: <strong>{pagination.totalCount}</strong> requests
       </div>
 
+      {/* Resumption Memo Modal — always mounted, toggled via state */}
+      <ResumptionMemoModal
+        isOpen={memoModal.open}
+        memoId={memoModal.memoId}
+        onClose={() => setMemoModal({ open: false, memoId: null })}
+      />
+
       {/* Sortable and Filterable Table */}
       {requests.length === 0 ? (
         <div className="border border-slate-200 rounded-lg bg-white p-8 text-center">
@@ -474,6 +573,18 @@ export function AllLeaveRequestsDashboard() {
           rowKey={(row) => row.id}
           showGlobalSearch={true}
           searchPlaceholder="Search by staff name, email, or department..."
+          getRowStyle={(row) => {
+            const isHrApproved = row.status?.toLowerCase() === "hr_approved"
+            if (!isHrApproved || row.daysOverdue <= 0) return undefined
+            const neitherConfirmed = !row.staffConfirmed && !row.hodConfirmed
+            if (neitherConfirmed && row.daysOverdue >= 5)
+              return { backgroundColor: "#fca5a5", borderLeft: "4px solid #dc2626" }
+            if (neitherConfirmed && row.daysOverdue >= 1)
+              return { backgroundColor: "#fecaca", borderLeft: "4px solid #ef4444" }
+            if (row.daysOverdue >= 1)
+              return { backgroundColor: "#fffbeb", borderLeft: "4px solid #f59e0b" }
+            return undefined
+          }}
         />
       )}
 

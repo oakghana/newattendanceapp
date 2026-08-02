@@ -43,6 +43,8 @@ interface SortableTableProps<T> {
   containerClassName?: string
   /** Optional: custom table class */
   tableClassName?: string
+  /** Optional: return inline style for each row */
+  getRowStyle?: (row: T) => React.CSSProperties | undefined
 }
 
 interface FilterState {
@@ -58,6 +60,7 @@ export function SortableTable<T>({
   searchPlaceholder = 'Search...',
   containerClassName,
   tableClassName,
+  getRowStyle,
 }: SortableTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>(null)
@@ -247,7 +250,8 @@ export function SortableTable<T>({
               processedData.map((row) => (
                 <tr
                   key={rowKey(row)}
-                  className="hover:bg-slate-50 transition-colors"
+                  className="transition-colors"
+                  style={getRowStyle ? getRowStyle(row) : undefined}
                 >
                   {renderRow ? (
                     <td colSpan={columns.length}>{renderRow(row)}</td>

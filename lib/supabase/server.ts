@@ -15,19 +15,22 @@ if (typeof window !== "undefined") {
 export async function createClient() {
   const cookieStore = await cookies()
 
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://vgtajtqxgczhjboatvol.supabase.co"
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndGFqdHF4Z2N6aGpib2F0dm9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5NzUyNDgsImV4cCI6MjA3MjU1MTI0OH0.EuuTCRC-rDoz_WHl4pwpV6_fEqrqcgGroa4nTjAEn1k"
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('[v0] Supabase env vars not configured (might be during build). Using defaults.')
+  }
+
+  const finalUrl = supabaseUrl || "https://vgtajtqxgczhjboatvol.supabase.co"
+  const finalKey = supabaseKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndGFqdHF4Z2N6aGpib2F0dm9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5NzUyNDgsImV4cCI6MjA3MjU1MTI0OH0.EuuTCRC-rDoz_WHl4pwpV6_fEqrqcgGroa4nTjAEn1k"
 
   // Debug: Log available cookies
   const allCookies = cookieStore.getAll()
   const authCookies = allCookies.filter(c => c.name.includes('sb') || c.name.includes('auth'))
   console.log("[v0] Supabase Server Client - Available auth cookies:", authCookies.map(c => c.name))
 
-  return createSupabaseServerClient(supabaseUrl, supabaseKey, {
+  return createSupabaseServerClient(finalUrl, finalKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll()
@@ -46,9 +49,10 @@ export async function createClient() {
 }
 
 export async function createAdminClient() {
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://vgtajtqxgczhjboatvol.supabase.co"
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  const finalUrl = supabaseUrl || "https://vgtajtqxgczhjboatvol.supabase.co"
 
   if (!supabaseKey) {
     // Fallback for local/dev environments where service role key is not set.
@@ -62,7 +66,7 @@ export async function createAdminClient() {
 
     console.warn("[v0] SUPABASE_SERVICE_ROLE_KEY missing - createAdminClient() is using authenticated anon fallback")
 
-    return createSupabaseServerClient(supabaseUrl, anonKey, {
+    return createSupabaseServerClient(finalUrl, anonKey, {
       cookies: {
         getAll() {
           return cookieStore.getAll()
@@ -78,7 +82,7 @@ export async function createAdminClient() {
     })
   }
 
-  return createSupabaseServerClient(supabaseUrl, supabaseKey, {
+  return createSupabaseServerClient(finalUrl, supabaseKey, {
     cookies: {
       getAll() {
         return []

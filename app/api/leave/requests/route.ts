@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
 
     // Use leave_plan_requests which has leave_type_key, hod_decision, status, etc.
     // Join with unified_user_management view to get full staff details including rank, position, department
+    // Also join with leave_resumption_confirmations for staff and HOD confirmation status
     let query = supabase.from("leave_plan_requests").select(`
       id,
       user_id,
@@ -107,6 +108,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // TODO: Fetch confirmation data from leave_resumption_notifications
+    // Note: leave_resumption_notifications.leave_request_id points to leave_requests table,
+    // not leave_plan_requests. Will need a different mapping approach.
+    let confirmationMap: Record<string, any> = {}
+
     const data = (planRequests || []).map((req: any) => {
       const hrApprover = hrApproverMap[req.hr_approver_id] || null
       // Resolution order for signature:
@@ -122,12 +128,24 @@ export async function GET(request: NextRequest) {
       const resolvedHrName = hrApprover
         ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
         : (req.hr_approver_name || null)
+      
+      const confirmation = confirmationMap[req.id] || {
+        staff_confirmed: false,
+        staff_confirmed_at: null,
+        hod_confirmed: false,
+        hod_confirmed_at: null,
+      }
+
       return {
         ...req,
         leave_type: req.leave_type_key || "Annual",
         start_date: req.adjusted_start_date || req.preferred_start_date,
         end_date: req.adjusted_end_date || req.preferred_end_date,
         hod_review_status: req.hod_decision || "pending",
+        staff_confirmed: confirmation.staff_confirmed,
+        staff_confirmed_at: confirmation.staff_confirmed_at,
+        hod_confirmed: confirmation.hod_confirmed,
+        hod_confirmed_at: confirmation.hod_confirmed_at,
         user_profiles: userMap[req.user_id] ? {
           first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
           last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",

@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
       .from("leave_plan_requests")
       .select(
         `id, user_id, leave_type_key, preferred_start_date, preferred_end_date,
-         requested_days, reason, status, created_at, updated_at, hr_approved_at,
-         user_profiles!user_id (id, first_name, last_name, email, department_id, employee_id, position)`,
+         requested_days, status, created_at, updated_at, hr_approved_at,
+         user_profiles!user_id (id, first_name, last_name, email, department_id)`,
         { count: "exact" }
       )
       .order("hr_approved_at", { ascending: false, nullsFirst: false })
@@ -105,28 +105,84 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch resumption confirmation data from leave_resumption_notifications
+    // Match by user_id + leave_end_date to link to leave_plan_requests
+    const userIds = [...new Set((requests || []).map((r: any) => r.user_id).filter(Boolean))]
+    let resumptionMap: Record<string, { staffConfirmed: boolean; hodConfirmed: boolean }> = {}
+    if (userIds.length > 0) {
+      const { data: resumptions } = await admin
+        .from("leave_resumption_notifications")
+        .select("user_id, leave_end_date, first_check_in_date, first_hod_rm_check_in_date")
+        .in("user_id", userIds)
+      if (resumptions) {
+        for (const r of resumptions) {
+          const key = `${r.user_id}::${r.leave_end_date}`
+          resumptionMap[key] = {
+            staffConfirmed: !!r.first_check_in_date,
+            hodConfirmed: !!r.first_hod_rm_check_in_date,
+          }
+        }
+      }
+    }
+
+    // Fetch existing resumption memos by staff_user_id + leave_end_date
+    // (only needed for rows where both confirmations exist)
+    let memoMap: Record<string, string> = {} // key: userId::endDate -> memoId
+    if (userIds.length > 0) {
+      const { data: memos } = await admin
+        .from("leave_resumption_memos")
+        .select("id, staff_user_id, leave_end_date")
+        .in("staff_user_id", userIds)
+      if (memos) {
+        for (const m of memos) {
+          const key = `${m.staff_user_id}::${m.leave_end_date}`
+          memoMap[key] = m.id
+        }
+      }
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
     const formattedRequests = (requests || []).map((req: any) => {
       const prof = req.user_profiles || {}
       const deptName = deptMap[prof.department_id] || "N/A"
+
+      // Calculate days overdue: parse ISO date string without timezone issues
+      let daysOverdue = 0
+      const endDateStr: string = req.preferred_end_date || ""
+      if (req.status === "hr_approved" && endDateStr) {
+        const [year, month, day] = endDateStr.split("-").map(Number)
+        const endDate = new Date(year, month - 1, day, 0, 0, 0, 0)
+        const diff = Math.floor((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24))
+        daysOverdue = Math.max(0, diff)
+      }
+
+      // Look up confirmation status and memo ID via user_id + leave_end_date
+      const resumptionKey = `${req.user_id}::${endDateStr}`
+      const confirmation = resumptionMap[resumptionKey] || { staffConfirmed: false, hodConfirmed: false }
+      const resumptionMemoId = memoMap[resumptionKey] || null
+
       return {
         id: req.id,
         userId: req.user_id,
         staffName: `${prof.first_name || ""} ${prof.last_name || ""}`.trim() || "Unknown",
         staffEmail: prof.email,
-        employeeId: prof.employee_id,
-        position: prof.position,
         department: deptName,
         departmentId: prof.department_id,
         leaveType: req.leave_type_key,
         startDate: req.preferred_start_date,
         endDate: req.preferred_end_date,
         requestedDays: req.requested_days,
-        reason: req.reason,
         status: req.status,
         hrApprovedAt: req.hr_approved_at,
         createdAt: req.created_at,
         updatedAt: req.updated_at,
         hodReviewers: hodReviewersMap[req.id] || [],
+        daysOverdue,
+        staffConfirmed: confirmation.staffConfirmed,
+        hodConfirmed: confirmation.hodConfirmed,
+        resumptionMemoId,
       }
     })
 

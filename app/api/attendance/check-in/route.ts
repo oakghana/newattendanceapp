@@ -3,6 +3,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
 import { trackLeaveResumption } from "@/lib/leave-resumption-service"
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -819,6 +822,25 @@ export async function POST(request: NextRequest) {
     } catch (resumptionError) {
       console.error('[v0] Non-critical error tracking leave resumption:', resumptionError)
       // Don't fail the entire check-in if resumption tracking fails
+    }
+
+    // ── Trigger resumption confirmation workflow ──────────────────────────
+    // If staff is checking in after leave ended, notify HOD/RM for verification
+    try {
+      const confirmationRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/leave/resumption/trigger-check-in`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          check_in_date: new Date().toISOString().split('T')[0],
+        }),
+      })
+      if (!confirmationRes.ok) {
+        console.warn('[v0] Confirmation workflow trigger failed (non-fatal)')
+      }
+    } catch (confirmErr) {
+      console.error('[v0] Error triggering confirmation workflow:', confirmErr)
+      // Non-fatal — don't block check-in
     }
 
     return NextResponse.json({ 

@@ -3,6 +3,7 @@ import { notifyLeaveHrApproved, notifyLeaveHrRejected } from "@/lib/workflow-ema
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, buildHologramCode } from "@/lib/leave-planning"
 import { renderTemplate } from "@/lib/leave-templates"
+import { createLeaveResumptionTrackingForLeaveRequest } from "@/lib/leave-resumption-service"
 import crypto from "crypto"
 
 // Statuses the HR approver sees in their queue (pending action or already actioned)
@@ -652,6 +653,57 @@ export async function POST(request: NextRequest) {
       approverName,
       memoToken,
     }).catch(() => {})
+
+    // ── Create leave resumption tracking record ───────────────────────────
+    // This seeds the leave_resumption_notifications table so the escalation
+    // cron can detect non-resumption and notify HOD/RM/HR roles automatically.
+    createLeaveResumptionTrackingForLeaveRequest({
+      id: leave_plan_request_id,
+      user_id: (leaveRequest as any).user_id,
+      end_date: effectiveEnd,
+    }).catch(() => {})
+
+    // ── Notify HOD, Regional Manager, HR Leave Office of this approval ────
+    // Fetch key role holders so they are aware the staff will be on leave.
+    const staffUserId = (leaveRequest as any).user_id
+    ;(async () => {
+      try {
+        const leaveTypeLabel2 = leaveTypeLabel(String((leaveRequest as any).leave_type_key || "annual"))
+        // Get HOD/RM linked to this staff member
+        const { data: hodLinks } = await admin
+          .from("loan_hod_linkages")
+          .select("hod_user_id")
+          .eq("staff_user_id", staffUserId)
+        const hodIds = (hodLinks || []).map((h: any) => h.hod_user_id).filter(Boolean)
+
+        // Get all HR Leave Office + HR Executive users
+        const { data: hrRoleUsers } = await admin
+          .from("user_profiles")
+          .select("id")
+          .in("role", ["hr_leave_office", "hr_executive", "director_hr", "department_head", "regional_manager"])
+          .eq("is_active", true)
+        const hrIds = (hrRoleUsers || []).map((u: any) => u.id).filter(Boolean)
+
+        const allRecipients = [...new Set([...hodIds, ...hrIds])].filter(
+          (id) => id !== user.id && id !== staffUserId
+        )
+
+        if (allRecipients.length > 0) {
+          const notifRows = allRecipients.map((recipientId: string) => ({
+            recipient_id: recipientId,
+            sender_id: user.id,
+            sender_role: "hr_executive",
+            sender_label: "HR Leave System",
+            message: `${staffName} has been granted ${leaveTypeLabel2} from ${fmtDate(effectiveStart)} to ${fmtDate(effectiveEnd)} (${effectiveDays} day(s)). They are expected to resume duty on ${fmtDate(returnDate.toISOString())}.`,
+            notification_type: "leave_hr_approved",
+            is_read: false,
+          }))
+          await admin.from("staff_notifications").insert(notifRows).catch(() => {})
+        }
+      } catch {
+        // Non-fatal — don't block the response
+      }
+    })()
 
     return NextResponse.json({
       success: true,
