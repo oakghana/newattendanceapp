@@ -1068,7 +1068,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
   const [hrExecHodDeptFilter, setHrExecHodDeptFilter] = useState("all")
 
-  // ── HR Approver Data ─────────────────────────────────────────────────
+  // ── HR Approver Data ────────────────────���────────────────────────────
   const [hrApproverData, setHrApproverData] = useState<any>(null)
   const [hrApproverLoading, setHrApproverLoading] = useState(false)
 
@@ -2893,24 +2893,25 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                   </Card>
                 )}
 
-                {/* ── Staff Resumption Confirmations ─────────────────────── */}
-                <Card className="border border-orange-200 bg-orange-50/30">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-orange-900 flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-orange-500 inline-block" />
-                      Staff Resumption Confirmations
-                    </CardTitle>
-                    <p className="text-xs text-orange-700 mt-1">
-                      Confirm that staff have resumed work after their approved leave. Search by name or employee ID.
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <HODResumptionConfirmations />
-                  </CardContent>
-                </Card>
-
               </div>
             )}
+
+            {/* ── Staff Resumption Confirmations ── always visible ── */}
+            <Card className="border border-orange-200 bg-orange-50/30 mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-orange-900 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-orange-500 inline-block" />
+                  Staff Resumption Confirmations
+                </CardTitle>
+                <p className="text-xs text-orange-700 mt-1">
+                  Confirm that staff have resumed work after their approved leave. Search by name or employee ID.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <HODResumptionConfirmations />
+              </CardContent>
+            </Card>
+
           </div>}
 
           {/* HR Executive HOD Review ──────────────────────────────────── */}
