@@ -24,26 +24,27 @@ export async function GET(req: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (profileErr || !userProfile) {
+    if (profileErr || !userProfile || !userProfile.department_id) {
       return NextResponse.json(
-        { error: 'User profile not found' },
+        { error: 'User profile or department not found' },
         { status: 404 }
       )
     }
 
-    // Fetch HR-approved leaves from this department that are past their end date
-    // and don't have HOD confirmation yet
+    // Fetch HR-approved leaves from HOD's department that are past their end date
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split('T')[0]
 
     const { data: requests, error: fetchErr } = await admin
       .from('leave_plan_requests')
       .select(
         `id, user_id, leave_type_key, preferred_start_date, preferred_end_date, status,
-         user_profiles!user_id (first_name, last_name, employee_id)`
+         user_profiles!user_id (first_name, last_name, employee_id, department_id)`
       )
       .eq('status', 'hr_approved')
-      .lte('preferred_end_date', today.toISOString().split('T')[0])
+      .lte('preferred_end_date', todayStr)
+      .eq('user_profiles.department_id', userProfile.department_id)
       .order('preferred_end_date', { ascending: false })
 
     if (fetchErr) {

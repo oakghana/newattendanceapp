@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { CheckCircle2, Clock, User, Calendar, Loader2, AlertCircle, Toggle } from 'lucide-react'
+import { CheckCircle2, Clock, User, Calendar, Loader2, AlertCircle, Search } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 interface ResumptionRequest {
@@ -31,7 +32,19 @@ export function HODResumptionConfirmations() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
   const { toast } = useToast()
+
+  // Filter requests by staff name or employee ID
+  const filteredRequests = useMemo(() => {
+    if (!searchTerm.trim()) return requests
+    const term = searchTerm.toLowerCase()
+    return requests.filter(req => {
+      const staffName = `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.toLowerCase()
+      const employeeId = req.user_profiles?.employee_id?.toLowerCase() || ''
+      return staffName.includes(term) || employeeId.includes(term)
+    })
+  }, [requests, searchTerm])
 
   useEffect(() => {
     fetchResumptionRequests()
@@ -112,7 +125,32 @@ export function HODResumptionConfirmations() {
 
   return (
     <div className="space-y-4">
-      {requests.map((req) => {
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by staff name or employee ID..."
+          className="pl-10"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {/* Results Count */}
+      <div className="text-sm text-muted-foreground">
+        Showing {filteredRequests.length} of {requests.length} staff needing confirmation
+      </div>
+
+      {/* No Search Results */}
+      {filteredRequests.length === 0 && searchTerm && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>No staff found matching "{searchTerm}"</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Request Cards */}
+      {filteredRequests.map((req) => {
         const staffName = `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() || req.staff_name || 'Unknown'
         const employeeId = req.user_profiles?.employee_id || '—'
         const leaveType = req.leave_type_key || 'Leave'
