@@ -25,11 +25,6 @@ interface LeaveRequest {
   staff_name?: string
   user_id?: string
   leave_resumption_id?: string
-  confirmation_status?: string
-  staff_confirmed?: boolean
-  staff_confirmed_at?: string
-  hod_confirmed?: boolean
-  hod_confirmed_at?: string
   user_profiles?: {
     first_name?: string
     last_name?: string
@@ -296,8 +291,6 @@ export function AllRequestsViewSection() {
                 <TableHead>End Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>HOD Review</TableHead>
-                <TableHead className="text-center">Staff Confirmed</TableHead>
-                <TableHead className="text-center">HOD Confirmed</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -321,17 +314,13 @@ export function AllRequestsViewSection() {
                 const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
 
                 const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
-                const staffConfirmed = req.staff_confirmed === true
-                const hodConfirmed = req.hod_confirmed === true
                 // Only colour rows that are HR-approved and whose leave has ended
-                const rowClass = isHrApproved
-                  ? getResumptionRowClass(
-                      req.end_date || req.preferred_end_date || '',
-                      staffConfirmed,
-                      hodConfirmed
-                    )
-                  : ''
                 const daysOver = getDaysOverdue(req.end_date || req.preferred_end_date || '')
+                const rowClass = isHrApproved && daysOver > 0
+                  ? daysOver >= 5
+                    ? 'bg-red-100 hover:bg-red-200 transition-colors'
+                    : 'bg-amber-50 hover:bg-amber-100 transition-colors'
+                  : ''
 
                 return (
                   <TableRow key={req.id} className={rowClass}>
@@ -344,66 +333,6 @@ export function AllRequestsViewSection() {
                     <TableCell>{endDate}</TableCell>
                     <TableCell>{getStatusBadge(req.status)}</TableCell>
                     <TableCell>{getHodStatusBadge(hodStatus)}</TableCell>
-                    <TableCell className="text-center">
-                      {staffConfirmed ? (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Confirmed
-                          </Badge>
-                          {req.staff_confirmed_at && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {new Date(req.staff_confirmed_at).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      ) : isHrApproved && daysOver > 0 ? (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Badge className={`border text-xs ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Not Yet
-                          </Badge>
-                          <span className={`text-[10px] font-medium ${daysOver >= 5 ? 'text-red-600' : 'text-amber-600'}`}>
-                            {daysOver}d overdue
-                          </span>
-                        </div>
-                      ) : (
-                        <Badge className="bg-gray-100 text-gray-500 border border-gray-200 text-xs">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          —
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {hodConfirmed ? (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Badge className="bg-green-100 text-green-800 border border-green-300 text-xs">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Confirmed
-                          </Badge>
-                          {req.hod_confirmed_at && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {new Date(req.hod_confirmed_at).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      ) : isHrApproved && daysOver > 0 ? (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Badge className={`border text-xs ${daysOver >= 5 ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}>
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Pending
-                          </Badge>
-                          <span className={`text-[10px] font-medium ${daysOver >= 5 ? 'text-red-600' : 'text-amber-600'}`}>
-                            {daysOver >= 5 ? 'Urgent' : 'Awaiting'}
-                          </span>
-                        </div>
-                      ) : (
-                        <Badge className="bg-gray-100 text-gray-500 border border-gray-200 text-xs">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          —
-                        </Badge>
-                      )}
-                    </TableCell>
                     <TableCell className="text-right space-x-2">
                       {isHrApproved && req.confirmation_status === 'pending_hod_rm' && (
                         <Button

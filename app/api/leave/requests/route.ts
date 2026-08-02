@@ -43,8 +43,7 @@ export async function GET(request: NextRequest) {
       memo_draft_subject,
       memo_draft_body,
       memo_subject,
-      memo_body,
-      leave_resumption_notifications(id, confirmation_status, first_check_in_date, first_hod_rm_check_in_date)
+      memo_body
     `, { count: "exact" })
 
     if (userId) query = query.eq("user_id", userId)
@@ -125,26 +124,12 @@ export async function GET(request: NextRequest) {
         ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
         : (req.hr_approver_name || null)
       
-      // Extract confirmation data from leave_resumption_notifications
-      // first_check_in_date = staff has checked in (staff confirmed)
-      // first_hod_rm_check_in_date = HOD/RM has verified (hod confirmed)
-      const resumption = Array.isArray(req.leave_resumption_notifications) && req.leave_resumption_notifications.length > 0
-        ? req.leave_resumption_notifications[0]
-        : null
-
-      const staffConfirmed = !!resumption?.first_check_in_date
-      const hodConfirmed = !!resumption?.first_hod_rm_check_in_date
-
       return {
         ...req,
         leave_type: req.leave_type_key || "Annual",
         start_date: req.adjusted_start_date || req.preferred_start_date,
         end_date: req.adjusted_end_date || req.preferred_end_date,
         hod_review_status: req.hod_decision || "pending",
-        staff_confirmed: staffConfirmed,
-        staff_confirmed_at: resumption?.first_check_in_date || null,
-        hod_confirmed: hodConfirmed,
-        hod_confirmed_at: resumption?.first_hod_rm_check_in_date || null,
         user_profiles: userMap[req.user_id] ? {
           first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
           last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",
