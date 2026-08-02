@@ -108,26 +108,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch confirmation data from leave_resumption_notifications
+    // TODO: Fetch confirmation data from leave_resumption_notifications
+    // Note: leave_resumption_notifications.leave_request_id points to leave_requests table,
+    // not leave_plan_requests. Will need a different mapping approach.
     let confirmationMap: Record<string, any> = {}
-    const requestIds = (planRequests || []).map((r: any) => r.id).filter(Boolean)
-    if (requestIds.length > 0) {
-      const { data: confirmations } = await supabase
-        .from("leave_resumption_notifications")
-        .select("leave_request_id, first_check_in_date, first_hod_rm_check_in_date")
-        .in("leave_request_id", requestIds)
-      
-      if (confirmations) {
-        confirmations.forEach((c: any) => {
-          confirmationMap[c.leave_request_id] = {
-            staff_confirmed: !!c.first_check_in_date,
-            staff_confirmed_at: c.first_check_in_date,
-            hod_confirmed: !!c.first_hod_rm_check_in_date,
-            hod_confirmed_at: c.first_hod_rm_check_in_date,
-          }
-        })
-      }
-    }
 
     const data = (planRequests || []).map((req: any) => {
       const hrApprover = hrApproverMap[req.hr_approver_id] || null
