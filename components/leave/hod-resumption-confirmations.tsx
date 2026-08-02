@@ -112,17 +112,6 @@ export function HODResumptionConfirmations() {
     )
   }
 
-  if (requests.length === 0) {
-    return (
-      <Card>
-        <CardContent className="pt-6 text-center text-muted-foreground">
-          <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-          <p>No staff resumption confirmations needed</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <div className="space-y-4">
       {/* Search Bar */}
@@ -138,19 +127,25 @@ export function HODResumptionConfirmations() {
 
       {/* Results Count */}
       <div className="text-sm text-muted-foreground">
-        Showing {filteredRequests.length} of {requests.length} staff needing confirmation
+        {requests.length === 0 ? (
+          <span className="text-green-700 flex items-center gap-1">
+            <CheckCircle2 className="h-4 w-4" /> No overdue leaves needing confirmation
+          </span>
+        ) : (
+          `Showing ${filteredRequests.length} of ${requests.length} staff needing confirmation`
+        )}
       </div>
 
       {/* No Search Results */}
-      {filteredRequests.length === 0 && searchTerm && (
+      {requests.length > 0 && filteredRequests.length === 0 && searchTerm && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>No staff found matching "{searchTerm}"</AlertDescription>
         </Alert>
       )}
 
-      {/* Request Cards */}
-      {filteredRequests.map((req) => {
+      {/* Request Cards - Only show if there are requests */}
+      {requests.length > 0 && filteredRequests.map((req) => {
         const staffName = `${req.user_profiles?.first_name || ''} ${req.user_profiles?.last_name || ''}`.trim() || req.staff_name || 'Unknown'
         const employeeId = req.user_profiles?.employee_id || '—'
         const leaveType = req.leave_type_key || 'Leave'
