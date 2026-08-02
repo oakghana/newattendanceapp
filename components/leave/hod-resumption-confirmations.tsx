@@ -185,7 +185,14 @@ export function HODResumptionConfirmations() {
                     <Badge variant="outline">{leaveType}</Badge>
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <Calendar className="h-3 w-3" />
-                      <span>{new Date(req.preferred_end_date || '').toLocaleDateString()}</span>
+                      <span>
+                        {req.preferred_end_date
+                          ? (() => {
+                              const [y, m, d] = req.preferred_end_date.split('-').map(Number)
+                              return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                            })()
+                          : '—'}
+                      </span>
                     </div>
                   </div>
 

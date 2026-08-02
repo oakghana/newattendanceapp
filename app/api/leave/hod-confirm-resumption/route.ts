@@ -62,12 +62,15 @@ export async function POST(req: NextRequest) {
 
     // If no record exists, create one
     if (!resumptionId) {
+      const today = new Date().toISOString().split('T')[0]
       const { data: newResumption, error: createErr } = await admin
         .from('leave_resumption_notifications')
         .insert({
           user_id: staffUserId,
           leave_end_date: leaveEndDate,
-          first_hod_rm_check_in_date: new Date().toISOString(),
+          status: 'confirmed',
+          first_hod_rm_check_in_date: today,
+          confirmation_status: 'hod_confirmed',
         })
         .select('id')
         .single()
@@ -82,10 +85,12 @@ export async function POST(req: NextRequest) {
       resumptionId = newResumption.id
     } else {
       // Update existing record with HOD confirmation
+      const todayDate = new Date().toISOString().split('T')[0]
       const { error: updateErr } = await admin
         .from('leave_resumption_notifications')
         .update({
-          first_hod_rm_check_in_date: new Date().toISOString(),
+          first_hod_rm_check_in_date: todayDate,
+          confirmation_status: 'hod_confirmed',
         })
         .eq('id', resumptionId)
 
