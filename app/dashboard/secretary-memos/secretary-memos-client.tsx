@@ -505,55 +505,70 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
           </div>
         )}
 
-        {/* MD Approved Memos Tab — LOANS ONLY (no leave memos) */}
-        {tab === "approved_director" && (
+        {/* MD Approved Memos Tab */}
+        {tab === "approved" && (
           <>
             {approvedMemos.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-slate-500">
-                <p>No MD approved memos yet.</p>
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="py-16 text-center text-slate-400">
+                  <CheckCircle2 className="h-10 w-10 mx-auto mb-3 text-slate-200" />
+                  <p className="text-sm font-medium">No MD approved memos yet.</p>
+                </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {approvedMemos
-                  .filter((memo) => memo.type === "loan") // Only show MD-stamped loans
-                  .map((memo) => {
-                  const memoType = memo.type === "loan" ? "Loan" : "Leave"
-                  const typeLabel = memo.loan_type_label || memo.leave_type || memoType
-                  return (
-                    <div
-                      key={memo.id}
-                      className="rounded-xl border border-emerald-200 bg-gradient-to-r from-white to-emerald-50 p-4 hover:border-emerald-300 transition-all"
-                    >
-                      <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div className="flex-1 min-w-[200px]">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">
-                              {staffName.split(" ").map(p => p[0]).join("").toUpperCase().slice(0, 2)}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-slate-900 text-sm">{staffName}</h3>
-                              <p className="text-xs text-slate-500">{staffId}</p>
-                            </div>
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-700">
+                    {approvedMemos.length} MD approved memo{approvedMemos.length !== 1 ? "s" : ""}
+                  </span>
+                  <span className="text-xs text-slate-400">MD signed off</span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {approvedMemos.map((memo) => {
+                    const staffName = memo.staff_full_name || "Unknown Staff"
+                    const staffId = memo.staff_number || "—"
+                    const memoType = memo.type === "loan" ? "Loan" : "Leave"
+                    const typeLabel = memo.loan_type_label || memo.leave_type || memoType
+                    const initials2 = staffName.split(" ").map((p: string) => p[0]).join("").toUpperCase().slice(0, 2)
+                    return (
+                      <div
+                        key={memo.id}
+                        className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs flex-shrink-0">
+                          {initials2}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-slate-900 truncate">{staffName}</span>
+                            <span className="text-xs text-slate-400 font-mono">#{staffId}</span>
                           </div>
-                          <div className="mt-2 flex items-center gap-4 text-sm text-slate-600">
-                            <span className="font-medium text-slate-700">{typeLabel}</span>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-slate-500">
+                            <span className="capitalize font-medium text-slate-700">{typeLabel}</span>
                             {memo.type === "loan" && memo.fixed_amount && (
-                              <span className="text-emerald-700 font-semibold">{fmtAmt(memo.fixed_amount)}</span>
+                              <>
+                                <span className="text-slate-300">·</span>
+                                <span className="text-emerald-700 font-semibold">{fmtAmt(memo.fixed_amount)}</span>
+                              </>
                             )}
                             {memo.type === "leave" && memo.start_date && memo.end_date && (
                               <>
-                                <span>{fmtDate(memo.start_date)} → {fmtDate(memo.end_date)}</span>
                                 <span className="text-slate-300">·</span>
-                                <span className="font-semibold">{leaveDays(memo.start_date, memo.end_date)}</span>
+                                <span>{fmtDate(memo.start_date)} &rarr; {fmtDate(memo.end_date)}</span>
+                                <span className="text-slate-300">·</span>
+                                <span className="font-semibold text-slate-700">{leaveDays(memo.start_date, memo.end_date)}</span>
                               </>
                             )}
-                          </div>
-                          <div className="mt-2 text-xs text-slate-500">
-                            Approved by {memo.md_approved_by_name || "MD"} on{" "}
-                            {fmtDate(memo.md_approved_at)}
+                            <span className="text-slate-300">·</span>
+                            <span>MD: {memo.md_approved_by_name || "MD"}</span>
+                            <span className="text-slate-300">·</span>
+                            <span>{fmtDate(memo.md_approved_at)}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
+                          <Badge className="text-xs border bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">
+                            MD Approved
+                          </Badge>
                           <button
                             onClick={() => downloadMemo(memo)}
                             disabled={downloadingId === memo.id}
@@ -567,11 +582,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                             Download
                           </button>
                           <button
-                            onClick={() => {
-                              downloadMemo(memo).then(() => {
-                                setTimeout(() => window.print(), 500)
-                              })
-                            }}
+                            onClick={() => { downloadMemo(memo).then(() => setTimeout(() => window.print(), 500)) }}
                             disabled={downloadingId === memo.id}
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors disabled:opacity-50"
                           >
@@ -579,9 +590,9 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           </button>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
             )}
           </>
