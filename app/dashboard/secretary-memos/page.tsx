@@ -81,7 +81,7 @@ export default async function SecretaryMemosPage() {
     user_profiles: leaveProfileMap.get(leave.user_id) || null,
   }))
 
-  // Fetch all MD-stamped/approved loan memos (any post-MD-approval status)
+  // Fetch all MD-stamped/approved loan memos (approved_director status with md_approved_at set)
   // Include user_profiles join to resolve staff names when staff_full_name is missing
   const { data: approvedLoanMemos } = await admin
     .from("loan_requests")
@@ -104,7 +104,7 @@ export default async function SecretaryMemosPage() {
         profile_image_url
       )
     `)
-    .in("status", ["md_approved", "approved_director", "staff_receiving_funds", "partially_recovered", "fully_recovered"])
+    .eq("status", "approved_director")
     .not("md_approved_at", "is", null)
     .order("md_approved_at", { ascending: false })
     .limit(300)
