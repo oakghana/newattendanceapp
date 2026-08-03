@@ -25,8 +25,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // parse request body once
+    // parse request body once — destructure immediately so all variables are available
     const body = await request.json()
+    const {
+      latitude,
+      longitude,
+      location_id,
+      device_info,
+      qr_code_used,
+      qr_timestamp,
+      lateness_reason,
+      lateness_proved_by,
+      lateness_proved_by_id,
+      accuracy,
+      location_timestamp,
+      location_source,
+      override_request,
+      override_reason,
+    } = body
 
     // Check if user already checked in today IMMEDIATELY at the start
     const today = new Date().toISOString().split("T")[0]
@@ -179,8 +195,6 @@ export async function POST(request: NextRequest) {
         )
       }
     }
-
-    const { latitude, longitude, location_id, device_info, qr_code_used, qr_timestamp, lateness_reason, lateness_proved_by, lateness_proved_by_id, accuracy, location_timestamp, location_source, override_request, override_reason } = body
 
     // Fetch geo settings from system settings for server-side enforcement
     const { data: sysSettings } = await supabase.from("system_settings").select("geo_settings").maybeSingle()
