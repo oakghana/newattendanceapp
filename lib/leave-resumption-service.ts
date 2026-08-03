@@ -69,17 +69,20 @@ export async function createLeaveResumptionTrackingForLeaveRequest(leaveRequest:
 }
 
 /**
- * Track leave resumption when staff checks in after leave ends
+ * Track leave resumption when staff checks in after leave ends.
+ * NEW POLICY:
+ * - During leave (today < leave_end_date): Do NOT mark resumption (allow check-in but not confirmed)
+ * - 0-9 days after leave end: Mark as resumed + notify supervisors
+ * - 10+ days after leave end: Block check-in + trigger query memos
  */
 export async function trackLeaveResumption(userId: string, checkInDate: Date) {
   try {
-    // Find pending leave records for this user that ended before today
+    // Find pending leave records for this user
     const { data: resumptionRecords, error: fetchError } = await supabase
       .from('leave_resumption_notifications')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'pending')
-      .lt('leave_end_date', format(new Date(), 'yyyy-MM-dd'))
       .is('first_check_in_date', null)
 
     if (fetchError) {
@@ -87,9 +90,21 @@ export async function trackLeaveResumption(userId: string, checkInDate: Date) {
       return
     }
 
-    // Mark as resumed for each pending leave
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
     for (const record of resumptionRecords || []) {
-      await markAsResumed(record.id, userId, checkInDate)
+      const leaveEndDate = new Date(record.leave_end_date)
+      leaveEndDate.setHours(0, 0, 0, 0)
+      
+      const daysAfterLeaveEnd = Math.floor((today.getTime() - leaveEndDate.getTime()) / (1000 * 60 * 60 * 24))
+      
+      // Policy: only mark resumption if within 0-9 days after leave end
+      if (daysAfterLeaveEnd >= 0 && daysAfterLeaveEnd <= 9) {
+        await markAsResumed(record.id, userId, checkInDate)
+      }
+      // If 10+ days past leave end, checkAndEscalateNonResumption will handle with query memos
+      // During leave (daysAfterLeaveEnd < 0), do nothing — check-in is allowed but not confirmed
     }
   } catch (error) {
     console.error('[v0] Error tracking leave resumption:', error)
@@ -140,6 +155,49 @@ export async function markAsResumed(
       `Staff member ${staffUser?.full_name} resumed duty on ${format(checkInDate, 'dd MMM yyyy')}. Resumption memo generated and sent.`)
   } catch (error) {
     console.error('[v0] Error marking leave as resumed:', error)
+  }
+}
+
+/**
+ * Check if a user has any leave that is 10+ days overdue (not yet resumed).
+ * Returns { isBlocked: true, daysOverdue, leaveEndDate } if blocked, else { isBlocked: false }
+ */
+export async function checkLeaveOverdueBlock(userId: string): Promise<{ isBlocked: boolean; daysOverdue?: number; leaveEndDate?: string }> {
+  try {
+    const { data: overdueRecords, error } = await supabase
+      .from('leave_resumption_notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .is('first_check_in_date', null)
+
+    if (error) {
+      console.error('[v0] Error checking overdue leave:', error)
+      return { isBlocked: false }
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    for (const record of overdueRecords || []) {
+      const leaveEndDate = new Date(record.leave_end_date)
+      leaveEndDate.setHours(0, 0, 0, 0)
+      const daysAfterLeaveEnd = Math.floor((today.getTime() - leaveEndDate.getTime()) / (1000 * 60 * 60 * 24))
+
+      // If 10+ days past leave end and not yet resumed, block check-in
+      if (daysAfterLeaveEnd >= 10) {
+        return {
+          isBlocked: true,
+          daysOverdue: daysAfterLeaveEnd,
+          leaveEndDate: record.leave_end_date,
+        }
+      }
+    }
+
+    return { isBlocked: false }
+  } catch (error) {
+    console.error('[v0] Error in checkLeaveOverdueBlock:', error)
+    return { isBlocked: false }
   }
 }
 

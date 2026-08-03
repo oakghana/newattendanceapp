@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { getDeviceInfo } from "@/lib/device-info"
+import { trackLeaveResumption, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
@@ -214,6 +215,32 @@ export async function POST(request: NextRequest) {
         { error: "Failed to record check-in" },
         { status: 500 }
       )
+    }
+
+    // Check if user has overdue leave (10+ days)
+    try {
+      const overdueCheck = await checkLeaveOverdueBlock(supabaseUser.id)
+      if (overdueCheck.isBlocked) {
+        return NextResponse.json(
+          {
+            error: `Your approved leave ended on ${new Date(overdueCheck.leaveEndDate!).toLocaleDateString()}. You have not resumed duty for ${overdueCheck.daysOverdue} days (10+ day threshold exceeded). A formal query memo has been issued. You cannot check in. Please contact HR immediately.`,
+            isLeaveOverdueBlocked: true,
+            daysOverdue: overdueCheck.daysOverdue,
+          },
+          { status: 403 }
+        )
+      }
+    } catch (blockError) {
+      console.error("[v0] Error checking overdue leave status:", blockError)
+      // Non-fatal — continue
+    }
+
+    // Track leave resumption (0-9 day window)
+    try {
+      await trackLeaveResumption(supabaseUser.id, new Date())
+    } catch (resumptionError) {
+      console.error("[v0] Error tracking leave resumption:", resumptionError)
+      // Non-fatal
     }
 
     const elapsedTime = performance.now() - startTime

@@ -440,11 +440,12 @@ export async function GET(
       console.warn("[v0] Failed to parse payment memo_body:", parseErr)
     }
 
-    // Access control: applicant, HR approver, HR leave office, HOD, admin, loan_office
+    // Access control: applicant, HR approver, HR leave office, HOD, admin, loan_office, secretary
     const isApplicant = (leaveRequest as any).user_id === user.id
     const canAccess =
       isApplicant ||
       role === "admin" ||
+      role === "secretary" ||
       role === "loan_office" || role === "hr_loan_office" || role === "accounts_loan_office" ||
       role === "hr_executive" ||
       role === "accounts_executive" ||
@@ -465,7 +466,7 @@ export async function GET(
       if (!storedToken || token !== storedToken) {
         return NextResponse.json({ error: "Invalid or expired memo token." }, { status: 401 })
       }
-    } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin" && role !== "hr_executive" && role !== "accounts_executive") {
+    } else if (!isHrApproverRole(role, deptName, deptCode) && !isHrLeaveOfficeRole(role) && role !== "admin" && role !== "hr_executive" && role !== "accounts_executive" && role !== "secretary") {
       // No token provided — allow the applicant or loan_office to download their own memo, or HOD/manager.
       if (!isApplicant && role !== "loan_office" && role !== "hr_loan_office" && role !== "accounts_loan_office" && !isManagerRole(role)) {
         return NextResponse.json({ error: "A valid memo token is required." }, { status: 401 })
