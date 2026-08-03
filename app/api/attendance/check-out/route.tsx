@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { validateCheckoutLocation, type LocationData } from "@/lib/geolocation"
 import { requiresEarlyCheckoutReason, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckOutDeadline, isSecurityDept, isOperationalDept, isTransportDept, isExemptFromAttendanceReasons } from "@/lib/attendance-utils"
 import { parseRuntimeFlags } from "@/lib/runtime-flags"
+import { checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -1030,6 +1031,24 @@ export async function POST(request: NextRequest) {
       })
     } catch (auditError) {
       console.error("[v0] Audit log error (non-critical):", auditError)
+    }
+
+    // Check if user has overdue leave (10+ days) — block check-out as well
+    try {
+      const overdueCheck = await checkLeaveOverdueBlock(user.id)
+      if (overdueCheck.isBlocked) {
+        return NextResponse.json(
+          {
+            error: `Your approved leave ended on ${new Date(overdueCheck.leaveEndDate!).toLocaleDateString()}. You have not resumed duty for ${overdueCheck.daysOverdue} days (10+ day threshold exceeded). A formal query memo has been issued. You cannot check out. Please contact HR immediately.`,
+            isLeaveOverdueBlocked: true,
+            daysOverdue: overdueCheck.daysOverdue,
+          },
+          { status: 403 }
+        )
+      }
+    } catch (blockError) {
+      console.error("[v0] Error checking overdue leave status:", blockError)
+      // Non-fatal — continue
     }
 
     return NextResponse.json({

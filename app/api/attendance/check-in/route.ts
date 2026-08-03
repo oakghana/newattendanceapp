@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
-import { trackLeaveResumption } from "@/lib/leave-resumption-service"
+import { trackLeaveResumption, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -866,7 +866,25 @@ export async function POST(request: NextRequest) {
       checkInMessage = `Late arrival detected - You checked in at ${arrivalTime} (after 9:00 AM). ${checkInMessage}`
     }
 
-    // Track leave resumption if applicable
+    // Check if user has overdue leave (10+ days) — if so, block check-in and trigger query memos
+    try {
+      const overdueCheck = await checkLeaveOverdueBlock(user.id)
+      if (overdueCheck.isBlocked) {
+        return NextResponse.json(
+          {
+            error: `Your approved leave ended on ${new Date(overdueCheck.leaveEndDate!).toLocaleDateString()}. You have not resumed duty for ${overdueCheck.daysOverdue} days (10+ day threshold exceeded). A formal query memo has been issued. You cannot check in. Please contact HR immediately.`,
+            isLeaveOverdueBlocked: true,
+            daysOverdue: overdueCheck.daysOverdue,
+          },
+          { status: 403 }
+        )
+      }
+    } catch (blockError) {
+      console.error('[v0] Error checking overdue leave status:', blockError)
+      // Non-fatal — continue with check-in
+    }
+
+    // Track leave resumption if applicable (0-9 day window)
     try {
       await trackLeaveResumption(user.id, new Date())
     } catch (resumptionError) {
