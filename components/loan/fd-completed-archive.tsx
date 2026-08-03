@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CheckCircle, XCircle, FileText, RefreshCw, Loader2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { CheckCircle, XCircle, FileText, RefreshCw, Loader2, Edit2, Save, X } from 'lucide-react'
 import { GOOD_FD_THRESHOLD, isPoorFdScore } from '@/lib/loan-workflow'
+import { useToast } from '@/hooks/use-toast'
 
 type CompletedFdReview = {
   id: string
@@ -23,6 +26,7 @@ type CompletedFdReview = {
   submission_date?: string
   status?: string
   review_status?: string
+  user_role?: string
 }
 
 function NoteBlock({ title, text }: { title: string; text?: string | null }) {
@@ -35,12 +39,18 @@ function NoteBlock({ title, text }: { title: string; text?: string | null }) {
   )
 }
 
-export function FdCompletedArchive() {
+export function FdCompletedArchive({ userRole }: { userRole?: string }) {
   const [rows, setRows] = useState<CompletedFdReview[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'approved' | 'rejected'>('all')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingFd, setEditingFd] = useState<number | null>(null)
+  const [editingReason, setEditingReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const { toast } = useToast()
+  const isLoanOffice = userRole === 'loan_office'
 
   const load = async () => {
     setLoading(true)
@@ -95,6 +105,39 @@ export function FdCompletedArchive() {
     void load()
   }, [])
 
+  const handleEditFd = async (rowId: string) => {
+    if (!editingFd || !editingReason.trim() || editingFd < 0 || editingFd > 100) {
+      toast({ title: 'Error', description: 'Please enter a valid FD value (0-100) and reason', variant: 'destructive' })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/loan/fd-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: rowId,
+          fd_score: editingFd,
+          reason: editingReason,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to update FD')
+      }
+      toast({ title: 'Success', description: 'FD value updated. Pending accounts executive approval.' })
+      setEditingId(null)
+      setEditingFd(null)
+      setEditingReason('')
+      await load()
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to update FD', variant: 'destructive' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows.filter((row) => {
@@ -119,97 +162,213 @@ export function FdCompletedArchive() {
   }, [rows, search, filter])
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-100">
+            <FileText className="h-6 w-6 text-blue-600" />
+          </div>
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-emerald-600" />
-              FD Completed &amp; Archived Records
-            </CardTitle>
-            <CardDescription>
-              All FD decisions from Accounts Executive — including loans already forwarded to HR Loan Office — with full calculation details.
-            </CardDescription>
+            <h2 className="text-2xl font-bold text-slate-900">FD Completed &amp; Archived Records</h2>
+            <p className="text-sm text-slate-600">
+              {isLoanOffice
+                ? 'Edit FD values before accounts executive approval'
+                : 'All FD decisions from Accounts Executive — with full calculation details'}
+            </p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} className="gap-1">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Refresh
-          </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search staff, request no, loan type..."
-            className="max-w-sm"
-          />
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as any)}
-            className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-          >
-            <option value="all">All decisions</option>
-            <option value="approved">Approved / sent to HR Loan Office</option>
-            <option value="rejected">Rejected</option>
-          </select>
-          <span className="ml-auto self-center text-xs text-slate-500">{filtered.length} record(s)</span>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search staff name, ID, loan type..."
+          className="max-w-sm"
+        />
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as any)}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white"
+        >
+          <option value="all">All records</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} className="gap-2 ml-auto">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Refresh
+        </Button>
+        <span className="text-xs text-slate-500 px-3 py-2 rounded-lg bg-slate-50">{filtered.length} record(s)</span>
+      </div>
+
+      {loading && (
+        <div className="py-12 text-center">
+          <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-blue-500" />
+          <p className="text-sm text-slate-600">Loading FD records...</p>
         </div>
+      )}
 
-        {loading && (
-          <div className="py-10 text-center text-sm text-slate-500">
-            <Loader2 className="mx-auto mb-2 h-8 w-8 animate-spin text-slate-400" />
-            Loading completed FD records...
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+          <div className="text-red-600 font-bold text-lg">⚠</div>
+          <div>
+            <p className="font-semibold text-red-900">Error Loading Records</p>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
           </div>
-        )}
-        {!loading && error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
-        )}
-        {!loading && !error && filtered.length === 0 && (
-          <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-            No completed FD records yet. After Accounts Executive approves an FD, it appears here automatically.
-          </div>
-        )}
+        </div>
+      )}
 
-        <div className="grid gap-3">
-          {filtered.map((row) => {
-            const poor = isPoorFdScore(row.fd_score, row.fd_good)
-            const isRejected = ['fd_rejected', 'rejected_fd'].includes(String(row.status || '')) || row.review_status === 'rejected'
-            return (
-              <div key={row.id} className={`rounded-xl border p-4 ${isRejected ? 'border-red-200 bg-red-50/30' : 'border-emerald-200 bg-emerald-50/20'}`}>
-                <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-slate-900">
+      {!loading && !error && filtered.length === 0 && (
+        <div className="rounded-lg border-2 border-dashed border-slate-200 p-12 text-center">
+          <FileText className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+          <p className="text-slate-600 font-medium">No records found</p>
+          <p className="text-sm text-slate-500 mt-1">No completed FD records match your search.</p>
+        </div>
+      )}
+
+      {/* Cards Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1">
+        {filtered.map((row) => {
+          const poor = isPoorFdScore(row.fd_score, row.fd_good)
+          const isRejected = ['fd_rejected', 'rejected_fd'].includes(String(row.status || '')) || row.review_status === 'rejected'
+          const isEditing = editingId === row.id
+          const canEdit = isLoanOffice && !isRejected && row.review_status === 'approved'
+
+          return (
+            <div
+              key={row.id}
+              className={`rounded-2xl border-2 p-6 transition-all hover:shadow-lg ${
+                isRejected ? 'border-red-200 bg-red-50/50' : 'border-blue-200 bg-gradient-to-br from-blue-50 to-white'
+              }`}
+            >
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-slate-900">
                       {row.staff_name || 'Staff'}
-                      {row.staff_number ? <span className="ml-1 font-normal text-slate-500">#{row.staff_number}</span> : null}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {row.loan_type || 'Loan'} · Ref: {row.request_number || row.id.slice(0, 8)}
-                      {row.requested_amount != null ? ` · ₵${Number(row.requested_amount).toLocaleString()}` : ''}
-                      {row.repayment_months ? ` · ${row.repayment_months} mo` : ''}
+                      {row.staff_number ? <span className="ml-2 text-sm font-normal text-slate-500">#{row.staff_number}</span> : null}
+                    </h3>
+                    <p className="text-sm text-slate-600 mt-1">
+                      <span className="font-medium">{row.loan_type || 'Loan'}</span> • Ref: <span className="font-mono text-xs">{row.request_number || row.id.slice(0, 8)}</span>
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className={poor ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}>
-                      FD {row.fd_score ?? 'N/A'}% {poor ? `(below ${GOOD_FD_THRESHOLD})` : `(≥ ${GOOD_FD_THRESHOLD})`}
-                    </Badge>
-                    <Badge className={isRejected ? 'bg-red-100 text-red-800' : 'bg-emerald-600 text-white'}>
-                      {isRejected ? (
-                        <span className="inline-flex items-center gap-1"><XCircle className="h-3 w-3" /> Rejected</span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Approved → HR Loan Office</span>
-                      )}
-                    </Badge>
-                    {row.status ? <Badge variant="outline" className="text-xs">{row.status}</Badge> : null}
+                  <div className="flex flex-col gap-2 items-end">
+                    {isRejected ? (
+                      <Badge className="bg-red-100 text-red-800 flex items-center gap-1">
+                        <XCircle className="h-3 w-3" /> Rejected
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-green-100 text-green-800 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" /> Approved
+                      </Badge>
+                    )}
                   </div>
                 </div>
-                <NoteBlock title="FD calculation / Loan Office notes" text={row.fd_note || row.submission_memo} />
+
+                {/* Metrics Row */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg bg-white/60 p-3 border border-slate-100">
+                    <p className="text-xs text-slate-600 font-semibold uppercase">Amount</p>
+                    <p className="text-lg font-bold text-slate-900">₵{Number(row.requested_amount || 0).toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-lg bg-white/60 p-3 border border-slate-100">
+                    <p className="text-xs text-slate-600 font-semibold uppercase">Term</p>
+                    <p className="text-lg font-bold text-slate-900">{row.repayment_months || '—'} mo</p>
+                  </div>
+                  <div
+                    className={`rounded-lg p-3 border-2 font-bold text-lg ${
+                      poor ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-green-100 border-green-300 text-green-900'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-current/70">FD Score</p>
+                    <p className="text-xl">{isEditing ? editingFd : row.fd_score ?? 'N/A'}%</p>
+                  </div>
+                </div>
+
+                {/* FD Note */}
+                {!isEditing && (
+                  <NoteBlock title="FD Calculation Details" text={row.fd_note || row.submission_memo} />
+                )}
+
+                {/* Edit Mode */}
+                {isEditing && (
+                  <div className="space-y-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 uppercase">New FD Value (0-100)</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={editingFd ?? ''}
+                        onChange={(e) => setEditingFd(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                        className="mt-1"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 uppercase">Reason for Change</label>
+                      <Textarea
+                        value={editingReason}
+                        onChange={(e) => setEditingReason(e.target.value)}
+                        placeholder="Explain why the FD value is being changed..."
+                        className="mt-1 resize-none"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                {canEdit && (
+                  <div className="flex gap-2 justify-end pt-2 border-t border-slate-200">
+                    {!isEditing ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingId(row.id)
+                          setEditingFd(row.fd_score ?? 0)
+                          setEditingReason('')
+                        }}
+                        className="gap-2"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                        Edit FD Value
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingId(null)}
+                          disabled={submitting}
+                          className="gap-2"
+                        >
+                          <X className="h-4 w-4" />
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleEditFd(row.id)}
+                          disabled={submitting}
+                          className="gap-2 bg-blue-600 hover:bg-blue-700"
+                        >
+                          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          Save Changes
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-            )
-          })}
-        </div>
-      </CardContent>
-    </Card>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }

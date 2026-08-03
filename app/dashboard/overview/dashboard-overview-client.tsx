@@ -263,112 +263,120 @@ export function DashboardOverviewClient({
   }
 
   return (
-    <div className="space-y-7">
-        {/* PWA Install notification - shows for 5 seconds */}
-        <PWAInstallToast />
+    <div className="space-y-6">
+      {/* PWA Install notification */}
+      <PWAInstallToast />
 
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/70 backdrop-blur px-6 py-5 shadow-sm">
-          <div className="space-y-1.5">
-            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard 🇬🇭</h1>
-            <p className="text-base md:text-lg text-muted-foreground">
-              Akwaaba, {" "}
-              <span className="text-primary font-semibold">{profile?.first_name || user?.email?.split("@")[0]}</span>{" "}
-              {profile?.last_name || ""}
-            </p>
-          </div>
+      {/* Hero Section */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600 text-white shadow-xl">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-20 -right-20 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -bottom-16 -left-16 h-72 w-72 rounded-full bg-purple-300/5 blur-3xl" />
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
         </div>
 
-        {profile?.role === "admin" && pendingApprovals > 0 && (
-          <Alert className="border-primary/30 bg-primary/5 shadow-sm rounded-xl">
-            <AlertCircle className="h-5 w-5 text-primary" />
-            <AlertDescription className="flex items-center justify-between">
-              <span className="text-primary font-semibold text-base">
-                {pendingApprovals} user{pendingApprovals > 1 ? "s" : ""} waiting for approval
-              </span>
-              <Button asChild size="sm" className="ml-4 shadow-sm hover:shadow-md transition-shadow">
-                <Link href="/dashboard/user-approvals">
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Review Now
-                </Link>
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <StatsCard
-            title="Today's Attendance"
-            value={todayAttendance ? "Checked In" : "Not Checked In"}
-            description={
-              todayAttendance
-                ? `At ${new Date(todayAttendance.check_in_time).toLocaleTimeString()}`
-                : "Ready for check-in"
-            }
-            icon={Clock}
-            variant={todayAttendance ? "success" : "default"}
-          />
-
-          <StatsCard
-            title="This Month"
-            value={monthlyAttendance || 0}
-            description="Attendance days"
-            icon={Calendar}
-            trend={{ value: 5, isPositive: true }}
-          />
-
-          <StatsCard
-            title="Department"
-            value={profile?.departments?.code || "N/A"}
-            description={profile?.departments?.name || "No department assigned"}
-            icon={Users}
-          />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-5">
-          <div className="lg:col-span-2">
-            <QuickActions userRole={profile?.role} />
-          </div>
-
-          <div className="lg:col-span-3">
-            <LeaveNotificationsCard />
-          </div>
-        </div>
-
-        {profile?.role === "admin" && (
-          <div className="mt-6">
-            <ActiveLocationsCard />
-          </div>
-        )}
-
-        <Card className="shadow-sm border border-slate-200/80 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/95">
-          <CardHeader className="pb-5">
-            <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2.5">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              Performance Snapshot
-            </CardTitle>
-            <CardDescription className="text-sm">Simple view of your attendance progress</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="text-center p-5 rounded-xl border border-primary/20 bg-primary/5">
-                <div className="text-3xl font-heading font-bold text-primary mb-1.5">{monthlyAttendance || 0}</div>
-                <div className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Days This Month</div>
-              </div>
-              <div className="text-center p-5 rounded-xl border border-emerald-200/70 dark:border-emerald-900/70 bg-emerald-50/70 dark:bg-emerald-950/20">
-                <div className="text-3xl font-heading font-bold text-emerald-700 dark:text-emerald-400 mb-1.5">
-                  {monthlyAttendance ? Math.round((monthlyAttendance / new Date().getDate()) * 100) : 0}%
-                </div>
-                <div className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Attendance Rate</div>
-              </div>
-              <div className="text-center p-5 rounded-xl border border-indigo-200/70 dark:border-indigo-900/70 bg-indigo-50/70 dark:bg-indigo-950/20">
-                <div className="text-lg font-heading font-bold text-indigo-700 dark:text-indigo-400 mb-1.5">
-                  {profile?.role === "admin" ? "Administrator" : profile?.role === "department_head" ? "Department Head" : "Staff"}
-                </div>
-                <div className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Role</div>
-              </div>
+        <div className="relative px-8 py-10 flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm font-semibold tracking-wide uppercase text-blue-100 mb-2">Welcome back</p>
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+                {profile?.first_name || user?.email?.split("@")[0]} {profile?.last_name || ""}
+              </h1>
+              <p className="text-blue-100 mt-2">{profile?.departments?.name || "QCC Head Office"}</p>
             </div>
-          </CardContent>
-        </Card>
+            <Avatar className="h-16 w-16 ring-4 ring-white/30 shadow-xl">
+              <AvatarImage src={profile?.profile_image_url || ""} />
+              <AvatarFallback className="bg-white/20 text-white font-bold">
+                {(profile?.first_name || "")[0]}{(profile?.last_name || "")[0]}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        </div>
+      </div>
+
+      {profile?.role === "admin" && pendingApprovals > 0 && (
+        <Alert className="border-primary/30 bg-primary/5 shadow-sm rounded-xl">
+          <AlertCircle className="h-5 w-5 text-primary" />
+          <AlertDescription className="flex items-center justify-between">
+            <span className="text-primary font-semibold text-base">
+              {pendingApprovals} user{pendingApprovals > 1 ? "s" : ""} waiting for approval
+            </span>
+            <Button asChild size="sm" className="ml-4 shadow-sm hover:shadow-md transition-shadow">
+              <Link href="/dashboard/user-approvals">
+                <UserCheck className="h-4 w-4 mr-2" />
+                Review Now
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Key Metrics Grid */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Today's Attendance */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Today&apos;s Status</p>
+            <Clock className="h-5 w-5 text-blue-500" />
+          </div>
+          <div className="text-3xl font-bold text-slate-900 mb-1">
+            {todayAttendance ? "✓" : "○"}
+          </div>
+          <p className="text-sm text-slate-600">
+            {todayAttendance
+              ? `Checked in at ${new Date(todayAttendance.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+              : "Ready for check-in"}
+          </p>
+        </div>
+
+        {/* Monthly Attendance */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">This Month</p>
+            <Calendar className="h-5 w-5 text-green-500" />
+          </div>
+          <div className="text-3xl font-bold text-slate-900 mb-1">{monthlyAttendance}</div>
+          <p className="text-sm text-slate-600">Days present</p>
+        </div>
+
+        {/* Attendance Rate */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Rate</p>
+            <TrendingUp className="h-5 w-5 text-emerald-500" />
+          </div>
+          <div className="text-3xl font-bold text-slate-900 mb-1">
+            {monthlyAttendance ? Math.round((monthlyAttendance / new Date().getDate()) * 100) : 0}%
+          </div>
+          <p className="text-sm text-slate-600">Attendance rate</p>
+        </div>
+
+        {/* Department */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Department</p>
+            <Users className="h-5 w-5 text-purple-500" />
+          </div>
+          <div className="text-3xl font-bold text-slate-900 mb-1">{profile?.departments?.code || "—"}</div>
+          <p className="text-sm text-slate-600">{profile?.departments?.name || "N/A"}</p>
+        </div>
+      </div>
+
+      {/* Action Sections */}
+      <div className="grid gap-4 lg:grid-cols-5">
+        <div className="lg:col-span-2">
+          <QuickActions userRole={profile?.role} />
+        </div>
+        <div className="lg:col-span-3">
+          <LeaveNotificationsCard />
+        </div>
+      </div>
+
+      {profile?.role === "admin" && (
+        <div>
+          <ActiveLocationsCard />
+        </div>
+      )}
     </div>
   )
 }

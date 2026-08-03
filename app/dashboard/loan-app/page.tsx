@@ -5406,7 +5406,7 @@ export default function LoanAppPage() {
 
         {/* ── FD Completed/Archived Tab (Accounts Executive) ── */}
         <TabsContent value="fd-completed" className="space-y-4">
-          <FdCompletedArchive />
+          <FdCompletedArchive userRole={data?.profile?.role} />
         </TabsContent>
 
         {/* ── Repayment Tracking ── */}
