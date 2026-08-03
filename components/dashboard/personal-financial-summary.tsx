@@ -43,9 +43,17 @@ export function PersonalFinancialSummary() {
     const fetchData = async () => {
       try {
         const res = await fetch('/api/dashboard/personal-summary')
-        if (!res.ok) throw new Error('Failed to fetch')
-        setData(await res.json())
+        console.log('[v0] API response status:', res.status)
+        if (!res.ok) {
+          const err = await res.text()
+          console.log('[v0] API error:', err)
+          throw new Error('Failed to fetch')
+        }
+        const json = await res.json()
+        console.log('[v0] Personal summary data:', json)
+        setData(json)
       } catch (e: any) {
+        console.log('[v0] Error fetching personal summary:', e?.message)
         setError(e?.message || 'Failed to load summary')
       } finally {
         setLoading(false)
@@ -58,12 +66,27 @@ export function PersonalFinancialSummary() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+        <span className="ml-2 text-sm text-slate-600">Loading financial summary...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <p className="font-semibold">Failed to load financial summary</p>
+        <p className="text-xs mt-1">{error}</p>
       </div>
     )
   }
 
   if (!data) return null
+
+  // Show nothing if no loans and no leave warnings
+  if (!data.loans.active && data.leaves.warnings.length === 0) {
+    return null
+  }
 
   const warningCount = data.leaves.warnings.filter(w => w.severity !== 'info').length
 
