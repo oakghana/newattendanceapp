@@ -3,6 +3,7 @@
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { LeaveNotificationsCard } from "@/components/leave/leave-notifications-card"
+import { PersonalFinancialSummary } from "@/components/dashboard/personal-financial-summary"
 import ActiveLocationsCard from "@/components/admin/active-locations-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -361,6 +362,9 @@ export function DashboardOverviewClient({
           <p className="text-sm text-slate-600">{profile?.departments?.name || "N/A"}</p>
         </div>
       </div>
+
+      {/* Personal Loans & Leave Status */}
+      <PersonalFinancialSummary />
 
       {/* Action Sections */}
       <div className="grid gap-4 lg:grid-cols-5">

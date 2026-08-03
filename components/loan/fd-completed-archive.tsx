@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { CheckCircle, XCircle, FileText, RefreshCw, Loader2, Edit2, Save, X } from 'lucide-react'
 import { GOOD_FD_THRESHOLD, isPoorFdScore } from '@/lib/loan-workflow'
 import { useToast } from '@/hooks/use-toast'
+import { FdCalculationSummary } from './fd-calculation-summary'
 
 type CompletedFdReview = {
   id: string
@@ -27,16 +28,6 @@ type CompletedFdReview = {
   status?: string
   review_status?: string
   user_role?: string
-}
-
-function NoteBlock({ title, text }: { title: string; text?: string | null }) {
-  if (!text?.trim()) return null
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-      <p className="mb-1 text-xs font-semibold text-slate-600">{title}</p>
-      <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-800">{text}</pre>
-    </div>
-  )
 }
 
 export function FdCompletedArchive({ userRole }: { userRole?: string }) {
@@ -289,9 +280,9 @@ export function FdCompletedArchive({ userRole }: { userRole?: string }) {
                   </div>
                 </div>
 
-                {/* FD Note */}
-                {!isEditing && (
-                  <NoteBlock title="FD Calculation Details" text={row.fd_note || row.submission_memo} />
+                {/* FD Calculation Summary */}
+                {!isEditing && (row.fd_note || row.submission_memo) && (
+                  <FdCalculationSummary data={row.fd_note || row.submission_memo} />
                 )}
 
                 {/* Edit Mode */}
