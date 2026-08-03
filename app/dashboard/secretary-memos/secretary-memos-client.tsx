@@ -508,9 +508,6 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
         {/* MD Approved Memos Tab */}
         {tab === "approved" && (
           <>
-            <div style={{position: "fixed", top: "100px", right: "20px", background: "yellow", padding: "10px", zIndex: 9999, fontSize: "12px", color: "black"}}>
-              DEBUG: tab={tab} memoCount={approvedMemos.length}
-            </div>
             {approvedMemos.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="py-16 text-center text-slate-400">
