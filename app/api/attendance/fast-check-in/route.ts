@@ -77,14 +77,36 @@ export async function POST(request: NextRequest) {
       .eq("status", "on_leave")
       .maybeSingle()
 
+    // NEW POLICY: If staff is on leave but physically within a QCC location, allow check-in
+    let staffIsOnLeaveFlag = false
     if (leaveStatus) {
-      return NextResponse.json(
-        {
-          error: "You are on approved leave today. Cannot check in while on leave.",
-          type: "on_leave",
-        },
-        { status: 400 }
-      )
+      let withinQccLocation = false
+      if (latitude && longitude) {
+        try {
+          const { data: qccLocs } = await supabase
+            .from("geofence_locations")
+            .select("id, latitude, longitude, radius_meters")
+            .eq("is_active", true)
+          if (qccLocs && qccLocs.length > 0) {
+            withinQccLocation = qccLocs.some((loc: any) => {
+              const dist = distanceMeters(Number(latitude), Number(longitude), Number(loc.latitude), Number(loc.longitude))
+              return dist <= (Number(loc.radius_meters) || 400)
+            })
+          }
+        } catch { /* fallback: do not block */ }
+      }
+
+      if (withinQccLocation) {
+        staffIsOnLeaveFlag = true
+      } else {
+        return NextResponse.json(
+          {
+            error: "You are on approved leave today. Cannot check in while on leave.",
+            type: "on_leave",
+          },
+          { status: 400 }
+        )
+      }
     }
 
     // --- CRITICAL: Server-side geofence validation to prevent out-of-range check-ins ---

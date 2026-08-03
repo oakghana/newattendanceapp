@@ -131,6 +131,9 @@ export async function POST(request: NextRequest) {
       .eq("status", "on_leave")
       .maybeSingle()
 
+    // Track if staff is on leave so we can attach the flag to the attendance record
+    let staffIsOnLeave = false
+
     if (leaveStatus) {
       let startDate: string | null = null
       let endDate: string | null = null
@@ -146,36 +149,77 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // check for override request from exempt staff
-      if (override_request && override_reason) {
-        const isSec = isSecurityDept(userProfile?.departments)
-        const isOp = isOperationalDept(userProfile?.departments)
-        const isTrans = isTransportDept(userProfile?.departments)
-        if (isSec || isOp || isTrans) {
-          // log override and continue with check-in
-          try {
-            await supabase.from("emergency_check_in_overrides").insert({
-              user_id: user.id,
-              check_in_time: new Date().toISOString(),
-              override_type: 'leave_override',
-              reason: override_reason,
-              is_security_staff: isSec,
-              is_operational_staff: isOp,
-              is_transport_staff: isTrans,
+      // NEW POLICY: If the staff is physically within a QCC location, allow check-in even on leave.
+      // We perform a quick geofence check here using available GPS / QR location.
+      let withinQccLocation = false
+
+      if (qr_code_used) {
+        // QR code check-ins are always from a QCC terminal — considered within a QCC location
+        withinQccLocation = true
+      } else if (latitude && longitude) {
+        try {
+          const { data: qccLocs } = await supabase
+            .from("geofence_locations")
+            .select("id, latitude, longitude, radius_meters")
+            .eq("is_active", true)
+          if (qccLocs && qccLocs.length > 0) {
+            // Inline haversine — distanceMeters is defined later in the file
+            const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+              const R = 6371000
+              const dLat = (lat2 - lat1) * Math.PI / 180
+              const dLon = (lon2 - lon1) * Math.PI / 180
+              const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+              return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            }
+            withinQccLocation = qccLocs.some((loc: any) => {
+              const dist = haversine(Number(latitude), Number(longitude), Number(loc.latitude), Number(loc.longitude))
+              return dist <= (Number(loc.radius_meters) || 400)
             })
-          } catch {}
-          overrideMeta = { type: 'leave_override' }
-          // send notification to manager
-          try {
-            await supabase.from("staff_notifications").insert({
-              user_id: user.id,
-              title: "Emergency override used",
-              message: "An override was used for leave restriction during check-in.",
-              type: "info",
-              is_read: false,
-            })
-          } catch {}
-          // allow to proceed (do nothing here)
+          }
+        } catch { /* fallback: do not block */ }
+      }
+
+      if (withinQccLocation) {
+        // Staff is physically on QCC premises — allow check-in and flag the record
+        staffIsOnLeave = true
+        overrideMeta = { type: 'leave_active_checkin' }
+      } else {
+        // Staff is off QCC premises and on leave — block check-in (existing override logic preserved)
+        if (override_request && override_reason) {
+          const isSec = isSecurityDept(userProfile?.departments)
+          const isOp = isOperationalDept(userProfile?.departments)
+          const isTrans = isTransportDept(userProfile?.departments)
+          if (isSec || isOp || isTrans) {
+            try {
+              await supabase.from("emergency_check_in_overrides").insert({
+                user_id: user.id,
+                check_in_time: new Date().toISOString(),
+                override_type: 'leave_override',
+                reason: override_reason,
+                is_security_staff: isSec,
+                is_operational_staff: isOp,
+                is_transport_staff: isTrans,
+              })
+            } catch {}
+            overrideMeta = { type: 'leave_override' }
+            try {
+              await supabase.from("staff_notifications").insert({
+                user_id: user.id,
+                title: "Emergency override used",
+                message: "An override was used for leave restriction during check-in.",
+                type: "info",
+                is_read: false,
+              })
+            } catch {}
+          } else {
+            return NextResponse.json(
+              {
+                error: `You are currently on approved leave${startDate && endDate ? ` from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}` : ""}. You cannot check in during this period. Please contact your manager if you believe this is incorrect.`,
+                onLeave: true,
+              },
+              { status: 403 }
+            )
+          }
         } else {
           return NextResponse.json(
             {
@@ -185,14 +229,6 @@ export async function POST(request: NextRequest) {
             { status: 403 }
           )
         }
-      } else {
-        return NextResponse.json(
-          {
-            error: `You are currently on approved leave${startDate && endDate ? ` from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}` : ""}. You cannot check in during this period. Please contact your manager if you believe this is incorrect.`,
-            onLeave: true,
-          },
-          { status: 403 }
-        )
       }
     }
 

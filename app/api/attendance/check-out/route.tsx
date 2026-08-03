@@ -91,54 +91,115 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const isSec = isSecurityDept(userProfile?.departments)
-      const isOp = isOperationalDept(userProfile?.departments)
-      const isTrans = isTransportDept(userProfile?.departments)
-      if (override_request && override_reason && (isSec || isOp || isTrans)) {
+      // NEW POLICY: Allow check-out if the staff is physically within a QCC location
+      let withinQccLocation = false
+
+      if (qr_code_used) {
+        withinQccLocation = true
+      } else if (latitude && longitude) {
         try {
-          await supabase.from("emergency_check_in_overrides").insert({
-            user_id: user.id,
-            check_out_time: new Date().toISOString(),
-            override_type: 'leave_override',
-            reason: override_reason,
-            is_security_staff: isSec,
-            is_operational_staff: isOp,
-            is_transport_staff: isTrans,
-          })
-        } catch {}
-        try {
-          await supabase.from("staff_notifications").insert({
-            user_id: user.id,
-            title: "Emergency override used",
-            message: "An override was used to bypass leave restriction during check-out.",
-            type: "info",
-            is_read: false,
-          })
-        } catch {}
-        // continue
+          const { data: qccLocs } = await supabase
+            .from("geofence_locations")
+            .select("id, latitude, longitude, radius_meters")
+            .eq("is_active", true)
+          if (qccLocs && qccLocs.length > 0) {
+            const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+              const R = 6371000
+              const dLat = (lat2 - lat1) * Math.PI / 180
+              const dLon = (lon2 - lon1) * Math.PI / 180
+              const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+              return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            }
+            withinQccLocation = qccLocs.some((loc: any) => {
+              const dist = haversine(Number(latitude), Number(longitude), Number(loc.latitude), Number(loc.longitude))
+              return dist <= (Number(loc.radius_meters) || 400)
+            })
+          }
+        } catch { /* fallback: do not block */ }
+      }
+
+      if (withinQccLocation) {
+        // Allow check-out — staff is on QCC premises even though on leave
+        overrideMeta = { type: 'leave_active_checkout' }
       } else {
-        return NextResponse.json(
-          {
-            error: `You are currently on approved leave${startDate && endDate ? ` from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}` : ""}. You cannot check out during this period.`,
-          },
-          { status: 403 },
-        )
+        const isSec = isSecurityDept(userProfile?.departments)
+        const isOp = isOperationalDept(userProfile?.departments)
+        const isTrans = isTransportDept(userProfile?.departments)
+        if (override_request && override_reason && (isSec || isOp || isTrans)) {
+          try {
+            await supabase.from("emergency_check_in_overrides").insert({
+              user_id: user.id,
+              check_out_time: new Date().toISOString(),
+              override_type: 'leave_override',
+              reason: override_reason,
+              is_security_staff: isSec,
+              is_operational_staff: isOp,
+              is_transport_staff: isTrans,
+            })
+          } catch {}
+          try {
+            await supabase.from("staff_notifications").insert({
+              user_id: user.id,
+              title: "Emergency override used",
+              message: "An override was used to bypass leave restriction during check-out.",
+              type: "info",
+              is_read: false,
+            })
+          } catch {}
+          // continue
+        } else {
+          return NextResponse.json(
+            {
+              error: `You are currently on approved leave${startDate && endDate ? ` from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}` : ""}. You cannot check out during this period.`,
+            },
+            { status: 403 },
+          )
+        }
       }
     }
 
     // Fallback: respect legacy `user_profiles.leave_status` if present
-    if (userProfile && userProfile.leave_status && userProfile.leave_status !== "active") {
-      const leaveType = userProfile.leave_status === "on_leave" ? "on leave" : "on sick leave"
-      const endDate = userProfile.leave_end_date
-        ? new Date(userProfile.leave_end_date).toLocaleDateString()
-        : "unspecified"
+    // Only block if not already handled by the per-day leave_status check above (which allows within-QCC)
+    if (userProfile && userProfile.leave_status && userProfile.leave_status !== "active" && !overrideMeta) {
+      // Check if within a QCC location before blocking
+      let withinQccFallback = false
+      if (qr_code_used) {
+        withinQccFallback = true
+      } else if (latitude && longitude) {
+        try {
+          const { data: qccLocs } = await supabase
+            .from("geofence_locations")
+            .select("id, latitude, longitude, radius_meters")
+            .eq("is_active", true)
+          if (qccLocs && qccLocs.length > 0) {
+            const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+              const R = 6371000
+              const dLat = (lat2 - lat1) * Math.PI / 180
+              const dLon = (lon2 - lon1) * Math.PI / 180
+              const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+              return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            }
+            withinQccFallback = qccLocs.some((loc: any) => {
+              const dist = haversine(Number(latitude), Number(longitude), Number(loc.latitude), Number(loc.longitude))
+              return dist <= (Number(loc.radius_meters) || 400)
+            })
+          }
+        } catch { /* fallback: do not block */ }
+      }
 
-      return NextResponse.json(
-        {
-          error: `You are currently marked as ${leaveType} until ${endDate}. You cannot check out during your leave period.`,
-        },
-        { status: 403 },
-      )
+      if (!withinQccFallback) {
+        const leaveType = userProfile.leave_status === "on_leave" ? "on leave" : "on sick leave"
+        const endDate = userProfile.leave_end_date
+          ? new Date(userProfile.leave_end_date).toLocaleDateString()
+          : "unspecified"
+
+        return NextResponse.json(
+          {
+            error: `You are currently marked as ${leaveType} until ${endDate}. You cannot check out during your leave period.`,
+          },
+          { status: 403 },
+        )
+      }
     }
 
     if (findError || !attendanceRecord) {

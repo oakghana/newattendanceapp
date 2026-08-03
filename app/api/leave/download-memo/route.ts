@@ -155,11 +155,44 @@ export async function GET(request: NextRequest) {
       .from('leave_payment_memos')
       .select('signer_name, signer_position, signature_data_url, leave_period_start, leave_period_end, approved_days, created_at')
       .eq('leave_plan_request_id', requestId)
-      .single()
+      .maybeSingle()
 
     if (memo?.signer_name && !req.hr_approver_id) signerName = memo.signer_name
     if (memo?.signer_position && !signerPosition) signerPosition = memo.signer_position
     if (memo?.signature_data_url && !signerSigDataUrl) signerSigDataUrl = memo.signature_data_url
+
+    // ── Last-resort: search registry by any active HR signer matching the name ─
+    if (!signerSigDataUrl && signerName) {
+      try {
+        // Find the user_id for the signer by full_name in unified_user_management
+        const { data: signerUser } = await admin
+          .from('unified_user_management')
+          .select('user_id')
+          .ilike('full_name', `%${signerName.trim()}%`)
+          .limit(1)
+          .maybeSingle()
+        if (signerUser?.user_id) {
+          const { data: lastResortSig } = await admin
+            .from('approval_signature_registry')
+            .select('signature_data_url')
+            .eq('user_id', signerUser.user_id)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (lastResortSig?.signature_data_url) signerSigDataUrl = lastResortSig.signature_data_url
+          // Also try user_profiles.signature_data_url
+          if (!signerSigDataUrl) {
+            const { data: signerProfile } = await admin
+              .from('user_profiles')
+              .select('signature_data_url')
+              .eq('id', signerUser.user_id)
+              .maybeSingle()
+            if (signerProfile?.signature_data_url) signerSigDataUrl = signerProfile.signature_data_url
+          }
+        }
+      } catch { /* fallback failed — proceed without signature image */ }
+    }
 
     // ── Computed values ───────────────────────────────────────────────────────
     const staffFullName = staffMgmt?.full_name ||
