@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         adjusted_end_date,
         preferred_end_date,
         status,
-        user_profiles (
+        user_profiles!leave_plan_requests_user_id_fkey (
           first_name,
           last_name
         )
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
           // Only include leaves with 5 days or less until resumption
           if (daysLeft < 0 || daysLeft > 5) return null
 
-          const profile = leave.user_profiles
+          const profile = (leave as any).user_profiles ?? (leave as any)["user_profiles!leave_plan_requests_user_id_fkey"]
           const staffName = [
             String(profile?.first_name || "").trim(),
             String(profile?.last_name || "").trim(),

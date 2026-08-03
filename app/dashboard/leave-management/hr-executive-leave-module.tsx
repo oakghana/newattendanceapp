@@ -105,16 +105,14 @@ export function HrExecutiveLeaveModule({
 
         {activeTab === "apply-leave" && (
           <LeavePlanningClient
-            userId={userId}
-            userRole={userRole || "staff"}
-            userDepartment={userDepartment || ""}
-            userFirstName={userFirstName || ""}
-            userLastName={userLastName || ""}
-            hasHodLinkage={hasHodLinkage}
-            inactivityDays={inactivityDays}
-            initialStaffRequests={initialStaffRequests}
-            initialManagerNotifications={initialManagerNotifications}
-            initialApprovedStaffRequests={initialApprovedStaffRequests}
+            profile={{
+              id: userId,
+              role: userRole || "hr_executive",
+              firstName: userFirstName || "",
+              lastName: userLastName || "",
+              departmentName: userDepartmentName,
+              departmentCode: userDepartmentCode,
+            }}
           />
         )}
 

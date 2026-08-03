@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
     // Fetch user profile for name, position AND primary signature storage
     const { data: userProfile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, first_name, last_name, position, role, email, signature_data_url, signature_text, signature_mode")
+      .select("id, first_name, last_name, position, role, email, signature_data_url")
       .eq("id", targetUserId)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
       console.error("[v0] Error fetching user profile:", profileError)
@@ -46,7 +46,6 @@ export async function GET(request: NextRequest) {
 
     // Priority 1: user_profiles.signature_data_url (set via Profile Settings > Signature)
     let resolvedSigDataUrl: string | null = (userProfile as any)?.signature_data_url?.trim() || null
-    let resolvedSigText: string | null = (userProfile as any)?.signature_text?.trim() || null
     let signatureRecord: any = null
 
     if (resolvedSigDataUrl) {
@@ -88,7 +87,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const hasSignature = !!(resolvedSigDataUrl || resolvedSigText)
+    const hasSignature = !!resolvedSigDataUrl
 
     return NextResponse.json({
       success: true,

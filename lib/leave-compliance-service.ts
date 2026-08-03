@@ -44,8 +44,13 @@ export function isAnnualLeaveReminderPeriod(): boolean {
 export function daysUntilAnnualLeaveDeadline(): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+
+  // Calculate September 1st of current or next year (same logic as isAnnualLeaveReminderPeriod)
+  let septemberFirst = new Date(today.getFullYear(), 8, 1) // Month 8 = September (0-indexed)
+  if (today >= septemberFirst) {
+    septemberFirst = new Date(today.getFullYear() + 1, 8, 1)
+  }
   
-  const septemberFirst = startOfSeptember(today)
   const diff = differenceInDays(septemberFirst, today)
   
   return Math.max(0, diff)

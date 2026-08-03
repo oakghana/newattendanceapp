@@ -22,10 +22,14 @@ export default async function LeaveManagementPage() {
     .from("user_profiles")
     .select("role, department_id, assigned_location_id, first_name, last_name, departments(name, code)")
     .eq("id", user.id)
-    .single()
+    .maybeSingle()
 
   if (!profile) {
-    return <div>Profile not found</div>
+    return (
+      <div className="p-8 text-center">
+        <p className="text-slate-600">Unable to load your profile. Please refresh or contact support.</p>
+      </div>
+    )
   }
 
   // Fetch only essential fast queries first
