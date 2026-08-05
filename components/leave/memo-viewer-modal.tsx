@@ -139,7 +139,7 @@ export function MemoViewerModal({
           {/* Header Section */}
           <div className="text-center space-y-2 pb-4 border-b">
             <h2 className="text-lg font-semibold text-slate-900">
-              {memoType === 'deferment' ? 'LEAVE DEFERMENT MEMO' : 'LEAVE RECALL MEMO'}
+              {memoType === 'deferment' ? 'RE: DEFERMENT OF LEAVE' : 'RE: RECALL OF LEAVE'}
             </h2>
             <p className="text-sm text-slate-600">Ministry/Office of Human Resources</p>
             <p className="text-sm text-slate-600">Republic of Ghana</p>

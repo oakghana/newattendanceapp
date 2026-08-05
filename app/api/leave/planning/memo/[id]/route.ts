@@ -136,15 +136,15 @@ function getMemoSubject(leaveTypeKey: string, leavePeriod: string, draftSubject?
   const yearPart = String(currentYear)
   const map: Record<string, string> = {
     annual:           `ANNUAL LEAVE ADVICE FOR ${yearPart}`,
-    casual:           "CASUAL LEAVE",
-    sick:             "SICK LEAVE",
-    maternity:        "MATERNITY LEAVE",
-    paternity:        "PATERNITY LEAVE",
-    study:            "STUDY LEAVE",
-    compassionate:    "COMPASSIONATE LEAVE",
-    part_leave:       "PART LEAVE",
-    no_pay:           "LEAVE WITHOUT PAY",
-    leave_of_absence: "LEAVE OF ABSENCE",
+    casual:           "RE: CASUAL LEAVE",
+    sick:             "RE: SICK LEAVE",
+    maternity:        "RE: MATERNITY LEAVE",
+    paternity:        "RE: PATERNITY LEAVE",
+    study:            "RE: STUDY LEAVE",
+    compassionate:    "RE: COMPASSIONATE LEAVE",
+    part_leave:       "RE: PART LEAVE",
+    no_pay:           "RE: LEAVE WITHOUT PAY",
+    leave_of_absence: "RE: LEAVE OF ABSENCE",
   }
   return map[String(leaveTypeKey || "annual").toLowerCase()] || `${leaveTypeLabel(leaveTypeKey).toUpperCase()} ADVICE FOR ${yearPart}`
 }

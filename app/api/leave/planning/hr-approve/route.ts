@@ -473,9 +473,13 @@ export async function POST(request: NextRequest) {
     const providedBody = memo_draft_body ? String(memo_draft_body).trim() : ""
     const providedCc = memo_draft_cc ? String(memo_draft_cc).trim() : ""
 
-    const resolvedSubject = providedSubject
+    const rawResolvedSubject = providedSubject
       || fallbackApprovalSubject
       || String((leaveRequest as any).memo_draft_subject || "").trim()
+    const leaveTypeKey = String((leaveRequest as any).leave_type_key || "annual").toLowerCase()
+    const resolvedSubject = leaveTypeKey === "annual"
+      ? rawResolvedSubject
+      : `RE: ${leaveTypeLabel(leaveTypeKey).toUpperCase()} LEAVE`
 
     const resolvedBody = providedBody
       || fallbackApprovalBody
@@ -485,9 +489,12 @@ export async function POST(request: NextRequest) {
       || fallbackApprovalCc
       || String((leaveRequest as any).memo_draft_cc || "").trim()
 
-    const resolvedRejectSubject = memo_draft_subject
+    const rawResolvedRejectSubject = memo_draft_subject
       ? String(memo_draft_subject).trim()
       : String((leaveRequest as any).memo_draft_subject || "").trim() || fallbackRejectionSubject
+    const resolvedRejectSubject = leaveTypeKey === "annual"
+      ? rawResolvedRejectSubject
+      : `RE: ${leaveTypeLabel(leaveTypeKey).toUpperCase()} LEAVE`
 
     const resolvedRejectBody = memo_draft_body
       ? String(memo_draft_body).trim()

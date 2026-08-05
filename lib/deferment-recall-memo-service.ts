@@ -96,7 +96,7 @@ export async function generateDefermentMemo(data: DefermentMemoData): Promise<js
   doc.text("SUBJECT: ", margin, yPosition)
   doc.setFont("helvetica", "normal")
   const subjectLines = doc.splitTextToSize(
-    `LEAVE DEFERMENT APPROVAL FOR ${data.staff.name.toUpperCase()}`,
+    `RE: DEFERMENT OF LEAVE - ${data.staff.name.toUpperCase()}`,
     contentWidth - 25
   )
   doc.text(subjectLines, margin + 20, yPosition)
@@ -230,7 +230,7 @@ export async function generateRecallMemo(data: RecallMemoData): Promise<jsPDF> {
   doc.text("SUBJECT: ", margin, yPosition)
   doc.setFont("helvetica", "normal")
   const subjectLines = doc.splitTextToSize(
-    `LEAVE RECALL - URGENT RETURN TO DUTY`,
+    `RE: RECALL OF LEAVE - URGENT RETURN TO DUTY`,
     contentWidth - 25
   )
   doc.text(subjectLines, margin + 20, yPosition)
