@@ -81,11 +81,11 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   // Audit pages
   "/dashboard/audit": ["admin", "audit_staff"],
 
-  // MD Approval Hub — admin and it-admin can also access for oversight
-  "/dashboard/md-approvals": ["managing_director", "admin", "it-admin"],
+  // MD Approval Hub — restricted to the Managing Director and administrators
+  "/dashboard/md-approvals": ["managing_director", "admin"],
 
-  // Secretary Memo Hub — admin and it-admin can also access for oversight
-  "/dashboard/secretary-memos": ["secretary", "admin", "it-admin"],
+  // Secretary Memo Hub — restricted to the Secretary and administrators
+  "/dashboard/secretary-memos": ["secretary", "admin"],
 
   // Overview dashboard — all roles
   "/dashboard/overview": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],

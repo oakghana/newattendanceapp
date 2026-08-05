@@ -561,7 +561,7 @@ export function StaffManagement() {
 
   const openHodLinkDialog = async (member: StaffMember) => {
     setHodLinkStaff(member)
-    setHodLinkHodIds([])
+    setHodLinkHodIds(((member as any).hod_links || []).map((hod: any) => String(hod.id)))
     setHodLinkError(null)
     try {
       // Fetch all roles that act as head of department in parallel
@@ -594,7 +594,7 @@ export function StaffManagement() {
   }
 
   const handleHodLink = async () => {
-    if (!hodLinkStaff || hodLinkHodIds.length === 0) return
+    if (!hodLinkStaff) return
     setHodLinkLoading(true)
     setHodLinkError(null)
     try {
@@ -606,14 +606,18 @@ export function StaffManagement() {
       const result = await res.json()
       if (result.success) {
         const count = hodLinkHodIds.length
-        showSuccess(`${hodLinkStaff.first_name} ${hodLinkStaff.last_name} linked to ${count} HOD(s) successfully`, "HOD Linked")
-        // Refresh staff data to show updated HOD linkage
+        showSuccess(
+          count > 0
+            ? `${hodLinkStaff.first_name} ${hodLinkStaff.last_name} assigned to ${count} HOD(s)`
+            : `${hodLinkStaff.first_name} ${hodLinkStaff.last_name} removed from all HOD assignments`,
+          count > 0 ? "HOD Assignment Updated" : "HOD Assignments Cleared",
+        )
         await fetchStaff()
         setHodLinkStaff(null)
         setHodLinkHodIds([])
         setHodLinkError(null)
       } else {
-        setHodLinkError(result.error || "Failed to link")
+        setHodLinkError(result.error || "Failed to update HOD assignments")
       }
     } catch (e: any) {
       setHodLinkError(e?.message || "Network error")
@@ -1443,9 +1447,9 @@ export function StaffManagement() {
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Link Staff to HOD</DialogTitle>
+            <DialogTitle>Manage Staff HOD Assignments</DialogTitle>
             <DialogDescription>
-              Assign <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong> to a Department Head or Regional Manager for loan routing.
+              Select one or more Department Heads or Regional Managers for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck a selected HOD to remove that assignment.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -1515,15 +1519,22 @@ export function StaffManagement() {
                   ))
                 )}
               </div>
-              {hodLinkHodIds.length > 0 && (
-                <p className="text-xs text-muted-foreground">Selected: {hodLinkHodIds.length} HOD(s)</p>
-              )}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  {hodLinkHodIds.length > 0 ? `Selected: ${hodLinkHodIds.length} HOD(s)` : "No HOD assignments selected"}
+                </p>
+                {hodLinkHodIds.length > 0 && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setHodLinkHodIds([])}>
+                    Clear all
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setHodLinkStaff(null)}>Cancel</Button>
-            <Button onClick={handleHodLink} disabled={hodLinkHodIds.length === 0 || hodLinkLoading}>
-              {hodLinkLoading ? "Linking..." : `Link (${hodLinkHodIds.length})`}
+            <Button onClick={handleHodLink} disabled={hodLinkLoading}>
+              {hodLinkLoading ? "Saving..." : "Save assignments"}
             </Button>
           </DialogFooter>
         </DialogContent>
