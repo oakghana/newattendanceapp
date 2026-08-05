@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2 } from "lucide-react"
+import { Users, Plus, Search, Edit, Trash2, UserCheck, UserX, Key, MapPin, Filter, Building2, Link2, Link2Off } from "lucide-react"
 import { PasswordManagement } from "./password-management"
 import { useNotifications } from "@/components/ui/notification-system"
 
@@ -333,8 +333,8 @@ export function StaffManagement() {
           contact_number: "",
         })
         fetchStaff()
-        // Auto-open HOD linkage dialog after creating staff (admin / it-admin)
-        if ((currentUserRole === "admin" || currentUserRole === "it-admin") && result.data) {
+        // Only Administrators manage HOD assignments from Staff Management.
+        if (currentUserRole === "admin" && result.data) {
           openHodLinkDialog(result.data)
         }
       } else {
@@ -1402,15 +1402,16 @@ export function StaffManagement() {
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
-                          {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
+                          {currentUserRole === "admin" && (
                             <Button
                               size="sm"
                               variant="outline"
-                              title="Link to HOD"
+                              title={(member as any).hod_links?.length ? "Manage or deselect HOD assignments" : "Assign to HOD"}
+                              aria-label={(member as any).hod_links?.length ? "Manage or deselect HOD assignments" : "Assign to HOD"}
                               onClick={() => openHodLinkDialog(member)}
                               className="h-8 w-8 p-0 hover:bg-blue-50 hover:border-blue-300"
                             >
-                              <Link2 className="h-3 w-3" />
+                              {(member as any).hod_links?.length ? <Link2Off className="h-3 w-3" /> : <Link2 className="h-3 w-3" />}
                             </Button>
                           )}
                         </div>
