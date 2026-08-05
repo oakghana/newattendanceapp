@@ -1224,6 +1224,7 @@ export default function LoanAppPage() {
   const p = data?.permissions
   const normalizedRole = normalizeRoleValue(data?.profile?.role)
   const isAdmin = isAdminRoleValue(normalizedRole)
+  const isItAdmin = ["it_admin", "it-admin"].includes(normalizedRole.replace(/\s+/g, "_"))
   const canSeeFdReviewerName = isAdmin || p?.directorHr || p?.hrOffice || p?.viewAllTabs
     // Loan Office workspace: loan_office/manager_hr ONLY if in HR dept (not Accounts dept)
   // Accounts-dept loan_office users get Accounts tab, not Loan Office tab
@@ -1331,7 +1332,7 @@ export default function LoanAppPage() {
     }
     if (canAccessLoanOfficeWorkspace) tabs.push({ key: "setup", label: "Setup & Linkage" })
     // My Tasks: hidden for pure HR Executives and HR Loan Office — they work on forwarded queues, not personal tasks
-    if (!isHrExecutiveOnly && !isHRLoanOffice && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
+    if (!isItAdmin && !isHrExecutiveOnly && !isHRLoanOffice && (p?.hod || p?.loanOffice || p?.accounts || p?.committee || p?.hrOffice || p?.viewAllTabs || p?.allLoans)) {
       tabs.push({ key: "my-tasks", label: `My Tasks (${c.mine})` })
     }
     // All Loans: admins, viewAllTabs, and HR Loan Office (read-only view with download access)
@@ -1340,8 +1341,6 @@ export default function LoanAppPage() {
       if (c.archived > 0) {
         tabs.push({ key: "archive", label: `Archive (${c.archived})` })
       }
-    } else if (normalizedRole !== "hr_loan_office" && (p?.allLoans || p?.viewAllTabs)) {
-      tabs.push({ key: "overview", label: `All Loans (${c.all})` })
     }
     const seen = new Set<string>()
     return tabs.filter((tab) => {
@@ -1349,7 +1348,7 @@ export default function LoanAppPage() {
       seen.add(tab.key)
       return true
     })
-  }, [data, canAccessLoanOfficeWorkspace, isAdmin, normalizedRole, userDeptIsAccounts, loanTypeKey, fdPendingCount])
+  }, [data, canAccessLoanOfficeWorkspace, isAdmin, isItAdmin, normalizedRole, userDeptIsAccounts, loanTypeKey, fdPendingCount])
 
   const uniqueVisibleTabs = useMemo(() => {
     const seen = new Set<string>()
@@ -1364,6 +1363,12 @@ export default function LoanAppPage() {
   const defaultTab = (!isAdmin && p?.directorHr && !p?.hod && !p?.loanOffice && !p?.accounts && !p?.committee)
     ? "director"
     : uniqueVisibleTabs[0]?.key || "staff"
+
+  useEffect(() => {
+    if (activeTab && !uniqueVisibleTabs.some((tab) => tab.key === activeTab)) {
+      setActiveTab(defaultTab)
+    }
+  }, [activeTab, defaultTab, uniqueVisibleTabs])
 
   const filteredHod = useMemo(
     () => filterAndSortRows(data?.inbox?.hod || [], hodSearch, hodStatus, hodSort, hodLocation, hodDept),
