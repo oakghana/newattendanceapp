@@ -481,8 +481,8 @@ export async function POST(request: NextRequest) {
         ? Array.from(new Set((body.hod_user_ids as any[]).map((v) => String(v || "")).filter(Boolean)))
         : []
 
-      if (!staffUserId || hodUserIds.length === 0) {
-        return NextResponse.json({ error: "staff_user_id and hod_user_ids[] are required" }, { status: 400 })
+      if (!staffUserId) {
+        return NextResponse.json({ error: "staff_user_id is required" }, { status: 400 })
       }
 
       const { data: staffProfile, error: staffError } = await admin
@@ -520,6 +520,18 @@ export async function POST(request: NextRequest) {
           error: "One or more selected HOD assignments are invalid for this staff.",
           details: invalidPairs,
         }, { status: 400 })
+      }
+
+      // Replace the complete assignment set only after all selected HODs pass validation.
+      const { error: deleteError } = await admin
+        .from("loan_hod_linkages")
+        .delete()
+        .eq("staff_user_id", staffUserId)
+
+      if (deleteError) throw deleteError
+
+      if (hodUserIds.length === 0) {
+        return NextResponse.json({ success: true, data: [], cleared: true })
       }
 
       const rows = hodUserIds.map((hodId) => ({
