@@ -137,21 +137,21 @@ const navigationItems = [
     roles: ALL_STAFF_ROLES,
     category: "main",
   },
-  // ── MD-exclusive ─────────────────────────────────────────────────────────
+  // ── MD oversight ──────────────────────────────────────────────────────────
   {
     title: "MD Approval Hub",
     href: "/dashboard/md-approvals",
     icon: Stamp,
-    roles: ["managing_director", "admin"],
+    roles: ["managing_director", "admin", "it-admin"],
     category: "main",
     executive: true,
   },
-  // ── Secretary-exclusive ──────────────────────────────────────────────────
+  // ── Secretary oversight ──────────────────────────────────────────────────
   {
     title: "Memo Console",
     href: "/dashboard/secretary-memos",
     icon: ScrollText,
-    roles: ["secretary", "admin"],
+    roles: ["secretary", "admin", "it-admin"],
     category: "main",
     executive: true,
   },
@@ -412,12 +412,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       ]
     : navigationItems
 
-  // Support role hierarchy: map 'audit_staff' to behave like 'staff' for base permissions
-  // managing_director and secretary keep their own role names for exclusive menu items.
+  // Normalize both the profile role and each menu item's allowed roles so the
+  // UI accepts the role values used by existing records, such as IT-ADMIN.
+  // Support role hierarchy by treating audit_staff like staff for base menus.
   const normalizedRole = (profile?.role || "staff").toLowerCase().replace(/[\s-]+/g, "_").trim()
-  const effectiveRole =
-    normalizedRole === "audit_staff" ? "staff" :
-    normalizedRole
+  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
@@ -425,17 +424,10 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       return effectiveRole === "admin"
     }
 
-    const isVisible = item.roles.includes(effectiveRole)
-    if (item.href === "/dashboard/disbursement-confirmation") {
-      console.log("[v0] Disbursement visibility check:", {
-        userRole: profile?.role,
-        normalizedRole,
-        effectiveRole,
-        allowedRoles: item.roles,
-        isVisible,
-      })
-    }
-    return isVisible
+    return item.roles.some((role) => {
+      const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
+      return normalizedAllowedRole === effectiveRole
+    })
   })
 
   const mainItems = filteredNavItems.filter((item) => item.category === "main")
