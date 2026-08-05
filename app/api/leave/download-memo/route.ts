@@ -221,9 +221,8 @@ export async function GET(request: NextRequest) {
     if (leaveTypeKey === 'annual') {
       subjectLine = `${leaveTypeName.toUpperCase()} LEAVE ADVICE FOR ${yearLabel}`
     } else {
-      // Non-annual leave: "RE: APPLICATION FOR [X DAYS] [LEAVE TYPE] LEAVE"
-      const daysText = grantedDays > 0 ? `${grantedDays.toLocaleString()} DAY${grantedDays !== 1 ? 'S' : ''} ` : ''
-      subjectLine = `RE: APPLICATION FOR ${daysText}${leaveTypeName.toUpperCase()} LEAVE`
+      // Every non-annual leave memo starts with RE: followed by the leave name.
+      subjectLine = `RE: ${leaveTypeName.toUpperCase()} LEAVE`
     }
 
     const letterDate = req.hr_approved_at || memo?.created_at || new Date().toISOString()

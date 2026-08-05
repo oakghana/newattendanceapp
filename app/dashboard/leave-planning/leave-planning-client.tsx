@@ -354,7 +354,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_casual_approval",
       template_name: "Casual Leave Approval",
       description: "Based on the current QCC casual leave response style",
-      subject_template: "CASUAL LEAVE",
+      subject_template: "RE: CASUAL LEAVE",
       body_template: [
         "We acknowledge receipt of your letter dated {{submitted_date_formal}} in relation to the above-mentioned subject and wish to inform you that Management has given approval for you to proceed on {{approved_days}} working day(s) casual leave with effect from {{leave_start_date_formal}} to {{leave_end_date_formal}}.",
         "You are expected to resume duty on {{return_to_work_date_formal}}.",
@@ -369,7 +369,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_part_leave_approval",
       template_name: "Part Leave Approval",
       description: "Official QCC part leave response style (formal letter wording)",
-      subject_template: "RE: APPLICATION FOR {{approved_days}} DAYS PART LEAVE",
+      subject_template: "RE: PART LEAVE",
       body_template: [
         "We acknowledge receipt of your letter dated {{submitted_date_formal}} in connection with the above-mentioned subject and wish to inform you that approval has been given for you to proceed on {{approved_days}} working days part leave with effect from {{leave_start_date_formal}} to {{leave_end_date_formal}}.",
         "You are expected to resume duty on {{return_to_work_date_formal}}.",
@@ -386,7 +386,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_maternity_approval",
       template_name: "Maternity Leave Approval",
       description: "Based on the current QCC maternity leave response style",
-      subject_template: "MATERNITY LEAVE",
+      subject_template: "RE: MATERNITY LEAVE",
       body_template: [
         "We refer to the maternity leave certificate / supporting medical recommendation received in relation to the above subject and wish to inform you that, in accordance with company policy, Management has approved your maternity leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
         "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
@@ -403,7 +403,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_leave_of_absence_approval",
       template_name: "Leave of Absence Approval",
       description: "Official QCC Leave of Absence approval wording (formal letter style)",
-      subject_template: "LEAVE OF ABSENCE",
+      subject_template: "RE: LEAVE OF ABSENCE",
       body_template: [
         "We acknowledge receipt of your letter dated {{submitted_date}} on the above subject and wish to inform you that Management has approved your request for {{approved_months_text}} Leave of Absence effective {{leave_start_date}}.",
         "Leave Period: {{leave_start_date}} to {{leave_end_date}}.",
@@ -421,7 +421,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_sick_approval",
       template_name: "Sick Leave Approval",
       description: "Professional sick leave approval wording",
-      subject_template: "SICK LEAVE APPROVAL",
+      subject_template: "RE: SICK LEAVE",
       body_template: [
         "We refer to your sick leave application dated {{submitted_date}} in respect of the above subject and wish to inform you that Management has approved your sick leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
         "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
@@ -437,7 +437,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_paternity_approval",
       template_name: "Paternity Leave Approval",
       description: "Professional paternity leave approval wording",
-      subject_template: "PATERNITY LEAVE",
+      subject_template: "RE: PATERNITY LEAVE",
       body_template: [
         "We refer to your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your paternity leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
         "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
@@ -453,7 +453,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_study_approval",
       template_name: "Study Leave Approval",
       description: "Professional study leave approval wording",
-      subject_template: "STUDY LEAVE",
+      subject_template: "RE: STUDY LEAVE",
       body_template: [
         "We refer to your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your study leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
         "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
@@ -469,7 +469,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_compassionate_approval",
       template_name: "Compassionate Leave Approval",
       description: "Professional compassionate leave approval wording",
-      subject_template: "COMPASSIONATE LEAVE",
+      subject_template: "RE: COMPASSIONATE LEAVE",
       body_template: [
         "We acknowledge receipt of your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your compassionate leave with effect from {{leave_start_date}} to {{leave_end_date}}.",
         "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
@@ -485,7 +485,7 @@ function getBuiltinHrTemplateOptions(): HrTemplateOption[] {
       template_key: "builtin_leave_no_pay_approval",
       template_name: "Leave Without Pay Approval",
       description: "Professional leave without pay approval wording",
-      subject_template: "LEAVE WITHOUT PAY",
+      subject_template: "RE: LEAVE WITHOUT PAY",
       body_template: [
         "We refer to your application dated {{submitted_date}} in relation to the above subject and wish to inform you that Management has approved your leave without pay with effect from {{leave_start_date}} to {{leave_end_date}}.",
         "The approved period covers {{approved_days}} day(s). You are expected to resume duty on {{return_to_work_date}}.",
@@ -1068,7 +1068,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
   const [hrExecHodDeptFilter, setHrExecHodDeptFilter] = useState("all")
 
-  // ── HR Approver Data ────────────────────���────────────────────────────
+  // ── HR Approver Data ────────────────────�����────────────────────────────
   const [hrApproverData, setHrApproverData] = useState<any>(null)
   const [hrApproverLoading, setHrApproverLoading] = useState(false)
 

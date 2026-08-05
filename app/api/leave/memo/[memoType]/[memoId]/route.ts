@@ -212,8 +212,8 @@ async function generateMemoHandler(context: any, isPublic = false) {
     // Subject line
     doc.setFont(undefined, "bold")
     const subject = memoType === "deferment" 
-      ? "LEAVE DEFERMENT APPROVAL NOTIFICATION"
-      : "LEAVE RECALL NOTIFICATION"
+      ? "RE: DEFERMENT OF LEAVE"
+      : "RE: RECALL OF LEAVE"
     doc.text("SUBJECT:", marginLeft, y)
     doc.setFont(undefined, "normal")
     const subjectWrapped = doc.splitTextToSize(subject, contentWidth - 30)

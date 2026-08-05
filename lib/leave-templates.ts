@@ -37,7 +37,7 @@ Approved Days: {{approved_days}} day(s)
     key: "sick_leave_approval",
     name: "Sick Leave Approval",
     category: "leave_approval",
-    subject: "APPLICATION FOR SICK LEAVE — {{leave_year_period}}",
+    subject: "RE: SICK LEAVE",
     body: `We refer to your sick leave application dated {{submitted_date}} and wish to inform you that Management has approved your request as follows:
 
 Leave Type: Sick Leave
@@ -56,7 +56,7 @@ Please ensure to provide the required medical documentation within the approved 
     key: "leave_of_absence",
     name: "Leave of Absence Approval",
     category: "leave_approval",
-    subject: "LEAVE OF ABSENCE",
+    subject: "RE: LEAVE OF ABSENCE",
     body: `We acknowledge receipt of your letter dated {{submitted_date}} on the above subject and wish to inform you that Management has approved your request for {{approved_months_text}} Leave of Absence effective {{leave_start_date}}.
 
 Leave Period: {{leave_start_date}} to {{leave_end_date}}
@@ -162,7 +162,7 @@ HR Leave Office`,
     key: "deferment_of_leave",
     name: "Deferment of Leave Application",
     category: "leave_approval",
-    subject: "APPLICATION FOR DEFERMENT OF LEAVE",
+    subject: "RE: DEFERMENT OF LEAVE",
     body: `We acknowledge receipt of your application for deferment of {{approved_days}} days {{leave_type}} dated {{submitted_date}}.
 
 Original Leave Period: {{original_start_date}} to {{original_end_date}}
