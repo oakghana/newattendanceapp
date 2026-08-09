@@ -95,6 +95,12 @@ function normalizeRole(role: string | null | undefined): string {
   return (role || "").toLowerCase().trim().replace(/[-\s]+/g, "_");
 }
 
+function isProtectedRoute(pathname: string): boolean {
+  return Object.keys(PROTECTED_ROUTES).some(
+    (pattern) => pathname === pattern || pathname.startsWith(pattern + "/"),
+  );
+}
+
 function isAuthorizedForRoute(userRole: string | null | undefined, pathname: string): boolean {
   const normalized = normalizeRole(userRole);
 
@@ -165,6 +171,12 @@ export default async function proxy(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
+      // Let unknown public paths reach Next.js so the branded 404 page can
+      // decide whether to guide the visitor to sign in or elsewhere.
+      if (!isProtectedRoute(pathname)) {
+        return response;
+      }
+
       return NextResponse.redirect(new URL("/auth/login", request.url));
     }
 
