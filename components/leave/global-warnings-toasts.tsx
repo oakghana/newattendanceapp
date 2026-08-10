@@ -38,6 +38,8 @@ export function GlobalWarningsToasts() {
           .select('id, staff_id, days_overdue, status, created_at')
           .eq('staff_id', user.id)
           .eq('status', 'active')
+          .is('first_check_in_date', null)
+          .not('confirmation_status', 'eq', 'pending_hod_rm')
           .order('created_at', { ascending: false })
           .limit(5)
 
