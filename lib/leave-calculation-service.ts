@@ -11,6 +11,7 @@ export interface CalculatedLeave {
   businessDays: number;
   weekendDays: number;
   holidayDays: number;
+  holidayDates: string[];
   actualLeaveDays: number;
   summary: string;
 }
@@ -92,8 +93,9 @@ export function calculateLeaveDuration(
     businessDays,
     weekendDays,
     holidayDays: holidayCount,
+    holidayDates,
     actualLeaveDays,
-    summary: `${businessDays} business days + ${travelingDays} traveling days (${weekendDays} weekend days, ${holidayCount} public holidays included)`,
+    summary: `${businessDays} business days + ${travelingDays} traveling days (${weekendDays} weekend days, ${holidayCount} public holidays excluded from entitlement)`,
   };
 }
 
@@ -175,7 +177,7 @@ export async function getEntitlementDays(
     // This will be called from the database via API
     // Default values for common leave types
     const defaults: { [key: string]: number } = {
-      annual_leave: 21,
+      annual_leave: 30,
       sick_leave: 14,
       maternity_leave: 98,
       paternity_leave: 6,
@@ -234,7 +236,7 @@ export function generateCalculationSummary(calculated: CalculatedLeave): Calcula
     totalCalendarDays: calculated.totalCalendarDays,
     businessDays: calculated.businessDays,
     weekendDays: calculated.weekendDays,
-    holidayDays: [], // Will be filled with actual dates
+    holidayDays: calculated.holidayDates,
     actualLeaveDays: calculated.actualLeaveDays,
     calculatedAt: format(new Date(), 'yyyy-MM-dd HH:mm:ss'),
   };

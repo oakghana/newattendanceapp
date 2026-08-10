@@ -1014,12 +1014,7 @@ export async function GET(
     const ccRaw = String(lr.memo_draft_cc || "").trim()
     const ccList: string[] = ccRaw
       ? ccRaw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-      : [
-          "Managing Director",
-          "Deputy Director, HR (QCC)",
-          "Accounts Manager",
-          "Dep. Audit Manager",
-        ]
+      : []
     const ccIndent = marginLeft + 10
     for (const cc of ccList) {
       doc.text(cc, ccIndent, y)
