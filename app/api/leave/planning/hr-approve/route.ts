@@ -459,16 +459,12 @@ export async function POST(request: NextRequest) {
     const fallbackApprovalBody = approvalTemplate?.body_template
       ? renderTemplate(String(approvalTemplate.body_template), templateData)
       : null
-    const fallbackApprovalCc = approvalTemplate?.cc_recipients ? String(approvalTemplate.cc_recipients) : null
-
     const fallbackRejectionSubject = rejectionTemplate?.subject_template
       ? renderTemplate(String(rejectionTemplate.subject_template), templateData)
       : null
     const fallbackRejectionBody = rejectionTemplate?.body_template
       ? renderTemplate(String(rejectionTemplate.body_template), templateData)
       : null
-    const fallbackRejectionCc = rejectionTemplate?.cc_recipients ? String(rejectionTemplate.cc_recipients) : null
-
     const providedSubject = memo_draft_subject ? String(memo_draft_subject).trim() : ""
     const providedBody = memo_draft_body ? String(memo_draft_body).trim() : ""
     const providedCc = memo_draft_cc ? String(memo_draft_cc).trim() : ""
@@ -485,9 +481,7 @@ export async function POST(request: NextRequest) {
       || fallbackApprovalBody
       || String((leaveRequest as any).memo_draft_body || "").trim()
 
-    const resolvedCc = providedCc
-      || fallbackApprovalCc
-      || String((leaveRequest as any).memo_draft_cc || "").trim()
+    const resolvedCc = providedCc || String((leaveRequest as any).memo_draft_cc || "").trim()
 
     const rawResolvedRejectSubject = memo_draft_subject
       ? String(memo_draft_subject).trim()
@@ -500,9 +494,9 @@ export async function POST(request: NextRequest) {
       ? String(memo_draft_body).trim()
       : String((leaveRequest as any).memo_draft_body || "").trim() || fallbackRejectionBody
 
-    const resolvedRejectCc = memo_draft_cc
+    const resolvedRejectCc = memo_draft_cc !== undefined && memo_draft_cc !== null
       ? String(memo_draft_cc).trim()
-      : String((leaveRequest as any).memo_draft_cc || "").trim() || fallbackRejectionCc
+      : String((leaveRequest as any).memo_draft_cc || "").trim()
 
     if (action === "reject") {
       await admin

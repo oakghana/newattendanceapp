@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     // Reason for adjustment is mandatory for annual leave, optional for all other leave types
     const leaveTypeKey = String((leaveRequest as any).leave_type_key || "").toLowerCase()
-    const requestIsAnnual = leaveTypeKey === "annual"
+    const requestIsAnnual = leaveTypeKey === "annual" || leaveTypeKey === "annual_leave"
     if (requestIsAnnual && (!adjustment_reason || String(adjustment_reason).trim().length < 5)) {
       return NextResponse.json(
         { error: "A detailed adjustment reason is required for annual leave (this will appear in the memo to staff)." },

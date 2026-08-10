@@ -3791,7 +3791,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               const renderedTemplate = matchingTemplate ? renderTemplateForRequest(matchingTemplate, req) : memoTpl
                               setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || renderedTemplate.subject || memoTpl.subject }))
                               setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || renderedTemplate.body || memoTpl.body }))
-                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
+                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc ?? "" }))
                               
                               // Auto-populate travel days and fetch outstanding leave for annual leave
                               if (String(req.leave_type_key || "").toLowerCase() === "annual") {

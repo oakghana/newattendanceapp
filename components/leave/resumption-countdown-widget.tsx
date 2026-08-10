@@ -234,13 +234,13 @@ export function ResumptionCountdownWidget({ onMute, autoPlaySound = true }: Resu
   const warning = visible.filter(c => c.days_left > 2 && c.days_left <= 5)
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-2">
 
       {/* Master alert banner */}
       {critical.length > 0 && (
-        <Alert className="border-red-400 bg-red-50 shadow-sm">
+        <Alert className="border-red-300 bg-red-50/80 shadow-sm">
           <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800 font-medium">
+          <AlertDescription className="py-0 text-xs font-medium text-red-800">
             🚨 <strong>CRITICAL:</strong> {critical.length} staff member{critical.length > 1 ? "s" : ""} resuming within 48 hours — immediate action required!
           </AlertDescription>
         </Alert>
@@ -255,8 +255,8 @@ export function ResumptionCountdownWidget({ onMute, autoPlaySound = true }: Resu
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
-        <p className="text-sm font-semibold text-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+        <p className="text-xs font-semibold text-slate-700">
           📅 Leave Resumption Tracker ({visible.length})
         </p>
         <div className="flex items-center gap-2">
@@ -291,9 +291,9 @@ export function ResumptionCountdownWidget({ onMute, autoPlaySound = true }: Resu
 
 
       {/* HR info footer */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 space-y-1">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
         <p className="font-semibold text-slate-700">📋 HR Action Checklist</p>
-        <ul className="list-disc list-inside space-y-0.5 text-slate-500">
+        <ul className="list-disc list-inside text-slate-500">
           <li>Verify return-to-work documentation for all upcoming resumptions</li>
           <li>Contact critical (≤48h) staff if issues are expected</li>
           <li>Ensure workspace, access and handover is ready before their return</li>
