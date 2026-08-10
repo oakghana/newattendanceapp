@@ -150,11 +150,11 @@ export function AnnualLeaveCompliancePanel() {
                 </div>
               ))}
             </div>
-            <Link href="/dashboard/leave-management">
-              <Button size="sm" variant="destructive">
+            <Button asChild size="sm" variant="destructive">
+              <Link href="/dashboard/leave-management?tab=hr-approvals&filter=pending">
                 Review Now
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </AlertDescription>
         </Alert>
       )}

@@ -1,48 +1,65 @@
 "use client"
 
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Home, ArrowLeft } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
+import useSWR from "swr"
+import { ArrowLeft, Compass, Home, LogIn } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error("Unable to determine the current session")
+  }
+  return response.json()
+}
 
 export default function NotFound() {
   const router = useRouter()
+  const { data, isLoading } = useSWR("/api/auth/current-user", fetcher, {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+  })
+
+  const isAuthenticated = data?.success === true && Boolean(data.user)
+  const destination = isAuthenticated ? "/dashboard" : "/"
+  const destinationLabel = isAuthenticated ? "Return to dashboard" : "Go to sign in"
+  const DestinationIcon = isAuthenticated ? Home : LogIn
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader className="pb-4">
-          <div className="flex justify-center mb-4">
-            <Image src="/images/qcc-logo.png" alt="QCC Logo" width={60} height={60} className="rounded-full" />
-          </div>
-          <CardTitle className="text-2xl font-bold text-foreground">Page Not Found</CardTitle>
-          <CardDescription className="text-base">
-            The page you're looking for doesn't exist or has been moved.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="text-6xl font-bold text-muted-foreground/50 mb-4">404</div>
-          <div className="space-y-3">
-            <Button asChild className="w-full">
-              <Link href="/dashboard">
-                <Home className="h-4 w-4 mr-2" />
-                Go to Dashboard
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full bg-transparent"
-              onClick={() => router.back()}
-            >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Go Back
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-6">QCC Electronic Attendance App</p>
-        </CardContent>
-      </Card>
-    </div>
+    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-12 text-foreground">
+      <div className="flex w-full max-w-2xl flex-col items-center text-center">
+        <Link href={destination} className="mb-12 transition-opacity hover:opacity-80" aria-label="Return to home">
+          <Image src="/images/qcc-logo.png" alt="QCC Electronic Attendance" width={72} height={72} className="rounded-full" priority />
+        </Link>
+
+        <div className="mb-8 flex size-24 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+          <Compass className="size-11" aria-hidden="true" />
+        </div>
+
+        <p className="mb-3 font-mono text-sm font-semibold uppercase tracking-[0.28em] text-primary">Error 404</p>
+        <h1 className="max-w-xl text-balance text-4xl font-bold tracking-tight sm:text-5xl">This page is not on the attendance map.</h1>
+        <p className="mt-5 max-w-lg text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
+          The address may be incorrect, or the page may have moved. No worries — we can get you back to where you need to be.
+        </p>
+
+        <div className="mt-10 flex w-full max-w-sm flex-col gap-3 sm:flex-row sm:max-w-none sm:justify-center">
+          <Button asChild size="lg" className="sm:min-w-48">
+            <Link href={destination}>
+              <DestinationIcon data-icon="inline-start" />
+              {isLoading ? "Choose a destination" : destinationLabel}
+            </Link>
+          </Button>
+          <Button variant="outline" size="lg" className="sm:min-w-36" onClick={() => router.back()}>
+            <ArrowLeft data-icon="inline-start" />
+            Go back
+          </Button>
+        </div>
+
+        <p className="mt-12 text-sm text-muted-foreground">QCC Electronic Attendance App</p>
+      </div>
+    </main>
   )
 }

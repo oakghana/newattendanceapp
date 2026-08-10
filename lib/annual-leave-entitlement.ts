@@ -64,9 +64,10 @@ export function computeAnnualLeaveEntitlement(
   let annualLeaveDays: number
   let tierLabel: string
 
-  if (staffCategory === "senior") {
+  if (staffCategory === "senior" || staffCategory === "manager") {
+    // Senior Staff and Managers both get the flat 36-day entitlement
     annualLeaveDays = 36
-    tierLabel = "Senior Staff"
+    tierLabel = staffCategory === "manager" ? "Manager" : "Senior Staff"
   } else {
     // Junior staff — tiered by years of service
     if (yearsOfService >= 11) {
@@ -148,12 +149,16 @@ export function resolveEntitlementFromProfile(
   const rawCategory = String(profile.staff_category || "").toLowerCase().trim()
   let staffCategory: StaffCategory = "junior" // default fallback
 
-  if (rawCategory === "senior" || rawCategory === "senior staff") {
-    staffCategory = "senior"
-  } else if (rawCategory === "manager") {
+  if (rawCategory === "manager") {
     staffCategory = "manager"
-  } else if (!rawCategory) {
-    // No explicit category stored — derive from position / rank
+  } else if (rawCategory === "senior" || rawCategory === "senior staff" || rawCategory === "officer") {
+    // "Officer" is a Senior-tier staff category at QCC (36-day flat entitlement)
+    staffCategory = "senior"
+  } else if (rawCategory === "junior") {
+    staffCategory = "junior"
+  } else {
+    // Empty or unrecognized stored value — derive from position / rank instead of
+    // silently defaulting to Junior (which previously mis-tiered Senior staff)
     staffCategory = deriveStaffCategoryFromPosition(profile.position, profile.rank)
   }
 

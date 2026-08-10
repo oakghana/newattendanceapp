@@ -119,6 +119,12 @@ interface LeaveTypeOption {
 }
 
 interface LeavePlanningClientProps {
+  annualEntitlement: {
+    annualLeaveDays: number
+    travelDays: number
+    totalEntitlement: number
+    tierLabel: string
+  }
   profile: {
     id?: string
     role: string
@@ -1014,8 +1020,8 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
+// ─── Main Component ──────────���────────────────────────────────────────────────
+export function LeavePlanningClient({ profile, annualEntitlement, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
@@ -1068,11 +1074,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
   const [hrExecHodDeptFilter, setHrExecHodDeptFilter] = useState("all")
 
-  // ── HR Approver Data ────────────────────�����────────────────────────────
+  // ── HR Approver Data ────────────────────���������───────────────────────────
   const [hrApproverData, setHrApproverData] = useState<any>(null)
   const [hrApproverLoading, setHrApproverLoading] = useState(false)
 
-  // ── HR Approve sub-tab ───────────────────────────────────────────────
+  // ── HR Approve sub-tab ���──────────────────────────────────────────────
   const [hrApproveSubTab, setHrApproveSubTab] = useState<"pending" | "approved" | "deferments" | "recalls">("pending")
 
   // ── HR Executive Deferment / Recall ──────────────────────────────────
@@ -1101,6 +1107,12 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [leaveType, setLeaveType] = useState("") // Start empty to show placeholder hint
   const [reason, setReason] = useState("")
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
+  const [myAnnualEntitlement, setMyAnnualEntitlement] = useState<{
+    annualLeaveDays: number
+    travelDays: number
+    totalEntitlement: number
+    tierLabel: string
+  } | null>(annualEntitlement)
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
   const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }>>({})
@@ -1176,10 +1188,18 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     return computeLeaveDays(startDate, endDate)
   }, [startDate, endDate])
 
-  const selectedLeaveType = useMemo(
-    () => leaveTypes.find((t) => t.leaveTypeKey === leaveType),
-    [leaveTypes, leaveType],
-  )
+  const selectedLeaveType = useMemo(() => {
+  const base = leaveTypes.find((t) => t.leaveTypeKey === leaveType)
+  if (!base) return base
+  // Annual Leave entitlement is tiered by staff category / years of service
+  // (Senior & Manager = 36 flat; Junior = 24/28/32/36 by years of service),
+  // never a flat policy number — override it with the per-staff calculated value.
+  if ((leaveType === "annual" || leaveType === "annual_leave") && myAnnualEntitlement) {
+  // Travel days are tracked separately; Annual Leave entitlement is the annual leave days only.
+  return { ...base, entitlementDays: myAnnualEntitlement.annualLeaveDays }
+  }
+  return base
+  }, [leaveTypes, leaveType, myAnnualEntitlement])
   
   // Filter for active leave types only (for the application dropdown)
   const activeLeaveTypes = useMemo(
@@ -1413,12 +1433,24 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
             String(t.leaveTypeLabel || "").toLowerCase() !== "sick leave"
           )
         : []
-      const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
-      setLeaveTypes(hasPartLeave ? types : [
-        ...types,
-        { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", is_active: true },
-      ])
-    } catch { /* silent */ }
+  const hasPartLeave = types.some((t) => t.leaveTypeKey === "part_leave")
+  setLeaveTypes(hasPartLeave ? types : [
+  ...types,
+  { leaveTypeKey: "part_leave", leaveTypeLabel: "Part Leave", entitlementDays: 15, leaveYearPeriod: "2026/2027", is_active: true },
+  ])
+  } catch { /* silent */ }
+  }, [])
+
+  // Load the tiered per-staff Annual Leave entitlement (Senior/Manager = 36 flat;
+  // Junior tiered by years of service: 1-3y=24, 4-5y=28, 6-10y=32, 11y+=36).
+  // This overrides the flat "Annual Leave" policy value shown/used for the annual type.
+  const loadMyAnnualEntitlement = useCallback(async () => {
+  try {
+  const res = await fetch("/api/leave/annual-entitlement", { cache: "no-store" })
+  const json = await res.json()
+  if (!res.ok || !json.entitlement) return
+  setMyAnnualEntitlement(json.entitlement)
+  } catch { /* silent */ }
   }, [])
 
   const loadTemplateOptions = useCallback(async () => {
@@ -1768,9 +1800,10 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   }, [editingId, startDate])
 
   useEffect(() => {
-    void loadData()
-    void loadPolicy()
-    void loadTemplateOptions()
+  void loadData()
+  void loadPolicy()
+  void loadMyAnnualEntitlement()
+  void loadTemplateOptions()
     void loadHolidays()
     // Load HR executives only for HR Leave Office users
     if (isHrOffice) {
@@ -2613,11 +2646,14 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedLeaveType && (
-                    <p className="text-xs text-slate-500">
-                      Entitlement: <strong>{selectedLeaveType.entitlementDays} day(s)</strong>
-                    </p>
-                  )}
+  {selectedLeaveType && (
+  <p className="text-xs text-slate-500">
+  Entitlement: <strong>{selectedLeaveType.entitlementDays} day(s)</strong>
+  {(leaveType === "annual" || leaveType === "annual_leave") && myAnnualEntitlement && (
+  <span> ({myAnnualEntitlement.tierLabel} — {myAnnualEntitlement.annualLeaveDays} + {myAnnualEntitlement.travelDays} travel)</span>
+  )}
+  </p>
+  )}
                   </div>
                 </div>
 
@@ -3474,6 +3510,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               <p className="text-[11px] text-slate-400 md:col-span-4">
                                 Key: <span className="font-mono">{leaveTypeOption.leaveTypeKey}</span> · Order: {index + 1} · Status: <span className={draft.isActive !== false ? "text-emerald-700 font-medium" : "text-red-600 font-medium"}>{draft.isActive !== false ? 'Active' : 'Inactive'}</span> {leaveTypeSavingKey === leaveTypeOption.leaveTypeKey && <span className="ml-2 inline-flex items-center gap-1 text-emerald-600">● Saving...</span>}
                               </p>
+                              {leaveTypeOption.leaveTypeKey === "annual" && (
+                                <p className="text-[11px] text-amber-600 md:col-span-4">
+                                  Note: The days value above is not used. Annual Leave is auto-calculated per staff member: Senior &amp; Manager = 36 days flat; Junior tiered by years of service (1–3y = 24, 4–5y = 28, 6–10y = 32, 11y+ = 36), plus 2 travel days.
+                                </p>
+                              )}
                             </div>
                           )
                         })}
@@ -3750,7 +3791,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
                               const renderedTemplate = matchingTemplate ? renderTemplateForRequest(matchingTemplate, req) : memoTpl
                               setOfficeMemoSubject((p) => ({ ...p, [req.id]: req.memo_draft_subject || renderedTemplate.subject || memoTpl.subject }))
                               setOfficeMemoBody((p) => ({ ...p, [req.id]: req.memo_draft_body || renderedTemplate.body || memoTpl.body }))
-                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc || renderedTemplate.cc || memoTpl.cc }))
+                              setOfficeMemoCc((p) => ({ ...p, [req.id]: req.memo_draft_cc ?? "" }))
                               
                               // Auto-populate travel days and fetch outstanding leave for annual leave
                               if (String(req.leave_type_key || "").toLowerCase() === "annual") {

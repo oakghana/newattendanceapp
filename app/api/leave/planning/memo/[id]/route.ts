@@ -5,6 +5,7 @@ import fs from "fs"
 import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
+import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 
 export const runtime = "nodejs"
 
@@ -189,7 +190,8 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
     : ""
 
   switch (leaveType) {
-    case "annual": {
+    case "annual":
+    case "annual_leave": {
       const yearRange = `January to December ${calYear}`
       // Compute actual working days between the granted leave dates (excl. weekends & public holidays)
       // This is the authoritative figure — never use the stored entitlement_days lookup value.
@@ -486,6 +488,12 @@ export async function GET(
       .select("*, departments(name, code)")
       .eq("id", (leaveRequest as any).user_id)
       .single()
+
+    // Annual entitlement is based on the applicant profile; travel days stay separate.
+    if (leaveRequest && String((leaveRequest as any).leave_type_key || "annual").toLowerCase() === "annual" && applicantProfile) {
+      const annualEntitlement = resolveEntitlementFromProfile(applicantProfile as any)
+      ;(leaveRequest as any).entitlement_days = annualEntitlement.annualLeaveDays
+    }
 
     // Resolve HOD profile (THRO)
     let hodProfile: any = null
@@ -811,16 +819,13 @@ export async function GET(
       const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
       const grossEntitlement = rawEntitlement > 0 ? rawEntitlement : Math.max(0, Number(tableEntitlement || 0))
       const entitlementLabel = travelDays > 0
-        ? `${grossEntitlement} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
+        ? `${grossEntitlement || effectiveDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
         : String(grossEntitlement || effectiveDays)
 
-      // ─── Number of Days Granted (net actual days being taken) ───────────────
-      // tableEntitlement is the NET working days for this grant (baseLeaveDays already
-      // accounts for prior deduction from HR office adjustments).
-      // We then add: travelling days + public holidays + outstanding leave.
-      // We do NOT subtract priorLeaveDaysDeducted here because baseDays is already net.
-      const baseDays = Math.max(0, Number(tableEntitlement || 0))
-      const totalGranted = Math.max(0, baseDays + travelDays + holidayDaysAdded + outstandingLeaveDaysAdded)
+      // Granted total = annual entitlement minus days already enjoyed, plus travel days.
+      // For this memo: 36 - 4 + 2 = 34.
+      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - priorLeaveDaysDeducted + holidayDaysAdded + outstandingLeaveDaysAdded)
+      const totalGranted = Math.max(0, annualDaysRemaining + travelDays)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
@@ -834,11 +839,10 @@ export async function GET(
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
-      // When remarksParts is populated it already covers all adjustment fields;
-      // do NOT append remarksText (adjustment_reason) to avoid duplicates.
-      const remarksSummary = remarksParts.length > 0
-        ? remarksParts.join("; ")
-        : (remarksText || "")
+      // Always include the HR Leave Office's saved reason, even when calculated
+      // adjustment details are also present in the memo.
+      if (remarksText) remarksParts.push(`Reason for adjustment: ${remarksText}`)
+      const remarksSummary = remarksParts.join("; ")
 
       autoTable(doc, {
         startY: y,
@@ -1014,12 +1018,7 @@ export async function GET(
     const ccRaw = String(lr.memo_draft_cc || "").trim()
     const ccList: string[] = ccRaw
       ? ccRaw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-      : [
-          "Managing Director",
-          "Deputy Director, HR (QCC)",
-          "Accounts Manager",
-          "Dep. Audit Manager",
-        ]
+      : []
     const ccIndent = marginLeft + 10
     for (const cc of ccList) {
       doc.text(cc, ccIndent, y)

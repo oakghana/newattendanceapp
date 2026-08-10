@@ -1178,7 +1178,7 @@ export async function POST(request: NextRequest) {
 
     const profile = await getOrCreateProfile(
       admin, user,
-      "id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position, rank"
+      "id, role, department_id, staff_category, date_of_appointment, years_of_service, first_name, last_name, employee_id, position"
     )
 
     const role = String((profile as any).role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -1252,7 +1252,7 @@ export async function POST(request: NextRequest) {
 
     let entitlementDays: number | null
 
-    if (leaveTypeKey === "annual") {
+    if (leaveTypeKey === "annual" || leaveTypeKey === "annual_leave") {
       const perStaffEntitlement = resolveEntitlementFromProfile(profile as any)
       entitlementDays = perStaffEntitlement.totalEntitlement
 

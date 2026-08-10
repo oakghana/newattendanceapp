@@ -48,6 +48,75 @@ function pad2(n: number) {
   return String(n).padStart(2, "0")
 }
 
+function ResumptionList({
+  items,
+  timers,
+  onDismiss,
+}: {
+  items: ResumptionCountdownData[]
+  timers: Record<string, LiveTimer>
+  onDismiss: (id: string) => void
+}) {
+  const pageSize = 20
+  const [page, setPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const rows = items.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  useEffect(() => setPage(1), [items.length])
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="hidden grid-cols-[minmax(0,1.7fr)_minmax(120px,0.9fr)_minmax(120px,0.9fr)_minmax(110px,0.7fr)_90px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:grid">
+        <span>Staff member</span><span>Leave type</span><span>Resumption</span><span>Status</span><span />
+      </div>
+      <div className="divide-y divide-slate-100">
+        {rows.map((countdown) => {
+          const d = countdown.days_left
+          const timer = timers[countdown.id] ?? computeTimerTo(countdown.resume_date)
+          const urgency = d <= 0 ? "today" : d <= 1 ? "critical" : d <= 2 ? "high" : d <= 3 ? "medium" : "low"
+          const styles = {
+            today: { row: "bg-emerald-50/70", badge: "bg-emerald-100 text-emerald-800", bar: "bg-emerald-500" },
+            critical: { row: "bg-red-50/70", badge: "bg-red-100 text-red-800", bar: "bg-red-500" },
+            high: { row: "bg-orange-50/60", badge: "bg-orange-100 text-orange-800", bar: "bg-orange-500" },
+            medium: { row: "bg-amber-50/60", badge: "bg-amber-100 text-amber-800", bar: "bg-amber-500" },
+            low: { row: "", badge: "bg-sky-100 text-sky-800", bar: "bg-sky-500" },
+          }[urgency]
+          const progress = Math.min(100, Math.max(0, ((7 - d) / 7) * 100))
+          return (
+            <div key={countdown.id} className={`grid gap-2 px-3 py-2.5 text-xs md:grid-cols-[minmax(0,1.7fr)_minmax(120px,0.9fr)_minmax(120px,0.9fr)_minmax(110px,0.7fr)_90px] md:items-center md:gap-3 md:px-4 ${styles.row}`}>
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-800">{countdown.staff_name}</p>
+                <p className="text-[11px] text-slate-500 md:hidden">{countdown.leave_type.replace(/_/g, " ")} Leave · Ends {format(parseISO(countdown.end_date), "dd MMM yyyy")}</p>
+              </div>
+              <p className="hidden capitalize text-slate-600 md:block">{countdown.leave_type.replace(/_/g, " ")} Leave</p>
+              <div>
+                <p className="font-medium text-slate-700">{format(parseISO(countdown.resume_date), "EEE, dd MMM yyyy")}</p>
+                <p className="font-mono text-[10px] text-slate-400">{pad2(timer.days)}d {pad2(timer.hours)}h {pad2(timer.minutes)}m</p>
+              </div>
+              <div className="min-w-0">
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${styles.badge}`}>{d <= 0 ? "Today" : `${d}d left`}</span>
+                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-slate-200"><div className={`h-full ${styles.bar}`} style={{ width: `${progress}%` }} /></div>
+              </div>
+              <button type="button" className="justify-self-start text-[11px] text-slate-400 underline hover:text-slate-700 md:justify-self-end" onClick={() => onDismiss(countdown.id)} aria-label={`Dismiss ${countdown.staff_name} resumption reminder`}>Dismiss</button>
+            </div>
+          )
+        })}
+      </div>
+      {pageCount > 1 && (
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+          <span>Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, items.length)} of {items.length}</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={currentPage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
+            <span>Page {currentPage} of {pageCount}</span>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={currentPage === pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>Next</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ResumptionCountdownWidget({ onMute, autoPlaySound = true }: ResumptionCountdownWidgetProps) {
   const [countdowns, setCountdowns] = useState<ResumptionCountdownData[]>([])
   const [timers, setTimers] = useState<Record<string, LiveTimer>>({})
@@ -165,13 +234,13 @@ export function ResumptionCountdownWidget({ onMute, autoPlaySound = true }: Resu
   const warning = visible.filter(c => c.days_left > 2 && c.days_left <= 5)
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-2">
 
       {/* Master alert banner */}
       {critical.length > 0 && (
-        <Alert className="border-red-400 bg-red-50 shadow-sm">
+        <Alert className="border-red-300 bg-red-50/80 shadow-sm">
           <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800 font-medium">
+          <AlertDescription className="py-0 text-xs font-medium text-red-800">
             🚨 <strong>CRITICAL:</strong> {critical.length} staff member{critical.length > 1 ? "s" : ""} resuming within 48 hours — immediate action required!
           </AlertDescription>
         </Alert>
@@ -186,8 +255,8 @@ export function ResumptionCountdownWidget({ onMute, autoPlaySound = true }: Resu
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
-        <p className="text-sm font-semibold text-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+        <p className="text-xs font-semibold text-slate-700">
           📅 Leave Resumption Tracker ({visible.length})
         </p>
         <div className="flex items-center gap-2">
@@ -217,128 +286,14 @@ export function ResumptionCountdownWidget({ onMute, autoPlaySound = true }: Resu
         </div>
       </div>
 
-      {/* Countdown cards */}
-      <div className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
-        {visible.map(countdown => {
-          const timer = timers[countdown.id] ?? computeTimerTo(countdown.resume_date)
-          const d = countdown.days_left
+      {/* Compact operational list: paged so hundreds of staff remain easy to scan. */}
+      <ResumptionList items={visible} timers={timers} onDismiss={(id) => setDismissed(prev => new Set([...prev, id]))} />
 
-          const urgency =
-            d <= 0 ? "today"
-            : d <= 1 ? "critical"
-            : d <= 2 ? "high"
-            : d <= 3 ? "medium"
-            : "low"
-
-          const palette: Record<string, { card: string; badge: string; bar: string; text: string }> = {
-            today:    { card: "border-emerald-400 bg-emerald-50 shadow-emerald-100",    badge: "bg-emerald-600 text-white", bar: "bg-emerald-500",  text: "text-emerald-800" },
-            critical: { card: "border-red-400 bg-red-50 shadow-red-100 animate-pulse", badge: "bg-red-600 text-white",     bar: "bg-red-500",      text: "text-red-800" },
-            high:     { card: "border-orange-400 bg-orange-50 shadow-orange-100",      badge: "bg-orange-500 text-white",  bar: "bg-orange-500",   text: "text-orange-800" },
-            medium:   { card: "border-amber-300 bg-amber-50 shadow-amber-100",         badge: "bg-amber-500 text-white",   bar: "bg-amber-400",    text: "text-amber-800" },
-            low:      { card: "border-sky-200 bg-sky-50",                              badge: "bg-sky-500 text-white",     bar: "bg-sky-400",      text: "text-sky-800" },
-          }
-          const pal = palette[urgency]
-
-          const emoji =
-            urgency === "today" ? "🎉"
-            : urgency === "critical" ? "🚨"
-            : urgency === "high" ? "⚠️"
-            : urgency === "medium" ? "⏰"
-            : "📅"
-
-          const progressPct = Math.min(100, Math.max(0, ((7 - d) / 7) * 100))
-
-          return (
-            <Card key={countdown.id} className={`border-2 shadow-sm ${pal.card}`}>
-              <CardContent className="p-4 space-y-3">
-
-                {/* Header row */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{emoji}</span>
-                    <div>
-                      <p className="font-bold text-slate-800 leading-tight">{countdown.staff_name}</p>
-                      <p className="text-xs text-slate-500 capitalize">{countdown.leave_type.replace(/_/g, " ")} Leave</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${pal.badge}`}>
-                      {urgency === "today" ? "RESUMES TODAY" : `${d}d left`}
-                    </span>
-                    <button
-                      className="text-[10px] text-slate-400 hover:text-slate-600 underline"
-                      onClick={() => setDismissed(prev => new Set([...prev, countdown.id]))}
-                    >
-                      dismiss
-                    </button>
-                  </div>
-                </div>
-
-                {/* Live digital clock */}
-                <div className={`rounded-xl border px-3 py-2 text-center font-mono ${
-                  urgency === "critical" ? "border-red-200 bg-white" : "border-slate-200 bg-white/70"
-                }`}>
-                  <p className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">Time until resumption</p>
-                  <div className="flex items-center justify-center gap-1">
-                    {[
-                      { val: pad2(timer.days), label: "d" },
-                      { val: pad2(timer.hours), label: "h" },
-                      { val: pad2(timer.minutes), label: "m" },
-                      { val: pad2(timer.seconds), label: "s" },
-                    ].map(({ val, label }, i) => (
-                      <div key={label} className="flex items-baseline gap-0.5">
-                        {i > 0 && <span className="text-slate-300 font-bold text-base">:</span>}
-                        <span className={`text-2xl font-extrabold tabular-nums ${pal.text}`}>{val}</span>
-                        <span className="text-[10px] text-slate-400">{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Date pills */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg bg-white/80 border border-slate-100 px-2.5 py-1.5">
-                    <p className="text-slate-400 mb-0.5">Leave ends</p>
-                    <p className="font-semibold text-slate-700">{format(parseISO(countdown.end_date), "EEE dd MMM")}</p>
-                  </div>
-                  <div className="rounded-lg bg-white/80 border border-slate-100 px-2.5 py-1.5">
-                    <p className="text-slate-400 mb-0.5">Resumes</p>
-                    <p className="font-semibold text-slate-700">{format(parseISO(countdown.resume_date), "EEE dd MMM")}</p>
-                  </div>
-                </div>
-
-                {/* Progress toward resumption */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] text-slate-500">
-                    <span>Progress to return</span>
-                    <span>{Math.round(progressPct)}%</span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                    <div className={`h-full rounded-full transition-all ${pal.bar}`} style={{ width: `${progressPct}%` }} />
-                  </div>
-                </div>
-
-                {/* Urgency message */}
-                {urgency === "today" && (
-                  <p className="text-xs font-medium text-emerald-700 rounded-lg bg-emerald-100 px-3 py-2">
-                    🎉 {countdown.staff_name.split(" ")[0]} should be checking in today. Attendance system will auto-confirm resumption!
-                  </p>
-                )}
-                {urgency === "critical" && (
-                  <p className="text-xs font-medium text-red-700 rounded-lg bg-red-100 px-3 py-2">
-                    🚨 Returning TOMORROW — ensure all handover and workspace preparations are complete.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
 
       {/* HR info footer */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 space-y-1">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
         <p className="font-semibold text-slate-700">📋 HR Action Checklist</p>
-        <ul className="list-disc list-inside space-y-0.5 text-slate-500">
+        <ul className="list-disc list-inside text-slate-500">
           <li>Verify return-to-work documentation for all upcoming resumptions</li>
           <li>Contact critical (≤48h) staff if issues are expected</li>
           <li>Ensure workspace, access and handover is ready before their return</li>

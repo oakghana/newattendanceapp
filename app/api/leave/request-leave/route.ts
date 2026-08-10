@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
+import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     const { data: roleProfile } = await supabase
       .from("user_profiles")
-      .select("role")
+      .select("role, staff_category, date_of_appointment, years_of_service, position, rank")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -99,6 +100,12 @@ export async function POST(request: NextRequest) {
 
     const returnToWorkDate = computeReturnToWorkDate(end_date)
 
+    // Annual leave uses the staff-specific entitlement plus travel days.
+    // Travel days are included in the allowed total but remain separately tracked.
+    const annualCalculation = leaveTypeKey === "annual" || leaveTypeKey === "annual_leave"
+      ? calculateAnnualLeaveBreakdown((roleProfile as any) || {}, 0)
+      : null
+
     // Enforce entitlement policy (if policy table exists).
     try {
       const { data: policyRows, error: policyError } = await supabase
@@ -114,10 +121,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Selected leave type is currently disabled by policy." }, { status: 400 })
         }
 
-        if (requestedDays > Number(policy.entitlement_days || 0) && !canSubmitBeyondEntitlementForHrAdjustment) {
+        const allowedEntitlement = annualCalculation?.totalGrantedDays ?? Number(policy.entitlement_days || 0)
+        if (requestedDays > allowedEntitlement && !canSubmitBeyondEntitlementForHrAdjustment) {
           return NextResponse.json(
             {
-              error: `Requested ${requestedDays} day(s) exceeds entitlement of ${policy.entitlement_days} for this leave type.`,
+              error: `Requested ${requestedDays} day(s) exceeds the available annual leave total of ${allowedEntitlement} day(s) (including travelling days).`,
             },
             { status: 400 },
           )

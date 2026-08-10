@@ -18,7 +18,7 @@ Approved Days: {{approved_days}} day(s)
 {{travelling_days_info}}Return to Work Date: {{return_to_work_date}}
 
 {{adjustment_details}}You can count on our co-operation.`,
-    cc: "Managing Director, Deputy Managing Director, HR Head, Accounts Manager",
+    cc: "",
     placeholder_help: {
       leave_type: "e.g., Annual Leave, Sick Leave",
       leave_year_period: "e.g., 2026/2027",
@@ -48,7 +48,7 @@ Return to Work Date: {{return_to_work_date}}
 Please ensure to provide the required medical documentation within the approved period.
 
 {{adjustment_details}}You can count on our co-operation.`,
-    cc: "Managing Director, Deputy Managing Director, HR Head, Accounts Manager",
+    cc: "",
   },
 
   // Leave of Absence
@@ -68,7 +68,7 @@ You are also advised to notify Management one (1) month prior to your resumption
 By copy of this letter, the Accounts Manager is advised to take note and delete your name from the payroll till otherwise advised.
 
 {{adjustment_details}}You can count on our co-operation.`,
-    cc: "Managing Director, Deputy Managing Director, HR Head, Accounts Manager",
+    cc: "",
   },
 
   // Re-change of Leave Date
@@ -86,7 +86,7 @@ Your {{leave_type}} leave, therefore, takes effect from {{leave_start_date}} to 
 You are expected to resume duty on {{return_to_work_date}}.
 
 {{adjustment_details}}You can count on our co-operation.`,
-    cc: "Managing Director, Deputy Managing Director, HR Head, Accounts Manager",
+    cc: "",
   },
 
   // Payment to Accounts - Leave Entitlement
@@ -114,7 +114,7 @@ Please proceed with the above payment and debit the appropriate cost center. Sup
 Submitted by:
 {{hr_officer_name}}
 HR Leave Office`,
-    cc: "Finance Director, Deputy Finance Director, Audit Manager",
+    cc: "",
     placeholder_help: {
       staff_name: "Full name of staff member",
       staff_number: "Staff identification number",
@@ -154,7 +154,7 @@ Please arrange payment to the above staff member. Supporting documentation is at
 Submitted by:
 {{hr_officer_name}}
 HR Leave Office`,
-    cc: "Finance Director, Personnel Department, Audit Manager",
+    cc: "",
   },
 
   // Deferment of Leave
@@ -173,7 +173,7 @@ Management has approved your request for deferment as stated above. Please note 
 You are expected to take this deferred leave during the new period specified above.
 
 {{adjustment_details}}You can count on our co-operation.`,
-    cc: "Managing Director, Deputy Managing Director, HR Head, Accounts Manager",
+    cc: "",
   },
 
   // Rejection Notice
@@ -191,7 +191,7 @@ You may reapply with updated dates or additional documentation where applicable.
 Regards,
 Human Resources Department
 Quality Control Company Limited`,
-    cc: "Managing Director, HR Head",
+    cc: "",
   },
 }
 
