@@ -64,9 +64,10 @@ export function computeAnnualLeaveEntitlement(
   let annualLeaveDays: number
   let tierLabel: string
 
-  if (staffCategory === "senior") {
+  if (staffCategory === "senior" || staffCategory === "manager") {
+    // Senior Staff and Managers both get the flat 36-day entitlement
     annualLeaveDays = 36
-    tierLabel = "Senior Staff"
+    tierLabel = staffCategory === "manager" ? "Manager" : "Senior Staff"
   } else {
     // Junior staff — tiered by years of service
     if (yearsOfService >= 11) {
