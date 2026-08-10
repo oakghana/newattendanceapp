@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
 import { LeavePlanningClient } from "./leave-planning-client"
 
 export default async function LeavePlanningPage() {
@@ -13,7 +14,7 @@ export default async function LeavePlanningPage() {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("id, role, first_name, last_name, department_id, departments(name, code)")
+    .select("id, role, first_name, last_name, department_id, staff_category, date_of_appointment, years_of_service, position, departments(name, code)")
     .eq("id", user.id)
     .single()
 
@@ -27,9 +28,17 @@ export default async function LeavePlanningPage() {
     .select("holiday_date, holiday_name")
     .order("holiday_date", { ascending: true })
 
+  const annualEntitlement = resolveEntitlementFromProfile(profile as any)
+
   return (
     <div className="leave-theme">
       <LeavePlanningClient
+        annualEntitlement={{
+          annualLeaveDays: annualEntitlement.annualLeaveDays,
+          travelDays: annualEntitlement.travelDays,
+          totalEntitlement: annualEntitlement.totalEntitlement,
+          tierLabel: annualEntitlement.tierLabel,
+        }}
         profile={{
           id: profile.id,
           role: profile.role,

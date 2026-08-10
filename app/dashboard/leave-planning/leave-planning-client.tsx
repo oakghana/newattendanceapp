@@ -119,6 +119,12 @@ interface LeaveTypeOption {
 }
 
 interface LeavePlanningClientProps {
+  annualEntitlement: {
+    annualLeaveDays: number
+    travelDays: number
+    totalEntitlement: number
+    tierLabel: string
+  }
   profile: {
     id?: string
     role: string
@@ -1015,7 +1021,7 @@ function HrExecRejectForm({
 }
 
 // ─── Main Component ──────────���────────────────────────────────────────────────
-export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
+export function LeavePlanningClient({ profile, annualEntitlement, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
@@ -1068,7 +1074,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
   const [hrExecHodDeptFilter, setHrExecHodDeptFilter] = useState("all")
 
-  // ── HR Approver Data ────────────────────��������───────────────────────────
+  // ── HR Approver Data ────────────────────���������───────────────────────────
   const [hrApproverData, setHrApproverData] = useState<any>(null)
   const [hrApproverLoading, setHrApproverLoading] = useState(false)
 
@@ -1106,7 +1112,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
     travelDays: number
     totalEntitlement: number
     tierLabel: string
-  } | null>(null)
+  } | null>(annualEntitlement)
   const [leaveYearPeriod, setLeaveYearPeriod] = useState(() => getDefaultSelectedLeaveYearPeriod())
   const [policyActivePeriod, setPolicyActivePeriod] = useState("2026/2027")
   const [leaveTypeDrafts, setLeaveTypeDrafts] = useState<Record<string, { leaveTypeLabel: string; entitlementDays: string; isActive: boolean }>>({})
@@ -1188,7 +1194,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // Annual Leave entitlement is tiered by staff category / years of service
   // (Senior & Manager = 36 flat; Junior = 24/28/32/36 by years of service),
   // never a flat policy number — override it with the per-staff calculated value.
-  if (leaveType === "annual" && myAnnualEntitlement) {
+  if ((leaveType === "annual" || leaveType === "annual_leave") && myAnnualEntitlement) {
   // Travel days are tracked separately; Annual Leave entitlement is the annual leave days only.
   return { ...base, entitlementDays: myAnnualEntitlement.annualLeaveDays }
   }
@@ -2643,7 +2649,7 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   {selectedLeaveType && (
   <p className="text-xs text-slate-500">
   Entitlement: <strong>{selectedLeaveType.entitlementDays} day(s)</strong>
-  {leaveType === "annual" && myAnnualEntitlement && (
+  {(leaveType === "annual" || leaveType === "annual_leave") && myAnnualEntitlement && (
   <span> ({myAnnualEntitlement.tierLabel} — {myAnnualEntitlement.annualLeaveDays} + {myAnnualEntitlement.travelDays} travel)</span>
   )}
   </p>
