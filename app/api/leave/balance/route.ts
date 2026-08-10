@@ -116,7 +116,8 @@ export async function GET() {
     }
 
     for (const req of legacyApprovedRequests || []) {
-      const key = String(req.leave_type || "annual").toLowerCase().trim()
+      const rawKey = String(req.leave_type || "annual").toLowerCase().trim()
+      const key = rawKey === "annual_leave" ? "annual" : rawKey
       const days = countCalendarDays(req.start_date, req.end_date)
       usageMap[key] = (usageMap[key] || 0) + days
     }
@@ -139,7 +140,8 @@ export async function GET() {
         .gte("preferred_end_date", today)
 
       for (const req of activeV2 || []) {
-        const key = String((req as any).leave_type_key || "annual").toLowerCase().trim()
+        const rawKey = String((req as any).leave_type_key || "annual").toLowerCase().trim()
+        const key = rawKey === "annual_leave" ? "annual" : rawKey
         const start = String((req as any).adjusted_start_date || (req as any).preferred_start_date || "")
         const end = String((req as any).adjusted_end_date || (req as any).preferred_end_date || "")
         if (!isDateWithinRange(today, start, end)) continue

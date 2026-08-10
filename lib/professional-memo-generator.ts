@@ -413,7 +413,11 @@ async function generateMainMemo(
         ? `${entitlementDays} plus ${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""}`
         : String(entitlementDays)
       : "—"
-    const granted = totalGrantedDays > 0 ? String(totalGrantedDays) : "—"
+    const granted = totalGrantedDays > 0
+      ? travellingDays > 0
+        ? `${totalGrantedDays} (${annualDaysRemaining} annual leave days plus ${travellingDays} travelling days)`
+        : String(totalGrantedDays)
+      : "—"
 
     // Try to extract from/to dates from staffList if available
     let fromDate = "—"

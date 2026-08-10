@@ -177,7 +177,8 @@ export async function getEntitlementDays(
     // This will be called from the database via API
     // Default values for common leave types
     const defaults: { [key: string]: number } = {
-      annual_leave: 30,
+      annual: 38,
+      annual_leave: 38,
       sick_leave: 14,
       maternity_leave: 98,
       paternity_leave: 6,

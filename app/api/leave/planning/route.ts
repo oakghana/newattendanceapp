@@ -1252,7 +1252,7 @@ export async function POST(request: NextRequest) {
 
     let entitlementDays: number | null
 
-    if (leaveTypeKey === "annual") {
+    if (leaveTypeKey === "annual" || leaveTypeKey === "annual_leave") {
       const perStaffEntitlement = resolveEntitlementFromProfile(profile as any)
       entitlementDays = perStaffEntitlement.totalEntitlement
 
