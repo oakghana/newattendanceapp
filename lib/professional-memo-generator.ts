@@ -17,6 +17,7 @@ export interface MemoData {
     leaveDate: string
     approved_days?: number
     entitlement_days?: number
+    prior_leave_days_deducted?: number
     travelling_days_added?: number
     leave_period_start?: string
     leave_period_end?: string
@@ -400,13 +401,18 @@ async function generateMainMemo(
 
     // Get days from staffList if available (preferred), otherwise parse from body
     const firstStaff = memoData.staffList?.[0]
-    const approvedDays = firstStaff?.approved_days ?? 0
-    const travellingDays = firstStaff?.travelling_days_added ?? 0
-    // Travelling days are recorded separately and must never inflate annual leave totals.
-    const totalGrantedDays = approvedDays
-
+    const approvedDays = Number(firstStaff?.approved_days ?? 0)
+    const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
+    const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
     const entitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
-    const entitled = entitlementDays > 0 ? String(entitlementDays) : "—"
+    const annualDaysRemaining = Math.max(0, entitlementDays - enjoyedDays)
+    const totalGrantedDays = annualDaysRemaining + travellingDays
+
+    const entitled = entitlementDays > 0
+      ? travellingDays > 0
+        ? `${entitlementDays} plus ${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""}`
+        : String(entitlementDays)
+      : "—"
     const granted = totalGrantedDays > 0 ? String(totalGrantedDays) : "—"
 
     // Try to extract from/to dates from staffList if available
@@ -430,7 +436,11 @@ async function generateMainMemo(
       toDate = toMatch ? toMatch[1] : "—"
     }
 
-    const remarks = travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? 's' : ''} added` : "—"
+    const remarksParts = [
+      enjoyedDays > 0 ? `${enjoyedDays} day(s) already enjoyed` : "",
+      travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""} added` : "",
+    ].filter(Boolean)
+    const remarks = remarksParts.length > 0 ? remarksParts.join("; ") : "—"
 
     autoTable(doc, {
       startY: yPos,

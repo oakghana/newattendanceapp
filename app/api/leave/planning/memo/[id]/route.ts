@@ -818,11 +818,14 @@ export async function GET(
       // Priority: entitlement_days field → tableEntitlement (computed working days)
       const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
       const grossEntitlement = rawEntitlement > 0 ? rawEntitlement : Math.max(0, Number(tableEntitlement || 0))
-      const entitlementLabel = String(grossEntitlement || effectiveDays)
+      const entitlementLabel = travelDays > 0
+        ? `${grossEntitlement || effectiveDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
+        : String(grossEntitlement || effectiveDays)
 
-      // Granted days are annual leave days only. Travel days remain a separate remark.
-      const baseDays = Math.max(0, Number(tableEntitlement || 0))
-      const totalGranted = Math.max(0, baseDays + holidayDaysAdded + outstandingLeaveDaysAdded)
+      // Granted total = annual entitlement minus days already enjoyed, plus travel days.
+      // For this memo: 36 - 4 + 2 = 34.
+      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - priorLeaveDaysDeducted + holidayDaysAdded + outstandingLeaveDaysAdded)
+      const totalGranted = Math.max(0, annualDaysRemaining + travelDays)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
