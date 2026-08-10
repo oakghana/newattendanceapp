@@ -1014,7 +1014,7 @@ function HrExecRejectForm({
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main Component ──────────���────────────────────────────────────────────────
 export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
@@ -1068,11 +1068,11 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
   const [hrExecHodDeptFilter, setHrExecHodDeptFilter] = useState("all")
 
-  // ── HR Approver Data ────────────────────�������───────────────────────────
+  // ── HR Approver Data ────────────────────��������───────────────────────────
   const [hrApproverData, setHrApproverData] = useState<any>(null)
   const [hrApproverLoading, setHrApproverLoading] = useState(false)
 
-  // ── HR Approve sub-tab ───────────────────────────────────────────────
+  // ── HR Approve sub-tab ���──────────────────────────────────────────────
   const [hrApproveSubTab, setHrApproveSubTab] = useState<"pending" | "approved" | "deferments" | "recalls">("pending")
 
   // ── HR Executive Deferment / Recall ──────────────────────────────────
@@ -1189,7 +1189,8 @@ export function LeavePlanningClient({ profile, initialHolidays = [] }: LeavePlan
   // (Senior & Manager = 36 flat; Junior = 24/28/32/36 by years of service),
   // never a flat policy number — override it with the per-staff calculated value.
   if (leaveType === "annual" && myAnnualEntitlement) {
-  return { ...base, entitlementDays: myAnnualEntitlement.totalEntitlement }
+  // Travel days are tracked separately; Annual Leave entitlement is the annual leave days only.
+  return { ...base, entitlementDays: myAnnualEntitlement.annualLeaveDays }
   }
   return base
   }, [leaveTypes, leaveType, myAnnualEntitlement])
