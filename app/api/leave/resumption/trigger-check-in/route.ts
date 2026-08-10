@@ -43,7 +43,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, triggered: false })
     }
 
-    // Create confirmation record with HOD/RM pending status
+    // Create confirmation record with HOD/RM pending status. Repeated calls
+    // from standard/fast check-in must not create duplicate confirmations.
+    const { data: existingConfirmation } = await admin
+      .from('leave_resumption_confirmations')
+      .select('id')
+      .eq('leave_resumption_id', resumption.id)
+      .eq('final_status', 'pending_verification')
+      .maybeSingle()
+
+    if (existingConfirmation?.id) {
+      await admin
+        .from('leave_resumption_notifications')
+        .update({ confirmation_status: 'pending_hod_rm', first_hod_rm_check_in_date: check_in_date || today })
+        .eq('id', resumption.id)
+      return NextResponse.json({ success: true, triggered: false, alreadyPending: true })
+    }
+
     const { error: createErr, data: confirmation } = await admin
       .from('leave_resumption_confirmations')
       .insert({

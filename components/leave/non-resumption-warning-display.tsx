@@ -17,6 +17,8 @@ export async function NonResumptionWarningDisplay() {
       .select('*')
       .eq('user_id', user.id)
       .in('status', ['warning_sent', 'letter_sent', 'memo_sent'])
+      .is('first_check_in_date', null)
+      .not('confirmation_status', 'eq', 'pending_hod_rm')
       .order('status', { ascending: false }) // memo_sent (critical) first
       .limit(1)
 

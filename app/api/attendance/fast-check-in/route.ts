@@ -235,12 +235,25 @@ export async function POST(request: NextRequest) {
       // Non-fatal — continue
     }
 
-    // Track leave resumption (0-9 day window)
+    // Track leave resumption (0-9 day window). The confirmation endpoint
+    // below changes the record to pending HOD/RM verification.
     try {
       await trackLeaveResumption(supabaseUser.id, new Date())
     } catch (resumptionError) {
       console.error("[v0] Error tracking leave resumption:", resumptionError)
-      // Non-fatal
+    }
+
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/leave/resumption/trigger-check-in`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: supabaseUser.id,
+          check_in_date: new Date().toISOString().split('T')[0],
+        }),
+      })
+    } catch (confirmationError) {
+      console.error('[v0] Error triggering fast check-in resumption confirmation:', confirmationError)
     }
 
     const elapsedTime = performance.now() - startTime
@@ -249,6 +262,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Checked in successfully",
       data: record,
+      resumptionStatus: 'pending_hod_rm',
       performanceMetrics: {
         elapsedMs: Math.round(elapsedTime),
       },

@@ -884,12 +884,13 @@ export async function POST(request: NextRequest) {
       // Non-fatal — continue with check-in
     }
 
-    // Track leave resumption if applicable (0-9 day window)
+    // Track the return check-in and immediately move the leave record into
+    // HOD/RM verification. This prevents the stale warning from remaining
+    // visible after a valid check-in.
     try {
       await trackLeaveResumption(user.id, new Date())
     } catch (resumptionError) {
       console.error('[v0] Non-critical error tracking leave resumption:', resumptionError)
-      // Don't fail the entire check-in if resumption tracking fails
     }
 
     // ── Trigger resumption confirmation workflow ──────────────────────────
@@ -919,6 +920,7 @@ export async function POST(request: NextRequest) {
       checkInPosition: checkInPosition,
       overrideUsed: overrideMeta !== null,
       overrideType: overrideMeta?.type || null,
+      resumptionStatus: 'pending_hod_rm',
     });
   }
   catch (error: unknown) {
