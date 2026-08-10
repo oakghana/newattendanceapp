@@ -16,6 +16,7 @@ export interface MemoData {
     department: string
     leaveDate: string
     approved_days?: number
+    entitlement_days?: number
     travelling_days_added?: number
     leave_period_start?: string
     leave_period_end?: string
@@ -401,14 +402,11 @@ async function generateMainMemo(
     const firstStaff = memoData.staffList?.[0]
     const approvedDays = firstStaff?.approved_days ?? 0
     const travellingDays = firstStaff?.travelling_days_added ?? 0
-    const totalGrantedDays = approvedDays + travellingDays
-    
-    // Format entitled days with travelling info
-    const entitled = travellingDays > 0 
-      ? `${approvedDays} plus ${travellingDays} travelling day${travellingDays !== 1 ? 's' : ''}`
-      : `${approvedDays}`
-    
-    // Format granted days (total)
+    // Travelling days are recorded separately and must never inflate annual leave totals.
+    const totalGrantedDays = approvedDays
+
+    const entitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
+    const entitled = entitlementDays > 0 ? String(entitlementDays) : "—"
     const granted = totalGrantedDays > 0 ? String(totalGrantedDays) : "—"
 
     // Try to extract from/to dates from staffList if available
