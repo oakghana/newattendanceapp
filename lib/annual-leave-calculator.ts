@@ -33,7 +33,7 @@ export interface AnnualLeaveCalculation {
 /**
  * Calculate annual leave breakdown from a profile and approved requests.
  * @param profile user_profiles row with staff_category, date_of_appointment, years_of_service, position, rank
- * @param daysAlreadyEnoyed Days already approved/enjoyed in this period (optional, defaults to 0)
+ * @param daysAlreadyEnjoyed Days already approved/enjoyed in this period (optional, defaults to 0)
  * @param referenceDate For computing years of service (defaults to today)
  * @returns Annual leave calculation with all components
  */
@@ -45,19 +45,19 @@ export function calculateAnnualLeaveBreakdown(
     position?: string | null
     rank?: string | null
   },
-  daysAlreadyEnoyed: number = 0,
+  daysAlreadyEnjoyed: number = 0,
   referenceDate: Date = new Date(),
 ): AnnualLeaveCalculation {
   const entitlement = resolveEntitlementFromProfile(profile, referenceDate)
 
   const annualEntitlement = entitlement.annualLeaveDays
   const travellingDays = entitlement.travelDays
-  const annualDaysRemaining = Math.max(0, annualEntitlement - Math.max(0, daysAlreadyEnoyed))
+  const annualDaysRemaining = Math.max(0, annualEntitlement - Math.max(0, daysAlreadyEnjoyed))
   const totalGrantedDays = annualDaysRemaining + travellingDays
 
   return {
     annualEntitlement,
-    daysAlreadyEnoyed: Math.max(0, daysAlreadyEnoyed),
+    daysAlreadyEnjoyed: Math.max(0, daysAlreadyEnjoyed),
     annualDaysRemaining,
     travellingDays,
     totalGrantedDays,
@@ -78,7 +78,7 @@ export function buildAnnualLeaveDisplay(calc: AnnualLeaveCalculation) {
       ? `${calc.annualEntitlement} plus ${calc.travellingDays} travelling day${calc.travellingDays !== 1 ? "s" : ""}`
       : String(calc.annualEntitlement)
 
-  const enjoyedStr = calc.daysAlreadyEnoyed > 0 ? `${calc.daysAlreadyEnoyed} day(s) already enjoyed` : ""
+  const enjoyedStr = calc.daysAlreadyEnjoyed > 0 ? `${calc.daysAlreadyEnjoyed} day(s) already enjoyed` : ""
 
   const remainingStr = `${calc.annualDaysRemaining} annual leave day${calc.annualDaysRemaining !== 1 ? "s" : ""}`
 
