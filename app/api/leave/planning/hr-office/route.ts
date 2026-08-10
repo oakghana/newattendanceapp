@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
 
     const { data: staffProfile } = await admin
       .from("user_profiles")
-      .select("first_name, last_name, employee_id, staff_category, date_of_appointment, years_of_service, position, rank")
+      .select("first_name, last_name, employee_id, staff_category, date_of_appointment, years_of_service, position")
       .eq("id", (leaveRequest as any).user_id)
       .maybeSingle()
 

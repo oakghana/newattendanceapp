@@ -360,8 +360,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password, date_of_appointment, years_of_service, contact_number } =
-      body
+  const { email, first_name, last_name, employee_id, department_id, position, staff_category, role, assigned_location_id, password, date_of_appointment, years_of_service, contact_number } =
+  body
 
     if (profile.role === "it-admin") {
       const allowedForItAdmin = ["staff", "nsp", "contract", "department_head"]
@@ -463,6 +463,7 @@ export async function POST(request: NextRequest) {
           department_id: department_id || null,
           assigned_location_id: assigned_location_id || null,
           position: position || null,
+          staff_category: staff_category || null,
           role: role || "staff",
           is_active: true,
           date_of_appointment: date_of_appointment || null,
@@ -493,6 +494,7 @@ export async function POST(request: NextRequest) {
           department_id: department_id || null,
           assigned_location_id: assigned_location_id || null,
           position: position || null,
+          staff_category: staff_category || null,
           role: role || "staff",
           is_active: true,
           date_of_appointment: date_of_appointment || null,

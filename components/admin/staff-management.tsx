@@ -110,6 +110,7 @@ export function StaffManagement() {
     employee_id: "",
     department_id: "",
     position: "",
+    staff_category: "Junior",
     role: "staff",
     assigned_location_id: "",
     date_of_appointment: "",
@@ -326,6 +327,7 @@ export function StaffManagement() {
           employee_id: "",
           department_id: "",
           position: "",
+          staff_category: "Junior",
           role: "staff",
           assigned_location_id: "",
           date_of_appointment: "",
@@ -810,17 +812,50 @@ export function StaffManagement() {
                       <Label htmlFor="position" className="font-medium">
                         Position
                       </Label>
-                      <Input
-                        id="position"
-                        value={newStaff.position}
-                        onChange={(e) => setNewStaff({ ...newStaff, position: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="department" className="font-medium">
-                        Department
-                      </Label>
+                    <Input
+                      id="position"
+                      value={newStaff.position}
+                      onChange={(e) => {
+                        const pos = e.target.value
+                        // Auto-derive category from position text
+                        const lower = pos.toLowerCase()
+                        let derivedCategory = newStaff.staff_category || "Junior"
+                        if (lower.includes("manager") || lower.includes("director")) derivedCategory = "Manager"
+                        else if (lower.includes("senior") || lower.includes("principal")) derivedCategory = "Senior"
+                        else if (lower.includes("officer")) derivedCategory = "Officer"
+                        else if (pos.trim().length > 0) derivedCategory = "Junior"
+                        setNewStaff({ ...newStaff, position: pos, staff_category: derivedCategory })
+                      }}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="newStaffCategory" className="font-medium">
+                      Category
+                      <span className="text-xs text-muted-foreground font-normal ml-1">(Auto-set from Position)</span>
+                    </Label>
+                    <Select
+                      value={newStaff.staff_category || "Junior"}
+                      onValueChange={(value) => setNewStaff({ ...newStaff, staff_category: value })}
+                    >
+                      <SelectTrigger id="newStaffCategory" className="mt-1">
+                        <SelectValue placeholder="Select Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Manager">Manager</SelectItem>
+                        <SelectItem value="Senior">Senior</SelectItem>
+                        <SelectItem value="Officer">Officer</SelectItem>
+                        <SelectItem value="Junior">Junior</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Used for leave entitlement and payment advice grouping
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="department" className="font-medium">
+                      Department
+                    </Label>
                       <Select
                         value={newStaff.department_id}
                         onValueChange={(value) => setNewStaff({ ...newStaff, department_id: value })}
