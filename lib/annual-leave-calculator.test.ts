@@ -34,6 +34,12 @@ describe("annual leave calculation", () => {
     expect(remarks).toBe("Adjusted after HR review; 4 day(s) already enjoyed; 2 travelling day(s) added")
   })
 
+  it("treats given days as already enjoyed deductions", () => {
+    const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 4)
+    expect(result.annualDaysRemaining).toBe(32)
+    expect(result.totalGrantedDays).toBe(34)
+  })
+
   it("calculates 36 - 4 + 2 = 34", () => {
     const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 4)
     const display = buildAnnualLeaveDisplay(result)

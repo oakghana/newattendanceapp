@@ -613,8 +613,6 @@ export async function GET(
       ? Number(lr.hr_approved_days)
       : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
 
-    const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
-
     // Outstanding/adjustment days affect entitlement and remarks only. The
     // manually approved leave range remains authoritative for the letter.
     const adjustedEffectiveEnd = effectiveEnd
@@ -640,7 +638,7 @@ export async function GET(
       leave_type: leaveLabel,
       leave_start_date: fmtFormalDate(effectiveStart),
       leave_end_date: fmtFormalDate(adjustedEffectiveEnd),
-      approved_days: String(effectiveDays + outstandingLeaveDaysAdded),
+      approved_days: String(effectiveDays),
       submitted_date: fmtFormalDate(lr.submitted_at || lr.created_at),
       return_to_work_date: fmtFormalDateWithWeekday(returnDateIso),
     }
@@ -800,9 +798,10 @@ export async function GET(
     // ── Annual leave table ───────────────────────���─────���─────────────
     if (useTable === true) {
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
-      const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
-      // Public holidays and travelling days are ADDED to the granted days (not deducted)
-      const holidayDaysAdded = Number(lr.holiday_days_deducted || 0)   // field name is legacy; treated as addition per business rule
+      // “Given” days are days already enjoyed. They reduce the annual balance;
+      // only travelling days are added to the granted total.
+      const givenDays = Number(lr.holiday_days_deducted || 0)
+      const outstandingGivenDays = Number(lr.outstanding_leave_days_added || 0)
       const travelDaysFromField = Math.max(0, Number(lr.travelling_days_added || 0))
       const travelDays = Math.max(0, Number(tableTravellingDays || 0) || travelDaysFromField)
 
@@ -818,20 +817,21 @@ export async function GET(
 
       // Granted total = annual entitlement minus days already enjoyed, plus travel days.
       // For this memo: 36 - 4 + 2 = 34.
-      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - priorLeaveDaysDeducted + holidayDaysAdded + outstandingLeaveDaysAdded)
+      // Avoid double-counting the same “given” days when legacy fields contain
+      // the same value; use the larger source as the authoritative deduction.
+      const givenDaysDeducted = Math.max(priorLeaveDaysDeducted, givenDays, outstandingGivenDays)
+      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - givenDaysDeducted)
       const totalGranted = Math.max(0, annualDaysRemaining + travelDays)
 
       const originalRequested = Number(
         lr.original_requested_days != null ? lr.original_requested_days : (lr.requested_days || 0),
       )
       const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
-      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0 || holidayDaysAdded > 0
+      const hasIncrease = adjustedRequested > originalRequested || travelDays > 0
       const remarksParts: string[] = []
-      // Build remarks: show every component that affects the total
-      if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) already enjoyed`)
-      if (holidayDaysAdded > 0) remarksParts.push(`${holidayDaysAdded} public holiday day(s) added`)
+      // Build remarks with “given” days shown once as a deduction.
+      if (givenDaysDeducted > 0) remarksParts.push(`${givenDaysDeducted} day(s) given/already enjoyed (deducted)`)
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
-      if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
       // Prefer the saved HR reason when it already contains the calculated
       // breakdown; otherwise append only the missing calculated details.
