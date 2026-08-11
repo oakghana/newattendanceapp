@@ -798,10 +798,10 @@ export async function GET(
     // ── Annual leave table ───────────────────────���─────���─────────────
     if (useTable === true) {
       const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
-      // “Given” days are days already enjoyed. They reduce the annual balance;
-      // only travelling days are added to the granted total.
-      const givenDays = Number(lr.holiday_days_deducted || 0)
-      const outstandingGivenDays = Number(lr.outstanding_leave_days_added || 0)
+      // These dedicated Day Adjustment Breakdown fields are authoritative.
+      // Public holidays and prior leave are deductions; travelling days are additions.
+      const publicHolidayDaysDeducted = Math.max(0, Number(lr.holiday_days_deducted || 0))
+      const priorLeaveDaysDeducted = Math.max(0, Number(lr.prior_leave_days_deducted || 0))
       const travelDaysFromField = Math.max(0, Number(lr.travelling_days_added || 0))
       const travelDays = Math.max(0, Number(tableTravellingDays || 0) || travelDaysFromField)
 
@@ -815,12 +815,10 @@ export async function GET(
         ? `${grossEntitlement || effectiveDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
         : String(grossEntitlement || effectiveDays)
 
-      // Granted total = annual entitlement minus days already enjoyed, plus travel days.
-      // For this memo: 36 - 4 + 2 = 34.
-      // Avoid double-counting the same “given” days when legacy fields contain
-      // the same value; use the larger source as the authoritative deduction.
-      const givenDaysDeducted = Math.max(priorLeaveDaysDeducted, givenDays, outstandingGivenDays)
-      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - givenDaysDeducted)
+      // Granted total uses only the dedicated numeric adjustment fields.
+      // Example: 36 entitlement - 4 prior/given - 0 holidays + 2 travel = 34.
+      const totalDeductions = publicHolidayDaysDeducted + priorLeaveDaysDeducted
+      const annualDaysRemaining = Math.max(0, (grossEntitlement || effectiveDays) - totalDeductions)
       const totalGranted = Math.max(0, annualDaysRemaining + travelDays)
 
       const originalRequested = Number(
@@ -829,20 +827,18 @@ export async function GET(
       const adjustedRequested = Number(lr.adjusted_days || lr.requested_days || 0)
       const hasIncrease = adjustedRequested > originalRequested || travelDays > 0
       const remarksParts: string[] = []
-      // Build remarks with “given” days shown once as a deduction.
-      if (givenDaysDeducted > 0) remarksParts.push(`${givenDaysDeducted} day(s) given/already enjoyed (deducted)`)
+      // Remarks confirm the dedicated-field calculation. Free-text reasons
+      // are displayed only and never parsed or used to change the total.
+      if (publicHolidayDaysDeducted > 0) remarksParts.push(`${publicHolidayDaysDeducted} public holiday day(s) deducted`)
+      if (priorLeaveDaysDeducted > 0) remarksParts.push(`${priorLeaveDaysDeducted} day(s) given/already enjoyed deducted`)
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
-      // Prefer the saved HR reason when it already contains the calculated
-      // breakdown; otherwise append only the missing calculated details.
-      const normalizedReason = remarksText.toLowerCase()
-      const missingParts = remarksParts.filter((part) => {
-        const normalizedPart = part.toLowerCase()
-        return !normalizedReason.includes(normalizedPart)
-      })
+      const calculationConfirmation = remarksParts.length > 0
+        ? remarksParts.join("; ")
+        : "No day adjustment applied"
       const remarksSummary = remarksText
-        ? [remarksText, ...missingParts].join("; ")
-        : remarksParts.join("; ")
+        ? `${calculationConfirmation}. ${remarksText}`
+        : calculationConfirmation
 
       autoTable(doc, {
         startY: y,

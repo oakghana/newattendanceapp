@@ -1075,7 +1075,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
-  // ── HR Executive HOD Review ──────────────────────────────────────────
+  // ── HR Executive HOD Review ────────────────────────────────���─────────
   const [hodReviewRequests, setHodReviewRequests] = useState<any[]>([])
   const [hodReviewLoading, setHodReviewLoading] = useState(false)
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
@@ -3651,18 +3651,19 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                   const holidayD = Number(officeHolidayDays[req.id] || 0)
                                   const travelD = Number(officeTravelDays[req.id] || 0)
                                   const priorD = Number(officePriorDays[req.id] || 0)
-                                  const outstandingD = Number(officeOutstandingDays[req.id] || 0)
+                                  // Only the dedicated Day Adjustment Breakdown fields affect totals.
+                                  // “Reason for Adjustment” is confirmation text, never numeric input.
                                   // Base days = working days (excl. weekends & holidays) from from-date to to-date
                                   const holidayDatesForRender = holidays.map((h) => h.holiday_date)
                                   const baseDays = adjStart && adjEnd
                                     ? calculateWorkingDays(adjStart, adjEnd, holidayDatesForRender).workingDays
                                     : Number(req.requested_days || 0)
-                                  // Public holidays are ADDED to the granted days (not deducted)
-                                  const finalDays = Math.max(0, baseDays + outstandingD + holidayD - priorD + travelD)
+                                  // Public holidays and prior leave are deductions;
+                                  // travelling days are additions.
+                                  const finalDays = Math.max(0, baseDays - holidayD - priorD + travelD)
                                   const generatedReason = [
-                                    outstandingD > 0 ? `${outstandingD} outstanding leave day(s) added` : "",
-                                    holidayD > 0 ? `${holidayD} public holiday day(s) added` : "",
-                                    priorD > 0 ? `${priorD} prior leave day(s) deducted` : "",
+                                    holidayD > 0 ? `${holidayD} public holiday day(s) deducted` : "",
+                                    priorD > 0 ? `${priorD} day(s) given/already enjoyed deducted` : "",
                                     travelD > 0 ? `${travelD} travelling day(s) added` : "",
                                   ].filter(Boolean).join("; ")
                       return (
@@ -3970,8 +3971,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               <div className="flex items-center justify-between bg-white rounded-lg p-3 border border-slate-200 mt-2">
                                 <span className="text-sm text-slate-600">
                                   Base: {baseDays}d
-                                  {outstandingD > 0 && <span className="text-green-600"> + {outstandingD}</span>}
-                                  {holidayD > 0 && <span className="text-red-600"> − {holidayD}</span>}
+                                                                  {holidayD > 0 && <span className="text-red-600"> − {holidayD}</span>}
                                   {priorD > 0 && <span className="text-red-600"> − {priorD}</span>}
                                   {travelD > 0 && <span className="text-emerald-600"> + {travelD}</span>}
                                 </span>
