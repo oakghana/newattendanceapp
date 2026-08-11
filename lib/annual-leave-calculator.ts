@@ -81,6 +81,17 @@ export function getNextWorkingDay(dateValue: string | Date): Date {
   return result
 }
 
+/** Count working days after the start date, excluding Saturdays and Sundays. */
+export function addAnnualLeaveWorkingDays(startDate: string | Date, workingDays: number): Date {
+  const result = new Date(startDate)
+  let remaining = Math.max(0, Math.floor(workingDays))
+  while (remaining > 0) {
+    result.setDate(result.getDate() + 1)
+    if (result.getDay() !== 0 && result.getDay() !== 6) remaining -= 1
+  }
+  return result
+}
+
 export function buildAnnualLeaveDisplay(calc: AnnualLeaveCalculation) {
   const entitledStr =
     calc.travellingDays > 0

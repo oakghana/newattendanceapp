@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { buildMemoRemarks } from "./professional-memo-generator"
-import { buildAnnualLeaveDisplay, calculateAnnualLeaveBreakdown, getNextWorkingDay } from "./annual-leave-calculator"
+import {
+  addAnnualLeaveWorkingDays,
+  buildAnnualLeaveDisplay,
+  calculateAnnualLeaveBreakdown,
+  getNextWorkingDay,
+} from "./annual-leave-calculator"
 
 describe("annual leave calculation", () => {
   it("uses the approved end date when calculating resumption", () => {
@@ -13,6 +18,10 @@ describe("annual leave calculation", () => {
     const authoritativeEnd = approvedEnd || preferredEnd
     expect(authoritativeEnd).toBe("2026-09-17")
     expect(getNextWorkingDay(authoritativeEnd).toISOString().slice(0, 10)).toBe("2026-09-18")
+  })
+
+  it("calculates 34 working days after 3 August as 18 September", () => {
+    expect(addAnnualLeaveWorkingDays("2026-08-03", 34).toISOString().slice(0, 10)).toBe("2026-09-18")
   })
 
   it("moves weekend leave endings to the next working day", () => {

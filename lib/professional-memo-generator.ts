@@ -1,5 +1,6 @@
 // jsPDF and jspdf-autotable are loaded dynamically inside each function
 // to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
+import { addAnnualLeaveWorkingDays } from "./annual-leave-calculator"
 
 export interface MemoData {
   to: string
@@ -28,8 +29,9 @@ export interface MemoData {
     signature_image_url?: string // Signer's saved signature image URL from approval_signature_registry
   }
   ccList?: string[]
-  adjustment_reason?: string
-  memoType: "payment" | "deferment" | "general"
+    adjustment_reason?: string
+    leave_type_key?: string
+    memoType: "payment" | "deferment" | "general"
 }
 
 export function buildMemoRemarks({
@@ -446,7 +448,16 @@ async function generateMainMemo(
       fromDate = fmtDateLongPdf(firstStaff.leave_period_start)
     }
     if (firstStaff?.leave_period_end) {
-      toDate = fmtDateLongPdf(firstStaff.leave_period_end)
+      const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
+      if (isAnnualLeave && firstStaff.leave_period_start) {
+        const publicHolidayDays = Math.max(0, Number(firstStaff.holiday_days_deducted ?? 0))
+        const enjoyedDays = Math.max(0, Number(firstStaff.prior_leave_days_deducted ?? 0))
+        const travelDays = Math.max(0, Number(firstStaff.travelling_days_added ?? 0))
+        const annualDays = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays + travelDays)
+        toDate = fmtDateLongPdf(addAnnualLeaveWorkingDays(firstStaff.leave_period_start, annualDays))
+      } else {
+        toDate = fmtDateLongPdf(firstStaff.leave_period_end)
+      }
     }
     
     // Fallback: Try to extract from/to from templateData hints in body

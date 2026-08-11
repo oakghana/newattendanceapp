@@ -6,7 +6,7 @@ import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
-import { getNextWorkingDay } from "@/lib/annual-leave-calculator"
+import { addAnnualLeaveWorkingDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
 
 export const runtime = "nodejs"
 
@@ -615,15 +615,23 @@ export async function GET(
       ? Number(lr.hr_approved_days)
       : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
 
-    // Outstanding/adjustment days affect entitlement and remarks only. The
-    // manually approved leave range remains authoritative for the letter.
-    const adjustedEffectiveEnd = effectiveEnd
+    const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
+    let adjustedEffectiveEnd = effectiveEnd
+    if (leaveTypeKey === "annual") {
+      // Annual memo dates are recalculated from the final numeric adjustment
+      // fields. The start date is day 0; weekends are excluded.
+      const entitlement = Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
+      const publicHolidayDeduction = Math.max(0, Number(lr.holiday_days_deducted || 0))
+      const priorLeaveDeduction = Math.max(0, Number(lr.prior_leave_days_deducted || 0))
+      const travellingAddition = Math.max(0, Number(lr.travelling_days_added || 0))
+      const annualMemoDays = Math.max(0, entitlement - publicHolidayDeduction - priorLeaveDeduction + travellingAddition)
+      adjustedEffectiveEnd = addAnnualLeaveWorkingDays(effectiveStart, annualMemoDays).toISOString().slice(0, 10)
+    }
 
-    // Return-to-work date is the next working day after the approved end.
+    // Return-to-work date is the next working day after the calculated end.
     const returnDate = getNextWorkingDay(adjustedEffectiveEnd)
     const returnDateIso = returnDate.toISOString()
 
-    const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
     const leaveLabel   = leaveTypeLabel(leaveTypeKey)
 
     const rawDraftSubject = String(lr.memo_draft_subject || "").trim()
@@ -656,7 +664,7 @@ export async function GET(
     // Stored draftBody values are stale and may contain wrong leave-type content
     // (e.g. a casual leave record with annual leave body text from old data entry).
     {
-      const built = buildBuiltinBody(lr, effectiveStart, effectiveEnd, effectiveDays, returnDateIso, holidayDatesForMemo)
+      const built = buildBuiltinBody(lr, effectiveStart, adjustedEffectiveEnd, effectiveDays, returnDateIso, holidayDatesForMemo)
       paragraphs          = built.paragraphs
       closingLine         = built.closing
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
