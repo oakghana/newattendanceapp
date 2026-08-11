@@ -839,10 +839,16 @@ export async function GET(
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
-      // Always include the HR Leave Office's saved reason, even when calculated
-      // adjustment details are also present in the memo.
-      if (remarksText) remarksParts.push(`Reason for adjustment: ${remarksText}`)
-      const remarksSummary = remarksParts.join("; ")
+      // Prefer the saved HR reason when it already contains the calculated
+      // breakdown; otherwise append only the missing calculated details.
+      const normalizedReason = remarksText.toLowerCase()
+      const missingParts = remarksParts.filter((part) => {
+        const normalizedPart = part.toLowerCase()
+        return !normalizedReason.includes(normalizedPart)
+      })
+      const remarksSummary = remarksText
+        ? [remarksText, ...missingParts].join("; ")
+        : remarksParts.join("; ")
 
       autoTable(doc, {
         startY: y,

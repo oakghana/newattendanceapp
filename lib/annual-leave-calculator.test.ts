@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { buildMemoRemarks } from "./professional-memo-generator"
 import { buildAnnualLeaveDisplay, calculateAnnualLeaveBreakdown } from "./annual-leave-calculator"
 
 describe("annual leave calculation", () => {
@@ -7,6 +8,22 @@ describe("annual leave calculation", () => {
     expect(result.annualEntitlement).toBe(36)
     expect(result.annualDaysRemaining).toBe(36)
     expect(result.totalGrantedDays).toBe(38)
+  })
+
+  it("does not repeat calculated reasons already present in the saved reason", () => {
+    const remarks = buildMemoRemarks({
+      savedReason: "4 day(s) already enjoyed; 2 travelling day(s) added",
+      calculatedRemarks: ["4 day(s) already enjoyed", "2 travelling day(s) added"],
+    })
+    expect(remarks).toBe("4 day(s) already enjoyed; 2 travelling day(s) added")
+  })
+
+  it("keeps a custom reason and adds only missing calculated details", () => {
+    const remarks = buildMemoRemarks({
+      savedReason: "Adjusted after HR review",
+      calculatedRemarks: ["4 day(s) already enjoyed", "2 travelling day(s) added"],
+    })
+    expect(remarks).toBe("Adjusted after HR review; 4 day(s) already enjoyed; 2 travelling day(s) added")
   })
 
   it("calculates 36 - 4 + 2 = 34", () => {
