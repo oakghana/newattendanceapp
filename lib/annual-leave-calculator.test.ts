@@ -20,8 +20,9 @@ describe("annual leave calculation", () => {
     expect(getNextWorkingDay(authoritativeEnd).toISOString().slice(0, 10)).toBe("2026-09-18")
   })
 
-  it("calculates 34 working days after 3 August as 18 September", () => {
-    expect(addAnnualLeaveWorkingDays("2026-08-03", 34).toISOString().slice(0, 10)).toBe("2026-09-18")
+  it("calculates 34 working days inclusively from 3 August as 17 September", () => {
+    expect(addAnnualLeaveWorkingDays("2026-08-03", 34).toISOString().slice(0, 10)).toBe("2026-09-17")
+    expect(getNextWorkingDay("2026-09-17").toISOString().slice(0, 10)).toBe("2026-09-18")
   })
 
   it("moves weekend leave endings to the next working day", () => {

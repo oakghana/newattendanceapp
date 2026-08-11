@@ -619,7 +619,7 @@ export async function GET(
     let adjustedEffectiveEnd = effectiveEnd
     if (leaveTypeKey === "annual") {
       // Annual memo dates are recalculated from the final numeric adjustment
-      // fields. The start date is day 0; weekends are excluded.
+      // fields. The start date is Working Day 1 when it is a weekday; weekends are excluded.
       const entitlement = Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
       const publicHolidayDeduction = Math.max(0, Number(lr.holiday_days_deducted || 0))
       const priorLeaveDeduction = Math.max(0, Number(lr.prior_leave_days_deducted || 0))

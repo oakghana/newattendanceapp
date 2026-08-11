@@ -454,6 +454,7 @@ async function generateMainMemo(
         const enjoyedDays = Math.max(0, Number(firstStaff.prior_leave_days_deducted ?? 0))
         const travelDays = Math.max(0, Number(firstStaff.travelling_days_added ?? 0))
         const annualDays = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays + travelDays)
+        // Annual leave uses the same inclusive working-day calculation as the memo API.
         toDate = fmtDateLongPdf(addAnnualLeaveWorkingDays(firstStaff.leave_period_start, annualDays))
       } else {
         toDate = fmtDateLongPdf(firstStaff.leave_period_end)
