@@ -607,8 +607,10 @@ export async function GET(
 
     // Compute effective dates/days for memo generation
     // Use HR executor's final dates/days if set; otherwise fall back to HR office dates, then requested dates
-    const effectiveStart = lr.hr_approved_start_date || lr.adjusted_start_date || lr.preferred_start_date
-    const effectiveEnd = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
+    const effectiveStart = lr.hr_approved_start_date || lr.preferred_start_date || lr.adjusted_start_date
+    // Day adjustments change entitlement only. They must never extend the
+    // approved leave range or move the reporting date.
+    const effectiveEnd = lr.preferred_end_date || lr.hr_approved_end_date || lr.adjusted_end_date
     const effectiveDays = lr.hr_approved_days !== null && lr.hr_approved_days !== undefined
       ? Number(lr.hr_approved_days)
       : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)
@@ -802,7 +804,7 @@ export async function GET(
       const publicHolidayDaysDeducted = Math.max(0, Number(lr.holiday_days_deducted || 0))
       const priorLeaveDaysDeducted = Math.max(0, Number(lr.prior_leave_days_deducted || 0))
       const travelDaysFromField = Math.max(0, Number(lr.travelling_days_added || 0))
-      const travelDays = Math.max(0, Number(tableTravellingDays || 0) || travelDaysFromField)
+      const travelDays = travelDaysFromField
 
       // ─── Entitlement label (top-left cell): gross entitlement ───────────────
       // Show the staff's full annual entitlement (e.g. "24") even when some days were
@@ -835,9 +837,9 @@ export async function GET(
       const calculationConfirmation = remarksParts.length > 0
         ? remarksParts.join("; ")
         : "No day adjustment applied"
-      const remarksSummary = remarksText
-        ? `${calculationConfirmation}. ${remarksText}`
-        : calculationConfirmation
+      // The HR reason is confirmation text only. Prefer it when supplied so
+      // the memo never prints the same adjustment in two different wordings.
+      const remarksSummary = remarksText || calculationConfirmation
 
       autoTable(doc, {
         startY: y,

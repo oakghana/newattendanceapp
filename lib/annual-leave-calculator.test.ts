@@ -31,7 +31,7 @@ describe("annual leave calculation", () => {
       savedReason: "Adjusted after HR review",
       calculatedRemarks: ["4 day(s) already enjoyed", "2 travelling day(s) added"],
     })
-    expect(remarks).toBe("Adjusted after HR review; 4 day(s) already enjoyed; 2 travelling day(s) added")
+    expect(remarks).toBe("Adjusted after HR review")
   })
 
   it("treats given days as already enjoyed deductions", () => {
