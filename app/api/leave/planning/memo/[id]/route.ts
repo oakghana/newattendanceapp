@@ -797,7 +797,6 @@ export async function GET(
 
     // ── Annual leave table ───────────────────────���─────���─────────────
     if (useTable === true) {
-      const priorLeaveDaysDeducted = Number(lr.prior_leave_days_deducted || 0)
       // These dedicated Day Adjustment Breakdown fields are authoritative.
       // Public holidays and prior leave are deductions; travelling days are additions.
       const publicHolidayDaysDeducted = Math.max(0, Number(lr.holiday_days_deducted || 0))
