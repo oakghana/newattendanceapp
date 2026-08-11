@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest"
 import { buildMemoRemarks } from "./professional-memo-generator"
-import { buildAnnualLeaveDisplay, calculateAnnualLeaveBreakdown } from "./annual-leave-calculator"
+import { buildAnnualLeaveDisplay, calculateAnnualLeaveBreakdown, getNextWorkingDay } from "./annual-leave-calculator"
 
 describe("annual leave calculation", () => {
+  it("uses the approved end date when calculating resumption", () => {
+    expect(getNextWorkingDay("2026-09-17").toISOString().slice(0, 10)).toBe("2026-09-18")
+  })
+
+  it("moves weekend leave endings to the next working day", () => {
+    expect(getNextWorkingDay("2026-09-19").toISOString().slice(0, 10)).toBe("2026-09-21")
+  })
+
   it("calculates 36 entitlement with no enjoyed days and two travel days", () => {
     const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 0)
     expect(result.annualEntitlement).toBe(36)

@@ -72,6 +72,15 @@ export function calculateAnnualLeaveBreakdown(
  * @param calc Result from calculateAnnualLeaveBreakdown
  * @returns Object with display strings for entitled, enjoyed, remaining, and granted
  */
+export function getNextWorkingDay(dateValue: string | Date): Date {
+  const result = new Date(dateValue)
+  result.setDate(result.getDate() + 1)
+  while (result.getDay() === 0 || result.getDay() === 6) {
+    result.setDate(result.getDate() + 1)
+  }
+  return result
+}
+
 export function buildAnnualLeaveDisplay(calc: AnnualLeaveCalculation) {
   const entitledStr =
     calc.travellingDays > 0
