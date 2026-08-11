@@ -1,5 +1,6 @@
 // jsPDF and jspdf-autotable are loaded dynamically inside each function
 // to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
+import { addAnnualLeaveWorkingDays } from "./annual-leave-calculator"
 
 export interface MemoData {
   to: string
@@ -28,8 +29,9 @@ export interface MemoData {
     signature_image_url?: string // Signer's saved signature image URL from approval_signature_registry
   }
   ccList?: string[]
-  adjustment_reason?: string
-  memoType: "payment" | "deferment" | "general"
+    adjustment_reason?: string
+    leave_type_key?: string
+    memoType: "payment" | "deferment" | "general"
 }
 
 export function buildMemoRemarks({
@@ -40,12 +42,10 @@ export function buildMemoRemarks({
   calculatedRemarks: string[]
 }): string {
   const reason = String(savedReason || "").trim()
-  const normalizedReason = reason.toLowerCase()
-  const missingCalculatedRemarks = calculatedRemarks.filter(
-    (part) => !normalizedReason.includes(part.toLowerCase()),
-  )
+  // Reasons are explanatory text only. When HR supplies one, print it once;
+  // never append the generated calculation a second time.
   return reason
-    ? [reason, ...missingCalculatedRemarks].join("; ")
+    ? reason
     : calculatedRemarks.length > 0
       ? calculatedRemarks.join("; ")
       : "—"
@@ -422,10 +422,11 @@ async function generateMainMemo(
     // Get days from staffList if available (preferred), otherwise parse from body
     const firstStaff = memoData.staffList?.[0]
     const approvedDays = Number(firstStaff?.approved_days ?? 0)
+    const publicHolidayDays = Number(firstStaff?.holiday_days_deducted ?? 0)
     const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
     const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
     const entitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
-    const annualDaysRemaining = Math.max(0, entitlementDays - enjoyedDays)
+    const annualDaysRemaining = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays)
     const totalGrantedDays = annualDaysRemaining + travellingDays
 
     const entitled = entitlementDays > 0
@@ -447,7 +448,17 @@ async function generateMainMemo(
       fromDate = fmtDateLongPdf(firstStaff.leave_period_start)
     }
     if (firstStaff?.leave_period_end) {
-      toDate = fmtDateLongPdf(firstStaff.leave_period_end)
+      const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
+      if (isAnnualLeave && firstStaff.leave_period_start) {
+        const publicHolidayDays = Math.max(0, Number(firstStaff.holiday_days_deducted ?? 0))
+        const enjoyedDays = Math.max(0, Number(firstStaff.prior_leave_days_deducted ?? 0))
+        const travelDays = Math.max(0, Number(firstStaff.travelling_days_added ?? 0))
+        const annualDays = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays + travelDays)
+        // Annual leave uses the same inclusive working-day calculation as the memo API.
+        toDate = fmtDateLongPdf(addAnnualLeaveWorkingDays(firstStaff.leave_period_start, annualDays))
+      } else {
+        toDate = fmtDateLongPdf(firstStaff.leave_period_end)
+      }
     }
     
     // Fallback: Try to extract from/to from templateData hints in body
@@ -461,7 +472,8 @@ async function generateMainMemo(
     }
 
     const calculatedRemarks = [
-      enjoyedDays > 0 ? `${enjoyedDays} day(s) already enjoyed` : "",
+      publicHolidayDays > 0 ? `${publicHolidayDays} public holiday day(s) deducted` : "",
+      enjoyedDays > 0 ? `${enjoyedDays} day(s) given/already enjoyed deducted` : "",
       travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""} added` : "",
     ].filter(Boolean)
     const savedReason = String((memoData as any).adjustment_reason || "").trim()
