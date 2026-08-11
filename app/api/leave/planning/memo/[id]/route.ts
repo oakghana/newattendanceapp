@@ -608,9 +608,9 @@ export async function GET(
     // Compute effective dates/days for memo generation
     // Use HR executor's final dates/days if set; otherwise fall back to HR office dates, then requested dates
     const effectiveStart = lr.hr_approved_start_date || lr.preferred_start_date || lr.adjusted_start_date
-    // Day adjustments change entitlement only. They must never extend the
-    // approved leave range or move the reporting date.
-    const effectiveEnd = lr.preferred_end_date || lr.hr_approved_end_date || lr.adjusted_end_date
+    // The approved/adjusted leave range is authoritative. Day adjustments
+    // affect entitlement only and must never extend the leave period.
+    const effectiveEnd = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
     const effectiveDays = lr.hr_approved_days !== null && lr.hr_approved_days !== undefined
       ? Number(lr.hr_approved_days)
       : (Number(lr.adjusted_days) || Number(lr.requested_days) || 0)

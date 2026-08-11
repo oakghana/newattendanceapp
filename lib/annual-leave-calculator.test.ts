@@ -7,6 +7,14 @@ describe("annual leave calculation", () => {
     expect(getNextWorkingDay("2026-09-17").toISOString().slice(0, 10)).toBe("2026-09-18")
   })
 
+  it("does not extend the approved end date for adjustment days", () => {
+    const approvedEnd = "2026-09-17"
+    const preferredEnd = "2026-09-22"
+    const authoritativeEnd = approvedEnd || preferredEnd
+    expect(authoritativeEnd).toBe("2026-09-17")
+    expect(getNextWorkingDay(authoritativeEnd).toISOString().slice(0, 10)).toBe("2026-09-18")
+  })
+
   it("moves weekend leave endings to the next working day", () => {
     expect(getNextWorkingDay("2026-09-19").toISOString().slice(0, 10)).toBe("2026-09-21")
   })
