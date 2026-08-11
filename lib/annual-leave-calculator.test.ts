@@ -40,6 +40,17 @@ describe("annual leave calculation", () => {
     expect(result.totalGrantedDays).toBe(34)
   })
 
+  it("keeps numeric text in the reason out of the calculation", () => {
+    const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 4)
+    const remarks = buildMemoRemarks({
+      savedReason: "4 given during Christmas holidays; 99 extra days requested",
+      calculatedRemarks: ["4 day(s) given/already enjoyed deducted", "2 travelling day(s) added"],
+    })
+    expect(result.totalGrantedDays).toBe(34)
+    expect(remarks).toContain("99 extra days requested")
+    expect(remarks).not.toContain("99 travelling")
+  })
+
   it("calculates 36 - 4 + 2 = 34", () => {
     const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 4)
     const display = buildAnnualLeaveDisplay(result)
