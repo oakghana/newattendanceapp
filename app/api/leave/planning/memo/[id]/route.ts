@@ -6,6 +6,7 @@ import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
+import { getNextWorkingDay } from "@/lib/annual-leave-calculator"
 
 export const runtime = "nodejs"
 
@@ -614,19 +615,12 @@ export async function GET(
 
     const outstandingLeaveDaysAdded = Number(lr.outstanding_leave_days_added || 0)
 
-    // Adjust end date if outstanding leave days are added
-    let adjustedEffectiveEnd = effectiveEnd
-    if (outstandingLeaveDaysAdded > 0) {
-      const endDateObj = new Date(effectiveEnd)
-      endDateObj.setDate(endDateObj.getDate() + outstandingLeaveDaysAdded)
-      adjustedEffectiveEnd = endDateObj.toISOString().split('T')[0]
-    }
+    // Outstanding/adjustment days affect entitlement and remarks only. The
+    // manually approved leave range remains authoritative for the letter.
+    const adjustedEffectiveEnd = effectiveEnd
 
-    // Return-to-work date (next business day after adjusted leave end)
-    const returnDate = new Date(adjustedEffectiveEnd)
-    returnDate.setDate(returnDate.getDate() + 1)
-    if (returnDate.getDay() === 6) returnDate.setDate(returnDate.getDate() + 2)
-    if (returnDate.getDay() === 0) returnDate.setDate(returnDate.getDate() + 1)
+    // Return-to-work date is the next working day after the approved end.
+    const returnDate = getNextWorkingDay(adjustedEffectiveEnd)
     const returnDateIso = returnDate.toISOString()
 
     const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
@@ -839,10 +833,16 @@ export async function GET(
       if (travelDays > 0) remarksParts.push(`${travelDays} travelling day(s) added`)
       if (outstandingLeaveDaysAdded > 0) remarksParts.push(`${outstandingLeaveDaysAdded} outstanding leave day(s) added`)
       const remarksText = String(lr.adjustment_reason || "").trim()
-      // Always include the HR Leave Office's saved reason, even when calculated
-      // adjustment details are also present in the memo.
-      if (remarksText) remarksParts.push(`Reason for adjustment: ${remarksText}`)
-      const remarksSummary = remarksParts.join("; ")
+      // Prefer the saved HR reason when it already contains the calculated
+      // breakdown; otherwise append only the missing calculated details.
+      const normalizedReason = remarksText.toLowerCase()
+      const missingParts = remarksParts.filter((part) => {
+        const normalizedPart = part.toLowerCase()
+        return !normalizedReason.includes(normalizedPart)
+      })
+      const remarksSummary = remarksText
+        ? [remarksText, ...missingParts].join("; ")
+        : remarksParts.join("; ")
 
       autoTable(doc, {
         startY: y,

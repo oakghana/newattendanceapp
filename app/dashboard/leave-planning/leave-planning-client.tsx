@@ -300,9 +300,16 @@ function buildMemoTemplateData(req: any): Record<string, string> {
     travellingDays > 0 ? `Travelling days added: ${travellingDays} day(s).` : "",
   ].filter(Boolean)
 
-  const adjustmentParagraph = req.adjustment_reason
-    ? `Adjustment details: ${adjustmentLines.join(" ")} Reason for adjustment: ${String(req.adjustment_reason || "").trim()}.\n\n`
-    : ""
+  const savedReason = String(req.adjustment_reason || "").trim()
+  const normalizedReason = savedReason.toLowerCase()
+  const missingAdjustmentLines = adjustmentLines.filter(
+    (line) => !normalizedReason.includes(line.replace(/\.$/, "").toLowerCase()),
+  )
+  const adjustmentParagraph = savedReason
+    ? `${[savedReason, ...missingAdjustmentLines].join(" ")}\n\n`
+    : adjustmentLines.length > 0
+      ? `${adjustmentLines.join(" ")}\n\n`
+      : ""
 
   const travellingParagraph = travellingDays > 0
     ? `This approval includes ${travellingDays} travelling day(s) as part of the approved leave arrangement.\n\n`

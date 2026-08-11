@@ -28,7 +28,27 @@ export interface MemoData {
     signature_image_url?: string // Signer's saved signature image URL from approval_signature_registry
   }
   ccList?: string[]
+  adjustment_reason?: string
   memoType: "payment" | "deferment" | "general"
+}
+
+export function buildMemoRemarks({
+  savedReason,
+  calculatedRemarks,
+}: {
+  savedReason?: string | null
+  calculatedRemarks: string[]
+}): string {
+  const reason = String(savedReason || "").trim()
+  const normalizedReason = reason.toLowerCase()
+  const missingCalculatedRemarks = calculatedRemarks.filter(
+    (part) => !normalizedReason.includes(part.toLowerCase()),
+  )
+  return reason
+    ? [reason, ...missingCalculatedRemarks].join("; ")
+    : calculatedRemarks.length > 0
+      ? calculatedRemarks.join("; ")
+      : "—"
 }
 
 export interface GeneratedMemo {
@@ -440,11 +460,15 @@ async function generateMainMemo(
       toDate = toMatch ? toMatch[1] : "—"
     }
 
-    const remarksParts = [
+    const calculatedRemarks = [
       enjoyedDays > 0 ? `${enjoyedDays} day(s) already enjoyed` : "",
       travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""} added` : "",
     ].filter(Boolean)
-    const remarks = remarksParts.length > 0 ? remarksParts.join("; ") : "—"
+    const savedReason = String((memoData as any).adjustment_reason || "").trim()
+    const remarks = buildMemoRemarks({
+      savedReason,
+      calculatedRemarks,
+    })
 
     autoTable(doc, {
       startY: yPos,
