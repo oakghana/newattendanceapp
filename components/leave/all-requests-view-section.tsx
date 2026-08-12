@@ -89,8 +89,8 @@ export function AllRequestsViewSection() {
       ).toLowerCase()
       const deptName = (req.user_profiles?.department_name || req.user_profiles?.departments?.name || '').toLowerCase()
       const empId = (req.user_profiles?.employee_id || '').toLowerCase()
-      const leaveType = (req.leave_type || req.leave_type_key || '').toLowerCase()
-      const searchLower = searchTerm.toLowerCase()
+      const leaveType = String(req.leave_type || req.leave_type_key || '').toLowerCase()
+      const searchLower = String(searchTerm || '').toLowerCase()
 
       return staffName.includes(searchLower) || deptName.includes(searchLower) ||
              empId.includes(searchLower) || leaveType.includes(searchLower)
@@ -114,12 +114,12 @@ export function AllRequestsViewSection() {
       // Extract data from response - handle multiple possible response formats
       let requestsList: LeaveRequest[] = []
       
-      if (Array.isArray(responseData.data)) {
-        requestsList = responseData.data
-      } else if (Array.isArray(responseData.records)) {
-        requestsList = responseData.records
+      if (Array.isArray(responseData?.data)) {
+        requestsList = responseData.data.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
+      } else if (Array.isArray(responseData?.records)) {
+        requestsList = responseData.records.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
       } else if (Array.isArray(responseData)) {
-        requestsList = responseData
+        requestsList = responseData.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
       }
       
       setRequests(requestsList)
@@ -142,6 +142,12 @@ export function AllRequestsViewSection() {
       default:
         return <Badge variant="outline">{status || 'Unknown'}</Badge>
     }
+  }
+
+  const formatLeaveDate = (value?: string) => {
+    if (!value) return 'N/A'
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString()
   }
 
   const getHodStatusBadge = (status: string | undefined) => {
@@ -276,12 +282,8 @@ export function AllRequestsViewSection() {
                   req.user_profiles?.department_name ||
                   req.user_profiles?.departments?.name ||
                   'N/A'
-                const startDate = (req.start_date || req.preferred_start_date)
-                  ? new Date(req.start_date || req.preferred_start_date!).toLocaleDateString()
-                  : 'N/A'
-                const endDate = (req.end_date || req.preferred_end_date)
-                  ? new Date(req.end_date || req.preferred_end_date!).toLocaleDateString()
-                  : 'N/A'
+                const startDate = formatLeaveDate(req.start_date || req.preferred_start_date)
+                const endDate = formatLeaveDate(req.end_date || req.preferred_end_date)
                 const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
 
                 const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
