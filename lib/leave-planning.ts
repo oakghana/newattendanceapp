@@ -159,13 +159,14 @@ export function getStatusLabel(status: string): string {
     hr_office_forwarded: "HR Office Reviewed — Awaiting HR Approval",
     hr_approved: "Approved",
     hr_rejected: "Rejected by HR",
+    approved: "Approved by Regional Manager",
   }
   return labels[status] || status
 }
 
 /** Returns color class for a leave status badge */
 export function getStatusColor(status: string): string {
-  if (status === "hr_approved") return "bg-emerald-100 text-emerald-800 border-emerald-200"
+  if (status === "hr_approved" || status === "approved") return "bg-emerald-100 text-emerald-800 border-emerald-200"
   if (status.includes("rejected")) return "bg-red-100 text-red-800 border-red-200"
   if (status.includes("changes_requested")) return "bg-amber-100 text-amber-800 border-amber-200"
   if (status === "hr_office_forwarded") return "bg-blue-100 text-blue-800 border-blue-200"
@@ -178,7 +179,7 @@ export function getWorkflowStage(status: string): number {
   if (HOD_PENDING_STATUSES.includes(status as LeavePlanStatus)) return 2
   if (status === "hod_approved" || status === "manager_confirmed") return 3
   if (status === "hr_office_forwarded") return 4
-  if (status === "hr_approved" || status === "hr_rejected") return 4
+  if (status === "hr_approved" || status === "hr_rejected" || status === "approved") return 4
   return 1
 }
 
