@@ -744,23 +744,24 @@ export function StaffManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="regional_manager">Regional Manager</SelectItem>
-                  <SelectItem value="it-admin">IT-Admin</SelectItem>
-                  <SelectItem value="department_head">Department Head</SelectItem>
-                  <SelectItem value="audit_staff">Audit Staff</SelectItem>
                   <SelectItem value="accounts">Accounts</SelectItem>
-                  <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>
-                  <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>
                   <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>
-  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
-  <SelectItem value="hr_records">HR Records Office</SelectItem>
-  <SelectItem value="manager_hr">Manager HR</SelectItem>
-                  <SelectItem value="director_hr">Director HR</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="nsp">NSP</SelectItem>
-                  <SelectItem value="intern">Intern</SelectItem>
+                  <SelectItem value="audit_staff">Audit Staff</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="contract">Contract</SelectItem>
+                  <SelectItem value="department_head">Department Head</SelectItem>
+                  <SelectItem value="director_hr">Director HR</SelectItem>
+                  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
+                  <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>
+                  <SelectItem value="hr_records">HR Records Office</SelectItem>
+                  <SelectItem value="intern">Intern</SelectItem>
+                  <SelectItem value="it-admin">IT Admin</SelectItem>
+                  <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>
+                  <SelectItem value="manager_hr">Manager HR</SelectItem>
+                  <SelectItem value="nsp">NSP</SelectItem>
+                  <SelectItem value="regional_hr">Regional HR Officer</SelectItem>
+                  <SelectItem value="regional_manager">Regional Manager</SelectItem>
+                  <SelectItem value="staff">Staff</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -941,30 +942,27 @@ export function StaffManagement() {
                               </>
                             ) : (
                               <>
-                                <SelectItem value="staff">Staff</SelectItem>
-                                <SelectItem value="audit_staff">Audit Staff</SelectItem>
-                                <SelectItem value="department_head">Department Head</SelectItem>
-                                {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                                {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
                                 {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
-                                {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
-                                {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
-                                {isAdministrator && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-  {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
-  {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
-  {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
-                                {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
-                                {canManageStaffLinks && (
-                                  <SelectItem value="it-admin">IT Admin</SelectItem>
-                                )}
-                                {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
-                                {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
-                                {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
                                 {isAdministrator && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
-                                {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
-                                <SelectItem value="nsp">NSP</SelectItem>
-                                <SelectItem value="intern">Intern</SelectItem>
+                                <SelectItem value="audit_staff">Audit Staff</SelectItem>
+                                {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
                                 <SelectItem value="contract">Contract</SelectItem>
+                                <SelectItem value="department_head">Department Head</SelectItem>
+                                {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
+                                <SelectItem value="intern">Intern</SelectItem>
+                                {canManageStaffLinks && <SelectItem value="it-admin">IT Admin</SelectItem>}
+                                {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
+                                {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                                {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                                <SelectItem value="nsp">NSP</SelectItem>
+                                {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
+                                {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                                {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
+                                <SelectItem value="staff">Staff</SelectItem>
                               </>
                             )}
                           </SelectContent>
@@ -1211,30 +1209,27 @@ export function StaffManagement() {
                           </>
                         ) : (
                           <>
-                            <SelectItem value="staff">Staff</SelectItem>
-                            <SelectItem value="audit_staff">Audit Staff</SelectItem>
-                            <SelectItem value="department_head">Department Head</SelectItem>
-                            {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                            {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
                             {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
-                            {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
-                            {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
-                            {isAdministrator && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-{isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
-  {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
-  {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
-                            {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
-                            {canManageStaffLinks && (
-                              <SelectItem value="it-admin">IT Admin</SelectItem>
-                            )}
-                            {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
-                            {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
-                            {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
                             {isAdministrator && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
-                            {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
-                            <SelectItem value="nsp">NSP</SelectItem>
-                            <SelectItem value="intern">Intern</SelectItem>
+                            <SelectItem value="audit_staff">Audit Staff</SelectItem>
+                            {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
                             <SelectItem value="contract">Contract</SelectItem>
+                            <SelectItem value="department_head">Department Head</SelectItem>
+                            {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
+                            <SelectItem value="intern">Intern</SelectItem>
+                            {canManageStaffLinks && <SelectItem value="it-admin">IT Admin</SelectItem>}
+                            {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
+                            {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                            {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                            <SelectItem value="nsp">NSP</SelectItem>
+                            {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
+                            {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                            {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
+                            <SelectItem value="staff">Staff</SelectItem>
                           </>
                         )}
                       </SelectContent>
