@@ -81,7 +81,7 @@ export function isManagerRole(role: string | null | undefined): boolean {
 /** Regional HR Officer role — view-only access to regional leave data */
 export function isRegionalHrOfficerRole(role: string | null | undefined): boolean {
   const normalized = (role || "").toLowerCase().trim().replace(/[\s-]+/g, "_")
-  return normalized === "regional_hr_officer"
+  return ["regional_hr_officer", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
 }
 
 export function isHrLeaveOfficeRole(role: string | null | undefined): boolean {

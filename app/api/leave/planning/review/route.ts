@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, assigned_location_id")
+      .select("id, role, assigned_location_id, region_id")
       .eq("id", user.id)
       .single()
 
@@ -97,7 +97,38 @@ export async function POST(request: NextRequest) {
     }
 
     if (reviewError || !reviews || reviews.length === 0) {
-      return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
+      const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(role)
+      if (!isRegionalHr) {
+        return NextResponse.json({ error: "Review assignment not found for this manager." }, { status: 404 })
+      }
+
+      const { data: targetRequest, error: targetRequestError } = await admin
+        .from("leave_plan_requests")
+        .select("id, user_id, leave_type_key, user_profiles:user_id(assigned_location_id, region_id)")
+        .eq("id", leave_plan_request_id)
+        .maybeSingle()
+
+      if (targetRequestError || !targetRequest) {
+        return NextResponse.json({ error: "Leave request not found." }, { status: 404 })
+      }
+      if (String(targetRequest.leave_type_key || "annual").toLowerCase() === "annual") {
+        return NextResponse.json({ error: "Regional HR can only process non-annual leave requests." }, { status: 403 })
+      }
+
+      const targetProfile = Array.isArray(targetRequest.user_profiles) ? targetRequest.user_profiles[0] : targetRequest.user_profiles
+      const sameScope =
+        (profile.assigned_location_id && targetProfile?.assigned_location_id === profile.assigned_location_id) ||
+        ((profile as any).region_id && targetProfile?.region_id === (profile as any).region_id)
+      if (!sameScope) {
+        return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
+      }
+
+      const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
+        leave_plan_request_id,
+        reviewer_id: user.id,
+        decision: "pending",
+      })
+      if (assignmentError) throw assignmentError
     }
 
     // Update all review records for this manager for this request

@@ -20,7 +20,7 @@ export default async function LeaveManagementPage() {
   // Get user profile
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role, department_id, assigned_location_id, first_name, last_name, departments(name, code)")
+    .select("role, department_id, assigned_location_id, region_id, first_name, last_name, departments(name, code)")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -38,7 +38,7 @@ export default async function LeaveManagementPage() {
   let hasHodLinkage = false
   let userLocationName: string | null = null
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const isRegionalHr = ["regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
 
   try {
     // Build parallel queries — include location lookup when user has an assigned location
@@ -71,19 +71,29 @@ export default async function LeaveManagementPage() {
     const results = await Promise.all(queries)
     const [requestsRes, linkageRes, locationRes] = results
 
-    if (isRegionalHr && locationId) {
-      const { data: regionalStaff } = await admin
+    if (isRegionalHr && (locationId || (profile as any)?.region_id)) {
+      const staffQuery = admin
         .from("user_profiles")
         .select("id")
-        .eq("assigned_location_id", locationId)
         .neq("id", user.id)
-      const regionalStaffIds = (regionalStaff || []).map((row: any) => row.id).filter(Boolean)
+      const { data: locationStaff } = locationId
+        ? await staffQuery.eq("assigned_location_id", locationId)
+        : { data: [] }
+      const { data: regionStaff } = (profile as any)?.region_id
+        ? await admin
+            .from("user_profiles")
+            .select("id")
+            .eq("region_id", (profile as any).region_id)
+            .neq("id", user.id)
+        : { data: [] }
+      const regionalStaffIds = Array.from(new Set([...(locationStaff || []), ...(regionStaff || [])].map((row: any) => row.id).filter(Boolean)))
       if (regionalStaffIds.length > 0) {
         const { data: regionalRequests } = await admin
           .from("leave_plan_requests")
-          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, user_profiles:user_id(first_name, last_name, employee_id)")
+          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
           .in("user_id", regionalStaffIds)
-          .in("status", ["pending_hod_review", "pending_regional_hr_review", "pending_hr_review"])
+          .neq("leave_type_key", "annual")
+          .in("status", ["pending_hod_review", "pending_regional_hr_review", "pending_hr_review", "pending_regional_manager_approval"])
           .order("created_at", { ascending: false })
           .limit(100)
         managerNotifications = (regionalRequests || []).map((request: any) => ({
