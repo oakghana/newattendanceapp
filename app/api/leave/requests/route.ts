@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     // Enrich with user details from unified_user_management view
     const userIds = [...new Set((planRequests || []).map((r: any) => r.user_id).filter(Boolean))]
     
-    let userMap: Record<string, any> = {}
+    const userMap: Record<string, any> = {}
     if (userIds.length > 0) {
       const { data: users } = await supabase
         .from("unified_user_management")
@@ -78,8 +78,8 @@ export async function GET(request: NextRequest) {
           .filter(Boolean)
       )
     ] as string[]
-    let hrApproverMap: Record<string, any> = {}
-    let hrSignatureRegistryMap: Record<string, string> = {}
+    const hrApproverMap: Record<string, any> = {}
+    const hrSignatureRegistryMap: Record<string, string> = {}
 
     if (hrApproverIds.length > 0) {
       // Primary: user_profiles for name, position, current signature
@@ -108,10 +108,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // TODO: Fetch confirmation data from leave_resumption_notifications
-    // Note: leave_resumption_notifications.leave_request_id points to leave_requests table,
-    // not leave_plan_requests. Will need a different mapping approach.
-    let confirmationMap: Record<string, any> = {}
+    // Attach resumption state to the leave-plan request. Older records may not
+    // have leave_request_id populated, so retain a user/date fallback match.
+    const confirmationMap: Record<string, any> = {}
+    if (userIds.length > 0) {
+      const { data: resumptions, error: resumptionError } = await supabase
+        .from('leave_resumption_notifications')
+        .select('id, leave_request_id, user_id, leave_end_date, confirmation_status, first_check_in_date, first_hod_rm_check_in_date')
+        .in('user_id', userIds)
+
+      if (resumptionError) {
+        console.error('[v0] Failed to load resumption statuses:', resumptionError.message)
+      } else {
+        for (const resumption of resumptions || []) {
+          const directKey = resumption.leave_request_id
+          const dateKey = `${resumption.user_id}::${resumption.leave_end_date}`
+          if (directKey) confirmationMap[directKey] = resumption
+          confirmationMap[dateKey] = resumption
+        }
+      }
+    }
 
     const data = (planRequests || []).map((req: any) => {
       const hrApprover = hrApproverMap[req.hr_approver_id] || null
@@ -129,12 +145,16 @@ export async function GET(request: NextRequest) {
         ? `${hrApprover.first_name || ""} ${hrApprover.last_name || ""}`.trim()
         : (req.hr_approver_name || null)
       
-      const confirmation = confirmationMap[req.id] || {
-        staff_confirmed: false,
-        staff_confirmed_at: null,
-        hod_confirmed: false,
-        hod_confirmed_at: null,
-      }
+      const confirmation = confirmationMap[req.id] || confirmationMap[
+        `${req.user_id}::${req.adjusted_end_date || req.preferred_end_date}`
+      ] || null
+      const confirmationStatus = confirmation?.confirmation_status || (
+        confirmation?.first_check_in_date
+          ? 'confirmed'
+          : confirmation?.first_hod_rm_check_in_date
+            ? 'pending_hr_manual'
+            : null
+      )
 
       return {
         ...req,
@@ -144,8 +164,10 @@ export async function GET(request: NextRequest) {
         hod_review_status: req.hod_decision || "pending",
         staff_confirmed: confirmation.staff_confirmed,
         staff_confirmed_at: confirmation.staff_confirmed_at,
-        hod_confirmed: confirmation.hod_confirmed,
-        hod_confirmed_at: confirmation.hod_confirmed_at,
+        hod_confirmed: Boolean(confirmation?.first_hod_rm_check_in_date),
+        hod_confirmed_at: confirmation?.first_hod_rm_check_in_date || null,
+        confirmation_status: confirmationStatus,
+        leave_resumption_id: confirmation?.id || null,
         user_profiles: userMap[req.user_id] ? {
           first_name: (userMap[req.user_id].full_name || "").split(" ")[0] || "",
           last_name: (userMap[req.user_id].full_name || "").split(" ").slice(1).join(" ") || "",

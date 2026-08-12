@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
-import { AlertCircle, Loader2, Search, XCircle, AlertTriangle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Search, XCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -29,6 +29,7 @@ interface LeaveRequest {
   staff_confirmed_at?: string
   hod_confirmed?: boolean
   hod_confirmed_at?: string
+  confirmation_status?: 'pending_hod_rm' | 'pending_hr_manual' | 'confirmed' | 'rejected' | null
   user_profiles?: {
     first_name?: string
     last_name?: string
