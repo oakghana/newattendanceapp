@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, assigned_location_id, region_id, first_name, last_name, position")
+      .select("id, role, assigned_location_id, region_id, first_name, last_name, position, signature_data_url")
       .eq("id", user.id)
       .single()
 
@@ -83,6 +83,27 @@ export async function POST(request: NextRequest) {
 
     if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
       return NextResponse.json({ error: "Adjusted start and end dates are required before forwarding to the Regional Manager." }, { status: 400 })
+    }
+
+    const isRegionalManagerApproval = role === "regional_manager"
+    if (isRegionalManagerApproval && decision === "approved" && !isRegionalForward) {
+      const { data: registrySignature, error: registryError } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle()
+      if (registryError && isSchemaIssue(registryError)) return schemaIssueResponse()
+      if (!registrySignature?.signature_data_url) {
+        const { data: profileSignature } = await admin
+          .from("user_profiles")
+          .select("signature_data_url")
+          .eq("id", user.id)
+          .maybeSingle()
+        if (!profileSignature?.signature_data_url) {
+          return NextResponse.json({ error: "Save your Regional Manager signature in your profile before approving this leave request." }, { status: 400 })
+        }
+      }
     }
 
     if (decision === "recommend_change" && !isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
@@ -216,7 +237,6 @@ export async function POST(request: NextRequest) {
       .filter((r: string | null) => !!r)
       .join("\n\n")
 
-    const isRegionalManagerApproval = role === "regional_manager" || role === "regional_manager_officer"
     const isRegionalNonAnnualApproval = isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const requestUpdatePayload: Record<string, any> = {
       status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalNonAnnualApproval ? "approved" : nextStatus,
@@ -235,8 +255,9 @@ export async function POST(request: NextRequest) {
 
       requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
       requestUpdatePayload.hr_approver_position = (profile as any).position || "Regional Manager"
-      requestUpdatePayload.hr_approver_signature_data_url = signerSignature?.signature_data_url || null
-      requestUpdatePayload.hr_signature_data_url = signerSignature?.signature_data_url || null
+      const savedSignature = signerSignature?.signature_data_url || (profile as any).signature_data_url || null
+      requestUpdatePayload.hr_approver_signature_data_url = savedSignature
+      requestUpdatePayload.hr_signature_data_url = savedSignature
       requestUpdatePayload.hr_approved_at = new Date().toISOString()
       requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."
     }

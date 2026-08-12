@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Calendar, Loader2, Info } from "lucide-react"
 import { useEffect } from "react"
-import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 
 interface AnnualEntitlementInfo {
   annualLeaveDays: number
@@ -37,7 +37,7 @@ export function RequestLeaveButton() {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [formData, setFormData] = useState({ start_date: "", end_date: "", leave_type: "annual", reason: "" })
+  const [formData, setFormData] = useState({ start_date: "", end_date: "", leave_type: "annual", reason: "", maternity_delivery_type: "normal", delivery_date: "" })
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeOption[]>([])
   const [activePeriod, setActivePeriod] = useState("2026/2027")
   const [annualEntitlement, setAnnualEntitlement] = useState<AnnualEntitlementInfo | null>(null)
@@ -102,8 +102,14 @@ export function RequestLeaveButton() {
     }
 
     const requestedDays = computeLeaveDays(formData.start_date, formData.end_date)
+    const maternity = formData.leave_type === "maternity"
+    const maternityDays = getMaternityEntitlementDays(formData.maternity_delivery_type)
+    if (maternity && (!formData.delivery_date || requestedDays !== maternityDays)) {
+      alert(`Maternity leave must be ${maternityDays} days for the selected delivery type, with the delivery date provided.`)
+      return
+    }
     const selectedType = leaveTypes.find((type) => type.leaveTypeKey === formData.leave_type)
-    if (selectedType && requestedDays > selectedType.entitlementDays) {
+    if (!maternity && selectedType && requestedDays > selectedType.entitlementDays) {
       alert(
         `Requested ${requestedDays} day(s) exceeds ${selectedType.entitlementDays} day entitlement for ${selectedType.leaveTypeLabel}.`,
       )
@@ -118,6 +124,10 @@ export function RequestLeaveButton() {
       m.append("reason", formData.reason)
       m.append("leave_type", formData.leave_type)
       m.append("leave_year_period", activePeriod)
+      if (formData.leave_type === "maternity") {
+        m.append("maternity_delivery_type", formData.maternity_delivery_type)
+        m.append("delivery_date", formData.delivery_date)
+      }
       if (uploadedFile) m.append("document", uploadedFile)
 
       const resp = await fetch("/api/leave/request-leave", { method: "POST", body: m })
@@ -206,6 +216,24 @@ export function RequestLeaveButton() {
                   </div>
                 )
               })()}
+            </div>
+          )}
+
+          {formData.leave_type === "maternity" && (
+            <div className="space-y-3 rounded-lg border border-pink-200 bg-pink-50 p-3">
+              <div>
+                <Label htmlFor="delivery_date">Date of Delivery</Label>
+                <Input id="delivery_date" type="date" value={formData.delivery_date} onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="maternity_delivery_type">Delivery Type</Label>
+                <select id="maternity_delivery_type" value={formData.maternity_delivery_type} onChange={(e) => setFormData({ ...formData, maternity_delivery_type: e.target.value })} className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm">
+                  <option value="normal">Normal delivery — 84 days</option>
+                  <option value="cs">Caesarean section — 98 days</option>
+                  <option value="twins">Twins delivery — 98 days</option>
+                </select>
+              </div>
+              <p className="text-xs text-pink-800">Entitlement is calculated from the delivery type; the old fixed 90-day entitlement is no longer used.</p>
             </div>
           )}
 

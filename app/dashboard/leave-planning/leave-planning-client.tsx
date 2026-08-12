@@ -2266,6 +2266,14 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     if (action === "recommend_change" && (!hodAdjStart[reviewId] || !hodAdjEnd[reviewId])) {
       toast({ title: "Adjusted dates required", variant: "destructive" }); return
     }
+    if (action === "approve" && normalizedRole === "regional_manager") {
+      const signatureCheck = await fetch(`/api/user/signature-check/${profile.id}`, { cache: "no-store" })
+      const signatureStatus = await signatureCheck.json()
+      if (!signatureCheck.ok || !signatureStatus.hasSignature) {
+        toast({ title: "Signature required", description: "Save your Regional Manager signature in your profile before approving.", variant: "destructive" })
+        return
+      }
+    }
     setHodSubmitting(reviewId)
     try {
       const res = await fetch("/api/leave/planning/review", {

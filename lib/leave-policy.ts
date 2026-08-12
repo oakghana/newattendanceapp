@@ -58,6 +58,21 @@ export function computeLeaveDays(startDate: string, endDate: string): number {
   return workingDays
 }
 
+export type MaternityDeliveryType = "normal" | "cs" | "twins" | "regular" | "cs_twins"
+
+/** Maternity entitlement is delivery-specific, not the legacy fixed 90 days. */
+export function getMaternityEntitlementDays(deliveryType?: string | null): number {
+  const normalized = String(deliveryType || "normal").toLowerCase().trim()
+  return normalized === "cs" || normalized === "twins" || normalized === "cs_twins" ? 98 : 84
+}
+
+export function getMaternityDeliveryLabel(deliveryType?: string | null): string {
+  const normalized = String(deliveryType || "normal").toLowerCase().trim()
+  if (normalized === "cs" || normalized === "cs_twins") return "Caesarean section"
+  if (normalized === "twins") return "Twins delivery"
+  return "Normal delivery"
+}
+
 export function computeReturnToWorkDate(endDate: string): string {
   const date = new Date(endDate)
   if (Number.isNaN(date.getTime())) return "N/A"

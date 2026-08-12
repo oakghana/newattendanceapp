@@ -1,6 +1,6 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
-import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
+import { computeLeaveDays, computeReturnToWorkDate, getMaternityEntitlementDays } from "@/lib/leave-policy"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
@@ -83,11 +83,18 @@ export async function POST(request: NextRequest) {
       if (!document || document.size === 0) {
         return NextResponse.json({ error: "Maternity evidence is required." }, { status: 400 })
       }
-      if (!["regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
-        return NextResponse.json({ error: "Select a valid maternity delivery type." }, { status: 400 })
+      if (!["normal", "cs", "twins", "regular", "cs_twins"].includes(String(maternity_delivery_type || ""))) {
+        return NextResponse.json({ error: "Select normal delivery, Caesarean section, or twins delivery." }, { status: 400 })
       }
       if (!delivery_date) {
         return NextResponse.json({ error: "Delivery date is required for maternity leave." }, { status: 400 })
+      }
+      const maternityDays = getMaternityEntitlementDays(maternity_delivery_type)
+      const expectedEnd = new Date(start_date)
+      expectedEnd.setDate(expectedEnd.getDate() + maternityDays - 1)
+      const expectedEndDate = expectedEnd.toISOString().split("T")[0]
+      if (end_date !== expectedEndDate || requestedDays !== maternityDays) {
+        return NextResponse.json({ error: `Maternity leave must be ${maternityDays} days for the selected delivery type.` }, { status: 400 })
       }
     }
 

@@ -41,7 +41,7 @@ export interface LeaveRequestData {
   leaveYearPeriod?: string
   documentFile?: File
   deliveryDate?: Date
-  maternityDeliveryType?: "regular" | "cs_twins"
+  maternityDeliveryType?: "normal" | "cs" | "twins" | "regular" | "cs_twins"
   isDirectSubmit?: boolean
 }
 
@@ -133,15 +133,16 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   const calculateDuration = async (startDate: Date, leaveType: string, period: string) => {
     if (!startDate || !leaveType) return
     if (leaveType === "maternity") {
-      const weeks = formData.maternityDeliveryType === "cs_twins" ? 14 : 12
+      const deliveryType = formData.maternityDeliveryType || "normal"
+      const days = deliveryType === "cs" || deliveryType === "twins" || deliveryType === "cs_twins" ? 98 : 84
       const endDate = new Date(startDate)
-      endDate.setDate(endDate.getDate() + weeks * 7 - 1)
+      endDate.setDate(endDate.getDate() + days - 1)
       const returnDate = new Date(endDate)
       returnDate.setDate(returnDate.getDate() + 1)
       setCalculatedEnd({
         endDate: endDate.toISOString().split("T")[0],
-        daysCount: weeks,
-        businessDays: weeks * 7,
+        daysCount: days,
+        businessDays: days,
         estimatedReturn: returnDate.toISOString().split("T")[0],
       })
       setFormData((p) => ({ ...p, endDate }))
@@ -340,7 +341,8 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                       <button
                         key={type.value}
                         onClick={() => {
-                          setFormData((p) => ({ ...p, leaveType: type.value }))
+                          const nextMaternityType = type.value === "maternity" ? (formData.maternityDeliveryType || "normal") : formData.maternityDeliveryType
+                          setFormData((p) => ({ ...p, leaveType: type.value, maternityDeliveryType: nextMaternityType as LeaveRequestData["maternityDeliveryType"] }))
                           setLeaveSearchQuery("")
                           setStep("dates")
                           void calculateDuration(formData.startDate, type.value, activePeriod)
@@ -383,14 +385,15 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                     <select
                       value={formData.maternityDeliveryType}
                       onChange={(e) => {
-                        const maternityDeliveryType = e.target.value as "regular" | "cs_twins"
+                        const maternityDeliveryType = e.target.value as LeaveRequestData["maternityDeliveryType"]
                         setFormData((p) => ({ ...p, maternityDeliveryType }))
                         void calculateDuration(formData.startDate, "maternity", activePeriod)
                       }}
                       className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm outline-none"
                     >
-                      <option value="regular">Regular delivery — 12 weeks</option>
-                      <option value="cs_twins">Cesarean Section / Twins — 14 weeks</option>
+                      <option value="normal">Normal delivery — 84 days</option>
+                      <option value="cs">Caesarean section — 98 days</option>
+                      <option value="twins">Twins delivery — 98 days</option>
                     </select>
                   </div>
                 </div>
