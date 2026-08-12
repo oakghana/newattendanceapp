@@ -7,6 +7,7 @@ import {
   isHrPlanningRole,
   isHrApproverRole,
   isHrLeaveOfficeRole,
+  isRegionalHrOfficerRole,
   isHrDepartment,
   isManagerRole,
   isHodRole,
@@ -701,12 +702,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, departments(name, code)")
+    const profile = await getOrCreateProfile(admin, user, "id, role, department_id, departments(name, code), assigned_location_id, region_id")
 
     const role = normalizeRoleValue(profile.role)
     const departmentName = (profile as any)?.departments?.name || null
     const departmentCode = (profile as any)?.departments?.code || null
-    const isHrOffice = isHrLeaveOfficeRole(role)
+    const isRegionalHr = isRegionalHrOfficerRole(role)
+    const isHrOffice = isHrLeaveOfficeRole(role) || isRegionalHr
     const isHrApprover = isHrApproverRole(role, departmentName, departmentCode)
     const isHr = isHrOffice || isHrApprover || isHrPlanningRole(role, departmentName, departmentCode)
 
@@ -730,6 +732,7 @@ export async function GET(request: NextRequest) {
           user:user_profiles!leave_plan_requests_user_id_fkey (
             id, first_name, last_name, employee_id,
             departments(name, code),
+            assigned_location_id, region_id,
             geofence_locations!user_profiles_assigned_location_id_fkey(name, address)
           )
         `)
@@ -739,11 +742,31 @@ export async function GET(request: NextRequest) {
         officeQuery = officeQuery.eq("is_archived", false)
       }
 
-      const { data: requests, error: reqError } = await officeQuery
+      // Regional HR handles only non-annual leave for staff within their own
+      // region/location — annual leave and out-of-region requests stay with
+      // the national HR Leave Office.
+      if (isRegionalHr) {
+        officeQuery = officeQuery.neq("leave_type_key", "annual")
+      }
+
+      let { data: requests, error: reqError } = await officeQuery
 
       if (reqError) {
         if (isSchemaIssue(reqError)) return buildDegradedModeResponse("hr_office", getSchemaIssueMessage(reqError))
         throw reqError
+      }
+
+      if (isRegionalHr) {
+        const regionalLocationId = (profile as any)?.assigned_location_id || null
+        const regionalRegionId = (profile as any)?.region_id || null
+        requests = (requests || []).filter((r: any) => {
+          const staffLocationId = r.user?.assigned_location_id || null
+          const staffRegionId = r.user?.region_id || null
+          return (
+            (regionalLocationId && staffLocationId === regionalLocationId) ||
+            (regionalRegionId && staffRegionId === regionalRegionId)
+          )
+        })
       }
 
       const { data: myRequests } = await admin
