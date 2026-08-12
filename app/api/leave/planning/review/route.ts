@@ -216,8 +216,10 @@ export async function POST(request: NextRequest) {
       .filter((r: string | null) => !!r)
       .join("\n\n")
 
+    const isRegionalManagerApproval = role === "regional_manager" || role === "regional_manager_officer"
+    const isRegionalNonAnnualApproval = isRegionalManagerApproval && decision === "approved" && !isRegionalForward
     const requestUpdatePayload: Record<string, any> = {
-      status: isRegionalForward ? "pending_regional_manager_approval" : nextStatus,
+      status: isRegionalForward ? "pending_regional_manager_approval" : isRegionalNonAnnualApproval ? "approved" : nextStatus,
       manager_recommendation: mergedRecommendations || null,
       updated_at: new Date().toISOString(),
     }
@@ -286,7 +288,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If fully approved by all HODs → notify HR Leave Office
-    if (nextStatus === "hod_approved" || nextStatus === "manager_confirmed") {
+    if (!isRegionalNonAnnualApproval && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
       const hodName = `${(profile as any).first_name || ""} ${(profile as any).last_name || ""}`.trim() || "HOD"
       notifyLeaveHodApproved(admin, {
         leavePlanRequestId: leave_plan_request_id,
