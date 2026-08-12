@@ -4,12 +4,21 @@ import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, AlertCircle, Mail, X } from 'lucide-react'
+import { AlertTriangle, AlertCircle, Mail, X, ClipboardCheck } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/use-local-storage'
+
+interface ManagementNotice {
+  id: string
+  staff_name: string
+  resumption_date: string
+  state: 'upcoming' | 'due_today' | 'overdue'
+  days_until_resumption: number
+  staff_checked_in: boolean
+}
 
 interface Warning {
   id: string
-  type: 'warning' | 'query_memo' | 'info'
+  type: 'warning' | 'query_memo' | 'info' | 'resumption_notice'
   title: string
   message: string
   severity: 'low' | 'medium' | 'high' | 'critical'
@@ -31,6 +40,10 @@ export function GlobalWarningsToasts() {
         const { data: { user } } = await supabase.auth.getUser()
 
         if (!user || !isMounted) return
+
+        const managementResponse = await fetch('/api/leave/resumption-notices', { cache: 'no-store' })
+        const managementPayload = managementResponse.ok ? await managementResponse.json() : { notices: [] }
+        const managementNotices: ManagementNotice[] = Array.isArray(managementPayload.notices) ? managementPayload.notices : []
 
         // A live attendance session is the employee's evidence of resumption.
         // Do not show a non-resumption warning after they have checked in.
@@ -67,6 +80,20 @@ export function GlobalWarningsToasts() {
         if (!isMounted) return
 
         const allWarnings: Warning[] = []
+
+        managementNotices.forEach((notice) => {
+          const timing = notice.state === 'overdue'
+            ? `overdue by ${Math.abs(notice.days_until_resumption)} day${Math.abs(notice.days_until_resumption) === 1 ? '' : 's'}`
+            : notice.state === 'due_today' ? 'due today' : `due in ${notice.days_until_resumption} day${notice.days_until_resumption === 1 ? '' : 's'}`
+          allWarnings.push({
+            id: `resumption-notice-${notice.id}`,
+            type: 'resumption_notice',
+            title: notice.state === 'overdue' ? 'Resumption confirmation overdue' : 'Resumption confirmation required',
+            message: `${notice.staff_name} is ${timing}. ${notice.staff_checked_in ? 'Staff check-in is recorded, but' : 'Please ensure'} HOD/RM confirmation is still required.`,
+            severity: notice.state === 'overdue' ? 'high' : 'medium',
+            dismissible: false,
+          })
+        })
 
         // A check-in changes the employee-facing state to resumed, while
         // management confirmation remains pending.
@@ -205,6 +232,14 @@ export function GlobalWarningsToasts() {
                   <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
                     <Mail className="h-4 w-4 mr-1" />
                     View Memo
+                  </Button>
+                )}
+                {warning.type === 'resumption_notice' && (
+                  <Button size="sm" asChild className="bg-primary hover:bg-primary/90">
+                    <a href="/dashboard/leave-management">
+                      <ClipboardCheck className="h-4 w-4 mr-1" />
+                      Confirm Resumption
+                    </a>
                   </Button>
                 )}
                 {warning.dismissible && (
