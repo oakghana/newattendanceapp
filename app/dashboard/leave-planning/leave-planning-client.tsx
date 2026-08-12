@@ -2483,8 +2483,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     if (canSelfApply) t.push({ value: "apply", label: editingId ? "Edit Request" : "Apply", Icon: Plus })
     if (isHod || isAdmin) t.push({ value: "hod-review", label: "HOD Review", Icon: UserCheck, count: hodAssignedReviews.length })
     // HR Executive HOD Review tab: for HR managers (manager_hr, director_hr) who are NOT also HODs
-    if (isHrOffice && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
-    if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
+  if (isHrOffice && !isRegionalHr && !isHod && !isAdmin) t.push({ value: "hr-exec-hod-review", label: "HOD Review", Icon: UserCheck, count: hodReviewRequests.length })
+  if (isHrOffice || isAdmin) t.push({ value: "hr-office", label: "HR Leave Office", Icon: ClipboardList, count: hrOfficeQueue.length })
     if (isHrApprover || isAdmin) {
       const deferRecallPending = [...hrExecDeferRecallData.deferments, ...hrExecDeferRecallData.recalls]
         .filter((r: any) => !r.hr_office_decision && !r.hr_decision).length
@@ -3100,13 +3100,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <TabsList className="flex h-auto flex-wrap justify-start gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1.5">
                   <TabsTrigger value="operations" className="rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Operations</TabsTrigger>
-                  {canManageLeaveTypePolicy && (
+                  {canManageLeaveTypePolicy && !isRegionalHr && (
                     <TabsTrigger value="leave-policy" className="rounded-lg data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Leave Policy</TabsTrigger>
                   )}
-                  {canManageLeaveTypePolicy && (
+                  {canManageLeaveTypePolicy && !isRegionalHr && (
                     <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Holidays</TabsTrigger>
                   )}
-                  {canViewLeaveAnalytics && (
+                  {canViewLeaveAnalytics && !isRegionalHr && (
                     <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm px-3 sm:px-4 py-1.5">Analytics</TabsTrigger>
                   )}
                 </TabsList>
