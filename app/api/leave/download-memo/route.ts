@@ -103,6 +103,16 @@ export async function GET(request: NextRequest) {
       .eq('user_id', req.user_id)
       .single()
 
+    // ── HR-adjusted outstanding balance ───────────────────────────────────────
+    // Leave Office adjustments are stored separately from the original request.
+    // Read the matching year so memo generation uses the latest carryover value.
+    const { data: outstandingBalance } = await admin
+      .from('outstanding_leave_balances')
+      .select('entitlement_days, used_this_period, carryover_to_next_year')
+      .eq('user_id', req.user_id)
+      .eq('leave_year_period', req.leave_year_period)
+      .maybeSingle()
+
     // ── Department ────────────────────────────────────────────────────────────
     let departmentName = staffMgmt?.department_name || 'N/A'
     const deptId = staff?.department_id
@@ -214,15 +224,25 @@ export async function GET(request: NextRequest) {
       ? resolveEntitlementFromProfile(entitlementProfile)
       : null
     const storedEntitledDays = Number(req.entitlement_days ?? req.leave_entitlement_days ?? 0)
+    const adjustedEntitlementDays = leaveTypeKey === 'annual'
+      ? Number(outstandingBalance?.entitlement_days ?? 0)
+      : 0
+    const outstandingDays = leaveTypeKey === 'annual'
+      ? Math.max(0, Number(outstandingBalance?.carryover_to_next_year ?? 0))
+      : 0
     const entitlementDays = leaveTypeKey === 'annual'
-      ? (resolvedEntitlement?.annualLeaveDays ?? 36)
+      ? adjustedEntitlementDays > 0
+        ? adjustedEntitlementDays
+        : (resolvedEntitlement?.annualLeaveDays ?? 36) + outstandingDays
       : (storedEntitledDays || storedGrantedDays)
     const travelDays = leaveTypeKey === 'annual'
       ? (resolvedEntitlement?.travelDays ?? Number(req.travelling_days_added || 2))
       : Number(req.travelling_days_added || 0)
     const explicitDeduction = (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
       ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
-      : extractAlreadyEnjoyedDays(req.adjustment_reason)
+      : outstandingBalance?.used_this_period != null
+        ? Number(outstandingBalance.used_this_period)
+        : extractAlreadyEnjoyedDays(req.adjustment_reason)
     const annualDates = leaveTypeKey === 'annual'
       ? calculateAnnualLeaveMemoDates({
           startDate: startRaw,

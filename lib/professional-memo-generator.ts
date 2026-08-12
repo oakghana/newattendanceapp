@@ -19,6 +19,11 @@ export interface MemoData {
     leaveDate: string
     approved_days?: number
     entitlement_days?: number
+    adjusted_entitlement_days?: number
+    outstanding_entitlement_days?: number
+    adjusted_used_days?: number
+    outstanding_used_days?: number
+    used_this_period?: number
     prior_leave_days_deducted?: number
     travelling_days_added?: number
     leave_period_start?: string
@@ -430,7 +435,18 @@ async function generateMainMemo(
     const publicHolidayDays = Number(firstStaff?.holiday_days_deducted ?? 0)
     const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
     const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
-    const storedEntitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
+    const storedEntitlementDays = Number(
+      firstStaff?.adjusted_entitlement_days
+        ?? firstStaff?.outstanding_entitlement_days
+        ?? firstStaff?.entitlement_days
+        ?? approvedDays,
+    )
+    const adjustedUsedDays = Number(
+      firstStaff?.adjusted_used_days
+        ?? firstStaff?.outstanding_used_days
+        ?? firstStaff?.used_this_period
+        ?? 0,
+    )
     const resolvedEntitlement = resolveEntitlementFromProfile({
       staff_category: firstStaff?.staff_category,
       position: firstStaff?.position,
@@ -438,14 +454,17 @@ async function generateMainMemo(
       date_of_appointment: firstStaff?.date_of_appointment,
       years_of_service: firstStaff?.years_of_service,
     })
+    const hasAdjustedEntitlement = firstStaff?.adjusted_entitlement_days != null
+      || firstStaff?.outstanding_entitlement_days != null
+      || firstStaff?.entitlement_days != null
     const entitlementDays = String(memoData.leave_type_key || "").toLowerCase() === "annual"
-      ? resolvedEntitlement.annualLeaveDays
+      ? hasAdjustedEntitlement ? storedEntitlementDays : resolvedEntitlement.annualLeaveDays
       : storedEntitlementDays
     const annualMemoDates = calculateAnnualLeaveMemoDates({
       startDate: firstStaff?.leave_period_start || new Date(),
       entitlementDays,
       grantedDays: approvedDays,
-      daysAlreadyEnjoyed: enjoyedDays || publicHolidayDays || null,
+      daysAlreadyEnjoyed: adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || publicHolidayDays || null,
       travellingDays,
     })
     const annualDaysRemaining = Math.max(0, annualMemoDates.entitlementDays - annualMemoDates.daysAlreadyEnjoyed)

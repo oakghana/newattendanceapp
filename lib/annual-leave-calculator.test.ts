@@ -83,6 +83,39 @@ describe("annual leave calculation", () => {
     expect(result.endDate.toISOString().slice(0, 10)).toBe("2026-09-17")
   })
 
+  it("uses HR-adjusted outstanding entitlement and usage in memo totals", () => {
+    const adjustedEntitlement = 34
+    const adjustedUsed = 10
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: adjustedEntitlement,
+      grantedDays: adjustedEntitlement - adjustedUsed,
+      daysAlreadyEnjoyed: adjustedUsed,
+      travellingDays: 0,
+    })
+
+    expect(result.entitlementDays).toBe(34)
+    expect(result.daysAlreadyEnjoyed).toBe(10)
+    expect(result.grantedDays).toBe(24)
+  })
+
+  it("adds HR carryover days to the core annual entitlement", () => {
+    const coreEntitlement = 36
+    const carryover = 12
+    const adjustedEntitlement = coreEntitlement + carryover
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: adjustedEntitlement,
+      grantedDays: adjustedEntitlement - 10,
+      daysAlreadyEnjoyed: 10,
+      travellingDays: 0,
+    })
+
+    expect(result.entitlementDays).toBe(48)
+    expect(result.daysAlreadyEnjoyed).toBe(10)
+    expect(result.grantedDays).toBe(38)
+  })
+
   it("calculates 36 entitlement with no enjoyed days and two travel days", () => {
     const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 0)
     expect(result.annualEntitlement).toBe(36)

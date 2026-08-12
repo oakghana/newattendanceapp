@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Loader2, CheckCircle, XCircle, Clock, FileText, ChevronDown, ChevronUp,
-  Download, Eye, AlertCircle, CalendarClock, RotateCcw
+  Loader2, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp,
+  CalendarClock, RotateCcw
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -190,31 +190,6 @@ export function HrExecutiveApprovalDashboard() {
     }
   }
 
-  // ── Download approved memo PDF ──────────────────────────────────────────────
-  const downloadMemo = async (memoId: string, category: string) => {
-    try {
-      // Route expects query param named memo_id (not memoId)
-      const res = await fetch(`/api/leave/payment-advice/download?memo_id=${memoId}`)
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || `Download failed (${res.status})`)
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `payment-advice-${category}-memo.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (err: any) {
-      console.error('[v0] Memo download error:', err)
-      const errorMsg = err?.message || 'Failed to download memo'
-      toast({ title: 'Error', description: String(errorMsg), variant: 'destructive' })
-    }
-  }
-
   // ── Download deferment approval letter ─────────────────────────────────────
   const downloadDefermentLetter = async (id: string, staffName: string) => {
     try {
@@ -270,7 +245,6 @@ export function HrExecutiveApprovalDashboard() {
   const pendingRecalls     = recalls.filter(r => !r.hr_decision || r.hr_decision === 'pending')
   const approvedDeferments = deferments.filter(d => d.hr_office_decision === 'approved')
   const approvedRecalls    = recalls.filter(r => r.hr_decision === 'approved')
-  const approvedMemos      = memos.filter(m => ['approved', 'signed_by_hr_executive', 'reviewed_by_hr', 'finalized'].includes(m.status))
 
   if (loading) {
     return (
