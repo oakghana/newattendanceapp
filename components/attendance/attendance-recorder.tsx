@@ -46,7 +46,7 @@ import { Label } from "@/components/ui/label"
 import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils"
-import { requiresLatenessReason, requiresEarlyCheckoutReason, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline } from "@/lib/attendance-utils"
+import { requiresLatenessReason, requiresEarlyCheckoutReason, isExemptFromAttendanceReasons, canCheckInAtTime, canCheckOutAtTime, canAutoCheckoutOutOfRange, getCheckInDeadline, getCheckOutDeadline } from "@/lib/attendance-utils"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
@@ -1512,7 +1512,7 @@ export function AttendanceRecorder({
       fieldLabel: "Off-premises reason",
       minLength: 10,
     })
-    if (!reasonValidation.ok) {
+    if (!isExemptFromAttendanceReasons(userProfile?.role) && !reasonValidation.ok) {
       toast({
         title: "Reason Required",
         description: reasonValidation.error,
@@ -2818,12 +2818,11 @@ export function AttendanceRecorder({
     }
   }
   const handleLatenessConfirm = async () => {
-    const reasonValidation = validateMeaningfulText(latenessReason, {
-      fieldLabel: "Lateness reason",
-      minLength: 10,
-    })
-
-    if (!reasonValidation.ok) {
+  const reasonValidation = validateMeaningfulText(latenessReason, {
+    fieldLabel: "Late arrival reason",
+    minLength: 10,
+  })
+  if (!isExemptFromAttendanceReasons(userProfile?.role) && !reasonValidation.ok) {
       setFlashMessage({
         message: reasonValidation.error || "Please provide a valid reason for your late arrival before proceeding.",
         type: "error",

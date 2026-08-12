@@ -34,16 +34,16 @@ describe("attendance-utils", () => {
     expect(requiresLatenessReason(weekday, { code: "security" })).toBe(true)
   })
 
-  it("does not bypass lateness or early-checkout reasons for privileged roles", () => {
+  it("exempts administrator roles from attendance reasons", () => {
     const weekday = new Date("2026-02-12T10:30:00Z")
 
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "admin")).toBe(true)
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(true)
-    expect(requiresLatenessReason(weekday, { code: "HR" }, "department_head")).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "administrator")).toBe(false)
+    expect(requiresEarlyCheckoutReason(weekday, true, "administrator", { code: "HR" })).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "admin")).toBe(false)
+    expect(requiresEarlyCheckoutReason(weekday, true, "admin", { code: "HR" })).toBe(false)
 
-    expect(requiresEarlyCheckoutReason(weekday, true, "admin", { code: "HR" })).toBe(true)
-    expect(requiresEarlyCheckoutReason(weekday, true, "regional_manager", { code: "HR" })).toBe(true)
-    expect(requiresEarlyCheckoutReason(weekday, true, "department_head", { code: "HR" })).toBe(true)
+    expect(requiresLatenessReason(weekday, { code: "HR" }, "regional_manager")).toBe(false)
+    expect(requiresEarlyCheckoutReason(weekday, true, "department_head", { code: "HR" })).toBe(false)
   })
 
   it("enforces early-checkout reason only when location requires it and not on weekends", () => {
