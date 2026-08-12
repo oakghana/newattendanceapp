@@ -63,7 +63,7 @@ export function LeaveManagementModuleClient({
   const showAnalytics = isHrAnalyticsRole(userRole)
   const normalizedRole = normalizeRole(userRole)
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
-  const isRegionalHR = isRegionalHrOfficerRole(normalizedRole)
+  const isRegionalHR = isRegionalHrOfficerRole(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isHrExecutive = ['hr_executive', 'hr_director', 'director_hr', 'manager_hr'].includes(normalizedRole)
   const isLoanOffice = normalizedRole === 'loan_office' || normalizedRole === 'hr_loan_office' || normalizedRole === 'accounts_loan_office'
 
@@ -111,7 +111,7 @@ export function LeaveManagementModuleClient({
 
   return (
     <div className="space-y-6 w-full">
-      <Tabs defaultValue="leave-management" className="space-y-4 w-full">
+      <Tabs defaultValue={isRegionalHR ? "leave-planning" : "leave-management"} className="space-y-4 w-full">
         <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-3xl border border-slate-200 bg-slate-100/80 p-2 shadow-sm overflow-x-auto sm:overflow-visible">
           {/* Regional HR uses this as the operational queue; other roles see the overview. */}
           <TabsTrigger value="leave-management" className="relative gap-1 sm:gap-2 rounded-2xl border-2 border-slate-200 bg-white px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm text-slate-600 hover:bg-slate-50 hover:border-emerald-300 transition-all duration-300 ease-out data-[state=active]:border-emerald-600 data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(16,185,129,0.5)] data-[state=active]:scale-105 data-[state=active]:font-bold data-[state=active]:-translate-y-0.5 min-w-fit group">

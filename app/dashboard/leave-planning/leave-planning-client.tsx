@@ -1046,7 +1046,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
 
   const isStaff = isStaffRole(normalizedRole)
   const isHod = isHodRole(normalizedRole) && !isHrLeaveOfficeRole(normalizedRole)
-  const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
   const isHrOffice = isHrLeaveOfficeRole(normalizedRole) || isRegionalHr
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
@@ -1323,7 +1323,6 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       const query = hrOfficeShowArchived ? "?includeArchived=true" : ""
       const res = await fetch(`/api/leave/planning${query}`, { cache: "no-store" })
       const json = await res.json()
-      console.log("[v0] Planning API response:", { mode: json.mode, hasOutstandingMap: !!json.outstandingLeaveMap, outstandingMap: json.outstandingLeaveMap })
       if (!res.ok) throw new Error(json.error || "Failed to load data")
       setData(json)
       setHrOfficeLastRefresh(new Date().toISOString())

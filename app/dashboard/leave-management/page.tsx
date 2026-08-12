@@ -38,7 +38,7 @@ export default async function LeaveManagementPage() {
   let hasHodLinkage = false
   let userLocationName: string | null = null
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
-  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
 
   try {
     // Build parallel queries — include location lookup when user has an assigned location
