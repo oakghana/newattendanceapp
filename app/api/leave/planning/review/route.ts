@@ -23,6 +23,7 @@ function schemaIssueResponse() {
 
 function normalizeDecision(action: string): LeavePlanReviewDecision | null {
   if (action === "approve") return "approved"
+  if (action === "forward_to_regional_manager") return "recommend_change"
   if (action === "recommend_change") return "recommend_change"
   if (action === "reject") return "rejected"
   return null
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "leave_plan_request_id and action are required." }, { status: 400 })
     }
 
+    const isRegionalForward = action === "forward_to_regional_manager"
     const decision = normalizeDecision(action)
     if (!decision) {
       return NextResponse.json({ error: "Invalid action. Use approve, recommend_change, or reject." }, { status: 400 })
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Recommendation is required for change request or rejection." }, { status: 400 })
     }
 
-    if (decision === "recommend_change" && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
+    if (decision === "recommend_change" && !isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
       return NextResponse.json(
         { error: "Adjusted start and end dates are required when recommending changes." },
         { status: 400 },
@@ -209,7 +211,7 @@ export async function POST(request: NextRequest) {
       .join("\n\n")
 
     const requestUpdatePayload: Record<string, any> = {
-      status: nextStatus,
+      status: isRegionalForward ? "pending_regional_manager_approval" : nextStatus,
       manager_recommendation: mergedRecommendations || null,
       updated_at: new Date().toISOString(),
     }
@@ -242,7 +244,7 @@ export async function POST(request: NextRequest) {
       throw requestUpdateError
     }
 
-    if (decision === "recommend_change" || decision === "rejected") {
+    if ((decision === "recommend_change" || decision === "rejected") && !isRegionalForward) {
       const title = decision === "recommend_change" ? "Leave Plan Changes Requested" : "Leave Plan Rejected"
       const message =
         decision === "recommend_change"

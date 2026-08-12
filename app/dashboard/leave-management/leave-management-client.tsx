@@ -640,6 +640,26 @@ export function LeaveManagementClient({
     closeEditDialog()
   }
 
+  const handleForwardToRegionalManager = async (notificationId: string) => {
+    const notification = managerNotifications.find((row) => row.id === notificationId)
+    const requestId = String(notification?.leave_plan_request_id || notification?.leave_requests?.id || "")
+    const recommendation = window.prompt("Add an adjustment note before forwarding to the Regional Manager") || ""
+    if (!requestId || !recommendation.trim()) return
+    setProcessingId(notificationId)
+    try {
+      const response = await fetch("/api/leave/planning/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "forward_to_regional_manager", leave_plan_request_id: requestId, recommendation }),
+      })
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || "Could not forward request")
+      toast({ title: "Request forwarded", description: "The Regional Manager can now review and approve this request." })
+      window.location.reload()
+    } catch (error) {
+      toast({ title: "Forwarding failed", description: error instanceof Error ? error.message : "Could not forward request.", variant: "destructive" })
+    } finally { setProcessingId(null) }
+  }
+
   const handleApprove = async (notificationId: string) => {
     const normalized = String(userRole || "").toLowerCase().replace(/[\s-]+/g, "_")
     const canManageLeave = ["admin", "department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalized)
@@ -1289,7 +1309,7 @@ export function LeaveManagementClient({
     }
   }
 
-  const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string) => {
+  const renderManagerNotifications = (rows: LeaveNotification[], emptyMessage: string, regionalHrMode = false) => {
     if (rows.length === 0) {
       return (
         <Card className="border border-dashed border-slate-300 bg-slate-50/80">
@@ -1341,18 +1361,26 @@ export function LeaveManagementClient({
                       <td className="max-w-[320px] px-4 py-3 text-xs text-slate-600">{String(leave.reason || "-")}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-                          <Button
-                            onClick={() => handleApprove(notification.id)}
-                            disabled={processingId === notification.id}
+  {!regionalHrMode && <Button
+  onClick={() => handleApprove(notification.id)}
+  disabled={processingId === notification.id}
                             size="sm"
                             className="gap-1 bg-emerald-600 hover:bg-emerald-700"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Approve
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              const rejectReason = window.prompt("Provide rejection reason") || ""
+  </Button>}
+  {regionalHrMode ? <Button
+  onClick={() => void handleForwardToRegionalManager(notification.id)}
+  disabled={processingId === notification.id}
+  size="sm"
+  className="gap-1 bg-violet-600 hover:bg-violet-700"
+  >
+  <ArrowUpRight className="h-4 w-4" />
+  Forward to Regional Manager
+  </Button> : <Button
+  onClick={() => {
+  const rejectReason = window.prompt("Provide rejection reason") || ""
                               if (!rejectReason.trim()) return
                               void handleDismiss(notification.id, rejectReason)
                             }}
@@ -1362,9 +1390,9 @@ export function LeaveManagementClient({
                             className="gap-1"
                           >
                             {processingId === notification.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                            Reject
-                          </Button>
-                        </div>
+  Reject
+  </Button>}
+  </div>
                       </td>
                     </tr>
                   )
@@ -3090,7 +3118,7 @@ export function LeaveManagementClient({
                 Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
               </AlertDescription>
             </Alert>
-            {renderManagerNotifications(adminAllPending, "No pending leave requests to approve")}
+            {renderManagerNotifications(adminAllPending, "No pending leave requests to approve", isRegionalHr)}
           </>
         )}
 
