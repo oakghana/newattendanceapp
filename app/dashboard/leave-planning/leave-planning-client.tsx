@@ -971,7 +971,7 @@ function LeaveRequestCard({ req, onEdit, onDelete, onViewMemo, canEdit }: {
           </div>
         )}
         <div className="flex gap-2 mt-3 justify-end flex-wrap">
-          {((req.status === "hr_approved" && req.memo_token) || (req.status === "approved" && req.leave_type_key !== "annual")) && onViewMemo && (
+          {((req.status === "hr_approved" && req.memo_token) || ((req.status === "approved" || req.status === "regional_manager_approved") && String(req.leave_type_key || "annual").toLowerCase() !== "annual")) && onViewMemo && (
             <Button size="sm" variant="outline"
               className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
               onClick={onViewMemo}>
@@ -2463,8 +2463,10 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     }
   }
 
-  const openMemo = (requestId: string, token: string) =>
-    window.open(`/api/leave/planning/memo/${requestId}?token=${encodeURIComponent(token)}`, "_blank")
+  const openMemo = (requestId: string, token: string) => {
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : ""
+    window.open(`/api/leave/planning/memo/${requestId}${tokenQuery}`, "_blank")
+  }
 
   const handleArchiveRequest = async (requestId: string, archive: boolean) => {
     const reason = archive ? (window.prompt("Optional archive reason for records:") || "") : ""

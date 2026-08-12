@@ -3464,13 +3464,14 @@ function LeaveRequestCard({
         )}
 
         {/* Download Memo button — shown when leave is hr_approved and a memo token is available */}
-        {["approved", "hr_approved"].includes(normalizedStatus) && request.memo_token && (
+        {["approved", "hr_approved"].includes(normalizedStatus) && (normalizedStatus === "approved" || request.memo_token) && (
           <Button
             variant="outline"
             size="sm"
             className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
             onClick={() => {
-              const url = `/api/leave/planning/memo/${request.id}?token=${encodeURIComponent(request.memo_token || "")}`
+              const tokenQuery = request.memo_token ? `?token=${encodeURIComponent(request.memo_token)}` : ""
+              const url = `/api/leave/planning/memo/${request.id}${tokenQuery}`
               window.open(url, "_blank")
             }}
           >
