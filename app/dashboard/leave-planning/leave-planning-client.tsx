@@ -2025,10 +2025,11 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     const requests = (data.requests || []).filter((r: any) => {
       const status = String(r?.status || "")
       const leaveType = String(r?.leave_type_key || "").toLowerCase()
-      if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(status)) return false
+      const isRegionalActionableStatus = ["pending_hod_review", "hod_approved", "manager_confirmed"].includes(status)
+      if (!((HR_OFFICE_PENDING_STATUSES as string[]).includes(status) || (isRegionalHr && isRegionalActionableStatus))) return false
       // Regional HR must never see annual, completed, or already-forwarded requests,
       // even if a stale response briefly contains them.
-      if (isRegionalHr && (leaveType === "annual" || !["hod_approved", "manager_confirmed"].includes(status))) return false
+      if (isRegionalHr && (leaveType === "annual" || !["pending_hod_review", "hod_approved", "manager_confirmed"].includes(status))) return false
       return true
     })
     
@@ -2038,7 +2039,6 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       if (String(r.leave_type_key || "").toLowerCase() === "annual") {
         const outstandingMap = data.outstandingLeaveMap || {}
         const outstanding = outstandingMap[String(r.user_id || "")]
-        console.log("[v0] Request for user", r.user_id, "- Outstanding map:", outstandingMap, "- Found:", outstanding)
         if (outstanding && outstanding > 0) {
           return { ...r, outstanding_leave_days: outstanding }
         }

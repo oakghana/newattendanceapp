@@ -749,7 +749,7 @@ export async function GET(request: NextRequest) {
       if (isRegionalHr) {
         officeQuery = officeQuery
           .neq("leave_type_key", "annual")
-          .in("status", ["hod_approved", "manager_confirmed"])
+          .in("status", ["pending_hod_review", "hod_approved", "manager_confirmed"])
       }
 
       let { data: requests, error: reqError } = await officeQuery
@@ -792,7 +792,6 @@ export async function GET(request: NextRequest) {
       const currentYearPeriod = policyData?.leave_year_period || "2026/2027"
       const staffIds = Array.from(new Set((requests || []).map((r: any) => r.user_id).filter(Boolean)))
       
-      console.log("[v0] API: Current leave year:", currentYearPeriod, "Fetching outstanding for staff IDs:", staffIds.slice(0, 5))
       
       // Fetch outstanding balances for current AND previous year (in case staff data is from different periods)
       const { data: outstandingRecords, error: outstandingError } = await admin
@@ -801,7 +800,6 @@ export async function GET(request: NextRequest) {
         .in("user_id", staffIds)
         .order("created_at", { ascending: false })
       
-      console.log("[v0] API: Outstanding records fetched:", { count: outstandingRecords?.length, error: outstandingError })
       
       // Build map using most recent record for each user
       const outstandingLeaveMap = new Map<string, number>()
