@@ -312,8 +312,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const uniqueLoanTypes = Array.from(
+      new Map(
+        (resolvedLoanTypesRes.data || []).map((row: any) => {
+          const key = `${String(row.loan_key || row.loan_label || "").trim().toLowerCase()}|${String(row.category || "").trim().toLowerCase()}`
+          return [key, row]
+        }),
+      ).values(),
+    )
+
     return NextResponse.json({
-      loanTypes: resolvedLoanTypesRes.data || [],
+      loanTypes: uniqueLoanTypes,
       locations: locationsRes.data || [],
       staff: staffRows,
       hods: hodRows,

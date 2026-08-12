@@ -5,7 +5,6 @@ export const EXCLUDED_LOCATION_TERMS = [
   "swanzy",
   "qcc head office",
   "accra",
-  "regional office",
   "district office",
   "seven excluded",
 ]

@@ -4,7 +4,7 @@ import { computeLeaveDays, computeReturnToWorkDate } from "@/lib/leave-policy"
 import { validateMeaningfulText } from "@/lib/meaningful-text"
 import { getNextQccReference } from "@/lib/reference-number"
 import { calculateAnnualLeaveBreakdown } from "@/lib/annual-leave-calculator"
-import { REGIONAL_NON_ANNUAL_STAGES, isAnnualLeave, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
+import { REGIONAL_NON_ANNUAL_STAGES, isAnnualLeave, isRegionalHrLeaveOfficeRole, resolveRegionalHrOffice, routeLeave } from "@/lib/hr-workflow"
 
 const NON_ANNUAL_REQUIRES_APPROVED_ANNUAL = new Set([
   "sick",
@@ -308,7 +308,7 @@ export async function POST(request: NextRequest) {
 
     // Regional non-annual requests start with Regional HR Office adjustment and must not notify HOD.
     const isRegionalNonAnnual = leaveRoute.route === "regional_non_annual" && Boolean(leaveRoute.firstStage)
-    const isHrLeaveOffice = normalizedRole === "hr_leave_office"
+    const isHrLeaveOffice = normalizedRole === "hr_leave_office" || isRegionalHrLeaveOfficeRole(normalizedRole)
 
     if (!shouldAutoApprove && !isHrLeaveOffice && !isRegionalNonAnnual) {
       try {

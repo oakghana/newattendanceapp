@@ -1173,12 +1173,18 @@ export default function LoanAppPage() {
     const rawTypes = data?.loanTypes || []
     const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role, data?.profile?.staffCategory)
 
-    const normalizedTypes = rawTypes.map((type) => ({
-      ...type,
-      loan_label: normalizeLoanTypeLabel(type, rawTypes),
-    }))
+  const normalizedTypes = rawTypes.map((type) => ({
+  ...type,
+  loan_label: normalizeLoanTypeLabel(type, rawTypes),
+  }))
+  const uniqueTypes = Array.from(
+  new Map(normalizedTypes.map((type) => [
+  `${String(type.loan_key || type.loan_label || "").trim().toLowerCase()}|${String(type.category || "").trim().toLowerCase()}`,
+  type,
+  ])).values(),
+  )
 
-    return normalizedTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, normalizedTypes))
+  return uniqueTypes.filter((type) => shouldIncludeLoanTypeForUser(type, userTier, uniqueTypes))
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])

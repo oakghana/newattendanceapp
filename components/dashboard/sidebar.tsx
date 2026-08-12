@@ -71,7 +71,7 @@ interface SidebarProps {
 
 const EXEC_ROLES = ["managing_director", "secretary"] as const
 const ALL_STAFF_ROLES = [
-  "admin", "it-admin", "regional_manager", "department_head",
+  "admin", "it-admin", "regional_manager", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "department_head",
   "staff", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr",
   "hr_office", "hr_leave_office", "audit_staff", "nsp", "intern",
   "contract", "managing_director", "secretary",
@@ -419,10 +419,12 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   // Support role hierarchy by treating audit_staff like staff for base menus.
   const normalizedRole = (profile?.role || "staff").toLowerCase().replace(/[\s-]+/g, "_").trim()
   const effectiveRole = normalizedRole === "administrator"
-    ? "admin"
-    : normalizedRole === "audit_staff"
-      ? "staff"
-      : normalizedRole
+  ? "admin"
+  : normalizedRole === "regional_hr_leave_office" || normalizedRole === "regional_leave_office"
+  ? "regional_hr"
+  : normalizedRole === "audit_staff"
+  ? "staff"
+  : normalizedRole
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     // Defense-in-depth: keep device monitoring strictly admin-only in the UI.

@@ -110,7 +110,11 @@ function isProtectedRoute(pathname: string): boolean {
 
 function isAuthorizedForRoute(userRole: string | null | undefined, pathname: string): boolean {
   const normalized = normalizeRole(userRole)
-  const effectiveRole = normalized === "administrator" ? "admin" : normalized;
+  const effectiveRole = normalized === "administrator"
+    ? "admin"
+    : normalized === "regional_hr_leave_office" || normalized === "regional_leave_office"
+      ? "regional_hr"
+      : normalized;
 
   // Sort patterns longest-first so more specific routes take priority over
   // parent patterns (e.g. /dashboard/md-approvals beats /dashboard).
