@@ -90,3 +90,68 @@ export function hrRecordsCanReference(status: string | null | undefined) {
 export function lockedReferenceMutationError(locked: boolean) {
   return locked ? "This official memo reference is locked and cannot be edited or removed." : null
 }
+
+export type MemoVisibilityScope = {
+  isRegional: boolean
+  staffIds: string[] | null
+  regionIds: string[]
+  locationIds: string[]
+}
+
+/** Resolve the server-side union of explicit regional links and location-derived staff. */
+export async function resolveMemoVisibilityScope(
+  admin: SupabaseClient,
+  actorId: string,
+  role: string | null | undefined,
+): Promise<MemoVisibilityScope> {
+  const normalizedRole = normalizeWorkflowRole(role)
+  const isRegional = isRegionalHrLeaveOfficeRole(normalizedRole)
+  if (!isRegional) return { isRegional: false, staffIds: null, regionIds: [], locationIds: [] }
+
+  const [{ data: assignments, error: assignmentError }, { data: actor, error: actorError }] = await Promise.all([
+    admin.from("regional_hr_leave_office_assignments").select("region_id").eq("user_id", actorId).eq("is_active", true),
+    admin.from("user_profiles").select("assigned_location_id").eq("id", actorId).maybeSingle(),
+  ])
+  if (assignmentError) throw assignmentError
+  if (actorError) throw actorError
+
+  const regionIds = [...new Set((assignments || []).map((row: any) => row.region_id).filter(Boolean))]
+  const locationIds = new Set<string>()
+  if (actor?.assigned_location_id) locationIds.add(actor.assigned_location_id)
+
+  if (regionIds.length) {
+    const { data: districts, error: districtError } = await admin
+      .from("districts")
+      .select("id")
+      .in("region_id", regionIds)
+    if (districtError) throw districtError
+    const districtIds = (districts || []).map((row: any) => row.id).filter(Boolean)
+    if (districtIds.length) {
+      const { data: regionalLocations, error: locationError } = await admin
+        .from("geofence_locations")
+        .select("id")
+        .in("district_id", districtIds)
+        .eq("is_active", true)
+      if (locationError) throw locationError
+      for (const location of regionalLocations || []) locationIds.add(location.id)
+    }
+  }
+
+  const locationList = [...locationIds]
+  const { data: staff, error: staffError } = locationList.length
+    ? await admin.from("user_profiles").select("id").in("assigned_location_id", locationList)
+    : { data: [], error: null }
+  if (staffError) throw staffError
+
+  return {
+    isRegional: true,
+    staffIds: [...new Set((staff || []).map((row: any) => row.id).filter(Boolean))],
+    regionIds,
+    locationIds: locationList,
+  }
+}
+
+export function regionalSecretaryRoles(role: string | null | undefined) {
+  const normalized = normalizeWorkflowRole(role)
+  return ["secretary", "admin", "administrator", "regional_hr_leave_office", "regional_hr", "regional_leave_office"].includes(normalized)
+}

@@ -91,8 +91,8 @@ const PROTECTED_ROUTES: Record<string, string[]> = {
   // MD Approval Hub — restricted to the Managing Director and administrators
   "/dashboard/md-approvals": ["managing_director", "admin"],
 
-  // Secretary Memo Hub — restricted to the Secretary and administrators
-  "/dashboard/secretary-memos": ["secretary", "admin"],
+  // Secretary Memo Hub — Regional HR users inherit Secretary capabilities with scoped visibility
+  "/dashboard/secretary-memos": ["secretary", "regional_hr_leave_office", "regional_hr", "regional_leave_office", "admin"],
 
   // Overview dashboard — all roles
   "/dashboard/overview": ["staff", "nsp", "intern", "it-admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "accounts_executive", "director_hr", "manager_hr", "hr_officer", "hr_leave_office", "hr_records", "regional_hr_leave_office", "hr_executive", "audit_staff", "contract", "loan_committee", "committee", "managing_director", "secretary", "regional_hr", "leave_admin"],

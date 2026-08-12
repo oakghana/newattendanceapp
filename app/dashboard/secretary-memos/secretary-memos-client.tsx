@@ -31,14 +31,7 @@ interface LoanMemo {
   staff_full_name: string | null
   staff_number: string | null
   user_id: string | null
-  user_profiles: {
-    first_name: string
-    last_name: string
-    employee_id: string
-    profile_image_url: string | null
-    departments: { name: string } | null
-    geofence_locations: { name: string } | null
-  } | null
+    user_profiles: any
 }
 
 interface LeaveMemo {
@@ -83,11 +76,12 @@ interface Props {
     first_name: string
     last_name: string
     profile_image_url: string | null
-    departments: { name: string } | null
+    departments: { name: string } | { name: string }[] | null
   }
   loanMemos: LoanMemo[]
   leaveMemos: LeaveMemo[]
   approvedMemos?: ApprovedMemo[]
+  regionalScope?: boolean
 }
 
 function fmtAmt(n: number | null) {
@@ -119,7 +113,7 @@ const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
   hod_approved: { label: "HOD Approved", color: "bg-teal-100 text-teal-800 border-teal-200" },
 }
 
-export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [] }: Props) {
+export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedMemos = [], regionalScope = false }: Props) {
   const [tab, setTab] = useState<"loans" | "leave" | "approved">("loans")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -128,6 +122,7 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
+  const departmentName = Array.isArray(profile.departments) ? profile.departments[0]?.name : profile.departments?.name
   const initials = [profile.first_name[0], profile.last_name[0]].join("").toUpperCase()
 
   const downloadMemo = async (memo: ApprovedMemo) => {
@@ -157,19 +152,19 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
 
   // Derive unique departments and locations from loan memos for filter dropdowns
   const uniqueDepts = useMemo(() => {
-    const s = new Set<string>()
-    loanMemos.forEach((m) => { 
-      const deptName = m.user_profiles?.departments?.name
-      if (deptName) s.add(deptName) 
+  const s = new Set<string>()
+  loanMemos.forEach((m) => {
+  const deptName = Array.isArray(m.user_profiles?.departments) ? m.user_profiles?.departments[0]?.name : m.user_profiles?.departments?.name
+  if (deptName) s.add(deptName)
     })
     return Array.from(s).sort()
   }, [loanMemos])
 
   const uniqueLocations = useMemo(() => {
     const s = new Set<string>()
-    loanMemos.forEach((m) => { 
-      const locName = m.user_profiles?.geofence_locations?.name
-      if (locName) s.add(locName) 
+  loanMemos.forEach((m) => {
+  const locName = Array.isArray(m.user_profiles?.geofence_locations) ? m.user_profiles?.geofence_locations[0]?.name : m.user_profiles?.geofence_locations?.name
+  if (locName) s.add(locName)
     })
     return Array.from(s).sort()
   }, [loanMemos])
@@ -179,8 +174,10 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
     return loanMemos.filter((m) => {
       const matchesSearch = !q || (m.staff_full_name?.toLowerCase().includes(q) || m.request_number?.toLowerCase().includes(q))
       const matchesStatus = statusFilter === "all" || m.status === statusFilter
-      const matchesDept = deptFilter === "all" || m.user_profiles?.departments?.name === deptFilter
-      const matchesLocation = locationFilter === "all" || m.user_profiles?.geofence_locations?.name === locationFilter
+  const deptName = Array.isArray(m.user_profiles?.departments) ? m.user_profiles?.departments[0]?.name : m.user_profiles?.departments?.name
+  const locationName = Array.isArray(m.user_profiles?.geofence_locations) ? m.user_profiles?.geofence_locations[0]?.name : m.user_profiles?.geofence_locations?.name
+  const matchesDept = deptFilter === "all" || deptName === deptFilter
+  const matchesLocation = locationFilter === "all" || locationName === locationFilter
       return matchesSearch && matchesStatus && matchesDept && matchesLocation
     })
   }, [loanMemos, search, statusFilter, deptFilter, locationFilter])
@@ -215,11 +212,11 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
               </div>
               <div>
                 <div className="text-xs font-semibold tracking-[0.15em] uppercase text-teal-400 mb-1">
-                  Secretary
+                  {regionalScope ? "Regional HR Leave Office" : "Secretary"}
                 </div>
                 <h1 className="text-xl font-bold tracking-tight">{fullName}</h1>
                 <p className="text-slate-400 text-sm mt-0.5">
-                  {profile.departments?.name || "QCC Head Office"} &mdash; Memo Review Console
+                  {regionalScope ? "Linked locations and regions" : (departmentName || "QCC Head Office")} &mdash; Memo Review Console
                 </p>
               </div>
             </div>
