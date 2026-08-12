@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, Clock } from 'lucide-react'
+import { Calendar, Clock, CheckCircle2 } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 
 interface LeaveResumptionBadgeProps {
@@ -30,6 +30,7 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null)
   const [leaveEndDate, setLeaveEndDate] = useState<string | null>(null)
   const [isOnLeave, setIsOnLeave] = useState(false)
+  const [hasResumedToday, setHasResumedToday] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -42,6 +43,17 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
         if (!user || !isMounted) return
 
         const today = new Date().toISOString().split('T')[0]
+
+        const { data: attendanceToday } = await supabase
+          .from('attendance_records')
+          .select('id, check_in_time, check_out_time')
+          .eq('user_id', user.id)
+          .gte('check_in_time', `${today}T00:00:00`)
+          .lt('check_in_time', `${today}T23:59:59`)
+          .order('check_in_time', { ascending: false })
+          .limit(1)
+        const checkedIn = Boolean(attendanceToday?.[0]?.check_in_time)
+        setHasResumedToday(checkedIn)
 
         // Query leave_plan_requests directly — user_profiles.leave_status is not
         // reliably updated when a leave is approved, so we check the source of truth.
@@ -90,7 +102,21 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
     }
   }, [])
 
-  if (loading || !isOnLeave || daysRemaining === null) return null
+  if (loading) return null
+
+  if (hasResumedToday) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+        <CheckCircle2 className="h-4 w-4" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">You have resumed work</p>
+          <p className="text-xs text-emerald-700">Waiting for HOD/RM confirmation in management records.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isOnLeave || daysRemaining === null) return null
 
   const getUrgencyColor = (days: number) => {
     if (days <= 0) return 'bg-red-600 text-white'

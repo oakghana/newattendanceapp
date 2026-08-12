@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, AlertCircle, CheckCircle2, Mail, X } from 'lucide-react'
+import { AlertTriangle, AlertCircle, Mail, X } from 'lucide-react'
 import { useLocalStorage } from '@/hooks/use-local-storage'
 
 interface Warning {
@@ -32,14 +32,26 @@ export function GlobalWarningsToasts() {
 
         if (!user || !isMounted) return
 
-        // Fetch non-resumption warnings
+        // A live attendance session is the employee's evidence of resumption.
+        // Do not show a non-resumption warning after they have checked in.
+        const today = new Date().toISOString().split('T')[0]
+        const { data: attendanceToday } = await supabase
+          .from('attendance_records')
+          .select('id, check_in_time, check_out_time')
+          .eq('user_id', user.id)
+          .gte('check_in_time', `${today}T00:00:00`)
+          .lt('check_in_time', `${today}T23:59:59`)
+          .order('check_in_time', { ascending: false })
+          .limit(1)
+        const hasCheckedInToday = Boolean(attendanceToday?.[0]?.check_in_time)
+
+        // Fetch active non-resumption records for either a warning or a
+        // post-check-in confirmation message.
         const { data: nonResumptionData } = await supabase
           .from('leave_non_resumption_tracking')
-          .select('id, staff_id, days_overdue, status, created_at')
+          .select('id, staff_id, days_overdue, status, created_at, first_check_in_date, confirmation_status')
           .eq('staff_id', user.id)
           .eq('status', 'active')
-          .is('first_check_in_date', null)
-          .not('confirmation_status', 'eq', 'pending_hod_rm')
           .order('created_at', { ascending: false })
           .limit(5)
 
@@ -56,9 +68,24 @@ export function GlobalWarningsToasts() {
 
         const allWarnings: Warning[] = []
 
-        // Add non-resumption warnings
-        if (nonResumptionData && nonResumptionData.length > 0) {
-          nonResumptionData.forEach((item, index) => {
+        // A check-in changes the employee-facing state to resumed, while
+        // management confirmation remains pending.
+        if (hasCheckedInToday && nonResumptionData?.some((item) => item.confirmation_status === 'pending_hod_rm' || item.first_check_in_date)) {
+          allWarnings.push({
+            id: 'resumption-confirmation-pending',
+            type: 'info',
+            title: 'You have resumed work',
+            message: 'Your attendance check-in was recorded. HOD/RM confirmation is pending for management records.',
+            severity: 'low',
+            dismissible: true,
+          })
+        }
+
+        // Add non-resumption warnings only when the employee has not checked in.
+        if (!hasCheckedInToday && nonResumptionData && nonResumptionData.length > 0) {
+          nonResumptionData
+            .filter((item) => !item.first_check_in_date && item.confirmation_status !== 'pending_hod_rm')
+            .forEach((item) => {
             const daysOverdue = item.days_overdue || 0
             let severity: 'low' | 'medium' | 'high' | 'critical' = 'medium'
             let title = 'Non-Resumption Warning'
