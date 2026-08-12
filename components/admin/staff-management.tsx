@@ -121,6 +121,9 @@ export function StaffManagement() {
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
+  const canManageStaffLinks = ["admin", "administrator", "it-admin", "it_admin", "itadmin"].includes(
+    String(currentUserRole).trim().toLowerCase(),
+  )
 
   // Calculate years of service based on date of appointment
   const calculateYearsOfService = (dateStr: string): number | string => {
@@ -915,7 +918,7 @@ export function StaffManagement() {
                                 {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
-                                {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
+                                {canManageStaffLinks && (
                                   <SelectItem value="it-admin">IT Admin</SelectItem>
                                 )}
                                 {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
@@ -1184,7 +1187,7 @@ export function StaffManagement() {
                             {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
-                            {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
+                            {canManageStaffLinks && (
                               <SelectItem value="it-admin">IT Admin</SelectItem>
                             )}
                             {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
@@ -1284,7 +1287,7 @@ export function StaffManagement() {
                   <Button variant="outline" onClick={() => setEditingStaff(null)}>
                     Cancel
                   </Button>
-                  {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
+                  {canManageStaffLinks && (
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -1447,7 +1450,7 @@ export function StaffManagement() {
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
-                          {currentUserRole === "admin" && (
+                          {canManageStaffLinks && (
                             <Button
                               size="sm"
                               variant="outline"
