@@ -159,16 +159,15 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   useEffect(() => {
-    if (!initialProfile) {
-      fetchProfile()
-    } else {
+    if (initialProfile) {
       setLoading(false)
-      // Initialize edit form with profile data
       setEditForm({
         first_name: initialProfile.first_name || "",
         last_name: initialProfile.last_name || "",
       })
     }
+    // Always re-read the profile so admin location/category changes are visible immediately.
+    fetchProfile()
     fetchAttendanceSummary()
   }, [initialProfile])
 
@@ -617,7 +616,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   <Label>Location</Label>
                   <div className="p-2 bg-muted rounded-md flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    {profile.assigned_location?.districts?.name || profile.assigned_location?.name || profile.assigned_location?.address || "No location assigned"}
+                    {profile.assigned_location?.name || profile.assigned_location?.districts?.name || profile.assigned_location?.address || "No location assigned"}
                   </div>
                 </div>
               </div>
@@ -1241,7 +1240,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Location:</span>
-                    <span className="text-sm font-medium">{profile.districts?.name || (profile.assigned_location as any)?.name || "N/A"}</span>
+                    <span className="text-sm font-medium">{profile.assigned_location?.name || profile.assigned_location?.districts?.name || profile.assigned_location?.address || "N/A"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Role:</span>

@@ -406,18 +406,10 @@ function getExplicitLoanTypeTier(loanType: LoanType): "junior" | "senior" | "man
   return null
 }
 
-function resolveLoanTypeTier(loanType: LoanType, allTypes: LoanType[]) {
-  const explicit = getExplicitLoanTypeTier(loanType)
-  if (explicit) return explicit
-
-  const baseKey = getLoanTypeBaseKey(loanType)
-  const sameGroup = allTypes.filter((type) => getLoanTypeBaseKey(type) === baseKey)
-  const hasHigherTier = sameGroup.some((type) => {
-    const tier = getExplicitLoanTypeTier(type)
-    return tier === "senior" || tier === "manager"
-  })
-
-  return hasHigherTier ? "junior" : null
+function resolveLoanTypeTier(loanType: LoanType, _allTypes: LoanType[]) {
+  // Only explicit loan category metadata/key/label restricts visibility.
+  // A loan without a category is shared across all staff categories.
+  return getExplicitLoanTypeTier(loanType)
 }
 
 function getUserLoanTier(position?: string | null, role?: string | null, staffCategory?: string | null): "junior" | "senior" | "manager" | null {
@@ -465,8 +457,8 @@ function loanTypeGroupKey(loanType: LoanType) {
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
   
-  // Staff-category users only see loan types explicitly assigned to their category.
-  if (!userTier) return true
+  // Shared/uncategorized loans are available to every staff category.
+  if (!userTier || !loanTier) return true
   return loanTier === userTier
 }
 

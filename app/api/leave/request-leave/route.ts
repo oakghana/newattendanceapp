@@ -213,8 +213,21 @@ export async function POST(request: NextRequest) {
       .select("region_id, assigned_location_id")
       .eq("id", user.id)
       .maybeSingle()
-    const regionalOffice = await resolveRegionalHrOffice(admin, (staffRoutingProfile.data as any)?.region_id)
-    const locationName = (staffRoutingProfile.data as any)?.assigned_location_id || null
+
+    const routingProfile = (staffRoutingProfile.data || {}) as any
+    let regionId = routingProfile.region_id || null
+    let locationName: string | null = null
+    if (routingProfile.assigned_location_id) {
+      const { data: assignedLocation } = await admin
+        .from("geofence_locations")
+        .select("name, address, districts (region_id)")
+        .eq("id", routingProfile.assigned_location_id)
+        .maybeSingle()
+      locationName = assignedLocation?.name || assignedLocation?.address || null
+      regionId = regionId || (assignedLocation?.districts as any)?.region_id || null
+    }
+
+    const regionalOffice = await resolveRegionalHrOffice(admin, regionId)
     const leaveRoute = routeLeave({
       leaveType: leaveTypeKey,
       locationName,

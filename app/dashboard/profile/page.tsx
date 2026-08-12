@@ -37,6 +37,16 @@ export default async function ProfilePage() {
     .eq("id", user.id)
     .maybeSingle()
 
+  // Resolve organization fields independently as a safety net for legacy/ambiguous Supabase relationships.
+  if (profile?.assigned_location_id && !profile.assigned_location) {
+    const { data: assignedLocation } = await supabase
+      .from("geofence_locations")
+      .select("id, name, address, district_id, districts (id, name)")
+      .eq("id", profile.assigned_location_id)
+      .maybeSingle()
+    if (assignedLocation) profile.assigned_location = assignedLocation as any
+  }
+
   // Ensure welfare fields are fetched for existing profile
   if (profile && !profile.staff_category && !profile.years_of_service) {
     const { data: welfareData } = await supabase
