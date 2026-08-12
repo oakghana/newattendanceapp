@@ -70,7 +70,7 @@ export function HrLeaveOfficCountdownDashboard() {
           leave_type: notice.leave_type,
           end_date: notice.resumption_date,
           resume_date: notice.resumption_date,
-          days_left: Math.max(0, notice.days_until_resumption),
+          days_left: notice.days_until_resumption,
           user_id: notice.user_id,
           state: notice.state,
           staff_checked_in: notice.staff_checked_in,
@@ -269,7 +269,7 @@ export function HrLeaveOfficCountdownDashboard() {
             <div className="grid gap-4">
               {filteredCountdowns.map(countdown => {
                 const urgencyColor =
-                  countdown.days_left <= 2
+                  countdown.days_left < 0 || countdown.days_left <= 2
                     ? "border-red-300 bg-red-50"
                     : countdown.days_left <= 5
                       ? "border-yellow-300 bg-yellow-50"
@@ -294,7 +294,11 @@ export function HrLeaveOfficCountdownDashboard() {
                             variant={countdown.days_left <= 2 ? "destructive" : "secondary"}
                             className="text-base"
                           >
-                            {countdown.days_left} {countdown.days_left === 1 ? "day" : "days"}
+                            {countdown.days_left < 0
+                              ? `${Math.abs(countdown.days_left)} ${Math.abs(countdown.days_left) === 1 ? "day" : "days"} overdue`
+                              : countdown.days_left === 0
+                                ? "Due today"
+                                : `${countdown.days_left} ${countdown.days_left === 1 ? "day" : "days"}` }
                           </Badge>
                         </div>
 
@@ -327,7 +331,7 @@ export function HrLeaveOfficCountdownDashboard() {
                               size="sm"
                               variant="destructive"
                               className="gap-2"
-                              onClick={() => handleIssueWarning(countdown.user_id || "", countdown.staff_name, "return_warning")}
+                              onClick={() => handleIssueWarning(countdown.user_id || "", countdown.staff_name, countdown.days_left < 0 ? "non_resumption" : "return_warning")}
                             >
                               <AlertTriangle className="h-4 w-4" />
                               Issue Warning

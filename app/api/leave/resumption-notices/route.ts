@@ -4,7 +4,18 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const HR_ROLES = new Set(['admin', 'hr', 'hr_office', 'hr_officer', 'hr_leave_office', 'manager_hr', 'director_hr', 'hr_executive'])
+const HR_ROLES = new Set([
+  'admin',
+  'it_admin',
+  'it-admin',
+  'hr',
+  'hr_office',
+  'hr_officer',
+  'hr_leave_office',
+  'manager_hr',
+  'director_hr',
+  'hr_executive',
+])
 const HOD_ROLES = new Set(['hod', 'department_head'])
 
 function dateOnly(value: string | null | undefined) {
