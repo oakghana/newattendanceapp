@@ -129,12 +129,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "This request is outside your assigned location or region." }, { status: 403 })
       }
 
-      const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
-        leave_plan_request_id,
-        reviewer_id: user.id,
-        decision: "pending",
-      })
-      if (assignmentError) throw assignmentError
+      if (!isRegionalForward) {
+        const { error: assignmentError } = await admin.from("leave_plan_reviews").insert({
+          leave_plan_request_id,
+          reviewer_id: user.id,
+          decision: "pending",
+        })
+        if (assignmentError) throw assignmentError
+      }
     }
 
     // Update all review records for this manager for this request
@@ -234,8 +236,6 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.preferred_start_date = nextStartDate
       requestUpdatePayload.preferred_end_date = nextEndDate
       requestUpdatePayload.requested_days = nextRequestedDays
-      requestUpdatePayload.adjusted_days = nextRequestedDays
-      requestUpdatePayload.adjustment_reason = recommendation || null
     }
 
     const { error: requestUpdateError } = await admin
@@ -305,6 +305,6 @@ export async function POST(request: NextRequest) {
       return schemaIssueResponse()
     }
     console.error("[v0] Leave planning manager review error:", error)
-    return NextResponse.json({ error: "Failed to review leave planning request." }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to review leave planning request." }, { status: 500 })
   }
 }

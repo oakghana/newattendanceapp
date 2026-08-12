@@ -2129,10 +2129,15 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
 
   const allRequestsFiltered: any[] = useMemo(() => {
     if (!data) return []
-    let rows = [...(data.requests || [])]
-    if (allRequestsStatusFilter !== "all") {
-      rows = rows.filter((r: any) => String(r?.status || "") === allRequestsStatusFilter)
+  let rows = (data.requests || []).map((r: any) => {
+    if (isRegionalHr && String(r?.status || "") === "pending_hod_review" && String(r?.leave_type_key || "").toLowerCase() !== "annual") {
+      return { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
     }
+    return r
+  })
+  if (allRequestsStatusFilter !== "all") {
+    rows = rows.filter((r: any) => String(r?.status || "") === allRequestsStatusFilter)
+  }
     const search = allRequestsSearch.trim().toLowerCase()
     if (search) {
       rows = rows.filter((r: any) => {
@@ -2164,7 +2169,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     return data.analytics
   }, [analyticsData, data])
 
-  // ── Actions ─────────────────────────────────────────���────────��──────���
+  // ── Actions ─────────────────────────────────────────���────────���──────���
 
   const submitPlan = async () => {
     if (!leaveType) {
@@ -4908,8 +4913,8 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="pending_manager_review">Pending HOD Review</SelectItem>
-                        <SelectItem value="hod_approved">HOD Approved</SelectItem>
+                        <SelectItem value={isRegionalHr ? "pending_regional_hr_review" : "pending_manager_review"}>{isRegionalHr ? "Pending Regional HR Review" : "Pending HOD Review"}</SelectItem>
+                        <SelectItem value="hod_approved">{isRegionalHr ? "Regional HR Review Complete" : "HOD Approved"}</SelectItem>
                         <SelectItem value="manager_confirmed">Manager Confirmed</SelectItem>
                         <SelectItem value="hod_changes_requested">HOD Changes Requested</SelectItem>
                         <SelectItem value="hod_rejected">HOD Rejected</SelectItem>
