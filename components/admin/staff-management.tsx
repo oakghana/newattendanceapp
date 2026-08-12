@@ -47,6 +47,7 @@ interface StaffMember {
   is_active: boolean
   department_id?: string
   assigned_location_id?: string
+  region_id?: string | null
   date_of_appointment?: string | null
   years_of_service?: number | string | null
   contact_number?: string | null
@@ -592,16 +593,48 @@ export function StaffManagement() {
         resMHR.json().then((d: any) => d.data || []),
         resDHR.json().then((d: any) => d.data || []),
       ])
-      // Deduplicate by id and sort by name
-      const all = [...dh, ...rm, ...mhr, ...dhr]
+      const normalizeLocation = (value: unknown) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[()]/g, "")
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim()
+          .replace(/\s+/g, " ")
+
+      const headOfficeLocations = [
+        "cwc commodity",
+        "qcc head office",
+        "tema port",
+        "tema research",
+        "tema training school",
+        "nsawam archive center",
+        "head office swanzy arcade",
+      ]
+      const staffLocationId = member.assigned_location_id
+      const staffLocationName = normalizeLocation(member.geofence_locations?.name)
+      const isHeadOfficeLocation = headOfficeLocations.some((location) => staffLocationName.includes(location))
+      const isRegionalStaff = member.role === "regional_manager" || !isHeadOfficeLocation
+      const sameLocation = (candidate: StaffMember) =>
+        Boolean(staffLocationId && candidate.assigned_location_id === staffLocationId)
+
+      // Regional staff see same-location Regional Managers first. Department Heads
+      // are only valid for the approved head-office locations.
+      const all = [
+        ...(isRegionalStaff ? rm.filter(sameLocation) : []),
+        ...(isHeadOfficeLocation ? dh : []),
+        ...mhr,
+        ...dhr,
+      ]
       const seen = new Set<string>()
       const unique = all.filter((s) => {
         if (seen.has(s.id)) return false
         seen.add(s.id)
         return true
-      }).sort((a, b) =>
-        `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
-      )
+      }).sort((a, b) => {
+        const regionalPriority = Number(b.role === "regional_manager") - Number(a.role === "regional_manager")
+        if (regionalPriority !== 0) return regionalPriority
+        return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+      })
       setHodCandidates(unique)
     } catch {
       setHodCandidates([])
@@ -1502,7 +1535,11 @@ export function StaffManagement() {
           <DialogHeader>
             <DialogTitle>Manage Staff HOD Assignments</DialogTitle>
             <DialogDescription>
-              Select one or more Department Heads or Regional Managers for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck a selected HOD to remove that assignment.
+              {hodLinkStaff && (hodLinkStaff.geofence_locations?.name ? `Location: ${hodLinkStaff.geofence_locations.name}. ` : "")}
+              {hodLinkStaff && hodCandidates.some((candidate) => candidate.role === "regional_manager")
+                ? "Regional Managers in the staff member’s location are shown first. "
+                : "Department Heads are shown only for approved head-office locations. "}
+              Select one or more HODs for <strong>{hodLinkStaff?.first_name} {hodLinkStaff?.last_name}</strong>. Uncheck a selected HOD to remove that assignment.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
