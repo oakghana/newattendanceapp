@@ -95,14 +95,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await request.json()
     console.log("[v0] Update request body:", body)
 
-    let {
+    const {
       first_name,
       last_name,
       employee_id,
       department_id,
       position,
       staff_category,
-      role,
       is_active,
       assigned_location_id,
       email,
@@ -110,6 +109,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       years_of_service,
       contact_number,
     } = body
+    let { role } = body
 
     // Map non-database roles to their database equivalents
     if (role === "accounts_executive") {
@@ -123,7 +123,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "First name, last name, and employee ID are required" }, { status: 400 })
     }
 
-    const { data: targetProfile } = await adminSupabase.from("user_profiles").select("role").eq("id", id).single()
+    const validCategories = ["Manager", "Senior", "Officer", "Junior"] as const
+    if (staff_category !== undefined && staff_category !== null && !validCategories.includes(staff_category)) {
+      return NextResponse.json(
+        { error: "Invalid staff category", details: `Category must be one of: ${validCategories.join(", ")}` },
+        { status: 400 },
+      )
+    }
+
+    const { data: targetProfile } = await adminSupabase.from("user_profiles").select("role, staff_category").eq("id", id).single()
 
     if (!targetProfile) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
@@ -291,6 +299,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           details: safeDetails,
         },
         { status: 500 },
+      )
+    }
+
+    if (staff_category !== undefined && updatedProfile?.staff_category !== staff_category) {
+      console.error("[v0] Staff category did not persist:", {
+        requested: staff_category,
+        persisted: updatedProfile?.staff_category,
+        staffId: id,
+      })
+      return NextResponse.json(
+        { error: "Staff category was not persisted", details: { requested: staff_category, persisted: updatedProfile?.staff_category } },
+        { status: 409 },
       )
     }
 

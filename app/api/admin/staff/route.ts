@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
         department_id,
         position,
         role,
+        staff_category,
         hire_date,
         is_active,
         assigned_location_id,
