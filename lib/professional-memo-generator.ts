@@ -1,6 +1,7 @@
 // jsPDF and jspdf-autotable are loaded dynamically inside each function
 // to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
 import { calculateAnnualLeaveMemoDates } from "./annual-leave-calculator"
+import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 
 export interface MemoData {
   to: string
@@ -425,7 +426,17 @@ async function generateMainMemo(
     const publicHolidayDays = Number(firstStaff?.holiday_days_deducted ?? 0)
     const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
     const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
-    const entitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
+    const storedEntitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
+    const resolvedEntitlement = resolveEntitlementFromProfile({
+      staff_category: firstStaff?.staff_category,
+      position: firstStaff?.position,
+      rank: firstStaff?.rank,
+      date_of_appointment: firstStaff?.date_of_appointment,
+      years_of_service: firstStaff?.years_of_service,
+    })
+    const entitlementDays = String(memoData.leave_type_key || "").toLowerCase() === "annual"
+      ? resolvedEntitlement.annualLeaveDays
+      : storedEntitlementDays
     const annualMemoDates = calculateAnnualLeaveMemoDates({
       startDate: firstStaff?.leave_period_start || new Date(),
       entitlementDays,

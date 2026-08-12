@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { buildMemoRemarks } from "./professional-memo-generator"
+import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 import {
   addAnnualLeaveWorkingDays,
   calculateAnnualLeaveMemoDates,
@@ -28,6 +29,13 @@ describe("annual leave calculation", () => {
 
   it("moves weekend leave endings to the next working day", () => {
     expect(getNextWorkingDay("2026-09-19").toISOString().slice(0, 10)).toBe("2026-09-21")
+  })
+
+  it("resolves senior staff to 36 core days plus 2 travel days", () => {
+    const entitlement = resolveEntitlementFromProfile({ position: "Senior IT Officer" })
+    expect(entitlement.annualLeaveDays).toBe(36)
+    expect(entitlement.travelDays).toBe(2)
+    expect(entitlement.totalEntitlement).toBe(38)
   })
 
   it("uses the same inclusive dates for 36 entitlement, 4 enjoyed, and 2 travel days", () => {

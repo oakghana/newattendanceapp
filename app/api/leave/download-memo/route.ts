@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf'
 import fs from 'fs'
 import path from 'path'
 import { calculateAnnualLeaveMemoDates } from '@/lib/annual-leave-calculator'
+import { resolveEntitlementFromProfile } from '@/lib/annual-leave-entitlement'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
     // ── Staff profile ────────────────────────────────────────────────────────
     const { data: staff } = await admin
       .from('user_profiles')
-      .select('first_name, last_name, employee_id, department_id, position')
+      .select('first_name, last_name, employee_id, department_id, position, rank, staff_category, date_of_appointment, years_of_service')
       .eq('id', req.user_id)
       .single()
 
@@ -204,12 +205,16 @@ export async function GET(request: NextRequest) {
     const startRaw = req.adjusted_start_date || req.preferred_start_date
     const leaveTypeKey = String(req.leave_type_key || 'annual').toLowerCase()
     const storedGrantedDays = Number(req.adjusted_days || req.requested_days || 0)
+    const resolvedEntitlement = leaveTypeKey === 'annual' && staff
+      ? resolveEntitlementFromProfile(staff)
+      : null
     const storedEntitledDays = Number(req.entitlement_days || storedGrantedDays)
-    const travelDays = Number(req.travelling_days_added || 0)
+    const entitlementDays = resolvedEntitlement?.annualLeaveDays || storedEntitledDays
+    const travelDays = Number(req.travelling_days_added || resolvedEntitlement?.travelDays || 0)
     const annualDates = leaveTypeKey === 'annual'
       ? calculateAnnualLeaveMemoDates({
           startDate: startRaw,
-          entitlementDays: storedEntitledDays,
+          entitlementDays,
           grantedDays: storedGrantedDays,
           daysAlreadyEnjoyed: (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
             ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
@@ -332,7 +337,7 @@ export async function GET(request: NextRequest) {
     doc.line(mL, y, mR, y)
     y += 6
 
-    // ── Addressee ────────────────────────────────────────────────────────────
+    // ── Addressee ─────────────────────────��──────────────────────────────────
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.setTextColor(0)
@@ -519,7 +524,7 @@ export async function GET(request: NextRequest) {
     })
     y += ccItems.length * 5 + 4
 
-    // ── Footer ────────────────────────────────────────────────────────────────
+    // ── Footer ────────────────────────────────────────────────────────────���───
     const footerY = pageH - 14
     doc.setDrawColor(0)
     doc.setLineWidth(0.4)
