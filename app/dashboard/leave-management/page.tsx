@@ -138,6 +138,10 @@ export default async function LeaveManagementPage() {
 
   // Heavy reviewer queries are lazy-loaded client-side to keep page fast
   const approvedStaffRequests: any[] = []
+  const profileRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const effectiveRole = isRegionalHr || (String(userLocationName || "").toLowerCase().includes("regional") && profileRole.includes("hr"))
+    ? "regional_hr_leave_office"
+    : profile.role
 
   try {
     return (
@@ -145,7 +149,7 @@ export default async function LeaveManagementPage() {
       <div className="leave-theme">
         <LeaveManagementModuleClient
           userId={user.id}
-          userRole={profile.role}
+          userRole={effectiveRole}
           userDepartment={(profile as any)?.department_id || null}
           userLocationId={(profile as any)?.assigned_location_id || null}
           userFirstName={(profile as any)?.first_name || null}
