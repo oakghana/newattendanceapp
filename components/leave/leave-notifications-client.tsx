@@ -51,6 +51,8 @@ export function LeaveNotificationsClient() {
     m.append('reason', data.reason)
     m.append('leave_type', data.leaveType)
     if (data.documentFile) m.append('document', data.documentFile)
+    if (data.deliveryDate) m.append('delivery_date', data.deliveryDate.toISOString().split('T')[0])
+    if (data.maternityDeliveryType) m.append('maternity_delivery_type', data.maternityDeliveryType)
     if (data.isHalfDay) m.append('is_half_day', 'true')
     if (data.halfDayPeriod) m.append('half_day_period', data.halfDayPeriod)
     const resp = await fetch('/api/leave/request-leave', { method: 'POST', body: m })

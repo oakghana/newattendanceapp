@@ -39,6 +39,8 @@ export interface LeaveRequestData {
   leaveType: string
   leaveYearPeriod?: string
   documentFile?: File
+  deliveryDate?: Date
+  maternityDeliveryType?: "regular" | "cs_twins"
   isDirectSubmit?: boolean
 }
 
@@ -95,6 +97,8 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
     endDate: new Date(),
     reason: "",
     leaveType: "annual",
+    deliveryDate: new Date(),
+    maternityDeliveryType: "regular",
     isDirectSubmit: hasApprovedLeave,
   })
 
@@ -126,6 +130,21 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
 
   const calculateDuration = async (startDate: Date, leaveType: string, period: string) => {
     if (!startDate || !leaveType) return
+    if (leaveType === "maternity") {
+      const weeks = formData.maternityDeliveryType === "cs_twins" ? 14 : 12
+      const endDate = new Date(startDate)
+      endDate.setDate(endDate.getDate() + weeks * 7 - 1)
+      const returnDate = new Date(endDate)
+      returnDate.setDate(returnDate.getDate() + 1)
+      setCalculatedEnd({
+        endDate: endDate.toISOString().split("T")[0],
+        daysCount: weeks,
+        businessDays: weeks * 7,
+        estimatedReturn: returnDate.toISOString().split("T")[0],
+      })
+      setFormData((p) => ({ ...p, endDate }))
+      return
+    }
     setCalculating(true)
     try {
       const res = await fetch("/api/leave/calculate", {
@@ -157,7 +176,9 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
     try {
       await onSubmit({
         ...formData,
-        documentFile: uploadedFile || undefined,
+            documentFile: uploadedFile || undefined,
+        deliveryDate: formData.deliveryDate,
+        maternityDeliveryType: formData.maternityDeliveryType,
       })
       resetForm()
       onOpenChange(false)
@@ -185,8 +206,9 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
     if (file && file.size <= 5 * 1024 * 1024) setUploadedFile(file)
   }
 
-  const steps = hasApprovedLeave ? STEPS : STEPS_NO_DOC
-  const currentIdx = stepIndex(step, !!hasApprovedLeave)
+  const requiresDocument = hasApprovedLeave || formData.leaveType === "maternity"
+  const steps = requiresDocument ? STEPS : STEPS_NO_DOC
+  const currentIdx = stepIndex(step, requiresDocument)
   const totalSteps = steps.length
 
   const daysDifference = calculatedEnd?.daysCount
@@ -208,7 +230,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
 
   const canProceed =
     step === "type" ? !!formData.leaveType :
-    step === "dates" ? (!!formData.startDate && !calculating) :
+    step === "dates" ? (!!formData.startDate && !calculating && (formData.leaveType !== "maternity" || !!formData.deliveryDate)) :
     step === "reason" ? formData.reason.trim().length >= 3 :
     step === "document" ? !!uploadedFile :
     true
@@ -340,6 +362,36 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
           {/* Step: Dates */}
           {step === "dates" && (
             <div className="space-y-4">
+              {formData.leaveType === "maternity" && (
+                <div className="space-y-3 rounded-xl border border-pink-200 bg-pink-50/60 p-4">
+                  <p className="text-sm font-semibold text-pink-900">Maternity details</p>
+                  <div>
+                    <label className="text-xs font-semibold text-pink-900 uppercase tracking-wide block mb-1.5">Date of Delivery</label>
+                    <input
+                      type="date"
+                      value={formData.deliveryDate?.toISOString().split("T")[0] ?? ""}
+                      onChange={(e) => setFormData((p) => ({ ...p, deliveryDate: new Date(e.target.value) }))}
+                      className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-pink-900 uppercase tracking-wide block mb-1.5">Delivery Type</label>
+                    <select
+                      value={formData.maternityDeliveryType}
+                      onChange={(e) => {
+                        const maternityDeliveryType = e.target.value as "regular" | "cs_twins"
+                        setFormData((p) => ({ ...p, maternityDeliveryType }))
+                        void calculateDuration(formData.startDate, "maternity", activePeriod)
+                      }}
+                      className="w-full px-3 py-2.5 border rounded-xl bg-background text-sm outline-none"
+                    >
+                      <option value="regular">Regular delivery — 12 weeks</option>
+                      <option value="cs_twins">Cesarean Section / Twins — 14 weeks</option>
+                    </select>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
                   Leave Start Date
@@ -429,10 +481,10 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
           )}
 
           {/* Step: Document */}
-          {step === "document" && hasApprovedLeave && (
+          {step === "document" && requiresDocument && (
             <div className="space-y-3">
-              <p className="text-sm font-semibold">Supporting Document</p>
-              <p className="text-xs text-muted-foreground">Approval letter, medical cert, or relevant document (PDF/JPG/PNG · max 5 MB)</p>
+              <p className="text-sm font-semibold">Supporting Document {formData.leaveType === "maternity" && <span className="text-destructive">(Required)</span>}</p>
+              <p className="text-xs text-muted-foreground">Medical certificate, delivery record, approval letter, or relevant document (PDF/JPG/PNG · max 5 MB)</p>
               <label
                 htmlFor="document-upload"
                 className={cn(
@@ -467,7 +519,8 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
               <div className="rounded-2xl border divide-y overflow-hidden">
                 {[
                   { label: "Leave Type", value: selectedType?.label ?? formData.leaveType },
-                  { label: "Duration", value: `${daysDifference} working day${daysDifference !== 1 ? "s" : ""}` },
+                  { label: "Duration", value: formData.leaveType === "maternity" ? `${formData.maternityDeliveryType === "cs_twins" ? 14 : 12} weeks` : `${daysDifference} working day${daysDifference !== 1 ? "s" : ""}` },
+                  ...(formData.leaveType === "maternity" && formData.deliveryDate ? [{ label: "Delivery Date", value: formData.deliveryDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) }] : []),
                   { label: "Start Date", value: formData.startDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
                   { label: "End Date", value: formData.endDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
                   ...(calculatedEnd ? [{ label: "Return to Work", value: new Date(calculatedEnd.estimatedReturn.replace(/-/g, "/")).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) }] : []),
@@ -511,7 +564,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                 <Button
                   onClick={handleSubmit}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={loading || (hasApprovedLeave && !uploadedFile)}
+                  disabled={loading || (requiresDocument && !uploadedFile) || (formData.leaveType === "maternity" && !formData.deliveryDate)}
                 >
                   {loading ? (
                     <><span className="animate-spin mr-2">⟳</span>Submitting…</>
