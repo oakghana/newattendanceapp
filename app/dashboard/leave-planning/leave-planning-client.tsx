@@ -2022,9 +2022,15 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
 
   const hrOfficeQueue: any[] = useMemo(() => {
     if (!data) return []
-    const requests = (data.requests || []).filter((r: any) =>
-      (HR_OFFICE_PENDING_STATUSES as string[]).includes(String(r?.status || "")),
-    )
+    const requests = (data.requests || []).filter((r: any) => {
+      const status = String(r?.status || "")
+      const leaveType = String(r?.leave_type_key || "").toLowerCase()
+      if (!(HR_OFFICE_PENDING_STATUSES as string[]).includes(status)) return false
+      // Regional HR must never see annual, completed, or already-forwarded requests,
+      // even if a stale response briefly contains them.
+      if (isRegionalHr && (leaveType === "annual" || !["hod_approved", "manager_confirmed"].includes(status))) return false
+      return true
+    })
     
     // Enhance requests with outstanding leave data if available
     return requests.map((r: any) => {

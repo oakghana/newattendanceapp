@@ -19,6 +19,7 @@ import {
   resolveEntitlementFromProfile,
   buildAnnualLeaveEntitlementSummary,
 } from "@/lib/annual-leave-entitlement"
+import { resolveMemoVisibilityScope } from "@/lib/hr-workflow"
 
 function getActiveLeaveYearPeriod(referenceDate: Date = new Date()) {
   const year = referenceDate.getFullYear()
@@ -746,7 +747,9 @@ export async function GET(request: NextRequest) {
       // region/location — annual leave and out-of-region requests stay with
       // the national HR Leave Office.
       if (isRegionalHr) {
-        officeQuery = officeQuery.neq("leave_type_key", "annual")
+        officeQuery = officeQuery
+          .neq("leave_type_key", "annual")
+          .in("status", ["hod_approved", "manager_confirmed"])
       }
 
       let { data: requests, error: reqError } = await officeQuery
@@ -757,15 +760,11 @@ export async function GET(request: NextRequest) {
       }
 
       if (isRegionalHr) {
-        const regionalLocationId = (profile as any)?.assigned_location_id || null
-        const regionalRegionId = (profile as any)?.region_id || null
+        const visibility = await resolveMemoVisibilityScope(admin, user.id, role)
+        const allowedStaffIds = new Set(visibility.staffIds || [])
         requests = (requests || []).filter((r: any) => {
-          const staffLocationId = r.user?.assigned_location_id || null
-          const staffRegionId = r.user?.region_id || null
-          return (
-            (regionalLocationId && staffLocationId === regionalLocationId) ||
-            (regionalRegionId && staffRegionId === regionalRegionId)
-          )
+          const staffId = String(r.user_id || r.user?.id || "")
+          return allowedStaffIds.has(staffId)
         })
       }
 
