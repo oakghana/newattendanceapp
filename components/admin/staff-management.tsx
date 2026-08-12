@@ -123,7 +123,8 @@ export function StaffManagement() {
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
   const normalizedCurrentUserRole = String(currentUserRole).trim().toLowerCase().replace(/[-\s]+/g, "_")
   const isAdministrator = ["admin", "administrator"].includes(normalizedCurrentUserRole)
-  const canManageStaffLinks = ["admin", "administrator", "it_admin", "itadmin"].includes(normalizedCurrentUserRole)
+  const isItAdmin = ["it_admin", "itadmin"].includes(normalizedCurrentUserRole)
+  const canManageStaffLinks = isAdministrator || isItAdmin
 
   // Calculate years of service based on date of appointment
   const calculateYearsOfService = (dateStr: string): number | string => {
@@ -897,7 +898,7 @@ export function StaffManagement() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {currentUserRole === "it-admin" ? (
+                            {isItAdmin ? (
                               // IT-Admin may only create limited roles
                               <>
                                 <SelectItem value="staff">Staff</SelectItem>
@@ -910,24 +911,24 @@ export function StaffManagement() {
                                 <SelectItem value="staff">Staff</SelectItem>
                                 <SelectItem value="audit_staff">Audit Staff</SelectItem>
                                 <SelectItem value="department_head">Department Head</SelectItem>
-                                {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                                {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                                 {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
+                                {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
+                                {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                                {isAdministrator && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
   {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
   {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
-  {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
+  {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                                {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
                                 {canManageStaffLinks && (
                                   <SelectItem value="it-admin">IT Admin</SelectItem>
                                 )}
-                                {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="managing_director">Managing Director</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_executive">HR Executive</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="secretary">Secretary</SelectItem>}
+                                {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
+                                {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
+                                {isAdministrator && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
+                                {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
                                 <SelectItem value="nsp">NSP</SelectItem>
                                 <SelectItem value="intern">Intern</SelectItem>
                                 <SelectItem value="contract">Contract</SelectItem>
@@ -1168,7 +1169,7 @@ export function StaffManagement() {
                         <SelectValue placeholder={editingStaff.role || "Select Role"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {currentUserRole === "it-admin" ? (
+                        {isItAdmin ? (
                           <>
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="nsp">NSP</SelectItem>
@@ -1180,24 +1181,24 @@ export function StaffManagement() {
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="audit_staff">Audit Staff</SelectItem>
                             <SelectItem value="department_head">Department Head</SelectItem>
-                            {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
+                            {isAdministrator && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                             {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="accounts">Accounts</SelectItem>}
+                            {isAdministrator && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
 {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
   {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
-  {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
+  {isAdministrator && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+                            {isAdministrator && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {canManageStaffLinks && (
                               <SelectItem value="it-admin">IT Admin</SelectItem>
                             )}
-                            {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="managing_director">Managing Director</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_executive">HR Executive</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="secretary">Secretary</SelectItem>}
+                            {isAdministrator && <SelectItem value="admin">Admin</SelectItem>}
+                            {isAdministrator && <SelectItem value="managing_director">Managing Director</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_executive">HR Executive</SelectItem>}
+                            {isAdministrator && <SelectItem value="accounts_executive">Accounts Executive</SelectItem>}
+                            {isAdministrator && <SelectItem value="secretary">Secretary</SelectItem>}
                             <SelectItem value="nsp">NSP</SelectItem>
                             <SelectItem value="intern">Intern</SelectItem>
                             <SelectItem value="contract">Contract</SelectItem>
@@ -1429,7 +1430,7 @@ export function StaffManagement() {
                             onClick={() => setEditingStaff({ ...member, role: displayRole(member.role) })}
                             className="h-8 w-8 p-0 hover:bg-primary/10 hover:border-primary/20"
                             disabled={
-                              currentUserRole === "it-admin" && (displayRole(member.role) === "admin" || displayRole(member.role) === "it-admin")
+                              isItAdmin && (displayRole(member.role) === "admin" || displayRole(member.role) === "it-admin")
                             }
                           >
                             <Edit className="h-3 w-3" />
@@ -1448,7 +1449,7 @@ export function StaffManagement() {
                             onClick={() => handleDeactivateStaff(member.id)}
                             className="h-8 w-8 p-0 hover:bg-destructive/10 hover:border-destructive/20"
                             disabled={
-                              currentUserRole === "it-admin" && (member.role === "admin" || member.role === "it-admin")
+                              isItAdmin && (member.role === "admin" || member.role === "it-admin")
                             }
                           >
                             <Trash2 className="h-3 w-3" />
