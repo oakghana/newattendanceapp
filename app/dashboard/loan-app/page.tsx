@@ -1202,8 +1202,7 @@ export default function LoanAppPage() {
     const label = String(selectedType?.loan_label || "").toLowerCase()
     return key === "salary_advance" || label.includes("salary advance")
   }, [selectedType])
-  const salaryAdvanceMaxMonths = String(data?.profile?.staffCategory || "").toLowerCase() === "senior" ? 2 : 3
-  const salaryAdvanceMonthOptions = Array.from({ length: salaryAdvanceMaxMonths }, (_, index) => index + 1)
+  const salaryAdvanceMonthOptions = [12, 15, 18, 21, 24]
 
   useEffect(() => {
     if (!isSalaryAdvanceRequest) {
@@ -2245,10 +2244,10 @@ export default function LoanAppPage() {
       return
     }
 
-    if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths > salaryAdvanceMaxMonths)) {
-      toast({
-        title: "Invalid repayment period",
-        description: `Salary advance recovery is limited to ${salaryAdvanceMaxMonths} month${salaryAdvanceMaxMonths === 1 ? "" : "s"} for your staff category.`,
+  if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths < 12 || salaryAdvanceMonths > 24)) {
+  toast({
+  title: "Invalid repayment period",
+  description: "Salary advance repayment must be between 12 and 24 months.",
         variant: "destructive",
       })
       return
@@ -3130,11 +3129,14 @@ export default function LoanAppPage() {
 
 
               {isSalaryAdvanceRequest && (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label>Repayment duration (12–24 months)</Label>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                   {salaryAdvanceMonthOptions.map((months) => (
-                    <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm hover:border-emerald-300">
+                    <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-emerald-300">
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="salary-advance-repayment"
                         checked={salaryAdvanceMonths === months}
                         onChange={() => setSalaryAdvanceMonths(salaryAdvanceMonths === months ? null : months)}
                         className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
@@ -3142,6 +3144,7 @@ export default function LoanAppPage() {
                       <span>{months} month{months > 1 ? "s" : ""}</span>
                     </label>
                   ))}
+                  </div>
                 </div>
               )}
 
@@ -5233,7 +5236,7 @@ export default function LoanAppPage() {
           </div>
         </TabsContent>
 
-        {/* ── Payment Approvals Tab (HR Executive) ── */}
+        {/* ── Payment Approvals Tab (HR Executive) ���─ */}
         <TabsContent value="payment-approvals" className="space-y-4">
           <Card>
             <CardHeader>

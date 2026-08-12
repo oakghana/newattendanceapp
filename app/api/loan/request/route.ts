@@ -183,8 +183,8 @@ async function loadLoanType(admin: any, loanTypeKey: string) {
 function clampSalaryAdvanceRecoveryMonths(loanTypeKey: string, months?: number | null): number | null {
   const normalizedKey = String(loanTypeKey || "").toLowerCase()
   if (normalizedKey !== "salary_advance") return months ?? null
-  if (!Number.isFinite(months) || months < 1) return null
-  return Math.min(3, Math.trunc(months))
+  if (!Number.isFinite(months) || months < 12 || months > 24) return null
+  return Math.trunc(months)
 }
 
 function shouldRetryWithoutLocationColumns(error: any): boolean {
@@ -275,11 +275,15 @@ export async function POST(request: NextRequest) {
 
     const { data: loanType, error: typeError } = await loadLoanType(admin, loan_type_key)
 
-    if (typeError || !loanType) {
-      return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
-    }
+  if (typeError || !loanType) {
+  return NextResponse.json({ error: "Loan type not found or inactive" }, { status: 404 })
+  }
 
-    if (role !== "admin") {
+  if (loanType.loan_key === "salary_advance" && (initialDurationMonths < 12 || initialDurationMonths > 24)) {
+    return NextResponse.json({ error: "Salary advance repayment must be between 12 and 24 months." }, { status: 400 })
+  }
+
+  if (role !== "admin") {
       // Check for active loan of the SAME type (allow different loan types while one is active)
       const activeLoanCheck = await checkForActiveLoanOfSameType(admin, user.id, loanType.loan_key)
       if (activeLoanCheck) {
@@ -653,7 +657,7 @@ export async function PUT(request: NextRequest) {
         )
         if (loanType.loan_key === "salary_advance" && chosenMonths === null) {
           return NextResponse.json(
-            { error: "Salary advance requests require recovery months between 1 and 3." },
+{ error: "Salary advance requests require repayment between 12 and 24 months." },
             { status: 400 },
           )
         }

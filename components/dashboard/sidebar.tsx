@@ -152,7 +152,7 @@ const navigationItems = [
     title: "Memo Console",
     href: "/dashboard/secretary-memos",
     icon: ScrollText,
-    roles: ["secretary", "admin"],
+    roles: ["secretary", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "admin"],
     category: "main",
     executive: true,
   },

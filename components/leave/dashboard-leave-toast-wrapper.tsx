@@ -33,7 +33,8 @@ export function DashboardLeaveToastWrapper({
     // Load dismissed state from localStorage
     const dismissedToasts = localStorage.getItem("dismissedLeaveToasts") || "{}"
     const parsed = JSON.parse(dismissedToasts)
-    if (parsed[leaveEndDate]) {
+    const today = new Date().toISOString().split("T")[0]
+    if (parsed[`${leaveEndDate}:${today}`]) {
       setDismissed(true)
       setShowToast(false)
     }
@@ -46,7 +47,7 @@ export function DashboardLeaveToastWrapper({
     // Store dismissed state with date so it can be shown again next day
     const dismissedToasts = JSON.parse(localStorage.getItem("dismissedLeaveToasts") || "{}")
     const today = new Date().toISOString().split("T")[0]
-    dismissedToasts[leaveEndDate] = today
+    dismissedToasts[`${leaveEndDate}:${today}`] = true
     localStorage.setItem("dismissedLeaveToasts", JSON.stringify(dismissedToasts))
   }
 

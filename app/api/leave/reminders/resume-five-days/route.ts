@@ -60,6 +60,9 @@ async function isAuthorized(request: NextRequest, admin: any) {
     "manager_hr",
     "director_hr",
     "hr_director",
+    "regional_hr",
+    "regional_hr_leave_office",
+    "regional_leave_office",
   ])
 
   return { ok: allowed.has(role), source: "user" as const }
