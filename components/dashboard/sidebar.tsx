@@ -416,7 +416,11 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   // UI accepts the role values used by existing records, such as IT-ADMIN.
   // Support role hierarchy by treating audit_staff like staff for base menus.
   const normalizedRole = (profile?.role || "staff").toLowerCase().replace(/[\s-]+/g, "_").trim()
-  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
+  const effectiveRole = normalizedRole === "administrator"
+    ? "admin"
+    : normalizedRole === "audit_staff"
+      ? "staff"
+      : normalizedRole
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
@@ -432,6 +436,33 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
 
   const mainItems = filteredNavItems.filter((item) => item.category === "main")
   const adminItems = filteredNavItems.filter((item) => item.category === "admin")
+  const adminGroupDefinitions = [
+    {
+      title: "Leave & Reviews",
+      icon: Calendar,
+      hrefs: ["/dashboard/leave-management", "/dashboard/excuse-duty-review", "/dashboard/hr-excuse-duty"],
+    },
+    {
+      title: "Reports & Monitoring",
+      icon: BarChart3,
+      hrefs: ["/dashboard/reports", "/dashboard/department-summaries", "/dashboard/warnings-archive", "/dashboard/defaulters", "/dashboard/device-violations", "/dashboard/weekly-device-sharing"],
+    },
+    {
+      title: "Staff & Access",
+      icon: Users,
+      hrefs: ["/dashboard/staff", "/dashboard/staff-activation", "/dashboard/data-management", "/dashboard/locations"],
+    },
+    {
+      title: "Security & System",
+      icon: Shield,
+      hrefs: ["/dashboard/audit-logs", "/dashboard/checkin-failures", "/dashboard/emergency-admin", "/dashboard/diagnostics"],
+    },
+  ].map((group) => ({
+    ...group,
+    items: adminItems.filter((item) => group.hrefs.includes(item.href)),
+  }))
+  const groupedAdminHrefs = new Set(adminGroupDefinitions.flatMap((group) => group.items.map((item) => item.href)))
+  const adminStandaloneItems = adminItems.filter((item) => !groupedAdminHrefs.has(item.href))
   const settingsItems = filteredNavItems.filter((item) => item.category === "settings")
 
   const firstInitial = profile?.first_name?.trim()?.[0] || ""
@@ -582,7 +613,37 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                     </Badge>
                   </div>
                 )}
-                {adminItems.map((item) => {
+                {adminGroupDefinitions.map((group) => {
+                  if (group.items.length === 0) return null
+                  const GroupIcon = group.icon
+                  return (
+                    <DropdownMenu key={group.title}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          title={isCollapsed ? group.title : undefined}
+                          className={cn(
+                            "w-full flex items-center rounded-lg text-sm font-medium transition-all min-h-[38px] border border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border",
+                            isCollapsed ? "justify-center px-0 py-2" : "gap-2.5 px-3 py-2",
+                          )}
+                        >
+                          <GroupIcon className="h-4.5 w-4.5 flex-shrink-0" />
+                          {!isCollapsed && <><span className="flex-1 text-left">{group.title}</span><ChevronRight className="h-4 w-4 text-muted-foreground" /></>}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64 shadow-lg border-border bg-background">
+                        {group.items.map((item) => (
+                          <DropdownMenuItem asChild key={item.href}>
+                            <Link href={item.href} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted rounded-md" onClick={() => setIsMobileMenuOpen(false)}>
+                              <item.icon className="h-4 w-4" />
+                              <span className="font-medium">{item.title}</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )
+                })}
+                {adminStandaloneItems.map((item) => {
                   const Icon = item.icon
                   const isActive = pathname === item.href || item.subItems?.some((subItem) => pathname === subItem.href)
 

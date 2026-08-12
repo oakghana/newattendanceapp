@@ -23,7 +23,7 @@ export async function isUserAdmin(): Promise<boolean> {
     if (!profile?.role) return false
 
     const roleNorm = String(profile.role || "").toLowerCase().replace(/[\s-]+/g, "_")
-    const adminRoles = ["admin", "super_admin", "god"]
+    const adminRoles = ["admin", "administrator", "super_admin", "god"]
 
     return adminRoles.includes(roleNorm)
   } catch (err) {
