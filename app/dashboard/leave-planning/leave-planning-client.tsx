@@ -2164,7 +2164,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     return data.analytics
   }, [analyticsData, data])
 
-  // ── Actions ─────────────────────────────────────────���───────────────���
+  // ── Actions ─────────────────────────────────────────���────────��──────���
 
   const submitPlan = async () => {
     if (!leaveType) {
@@ -2488,7 +2488,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     }
   }
 
-  // ── Tab config ────────────────────────────────────────────────────────
+  // ── Tab config ───────────���────────────────────────────────────────────
   const tabs = useMemo(() => {
     const t: { value: string; label: string; Icon: any; count?: number }[] = []
     if (canSelfApply) t.push({ value: "my-leaves", label: "Request", Icon: CalendarDays, count: myRequests.length })
@@ -3881,6 +3881,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               }
                             }
                           }}
+                          disabled={!isRegionalHr && !((HR_OFFICE_PENDING_STATUSES as string[]).includes(String(req.status || "")))}
                           className="text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed">
                           {isExpanded ? "▲ Collapse" : "▼ Adjust & Forward"}
                         </Button>

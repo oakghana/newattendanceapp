@@ -72,13 +72,17 @@ export async function POST(request: NextRequest) {
     }
 
     const isRegionalForward = action === "forward_to_regional_manager"
-    const decision = normalizeDecision(action)
+    const decision = isRegionalForward ? "approved" : normalizeDecision(action)
     if (!decision) {
       return NextResponse.json({ error: "Invalid action. Use approve, recommend_change, or reject." }, { status: 400 })
     }
 
     if (decision !== "approved" && !recommendation) {
       return NextResponse.json({ error: "Recommendation is required for change request or rejection." }, { status: 400 })
+    }
+
+    if (isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
+      return NextResponse.json({ error: "Adjusted start and end dates are required before forwarding to the Regional Manager." }, { status: 400 })
     }
 
     if (decision === "recommend_change" && !isRegionalForward && (!adjusted_preferred_start_date || !adjusted_preferred_end_date)) {
@@ -170,7 +174,7 @@ export async function POST(request: NextRequest) {
     let nextEndDate = leavePlan.preferred_end_date
     let nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
 
-    if (decision === "recommend_change") {
+    if (isRegionalForward || decision === "recommend_change") {
       nextStartDate = adjusted_preferred_start_date
       nextEndDate = adjusted_preferred_end_date
       nextRequestedDays = calculateRequestedDays(nextStartDate, nextEndDate)
@@ -226,10 +230,12 @@ export async function POST(request: NextRequest) {
       requestUpdatePayload.hod_decision = "changes_requested"
     }
 
-    if (decision === "recommend_change") {
+    if (isRegionalForward || decision === "recommend_change") {
       requestUpdatePayload.preferred_start_date = nextStartDate
       requestUpdatePayload.preferred_end_date = nextEndDate
       requestUpdatePayload.requested_days = nextRequestedDays
+      requestUpdatePayload.adjusted_days = nextRequestedDays
+      requestUpdatePayload.adjustment_reason = recommendation || null
     }
 
     const { error: requestUpdateError } = await admin
