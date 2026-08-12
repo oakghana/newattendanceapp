@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
-import { Clock, User, Calendar, AlertCircle, Loader2, Search, Download, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Search, XCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { getResumptionRowClass, getDaysOverdue } from '@/lib/resumption-confirmation-helpers'
+import { getDaysOverdue } from '@/lib/resumption-confirmation-helpers'
 
 interface LeaveRequest {
   id: string
@@ -29,6 +29,7 @@ interface LeaveRequest {
   staff_confirmed_at?: string
   hod_confirmed?: boolean
   hod_confirmed_at?: string
+  confirmation_status?: 'pending_hod_rm' | 'pending_hr_manual' | 'confirmed' | 'rejected' | null
   user_profiles?: {
     first_name?: string
     last_name?: string
@@ -66,7 +67,6 @@ export function AllRequestsViewSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModalState>({
     isOpen: false,
     request: null,
@@ -89,8 +89,8 @@ export function AllRequestsViewSection() {
       ).toLowerCase()
       const deptName = (req.user_profiles?.department_name || req.user_profiles?.departments?.name || '').toLowerCase()
       const empId = (req.user_profiles?.employee_id || '').toLowerCase()
-      const leaveType = (req.leave_type || req.leave_type_key || '').toLowerCase()
-      const searchLower = searchTerm.toLowerCase()
+      const leaveType = String(req.leave_type || req.leave_type_key || '').toLowerCase()
+      const searchLower = String(searchTerm || '').toLowerCase()
 
       return staffName.includes(searchLower) || deptName.includes(searchLower) ||
              empId.includes(searchLower) || leaveType.includes(searchLower)
@@ -114,12 +114,12 @@ export function AllRequestsViewSection() {
       // Extract data from response - handle multiple possible response formats
       let requestsList: LeaveRequest[] = []
       
-      if (Array.isArray(responseData.data)) {
-        requestsList = responseData.data
-      } else if (Array.isArray(responseData.records)) {
-        requestsList = responseData.records
+      if (Array.isArray(responseData?.data)) {
+        requestsList = responseData.data.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
+      } else if (Array.isArray(responseData?.records)) {
+        requestsList = responseData.records.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
       } else if (Array.isArray(responseData)) {
-        requestsList = responseData
+        requestsList = responseData.filter((item): item is LeaveRequest => Boolean(item && typeof item === 'object' && item.id))
       }
       
       setRequests(requestsList)
@@ -144,6 +144,12 @@ export function AllRequestsViewSection() {
     }
   }
 
+  const formatLeaveDate = (value?: string) => {
+    if (!value) return 'N/A'
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString()
+  }
+
   const getHodStatusBadge = (status: string | undefined) => {
     switch (status?.toLowerCase()) {
       case 'approved':
@@ -154,41 +160,6 @@ export function AllRequestsViewSection() {
         return <Badge className="bg-orange-100 text-orange-700">Pending HOD</Badge>
       default:
         return <Badge variant="outline">-</Badge>
-    }
-  }
-
-  const downloadLeaveMemo = async (requestId: string, staffName: string) => {
-    setDownloadingId(requestId)
-    try {
-      // Fetch the leave memo document from the endpoint
-      const res = await fetch(`/api/leave/download-memo?request_id=${requestId}`)
-      
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: 'Failed to fetch memo' }))
-        throw new Error(errData.error || 'Failed to download leave memo')
-      }
-
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Leave_Memo_${staffName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      toast({ title: 'Success', description: 'Leave memo downloaded successfully' })
-    } catch (err) {
-      console.error('[v0] Download memo error:', err)
-      const errorMsg = err instanceof Error ? (err.message || 'Failed to download leave memo') : 'Failed to download leave memo'
-      toast({
-        title: 'Error',
-        description: String(errorMsg),
-        variant: 'destructive',
-      })
-    } finally {
-      setDownloadingId(null)
     }
   }
 
@@ -311,12 +282,8 @@ export function AllRequestsViewSection() {
                   req.user_profiles?.department_name ||
                   req.user_profiles?.departments?.name ||
                   'N/A'
-                const startDate = (req.start_date || req.preferred_start_date)
-                  ? new Date(req.start_date || req.preferred_start_date!).toLocaleDateString()
-                  : 'N/A'
-                const endDate = (req.end_date || req.preferred_end_date)
-                  ? new Date(req.end_date || req.preferred_end_date!).toLocaleDateString()
-                  : 'N/A'
+                const startDate = formatLeaveDate(req.start_date || req.preferred_start_date)
+                const endDate = formatLeaveDate(req.end_date || req.preferred_end_date)
                 const hodStatus = req.hod_review_status || req.hod_decision || 'pending'
 
                 const isHrApproved = req.status?.toLowerCase() === 'hr_approved'
@@ -393,27 +360,6 @@ export function AllRequestsViewSection() {
                         >
                           <AlertCircle className="h-4 w-4" />
                           HR Verify
-                        </Button>
-                      )}
-                      {isHrApproved && !req.confirmation_status?.includes('pending') && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 text-teal-600 border-teal-200 hover:bg-teal-50"
-                          onClick={() => downloadLeaveMemo(req.id, staffName)}
-                          disabled={downloadingId === req.id}
-                        >
-                          {downloadingId === req.id ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Downloading...
-                            </>
-                          ) : (
-                            <>
-                              <Download className="h-4 w-4" />
-                              Download
-                            </>
-                          )}
                         </Button>
                       )}
                     </TableCell>

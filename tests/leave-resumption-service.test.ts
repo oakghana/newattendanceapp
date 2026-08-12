@@ -54,6 +54,16 @@ describe('leave resumption service', () => {
     vi.clearAllMocks()
   })
 
+  it('selects warning, letter, and memo escalation by current status', async () => {
+    const { getResumptionEscalationLevel } = await import('../lib/leave-resumption-service')
+
+    expect(getResumptionEscalationLevel(2, 'pending')).toBe('warning')
+    expect(getResumptionEscalationLevel(5, 'warning_sent')).toBe('letter')
+    expect(getResumptionEscalationLevel(10, 'letter_sent')).toBe('memo')
+    expect(getResumptionEscalationLevel(10, 'memo_sent')).toBeNull()
+    expect(getResumptionEscalationLevel(1, 'pending')).toBeNull()
+  })
+
   it('creates a pending resumption record for an approved leave request', async () => {
     const { createLeaveResumptionTrackingForLeaveRequest } = await import('../lib/leave-resumption-service')
 

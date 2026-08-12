@@ -186,8 +186,8 @@ export function HrExecutiveLeaveCenter() {
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="hod-review" className="gap-2">
             <AlertCircle className="h-4 w-4" />
-            <span className="hidden sm:inline">HOD Review</span>
-            <span className="sm:hidden">HOD</span>
+            <span className="hidden sm:inline">Pending Decisions</span>
+            <span className="sm:hidden">Pending</span>
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{staffRequests.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="all-requests" className="gap-2">

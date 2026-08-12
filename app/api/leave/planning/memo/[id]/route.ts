@@ -6,7 +6,7 @@ import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
-import { addAnnualLeaveWorkingDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
+import { calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
 
 export const runtime = "nodejs"
 
@@ -200,6 +200,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       // Use the stored adjusted_days if it was explicitly set by HR office (may include travel adjustments),
       // otherwise fall back to the computed working-days figure so the table never shows a stale entitlement.
       const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
+      const entitlementForDisplay = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
       return {
         useTable: true,
         paragraphs: [
@@ -207,7 +208,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
           "Your leave details are shown below.",
         ],
         closing: "We wish you a pleasant and relaxing vacation.",
-        tableEntitlement: actualBaseDays,
+        tableEntitlement: entitlementForDisplay,
         tableTravellingDays: travellingDays,
       }
     }
@@ -607,7 +608,7 @@ export async function GET(
 
     // Compute effective dates/days for memo generation
     // Use HR executor's final dates/days if set; otherwise fall back to HR office dates, then requested dates
-    const effectiveStart = lr.hr_approved_start_date || lr.preferred_start_date || lr.adjusted_start_date
+    const effectiveStart = lr.hr_approved_start_date || lr.adjusted_start_date || lr.preferred_start_date
     // The approved/adjusted leave range is authoritative. Day adjustments
     // affect entitlement only and must never extend the leave period.
     const effectiveEnd = lr.hr_approved_end_date || lr.adjusted_end_date || lr.preferred_end_date
@@ -617,19 +618,25 @@ export async function GET(
 
     const leaveTypeKey = String(lr.leave_type_key || "annual").toLowerCase()
     let adjustedEffectiveEnd = effectiveEnd
+    let annualMemoDates: ReturnType<typeof calculateAnnualLeaveMemoDates> | null = null
     if (leaveTypeKey === "annual") {
-      // Annual memo dates are recalculated from the final numeric adjustment
-      // fields. The start date is Working Day 1 when it is a weekday; weekends are excluded.
-      const entitlement = Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays))
-      const publicHolidayDeduction = Math.max(0, Number(lr.holiday_days_deducted || 0))
-      const priorLeaveDeduction = Math.max(0, Number(lr.prior_leave_days_deducted || 0))
-      const travellingAddition = Math.max(0, Number(lr.travelling_days_added || 0))
-      const annualMemoDays = Math.max(0, entitlement - publicHolidayDeduction - priorLeaveDeduction + travellingAddition)
-      adjustedEffectiveEnd = addAnnualLeaveWorkingDays(effectiveStart, annualMemoDays).toISOString().slice(0, 10)
+      const explicitDeduction = (lr.prior_leave_days_deducted != null || lr.holiday_days_deducted != null)
+        ? Number(lr.prior_leave_days_deducted || 0) + Number(lr.holiday_days_deducted || 0)
+        : extractAlreadyEnjoyedDays(lr.adjustment_reason || lr.memo_draft_body)
+      annualMemoDates = calculateAnnualLeaveMemoDates({
+        startDate: effectiveStart,
+        entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays),
+        // Annual granted days are recalculated from the resolved entitlement,
+        // deductions, and travel days; never trust stale stored 22/24-day totals.
+        grantedDays: null,
+        daysAlreadyEnjoyed: explicitDeduction ?? Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays) - effectiveDays),
+        travellingDays: Number(lr.travelling_days_added || 2),
+      })
+      adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
     }
 
     // Return-to-work date is the next working day after the calculated end.
-    const returnDate = getNextWorkingDay(adjustedEffectiveEnd)
+    const returnDate = annualMemoDates?.resumptionDate || getNextWorkingDay(adjustedEffectiveEnd)
     const returnDateIso = returnDate.toISOString()
 
     const leaveLabel   = leaveTypeLabel(leaveTypeKey)
@@ -670,12 +677,6 @@ export async function GET(
       // HARD SAFETY GUARD: table format is EXCLUSIVELY for annual leave.
       // Even if buildBuiltinBody returns useTable=true for another type, we override it.
       useTable            = leaveTypeKey === "annual" ? built.useTable : false
-      console.log("[v0] TABLE DECISION:", {
-        leaveTypeKey,
-        builtUseTable: built.useTable,
-        finalUseTable: useTable,
-        willRenderTable: useTable === true,
-      })
       tableEntitlement    = built.tableEntitlement    ?? 0
       tableTravellingDays = built.tableTravellingDays ?? 0
     }
@@ -817,9 +818,16 @@ export async function GET(
       // ─── Entitlement label (top-left cell): gross entitlement ───────────────
       // Show the staff's full annual entitlement (e.g. "24") even when some days were
       // already enjoyed — this is what the memo should declare as the entitlement.
-      // Priority: entitlement_days field → tableEntitlement (computed working days)
-      const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
-      const grossEntitlement = rawEntitlement > 0 ? rawEntitlement : Math.max(0, Number(tableEntitlement || 0))
+  // The applicant profile is authoritative for annual entitlement. The stored
+  // request value is retained only for legacy/non-annual records.
+  const isAnnualMemo = leaveTypeKey === "annual"
+  const profileEntitlement = isAnnualMemo && applicantProfile
+    ? resolveEntitlementFromProfile(applicantProfile as any).annualLeaveDays
+    : 0
+  const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
+  const grossEntitlement = isAnnualMemo
+    ? Math.max(0, profileEntitlement || Number(tableEntitlement || 0) || rawEntitlement)
+    : Math.max(0, rawEntitlement || Number(tableEntitlement || 0))
       const entitlementLabel = travelDays > 0
         ? `${grossEntitlement || effectiveDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
         : String(grossEntitlement || effectiveDays)
@@ -1031,7 +1039,7 @@ export async function GET(
     }
     y += 3
 
-    // ── Footer ────────────────────────────────────────────────────────
+    // ── Footer ─────────��──────────────────────────────────────────────
     doc.setDrawColor(44, 98, 22)
     doc.setLineWidth(0.5)
     doc.line(marginLeft, pageHeight - 18, pageWidth - marginRight, pageHeight - 18)

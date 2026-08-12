@@ -1,6 +1,7 @@
 // jsPDF and jspdf-autotable are loaded dynamically inside each function
 // to avoid SSR crashes (jsPDF accesses `window` at module initialisation time).
-import { addAnnualLeaveWorkingDays } from "./annual-leave-calculator"
+import { calculateAnnualLeaveMemoDates } from "./annual-leave-calculator"
+import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 
 export interface MemoData {
   to: string
@@ -18,10 +19,19 @@ export interface MemoData {
     leaveDate: string
     approved_days?: number
     entitlement_days?: number
+    adjusted_entitlement_days?: number
+    outstanding_entitlement_days?: number
+    adjusted_used_days?: number
+    outstanding_used_days?: number
+    used_this_period?: number
     prior_leave_days_deducted?: number
     travelling_days_added?: number
     leave_period_start?: string
     leave_period_end?: string
+    staff_category?: string
+    rank?: string
+    date_of_appointment?: string
+    years_of_service?: number
   }>
   signatory: {
     name: string
@@ -412,7 +422,7 @@ async function generateMainMemo(
     })
     yPos = (doc as any).lastAutoTable.finalY + 6
   } else if (!hasAttachment) {
-    // ── Individual annual leave table (QCC format) ─────────────────────────
+    // ── Individual annual leave table (QCC format) ─────��───────────────────
     // Parse days/dates from body or memoData fields
     // Table: Entitled | Granted | From | To | Remarks
     const tableHeaders = [
@@ -425,9 +435,40 @@ async function generateMainMemo(
     const publicHolidayDays = Number(firstStaff?.holiday_days_deducted ?? 0)
     const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
     const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
-    const entitlementDays = Number(firstStaff?.entitlement_days ?? approvedDays)
-    const annualDaysRemaining = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays)
-    const totalGrantedDays = annualDaysRemaining + travellingDays
+    const storedEntitlementDays = Number(
+      firstStaff?.adjusted_entitlement_days
+        ?? firstStaff?.outstanding_entitlement_days
+        ?? firstStaff?.entitlement_days
+        ?? approvedDays,
+    )
+    const adjustedUsedDays = Number(
+      firstStaff?.adjusted_used_days
+        ?? firstStaff?.outstanding_used_days
+        ?? firstStaff?.used_this_period
+        ?? 0,
+    )
+    const resolvedEntitlement = resolveEntitlementFromProfile({
+      staff_category: firstStaff?.staff_category,
+      position: firstStaff?.position,
+      rank: firstStaff?.rank,
+      date_of_appointment: firstStaff?.date_of_appointment,
+      years_of_service: firstStaff?.years_of_service,
+    })
+    const hasAdjustedEntitlement = firstStaff?.adjusted_entitlement_days != null
+      || firstStaff?.outstanding_entitlement_days != null
+      || firstStaff?.entitlement_days != null
+    const entitlementDays = String(memoData.leave_type_key || "").toLowerCase() === "annual"
+      ? hasAdjustedEntitlement ? storedEntitlementDays : resolvedEntitlement.annualLeaveDays
+      : storedEntitlementDays
+    const annualMemoDates = calculateAnnualLeaveMemoDates({
+      startDate: firstStaff?.leave_period_start || new Date(),
+      entitlementDays,
+      grantedDays: approvedDays,
+      daysAlreadyEnjoyed: adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || publicHolidayDays || null,
+      travellingDays,
+    })
+    const annualDaysRemaining = Math.max(0, annualMemoDates.entitlementDays - annualMemoDates.daysAlreadyEnjoyed)
+    const totalGrantedDays = annualMemoDates.grantedDays
 
     const entitled = entitlementDays > 0
       ? travellingDays > 0
@@ -450,12 +491,8 @@ async function generateMainMemo(
     if (firstStaff?.leave_period_end) {
       const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
       if (isAnnualLeave && firstStaff.leave_period_start) {
-        const publicHolidayDays = Math.max(0, Number(firstStaff.holiday_days_deducted ?? 0))
-        const enjoyedDays = Math.max(0, Number(firstStaff.prior_leave_days_deducted ?? 0))
-        const travelDays = Math.max(0, Number(firstStaff.travelling_days_added ?? 0))
-        const annualDays = Math.max(0, entitlementDays - publicHolidayDays - enjoyedDays + travelDays)
-        // Annual leave uses the same inclusive working-day calculation as the memo API.
-        toDate = fmtDateLongPdf(addAnnualLeaveWorkingDays(firstStaff.leave_period_start, annualDays))
+        // Annual leave uses the same inclusive calculation and totals as every memo route.
+        toDate = fmtDateLongPdf(annualMemoDates.endDate)
       } else {
         toDate = fmtDateLongPdf(firstStaff.leave_period_end)
       }

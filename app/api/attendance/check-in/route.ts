@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { requiresLatenessReason, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
+import { requiresLatenessReason, isExemptFromAttendanceReasons, canCheckInAtTime, getCheckInDeadline, isSecurityDept, isOperationalDept, isTransportDept } from "@/lib/attendance-utils"
 import { trackLeaveResumption, checkLeaveOverdueBlock } from "@/lib/leave-resumption-service"
 
 export const runtime = 'nodejs'
@@ -744,7 +744,8 @@ export async function POST(request: NextRequest) {
     }
 
     const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role)
-    if (isLateArrival && latenessRequired && (!lateness_reason || lateness_reason.trim().length === 0)) {
+    const attendanceReasonExempt = isExemptFromAttendanceReasons(userProfile?.role)
+    if (isLateArrival && latenessRequired && !attendanceReasonExempt && (!lateness_reason || lateness_reason.trim().length === 0)) {
       return NextResponse.json({
         error: "Lateness reason is required when checking in after 9:00 AM",
         requiresLatenessReason: true,

@@ -4,8 +4,8 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertTriangle, Clock, Lock, AlertCircle, CheckCircle2, Info } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertTriangle, Clock, Lock, Info } from 'lucide-react'
 import Link from 'next/link'
 
 interface ComplianceData {
@@ -127,16 +127,16 @@ export function AnnualLeaveCompliancePanel() {
 
       {/* Manager/HOD Endorsement Escalations */}
       {escalations.length > 0 && (
-        <Alert className="border-red-400 bg-red-50">
-          <AlertTriangle className="h-5 w-5 text-red-600" />
-          <AlertTitle className="text-red-900 font-semibold">
-            ⚠️ {escalations.length} Overdue Leave Endorsement{escalations.length > 1 ? 's' : ''}
+        <Alert className="border-red-200 bg-red-50/90 py-2.5 shadow-sm">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-900 text-sm font-semibold">
+            {escalations.length} overdue endorsement{escalations.length > 1 ? 's' : ''}
           </AlertTitle>
-          <AlertDescription className="text-red-800 mt-3">
-            <p className="mb-3 text-sm">
-              You have pending leave requests awaiting your endorsement/decision. These have been pending for over 7 days:
+          <AlertDescription className="text-red-800 mt-1 text-xs">
+            <p className="mb-2">
+              Pending leave decisions require your attention.
             </p>
-            <div className="space-y-2 mb-3 max-h-[300px] overflow-y-auto">
+            <div className="space-y-1.5 mb-2 max-h-32 overflow-y-auto">
               {escalations.map((escalation, idx) => (
                 <div key={idx} className="bg-white p-2 rounded text-xs border border-red-200">
                   <div className="flex justify-between items-start">
@@ -150,9 +150,9 @@ export function AnnualLeaveCompliancePanel() {
                 </div>
               ))}
             </div>
-            <Button asChild size="sm" variant="destructive">
-              <Link href="/dashboard/leave-management?tab=hr-approvals&filter=pending">
-                Review Now
+            <Button asChild size="sm" variant="destructive" className="h-7 px-2.5 text-xs">
+              <Link href="/dashboard/leave-management?tab=pending-approvals">
+                Review pending requests
               </Link>
             </Button>
           </AlertDescription>

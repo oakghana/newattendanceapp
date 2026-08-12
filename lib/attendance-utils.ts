@@ -15,6 +15,7 @@ function isManagerOrAdminRole(role?: string | null): boolean {
   const normalizedRole = normalizeRole(role)
   return [
     "admin",
+    "administrator",
     "super_admin",
     "department_head",
     "head_of_department",
@@ -75,8 +76,8 @@ export function requiresLatenessReason(
   config?: AttendanceTimeConfig,
 ): boolean {
   if (isWeekend(date)) return false
+  if (isExemptFromAttendanceReasons(role)) return false
   void dept
-  void role
   void config
   // Check if current time is past the configured lateness deadline
   const deadlineStr = config?.latenessReasonDeadline ?? "09:00"
@@ -94,7 +95,7 @@ export function requiresLatenessReason(
 export function requiresEarlyCheckoutReason(date: Date = new Date(), locationRequires: boolean = true, role?: string | null, dept?: DeptInfo): boolean {
   if (!locationRequires) return false
   if (isWeekend(date)) return false
-  void role
+  if (isExemptFromAttendanceReasons(role)) return false
   void dept
   return true
 }

@@ -12,8 +12,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Download, Loader2, RotateCw, Search, XCircle } from "lucide-react"
-import { ResumptionMemoModal } from "@/components/leave/resumption-memo-modal"
+import { CheckCircle2, RotateCw, Search, XCircle } from "lucide-react"
 import { SortableTable, ColumnDef } from "@/components/ui/sortable-table"
 
 interface LeaveRequest {
@@ -69,39 +68,6 @@ export function AllLeaveRequestsDashboard() {
   const [searchTerm, setSearchTerm] = useState("")
   const [departments, setDepartments] = useState<string[]>([])
   const [leaveTypes, setLeaveTypes] = useState<string[]>([])
-  const [memoModal, setMemoModal] = useState<{ open: boolean; memoId: string | null }>({ open: false, memoId: null })
-  const [generatingMemoFor, setGeneratingMemoFor] = useState<string | null>(null) // rowId being generated
-
-  const handleViewMemo = useCallback(async (row: LeaveRequest) => {
-    // If memo already exists, open it directly
-    if (row.resumptionMemoId) {
-      setMemoModal({ open: true, memoId: row.resumptionMemoId })
-      return
-    }
-    // Otherwise generate it on demand via POST to /api/leave/resumption-memo
-    setGeneratingMemoFor(row.id)
-    try {
-      const res = await fetch("/api/leave/resumption-memo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          staffUserId: row.userId,
-          leaveEndDate: row.endDate,
-          leaveType: row.leaveType || "leave",
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to generate memo")
-      // Refresh the row so next time it has the memo ID
-      setRequests(prev => prev.map(r => r.id === row.id ? { ...r, resumptionMemoId: data.memo_id } : r))
-      setMemoModal({ open: true, memoId: data.memo_id })
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" })
-    } finally {
-      setGeneratingMemoFor(null)
-    }
-  }, [toast])
-
   const fetchRequests = useCallback(async (
     page = 1,
     status = "all",
@@ -373,35 +339,6 @@ export function AllLeaveRequestsDashboard() {
       filterable: false,
       className: "text-center",
     },
-    {
-      key: "resumptionMemo",
-      label: "Resumption Memo",
-      getValue: (row) => (row.staffConfirmed && row.hodConfirmed ? "ready" : ""),
-      render: (row) => {
-        if (!row.staffConfirmed || !row.hodConfirmed) {
-          return <span className="text-slate-400 text-xs">—</span>
-        }
-        const isGenerating = generatingMemoFor === row.id
-        return (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-            onClick={() => handleViewMemo(row)}
-            disabled={isGenerating}
-          >
-            {isGenerating ? (
-              <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
-            ) : (
-              <><Download className="h-3 w-3" /> View & Download</>
-            )}
-          </Button>
-        )
-      },
-      sortable: false,
-      filterable: false,
-      className: "text-center",
-    },
   ]
 
   if (loading) {
@@ -553,12 +490,7 @@ export function AllLeaveRequestsDashboard() {
         Total: <strong>{pagination.totalCount}</strong> requests
       </div>
 
-      {/* Resumption Memo Modal — always mounted, toggled via state */}
-      <ResumptionMemoModal
-        isOpen={memoModal.open}
-        memoId={memoModal.memoId}
-        onClose={() => setMemoModal({ open: false, memoId: null })}
-      />
+
 
       {/* Sortable and Filterable Table */}
       {requests.length === 0 ? (

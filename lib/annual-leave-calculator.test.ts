@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { buildMemoRemarks } from "./professional-memo-generator"
+import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 import {
   addAnnualLeaveWorkingDays,
+  calculateAnnualLeaveMemoDates,
+  extractAlreadyEnjoyedDays,
   buildAnnualLeaveDisplay,
   calculateAnnualLeaveBreakdown,
   getNextWorkingDay,
@@ -27,6 +30,90 @@ describe("annual leave calculation", () => {
 
   it("moves weekend leave endings to the next working day", () => {
     expect(getNextWorkingDay("2026-09-19").toISOString().slice(0, 10)).toBe("2026-09-21")
+  })
+
+  it("resolves senior staff to 36 core days plus 2 travel days", () => {
+    const entitlement = resolveEntitlementFromProfile({ position: "Senior IT Officer" })
+    expect(entitlement.annualLeaveDays).toBe(36)
+    expect(entitlement.travelDays).toBe(2)
+    expect(entitlement.totalEntitlement).toBe(38)
+  })
+
+  it("uses the same inclusive dates for 36 entitlement, 4 enjoyed, and 2 travel days", () => {
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 36,
+      grantedDays: 34,
+      daysAlreadyEnjoyed: 4,
+      travellingDays: 2,
+    })
+    expect(result.grantedDays).toBe(34)
+    expect(result.endDate.toISOString().slice(0, 10)).toBe("2026-09-17")
+    expect(result.resumptionDate.toISOString().slice(0, 10)).toBe("2026-09-18")
+  })
+
+  it("derives enjoyed days when the stored granted total is 22", () => {
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 24,
+      grantedDays: 22,
+      travellingDays: 2,
+    })
+    expect(result.daysAlreadyEnjoyed).toBe(4)
+    expect(result.endDate.toISOString().slice(0, 10)).toBe("2026-09-01")
+  })
+
+  it("extracts legacy enjoyed-day deductions from adjustment text", () => {
+    expect(extractAlreadyEnjoyedDays("4 given during Christmas holidays")).toBe(4)
+    expect(extractAlreadyEnjoyedDays("4 days already enjoyed deducted")).toBe(4)
+    expect(extractAlreadyEnjoyedDays("No prior leave")).toBeNull()
+  })
+
+  it("keeps senior staff at 36 core days even when a legacy request says 24", () => {
+    const profile = { position: "Senior IT Officer", staff_category: "senior" }
+    const resolved = resolveEntitlementFromProfile(profile)
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: resolved.annualLeaveDays,
+      daysAlreadyEnjoyed: 4,
+      travellingDays: resolved.travelDays,
+    })
+    expect(resolved.annualLeaveDays).toBe(36)
+    expect(result.grantedDays).toBe(34)
+    expect(result.endDate.toISOString().slice(0, 10)).toBe("2026-09-17")
+  })
+
+  it("uses HR-adjusted outstanding entitlement and usage in memo totals", () => {
+    const adjustedEntitlement = 34
+    const adjustedUsed = 10
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: adjustedEntitlement,
+      grantedDays: adjustedEntitlement - adjustedUsed,
+      daysAlreadyEnjoyed: adjustedUsed,
+      travellingDays: 0,
+    })
+
+    expect(result.entitlementDays).toBe(34)
+    expect(result.daysAlreadyEnjoyed).toBe(10)
+    expect(result.grantedDays).toBe(24)
+  })
+
+  it("adds HR carryover days to the core annual entitlement", () => {
+    const coreEntitlement = 36
+    const carryover = 12
+    const adjustedEntitlement = coreEntitlement + carryover
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: adjustedEntitlement,
+      grantedDays: adjustedEntitlement - 10,
+      daysAlreadyEnjoyed: 10,
+      travellingDays: 0,
+    })
+
+    expect(result.entitlementDays).toBe(48)
+    expect(result.daysAlreadyEnjoyed).toBe(10)
+    expect(result.grantedDays).toBe(38)
   })
 
   it("calculates 36 entitlement with no enjoyed days and two travel days", () => {

@@ -11,6 +11,13 @@
 
 import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 
+/** Extract a prior-leave deduction from HR adjustment text when legacy rows lack the numeric field. */
+export function extractAlreadyEnjoyedDays(value?: string | null): number | null {
+  const text = String(value || "")
+  const match = text.match(/(\d+)\s*(?:day|days)?\s*(?:given|already\s+enjoyed|previously\s+taken|deducted)/i)
+  return match ? Math.max(0, Number(match[1])) : null
+}
+
 export interface AnnualLeaveCalculation {
   /** Base annual leave entitlement (e.g., 36 for senior staff) */
   annualEntitlement: number
@@ -90,6 +97,47 @@ export function addAnnualLeaveWorkingDays(startDate: string | Date, workingDays:
     if (remaining > 0) result.setDate(result.getDate() + 1)
   }
   return result
+}
+
+export interface AnnualLeaveMemoDates {
+  entitlementDays: number
+  daysAlreadyEnjoyed: number
+  travellingDays: number
+  grantedDays: number
+  endDate: Date
+  resumptionDate: Date
+}
+
+/**
+ * Single source of truth for annual-leave memo dates and displayed totals.
+ * Annual leave follows the manual inclusive rule: the start weekday is Day 1.
+ */
+export function calculateAnnualLeaveMemoDates(input: {
+  startDate: string | Date
+  entitlementDays: number
+  grantedDays?: number | null
+  daysAlreadyEnjoyed?: number | null
+  travellingDays?: number | null
+}): AnnualLeaveMemoDates {
+  const entitlementDays = Math.max(0, Math.floor(Number(input.entitlementDays) || 0))
+  const travellingDays = Math.max(0, Math.floor(Number(input.travellingDays) || 0))
+  const explicitGranted = Number.isFinite(Number(input.grantedDays)) && input.grantedDays !== null
+    ? Math.max(0, Math.floor(Number(input.grantedDays)))
+    : null
+  const explicitEnjoyed = Number.isFinite(Number(input.daysAlreadyEnjoyed)) && input.daysAlreadyEnjoyed !== null
+    ? Math.max(0, Math.floor(Number(input.daysAlreadyEnjoyed)))
+    : null
+  const daysAlreadyEnjoyed = explicitEnjoyed ?? Math.max(0, entitlementDays + travellingDays - (explicitGranted ?? entitlementDays + travellingDays))
+  const grantedDays = explicitGranted ?? Math.max(0, entitlementDays - daysAlreadyEnjoyed + travellingDays)
+  const endDate = addAnnualLeaveWorkingDays(input.startDate, Math.max(0, grantedDays))
+  return {
+    entitlementDays,
+    daysAlreadyEnjoyed,
+    travellingDays,
+    grantedDays,
+    endDate,
+    resumptionDate: getNextWorkingDay(endDate),
+  }
 }
 
 export function buildAnnualLeaveDisplay(calc: AnnualLeaveCalculation) {

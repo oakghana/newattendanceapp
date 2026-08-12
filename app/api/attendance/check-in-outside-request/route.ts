@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
         fieldLabel: 'Off-premises check-out reason',
         minLength: 10,
       })
-      if (!reasonValidation.ok) {
+      if (!isPrivilegedExempt && !reasonValidation.ok) {
         return NextResponse.json(
           { error: reasonValidation.error || 'A meaningful reason is required for off-premises check-out requests.' },
           { status: 400 }

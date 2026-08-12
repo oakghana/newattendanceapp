@@ -317,14 +317,25 @@ export default function LoginPage() {
         
         await checkExecutiveRole()
 
-        // All roles go to attendance check-in page (same as every other role)
+        // Confirm the browser client can read the session before navigating. This
+        // prevents the redirect from racing Supabase's cookie persistence.
         const dashboardUrl = "/dashboard/attendance"
+        const { data: persistedSession } = await supabase.auth.getSession()
 
-        // Wait longer for Supabase to properly set and persist cookies
-        setTimeout(() => {
-          // Force a full page reload to ensure cookies are read on the new page
-          window.location.href = dashboardUrl
-        }, 800)
+        if (!persistedSession.session) {
+          showError("Your login succeeded, but the session could not be saved. Please try again.", "Session Error")
+          return
+        }
+
+        // Use the App Router first, then perform a hard navigation fallback if
+        // the preview/browser does not commit the route transition.
+        router.replace(dashboardUrl)
+        router.refresh()
+        window.setTimeout(() => {
+          if (window.location.pathname === "/auth/login") {
+            window.location.assign(dashboardUrl)
+          }
+        }, 1200)
       }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)

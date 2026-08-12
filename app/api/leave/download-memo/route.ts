@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { jsPDF } from 'jspdf'
 import fs from 'fs'
 import path from 'path'
+import { calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays } from '@/lib/annual-leave-calculator'
+import { resolveEntitlementFromProfile } from '@/lib/annual-leave-entitlement'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -67,8 +69,9 @@ export async function GET(request: NextRequest) {
         id, user_id, leave_type_key, status,
         preferred_start_date, preferred_end_date,
         adjusted_start_date, adjusted_end_date,
-        requested_days, adjusted_days, entitlement_days,
-        travelling_days_added, leave_year_period,
+        hr_approved_start_date, hr_approved_end_date, hr_approved_days,
+        requested_days, adjusted_days, entitlement_days, leave_entitlement_days,
+        prior_leave_days_deducted, holiday_days_deducted, travelling_days_added, leave_year_period,
         hr_approver_id, hr_approver_name,
         hr_approved_at, hr_signature_data_url, hr_signature_text,
         submitted_at, created_at,
@@ -89,7 +92,7 @@ export async function GET(request: NextRequest) {
     // ── Staff profile ────────────────────────────────────────────────────────
     const { data: staff } = await admin
       .from('user_profiles')
-      .select('first_name, last_name, employee_id, department_id, position')
+      .select('first_name, last_name, employee_id, department_id, position, rank, staff_category, date_of_appointment, years_of_service')
       .eq('id', req.user_id)
       .single()
 
@@ -99,6 +102,16 @@ export async function GET(request: NextRequest) {
       .select('full_name, employee_id, department_name, position')
       .eq('user_id', req.user_id)
       .single()
+
+    // ── HR-adjusted outstanding balance ───────────────────────────────────────
+    // Leave Office adjustments are stored separately from the original request.
+    // Read the matching year so memo generation uses the latest carryover value.
+    const { data: outstandingBalance } = await admin
+      .from('outstanding_leave_balances')
+      .select('entitlement_days, used_this_period, carryover_to_next_year')
+      .eq('user_id', req.user_id)
+      .eq('leave_year_period', req.leave_year_period)
+      .maybeSingle()
 
     // ── Department ────────────────────────────────────────────────────────────
     let departmentName = staffMgmt?.department_name || 'N/A'
@@ -200,19 +213,61 @@ export async function GET(request: NextRequest) {
     const employeeId = staffMgmt?.employee_id || staff?.employee_id || 'N/A'
     const position = staffMgmt?.position || staff?.position || ''
 
-    const startRaw = req.adjusted_start_date || req.preferred_start_date
-    const endRaw = req.adjusted_end_date || req.preferred_end_date
-    const grantedDays = req.adjusted_days || req.requested_days || 0
-    const entitledDays = req.entitlement_days || grantedDays
-    const travelDays = req.travelling_days_added || 0
-    const entitledLabel = travelDays > 0
-      ? `${entitledDays - travelDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
-      : String(entitledDays)
-    const remarks = travelDays > 0
-      ? `${travelDays} travelling day${travelDays !== 1 ? 's' : ''} added`
-      : ''
-
+    const startRaw = req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date
     const leaveTypeKey = String(req.leave_type_key || 'annual').toLowerCase()
+    const storedGrantedDays = Number(req.hr_approved_days ?? req.adjusted_days ?? req.requested_days ?? 0)
+    // Always resolve entitlement from the current staff profile. If the richer
+    // profile query is unavailable on a legacy schema, use the management view
+    // position/category rather than falling back to stale request totals.
+    const entitlementProfile = staff || staffMgmt
+    const resolvedEntitlement = leaveTypeKey === 'annual' && entitlementProfile
+      ? resolveEntitlementFromProfile(entitlementProfile)
+      : null
+    const storedEntitledDays = Number(req.entitlement_days ?? req.leave_entitlement_days ?? 0)
+    const adjustedEntitlementDays = leaveTypeKey === 'annual'
+      ? Number(outstandingBalance?.entitlement_days ?? 0)
+      : 0
+    const outstandingDays = leaveTypeKey === 'annual'
+      ? Math.max(0, Number(outstandingBalance?.carryover_to_next_year ?? 0))
+      : 0
+    const entitlementDays = leaveTypeKey === 'annual'
+      ? adjustedEntitlementDays > 0
+        ? adjustedEntitlementDays
+        : (resolvedEntitlement?.annualLeaveDays ?? 36) + outstandingDays
+      : (storedEntitledDays || storedGrantedDays)
+    const travelDays = leaveTypeKey === 'annual'
+      ? (resolvedEntitlement?.travelDays ?? Number(req.travelling_days_added || 2))
+      : Number(req.travelling_days_added || 0)
+    const explicitDeduction = (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
+      ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
+      : outstandingBalance?.used_this_period != null
+        ? Number(outstandingBalance.used_this_period)
+        : extractAlreadyEnjoyedDays(req.adjustment_reason)
+    const annualDates = leaveTypeKey === 'annual'
+      ? calculateAnnualLeaveMemoDates({
+          startDate: startRaw,
+          entitlementDays,
+          // Recalculate annual grant from entitlement, deductions, and travel;
+          // stored request totals may be legacy 22/24-day values.
+          grantedDays: null,
+          daysAlreadyEnjoyed: explicitDeduction ?? Math.max(0, entitlementDays - storedGrantedDays),
+          travellingDays: travelDays || 2,
+        })
+      : null
+    const endRaw = leaveTypeKey === 'annual'
+      ? (annualDates?.endDate.toISOString().slice(0, 10) || req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
+      : (req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
+    const grantedDays = annualDates?.grantedDays ?? storedGrantedDays
+    const entitledDays = annualDates?.entitlementDays ?? storedEntitledDays
+    const entitledLabel = travelDays > 0
+      ? `${entitledDays} plus ${travelDays} travelling day${travelDays !== 1 ? 's' : ''}`
+      : String(entitledDays)
+    const remarks = annualDates && annualDates.daysAlreadyEnjoyed > 0
+      ? `${annualDates.daysAlreadyEnjoyed} day(s) already enjoyed; ${travelDays} travelling day(s) added`
+      : travelDays > 0
+        ? `${travelDays} travelling day${travelDays !== 1 ? 's' : ''} added`
+        : ''
+    
     const leaveTypeName = leaveTypeLabel(leaveTypeKey)
     const yearLabel = req.leave_year_period || String(new Date(startRaw || req.created_at).getFullYear())
     
@@ -316,7 +371,7 @@ export async function GET(request: NextRequest) {
     doc.line(mL, y, mR, y)
     y += 6
 
-    // ── Addressee ────────────────────────────────────────────────────────────
+    // ── Addressee ─────────────────────────��──────────────────────────────────
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.setTextColor(0)
@@ -345,7 +400,7 @@ export async function GET(request: NextRequest) {
     doc.setTextColor(0)
     y += 10
 
-    // ── Subject — bold + underline ────────────────────────────────────────────
+    // ── Subject — bold + underline ──────────────────��─────────────────────────
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.text(subjectLine, mL, y)
@@ -503,7 +558,7 @@ export async function GET(request: NextRequest) {
     })
     y += ccItems.length * 5 + 4
 
-    // ── Footer ────────────────────────────────────────────────────────────────
+    // ── Footer ────────────────────────────────────────────────────────────���───
     const footerY = pageH - 14
     doc.setDrawColor(0)
     doc.setLineWidth(0.4)

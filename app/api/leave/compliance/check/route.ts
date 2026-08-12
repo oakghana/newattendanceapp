@@ -33,11 +33,21 @@ export async function GET(request: NextRequest) {
     // Get reminders if in reminder period
     const { reminders, daysLeft } = await getAnnualLeaveReminders(user.id, admin)
 
-    // Get endorsement escalations if user is a manager/HOD
-    const { escalations } = await getEndorsementEscalations(user.id, admin)
+    // Only managers/HODs who can actually endorse leave should receive overdue
+    // endorsement alerts. HR executives act on forwarded HR decisions instead.
+    const { data: profile } = await admin
+      .from('user_profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+    const role = String(profile?.role || '').toLowerCase().replace(/[\s-]+/g, '_')
+    const canEndorse = ['department_head', 'hod', 'regional_manager', 'regional_head', 'manager'].includes(role)
+    const { escalations: rawEscalations } = canEndorse
+      ? await getEndorsementEscalations(user.id, admin)
+      : { escalations: [] }
+    const escalations = canEndorse ? rawEscalations : []
 
-    // If manager/HOD, trigger automatic escalation of overdue endorsements
-    if (escalations.length > 0) {
+    if (canEndorse && escalations.length > 0) {
       await escalateOverdueEndorsements(admin)
     }
 

@@ -27,6 +27,9 @@ interface ResumptionCountdownData {
   resume_date: string
   days_left: number
   user_id?: string
+  state?: 'upcoming' | 'due_today' | 'overdue'
+  staff_checked_in?: boolean
+  requires_confirmation?: boolean
 }
 
 interface StaffWarning {
@@ -52,12 +55,28 @@ export function HrLeaveOfficCountdownDashboard() {
 
   const fetchData = async () => {
     try {
-      const [countdownsRes, warningsRes] = await Promise.all([
-        fetch("/api/leave/reminders/resume-five-days-countdown"),
-        fetch("/api/leave/warnings-and-queries"),
+      const [countdownsRes, warningsRes, noticesRes] = await Promise.all([
+        fetch("/api/leave/reminders/resume-five-days-countdown", { cache: "no-store" }),
+        fetch("/api/leave/warnings-and-queries", { cache: "no-store" }),
+        fetch("/api/leave/resumption-notices", { cache: "no-store" }),
       ])
 
-      if (countdownsRes.ok) {
+      if (noticesRes.ok) {
+        const data = await noticesRes.json()
+        const notices = Array.isArray(data.notices) ? data.notices : []
+        setCountdowns(notices.map((notice: any) => ({
+          id: notice.id,
+          staff_name: notice.staff_name,
+          leave_type: notice.leave_type,
+          end_date: notice.resumption_date,
+          resume_date: notice.resumption_date,
+          days_left: notice.days_until_resumption,
+          user_id: notice.user_id,
+          state: notice.state,
+          staff_checked_in: notice.staff_checked_in,
+          requires_confirmation: notice.requires_confirmation,
+        })))
+      } else if (countdownsRes.ok) {
         const data = await countdownsRes.json()
         setCountdowns(data.countdowns || [])
       }
@@ -250,7 +269,7 @@ export function HrLeaveOfficCountdownDashboard() {
             <div className="grid gap-4">
               {filteredCountdowns.map(countdown => {
                 const urgencyColor =
-                  countdown.days_left <= 2
+                  countdown.days_left < 0 || countdown.days_left <= 2
                     ? "border-red-300 bg-red-50"
                     : countdown.days_left <= 5
                       ? "border-yellow-300 bg-yellow-50"
@@ -275,7 +294,11 @@ export function HrLeaveOfficCountdownDashboard() {
                             variant={countdown.days_left <= 2 ? "destructive" : "secondary"}
                             className="text-base"
                           >
-                            {countdown.days_left} {countdown.days_left === 1 ? "day" : "days"}
+                            {countdown.days_left < 0
+                              ? `${Math.abs(countdown.days_left)} ${Math.abs(countdown.days_left) === 1 ? "day" : "days"} overdue`
+                              : countdown.days_left === 0
+                                ? "Due today"
+                                : `${countdown.days_left} ${countdown.days_left === 1 ? "day" : "days"}` }
                           </Badge>
                         </div>
 
@@ -308,7 +331,7 @@ export function HrLeaveOfficCountdownDashboard() {
                               size="sm"
                               variant="destructive"
                               className="gap-2"
-                              onClick={() => handleIssueWarning(countdown.user_id || "", countdown.staff_name, "return_warning")}
+                              onClick={() => handleIssueWarning(countdown.user_id || "", countdown.staff_name, countdown.days_left < 0 ? "non_resumption" : "return_warning")}
                             >
                               <AlertTriangle className="h-4 w-4" />
                               Issue Warning

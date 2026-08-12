@@ -102,7 +102,8 @@ function isProtectedRoute(pathname: string): boolean {
 }
 
 function isAuthorizedForRoute(userRole: string | null | undefined, pathname: string): boolean {
-  const normalized = normalizeRole(userRole);
+  const normalized = normalizeRole(userRole)
+  const effectiveRole = normalized === "administrator" ? "admin" : normalized;
 
   // Sort patterns longest-first so more specific routes take priority over
   // parent patterns (e.g. /dashboard/md-approvals beats /dashboard).
@@ -113,12 +114,12 @@ function isAuthorizedForRoute(userRole: string | null | undefined, pathname: str
   for (const [pattern, allowedRoles] of sortedEntries) {
     // Exact match
     if (pathname === pattern) {
-      return allowedRoles.some(r => normalizeRole(r) === normalized);
+      return allowedRoles.some(r => normalizeRole(r) === effectiveRole);
     }
 
     // Prefix match (pathname starts with pattern + "/")
     if (pathname.startsWith(pattern + "/")) {
-      return allowedRoles.some(r => normalizeRole(r) === normalized);
+      return allowedRoles.some(r => normalizeRole(r) === effectiveRole);
     }
   }
 

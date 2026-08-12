@@ -16,13 +16,14 @@ export function getDaysOverdue(leaveEndDate: string): number {
     endDateObj = new Date(leaveEndDate)
   }
   
+  if (Number.isNaN(endDateObj.getTime())) return 0
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   endDateObj.setHours(0, 0, 0, 0)
-  
+
   const diffTime = today.getTime() - endDateObj.getTime()
   const days = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-  console.log("[v0] getDaysOverdue:", { leaveEndDate, today: today.toISOString(), endDate: endDateObj.toISOString(), diffTime, days })
   return days > 0 ? days : 0
 }
 

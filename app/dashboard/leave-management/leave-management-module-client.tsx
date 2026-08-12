@@ -32,6 +32,7 @@ interface LeaveManagementModuleClientProps {
   userId: string
   userRole: string | null
   userDepartment: string | null
+  userLocationId: string | null
   userFirstName: string | null
   userLastName: string | null
   inactivityDays: number
@@ -48,6 +49,7 @@ export function LeaveManagementModuleClient({
   userId,
   userRole,
   userDepartment,
+  userLocationId,
   userFirstName,
   userLastName,
   inactivityDays,
@@ -199,6 +201,7 @@ export function LeaveManagementModuleClient({
               userId={userId}
               userRole={userRole}
               userDepartment={userDepartment}
+              userLocationId={userLocationId}
               userFirstName={userFirstName}
               userLastName={userLastName}
               hasHodLinkage={hasHodLinkage}

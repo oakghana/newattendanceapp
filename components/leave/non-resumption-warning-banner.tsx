@@ -2,7 +2,7 @@
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertTriangle, AlertCircle, XCircle } from 'lucide-react'
-import { format, differenceInDays } from 'date-fns'
+import { format } from 'date-fns'
 
 export interface NonResumptionWarningProps {
   leaveEndDate: string

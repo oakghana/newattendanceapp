@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, Clock } from 'lucide-react'
+import { Calendar, Clock, CheckCircle2 } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 
 interface LeaveResumptionBadgeProps {
@@ -30,6 +30,7 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null)
   const [leaveEndDate, setLeaveEndDate] = useState<string | null>(null)
   const [isOnLeave, setIsOnLeave] = useState(false)
+  const [hasResumedToday, setHasResumedToday] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -43,24 +44,41 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
 
         const today = new Date().toISOString().split('T')[0]
 
+        const { data: attendanceToday } = await supabase
+          .from('attendance_records')
+          .select('id, check_in_time, check_out_time')
+          .eq('user_id', user.id)
+          .gte('check_in_time', `${today}T00:00:00`)
+          .lt('check_in_time', `${today}T23:59:59`)
+          .order('check_in_time', { ascending: false })
+          .limit(1)
+        const checkedIn = Boolean(attendanceToday?.[0]?.check_in_time)
+        setHasResumedToday(checkedIn)
+
         // Query leave_plan_requests directly — user_profiles.leave_status is not
         // reliably updated when a leave is approved, so we check the source of truth.
         const { data: leaves } = await supabase
           .from('leave_plan_requests')
           .select('id, status, adjusted_end_date, preferred_end_date, adjusted_start_date, preferred_start_date')
           .eq('user_id', user.id)
-          .in('status', ['hr_approved', 'on_leave'])
-          .lte('adjusted_start_date', today)  // leave has already started
+          .in('status', ['approved', 'hr_approved', 'finalized', 'completed', 'memo_issued', 'on_leave'])
           .order('adjusted_end_date', { ascending: false })
-          .limit(1)
+          .limit(10)
 
         if (!isMounted) return
 
-        if (leaves && leaves.length > 0) {
-          const leave = leaves[0]
+        const activeLeave = (leaves || []).find((leave) => {
+          const startDate = leave.adjusted_start_date || leave.preferred_start_date
           const endDate = leave.adjusted_end_date || leave.preferred_end_date
-          if (!endDate) return
+          return Boolean(startDate && endDate && startDate <= today)
+        })
 
+        if (activeLeave) {
+          const endDate = activeLeave.adjusted_end_date || activeLeave.preferred_end_date
+          if (!endDate) {
+            setIsOnLeave(false)
+            return
+          }
           const days = daysUntilResumption(endDate)
 
           // Show badge when 5 or fewer days until resumption (includes overdue / today / tomorrow)
@@ -90,7 +108,21 @@ export function LeaveResumptionBadge({ compact = false }: LeaveResumptionBadgePr
     }
   }, [])
 
-  if (loading || !isOnLeave || daysRemaining === null) return null
+  if (loading) return null
+
+  if (hasResumedToday) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+        <CheckCircle2 className="h-4 w-4" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">You have resumed work</p>
+          <p className="text-xs text-emerald-700">Waiting for HOD/RM confirmation in management records.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isOnLeave || daysRemaining === null) return null
 
   const getUrgencyColor = (days: number) => {
     if (days <= 0) return 'bg-red-600 text-white'

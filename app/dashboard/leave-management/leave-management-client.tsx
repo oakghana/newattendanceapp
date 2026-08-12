@@ -80,6 +80,7 @@ interface LeaveManagementClientProps {
   userId: string
   userRole: string
   userDepartment: string | null
+  userLocationId: string | null
   userFirstName: string | null
   userLastName: string | null
   hasHodLinkage: boolean
@@ -106,6 +107,7 @@ export function LeaveManagementClient({
   userId,
   userRole,
   userDepartment,
+  userLocationId,
   userFirstName,
   userLastName,
   hasHodLinkage,
@@ -219,6 +221,7 @@ export function LeaveManagementClient({
     category: "approval",
   })
   const [isExportingAnnualLeave, setIsExportingAnnualLeave] = useState(false)
+  const [annualExportFilters, setAnnualExportFilters] = useState({ locationId: "", departmentId: "", status: "", leaveYear: "" })
   const [staffApprovedMemos, setStaffApprovedMemos] = useState<any[]>([])
   const [isLoadingApprovedMemos, setIsLoadingApprovedMemos] = useState(false)
   const [showSubmitDefermentModal, setShowSubmitDefermentModal] = useState(false)
@@ -388,7 +391,13 @@ export function LeaveManagementClient({
 
       setIsExportingAnnualLeave(true)
 
-      const response = await fetch(`/api/leave/export-annual?user_id=${encodeURIComponent(userId)}&user_role=${encodeURIComponent(userRole)}`)
+      const params = new URLSearchParams({
+        location_id: annualExportFilters.locationId || (normalizedRole === "regional_manager" ? userLocationId || "" : ""),
+        department_id: annualExportFilters.departmentId || (normalizedRole === "department_head" ? userDepartment || "" : ""),
+      })
+      if (annualExportFilters.status) params.set("status", annualExportFilters.status)
+      if (annualExportFilters.leaveYear) params.set("leave_year", annualExportFilters.leaveYear)
+      const response = await fetch(`/api/leave/export-annual?${params.toString()}`)
 
       if (!response.ok) {
         const error = await response.json()
@@ -399,7 +408,7 @@ export function LeaveManagementClient({
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `Annual_Leave_Export_${new Date().toISOString().split("T")[0]}.csv`
+      link.download = `Annual_Leave_Export_${new Date().toISOString().split("T")[0]}.xlsx`
       document.body.appendChild(link)
       link.click()
       window.URL.revokeObjectURL(url)
@@ -1628,7 +1637,7 @@ export function LeaveManagementClient({
       )}
 
       {/* Export Annual Leave Card - HOD/RM/HR Only */}
-      {["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
+      {["department_head", "regional_manager", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_leave_office", "hr_office", "hr", "admin"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) && (
         <Card className="border border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50/50">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-bold text-purple-900 flex items-center gap-2">
@@ -1637,7 +1646,29 @@ export function LeaveManagementClient({
             </CardTitle>
             <CardDescription className="text-purple-700">Download all staff annual leave requests for your department/region as an Excel file</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {!["department_head", "regional_manager"].includes(String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")) ? (
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="space-y-1">
+                  <Label className="text-xs text-purple-900">Location ID (optional)</Label>
+                  <Input value={annualExportFilters.locationId} onChange={(event) => setAnnualExportFilters((current) => ({ ...current, locationId: event.target.value }))} placeholder="All locations" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-purple-900">Department ID (optional)</Label>
+                  <Input value={annualExportFilters.departmentId} onChange={(event) => setAnnualExportFilters((current) => ({ ...current, departmentId: event.target.value }))} placeholder="All departments" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-purple-900">Status (optional)</Label>
+                  <Input value={annualExportFilters.status} onChange={(event) => setAnnualExportFilters((current) => ({ ...current, status: event.target.value }))} placeholder="All statuses" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-purple-900">Leave year (optional)</Label>
+                  <Input value={annualExportFilters.leaveYear} onChange={(event) => setAnnualExportFilters((current) => ({ ...current, leaveYear: event.target.value }))} placeholder="2026" inputMode="numeric" />
+                </div>
+              </div>
+            ) : (
+              <p className="rounded-md bg-purple-100 px-3 py-2 text-sm text-purple-900">Your export is automatically restricted to your assigned {String(userRole).toLowerCase().includes("regional") ? "location" : "department"}.</p>
+            )}
             <Button
               onClick={exportAnnualLeaveToExcel}
               disabled={isExportingAnnualLeave}

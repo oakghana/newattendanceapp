@@ -43,6 +43,7 @@ interface StaffMember {
   employee_id: string
   position: string
   role: string
+  staff_category?: "Manager" | "Senior" | "Officer" | "Junior" | string | null
   is_active: boolean
   department_id?: string
   assigned_location_id?: string
@@ -168,7 +169,11 @@ export function StaffManagement() {
 
       if (result.success) {
         const rows = Array.isArray(result.data)
-          ? result.data.map((row: StaffMember) => ({ ...row, role: displayRole(row.role) }))
+          ? result.data.map((row: StaffMember) => ({
+              ...row,
+              staff_category: row.staff_category || "Junior",
+              role: displayRole(row.role),
+            }))
           : []
         setStaff(rows)
         setTotalPages(result.pagination?.totalPages || 1)
@@ -506,7 +511,11 @@ export function StaffManagement() {
       const result = await response.json()
       console.log("[v0] Update response data:", result)
 
-      if (result.success) {
+      if (result.success && result.data) {
+        if (updateData.staff_category && result.data.staff_category !== updateData.staff_category) {
+          throw new Error("The server did not confirm the requested staff category")
+        }
+
         showSuccess("Staff member updated successfully", "Staff Updated")
         setSuccess("Staff member updated successfully")
 
@@ -1098,8 +1107,9 @@ export function StaffManagement() {
                       <span className="text-xs text-muted-foreground font-normal ml-1">(Auto-set from Position)</span>
                     </Label>
                     <Select
-                      value={editingStaff.staff_category || "Junior"}
-                      onValueChange={(value) => setEditingStaff({ ...editingStaff, staff_category: value })}
+  value={editingStaff.staff_category || "Junior"}
+  onValueChange={(value) => setEditingStaff((current) => current ? { ...current, staff_category: value } : current)}
+
                     >
                       <SelectTrigger id="editStaffCategory" className="mt-1">
                         <SelectValue placeholder="Select Category" />
