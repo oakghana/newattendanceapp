@@ -49,6 +49,7 @@ export function LeaveNotificationsClient() {
     m.append('start_date', data.startDate.toISOString().split('T')[0])
     m.append('end_date', data.endDate.toISOString().split('T')[0])
     m.append('reason', data.reason)
+    m.append('requested_days', String(data.requestedDays))
     m.append('leave_type', data.leaveType)
     if (data.documentFile) m.append('document', data.documentFile)
     if (data.deliveryDate) m.append('delivery_date', data.deliveryDate.toISOString().split('T')[0])

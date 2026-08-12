@@ -36,6 +36,7 @@ export interface LeaveRequestData {
   startDate: Date
   endDate: Date
   reason: string
+  requestedDays: number
   leaveType: string
   leaveYearPeriod?: string
   documentFile?: File
@@ -96,6 +97,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
     startDate: new Date(),
     endDate: new Date(),
     reason: "",
+    requestedDays: 1,
     leaveType: "annual",
     deliveryDate: new Date(),
     maternityDeliveryType: "regular",
@@ -160,7 +162,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
       if (result.success && result.calculation) {
         const { endDate, daysCount, businessDays, estimatedReturn } = result.calculation
         setCalculatedEnd({ endDate, daysCount, businessDays, estimatedReturn })
-        setFormData((p) => ({ ...p, endDate: new Date(endDate) }))
+        setFormData((p) => ({ ...p, endDate: new Date(endDate), requestedDays: daysCount }))
       }
     } catch {
       // Fallback: set endDate same as startDate
@@ -195,6 +197,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
       startDate: new Date(),
       endDate: new Date(),
       reason: "",
+      requestedDays: 1,
       leaveType: leaveTypeOptions[0]?.value || "annual",
       leaveYearPeriod: activePeriod,
       isDirectSubmit: hasApprovedLeave,
@@ -231,7 +234,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
   const canProceed =
     step === "type" ? !!formData.leaveType :
     step === "dates" ? (!!formData.startDate && !calculating && (formData.leaveType !== "maternity" || !!formData.deliveryDate)) :
-    step === "reason" ? formData.reason.trim().length >= 3 :
+    step === "reason" ? Number.isInteger(formData.requestedDays) && formData.requestedDays > 0 && formData.reason.trim().length >= 3 :
     step === "document" ? !!uploadedFile :
     true
 
@@ -461,22 +464,48 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
             </div>
           )}
 
-          {/* Step: Reason */}
+          {/* Step: Number of Days / Purpose */}
           {step === "reason" && (
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-foreground">Reason for Leave</p>
-              <p className="text-xs text-muted-foreground">
-                Your HOD and HR will review this reason. Be clear and concise.
-              </p>
-              <textarea
-                value={formData.reason}
-                onChange={(e) => setFormData((p) => ({ ...p, reason: e.target.value }))}
-                placeholder="e.g., Annual family trip, medical procedure, personal matter…"
-                className="w-full px-3 py-3 border rounded-xl bg-background text-sm resize-none h-28 focus:ring-2 focus:ring-blue-500 outline-none"
-                maxLength={500}
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground text-right">{formData.reason.length}/500</p>
+            <div className="space-y-4">
+              <div>
+                <p className="text-base font-semibold text-foreground">Number of Days / Purpose</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">Tell HR how many days you are requesting and why. HR may adjust the dates while keeping your original request visible.</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-[150px_1fr]">
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <label htmlFor="requested-days" className="text-xs font-semibold uppercase tracking-wide text-primary">Days requested</label>
+                  <input
+                    id="requested-days"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={formData.requestedDays}
+                    onChange={(e) => setFormData((p) => ({ ...p, requestedDays: Math.max(1, Number.parseInt(e.target.value || "1", 10)) }))}
+                    className="mt-2 w-full rounded-xl border bg-background px-3 py-3 text-2xl font-semibold outline-none focus:ring-2 focus:ring-primary"
+                    aria-describedby="requested-days-help"
+                    required
+                  />
+                  <p id="requested-days-help" className="mt-2 text-xs leading-5 text-muted-foreground">Whole days only</p>
+                </div>
+                <div>
+                  <label htmlFor="leave-purpose" className="text-xs font-semibold uppercase tracking-wide text-foreground">Purpose / remarks</label>
+                  <textarea
+                    id="leave-purpose"
+                    value={formData.reason}
+                    onChange={(e) => setFormData((p) => ({ ...p, reason: e.target.value }))}
+                    placeholder="Describe the purpose of your leave request…"
+                    className="mt-2 min-h-32 w-full resize-none rounded-2xl border bg-background px-4 py-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-primary"
+                    maxLength={500}
+                    autoFocus
+                    required
+                  />
+                  <p className="mt-1 text-right text-xs text-muted-foreground">{formData.reason.length}/500</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-3 text-sm">
+                <span className="text-muted-foreground">Your request</span>
+                <span className="font-semibold text-foreground">{formData.requestedDays} day{formData.requestedDays === 1 ? "" : "s"} · {formData.reason.trim() ? "Purpose added" : "Purpose required"}</span>
+              </div>
             </div>
           )}
 
@@ -519,12 +548,13 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
               <div className="rounded-2xl border divide-y overflow-hidden">
                 {[
                   { label: "Leave Type", value: selectedType?.label ?? formData.leaveType },
+                  { label: "Days requested", value: `${formData.requestedDays} day${formData.requestedDays !== 1 ? "s" : ""}` },
                   { label: "Duration", value: formData.leaveType === "maternity" ? `${formData.maternityDeliveryType === "cs_twins" ? 14 : 12} weeks` : `${daysDifference} working day${daysDifference !== 1 ? "s" : ""}` },
                   ...(formData.leaveType === "maternity" && formData.deliveryDate ? [{ label: "Delivery Date", value: formData.deliveryDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) }] : []),
                   { label: "Start Date", value: formData.startDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
                   { label: "End Date", value: formData.endDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
                   ...(calculatedEnd ? [{ label: "Return to Work", value: new Date(calculatedEnd.estimatedReturn.replace(/-/g, "/")).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) }] : []),
-                  { label: "Reason", value: formData.reason },
+                  { label: "Purpose / remarks", value: formData.reason },
                   ...(uploadedFile ? [{ label: "Document", value: uploadedFile.name }] : []),
                 ].map(({ label, value }) => (
                   <div key={label} className="flex items-start justify-between gap-3 px-4 py-3">
