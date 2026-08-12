@@ -2,7 +2,8 @@
 
 // ============================================================
 // Leave Planning Client — V2 Redesign (4-stage workflow)
-// Staff → HOD Review → HR Leave Office → HR Approval + Memo
+// Standard: Staff → HOD Review → HR Leave Office → HR Approval + Memo
+// Regional non-annual: Staff → Regional HR Office → Regional Manager → HR Processing
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
@@ -670,7 +671,7 @@ function WorkflowStages({ status }: { status: string }) {
   const stageIndex = isRegional
     ? status === "completed" || status === "hr_approved" || hrRejected ? 4
       : status === "pending_hr_leave_processing" || status === "pending_hr_records_reference" ? 3
-      : status === "pending_regional_manager_approval" ? 2
+      : status === "pending_regional_hr_review" || status === "pending_regional_manager_approval" ? 2
       : 1
     : status === "hr_approved" || hrRejected ? 4
       : status === "hr_office_forwarded" ? 3
@@ -2033,8 +2034,19 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
       return true
     })
     
+  // Regional non-annual requests do not pass through HOD Review. Normalize
+  // the legacy database status for the Regional HR workspace display while
+  // preserving the original status for API actions and audit history.
+  const regionalRequests = isRegionalHr
+    ? requests.map((r: any) =>
+        String(r.status || "") === "pending_hod_review"
+          ? { ...r, workflow_status: r.status, status: "pending_regional_hr_review" }
+          : r,
+      )
+    : requests
+
     // Enhance requests with outstanding leave data if available
-    return requests.map((r: any) => {
+    return regionalRequests.map((r: any) => {
       // For annual leave, try to get outstanding leave from the data
       if (String(r.leave_type_key || "").toLowerCase() === "annual") {
         const outstandingMap = data.outstandingLeaveMap || {}
