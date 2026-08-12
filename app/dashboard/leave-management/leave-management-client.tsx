@@ -429,7 +429,7 @@ export function LeaveManagementClient({
   const fetchStaffApprovedMemos = async () => {
     try {
       const normalizedRole = String(userRole || "").toLowerCase().replace(/[-\s]+/g, "_")
-      const isAuthorized = ["department_head", "regional_manager", "admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office"].includes(normalizedRole)
+      const isAuthorized = ["department_head", "regional_manager", "regional_manager_officer", "regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office", "admin", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office"].includes(normalizedRole)
 
       if (!isAuthorized) return
 
