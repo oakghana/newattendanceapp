@@ -157,7 +157,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const normalizedActorRole = String(profile.role || "").trim().toLowerCase().replace(/[-\s]+/g, "_")
     const isAdministrator = ["admin", "administrator"].includes(normalizedActorRole)
     const isItAdmin = ["it_admin", "itadmin"].includes(normalizedActorRole)
-    const regionalHrRoles = ["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_hr_officer"]
+    const regionalHrRoles = ["hr_leave_office", "hr_records", "hr_records_office", "regional_hr", "regional_hr_leave_office", "regional_hr_office", "regional_hr_officer"]
 
     if (role && regionalHrRoles.includes(String(role).trim().toLowerCase()) && !isAdministrator) {
       console.error("[v0] Staff API PUT - Non-administrator tried to assign Regional HR Leave Office role")

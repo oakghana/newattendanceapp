@@ -719,8 +719,9 @@ export function StaffManagement() {
                   <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>
                   <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>
                   <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>
-                  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
-                  <SelectItem value="manager_hr">Manager HR</SelectItem>
+  <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>
+  <SelectItem value="hr_records">HR Records Office</SelectItem>
+  <SelectItem value="manager_hr">Manager HR</SelectItem>
                   <SelectItem value="director_hr">Director HR</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
                   <SelectItem value="nsp">NSP</SelectItem>
@@ -915,8 +916,9 @@ export function StaffManagement() {
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-                                {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+  {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+  {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
+  {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                                 {canManageStaffLinks && (
                                   <SelectItem value="it-admin">IT Admin</SelectItem>
