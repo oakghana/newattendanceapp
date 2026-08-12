@@ -477,9 +477,14 @@ export async function GET(
       }
     }
 
-    if ((leaveRequest as any).status !== "hr_approved") {
+    const isFinalHrApproval = (leaveRequest as any).status === "hr_approved"
+    const isRegionalNonAnnualApproval =
+      (leaveRequest as any).status === "approved" &&
+      String((leaveRequest as any).leave_type_key || "annual").toLowerCase() !== "annual"
+
+    if (!isFinalHrApproval && !isRegionalNonAnnualApproval) {
       return NextResponse.json(
-        { error: "Leave memo is only available after HR final approval." },
+        { error: "Leave memo is only available after final approval." },
         { status: 400 },
       )
     }
