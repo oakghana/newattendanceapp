@@ -134,6 +134,7 @@ interface LeavePlanningClientProps {
     departmentCode: string | null
   }
   initialHolidays?: Array<{ holiday_date: string; holiday_name: string }>
+  initialActiveTab?: string
 }
 
 async function readAsDataUrl(file: File): Promise<string> {
@@ -1039,13 +1040,14 @@ function HrExecRejectForm({
 }
 
 // ─── Main Component ──────────���────────────────────────────────────────────────
-export function LeavePlanningClient({ profile, annualEntitlement, initialHolidays = [] }: LeavePlanningClientProps) {
+export function LeavePlanningClient({ profile, annualEntitlement, initialHolidays = [], initialActiveTab }: LeavePlanningClientProps) {
   const { toast } = useToast()
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
 
   const isStaff = isStaffRole(normalizedRole)
   const isHod = isHodRole(normalizedRole) && !isHrLeaveOfficeRole(normalizedRole)
-  const isHrOffice = isHrLeaveOfficeRole(normalizedRole)
+  const isRegionalHr = ["regional_hr", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isHrOffice = isHrLeaveOfficeRole(normalizedRole) || isRegionalHr
   const isHrApprover = isHrApproverRole(normalizedRole, profile.departmentName, profile.departmentCode) && !isHrOffice
   const isAdmin = normalizedRole === "admin"
   const canViewLeaveAnalytics = isHrApprover || isHrOffice || isAdmin
@@ -1060,7 +1062,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState("my-leaves")
+  const [activeTab, setActiveTab] = useState(initialActiveTab || "my-leaves")
   const [hrOfficeShowArchived, setHrOfficeShowArchived] = useState(false)
   const [hrOfficePageSize, setHrOfficePageSize] = useState(100)
   const [isArchivingAllLeaves, setIsArchivingAllLeaves] = useState(false)
@@ -2282,9 +2284,38 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
     // For non-annual leave, warn if no reason is provided but still allow submission
     if (!isAnnualLeave && (!rsn || String(rsn).trim().length < 5)) {
       const continueWithoutReason = window.confirm(
-        "No reason for adjustment provided. Continue forwarding to HR Approvers without a reason?"
+        isRegionalHr
+          ? "No adjustment note provided. Continue forwarding this non-annual request to the Regional Manager?"
+          : "No reason for adjustment provided. Continue forwarding to HR Approvers without a reason?"
       )
       if (!continueWithoutReason) return
+    }
+
+    if (isRegionalHr) {
+      setOfficeSubmitting(requestId)
+      try {
+        const res = await fetch("/api/leave/planning/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            leave_plan_request_id: requestId,
+            action: "forward_to_regional_manager",
+            recommendation: String(rsn || "Regional HR adjustment completed before final Regional Manager approval.").trim(),
+            adjusted_preferred_start_date: adjStart,
+            adjusted_preferred_end_date: adjEnd,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || "Could not forward request")
+        toast({ title: "Request forwarded to Regional Manager", description: "The adjusted non-annual request is ready for final approval." })
+        setOfficeExpanded(null)
+        await loadData()
+      } catch (e) {
+        toast({ title: "Regional forwarding failed", description: e instanceof Error ? e.message : "Review failed", variant: "destructive" })
+      } finally {
+        setOfficeSubmitting(null)
+      }
+      return
     }
 
     const holidayDeducted = Number(officeHolidayDays[requestId] || 0)
@@ -4031,7 +4062,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               />
                             </div>
 
-                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                            {!isRegionalHr && <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Memo Details</p>
 
                               {/* Our Ref No. — required before forwarding */}
@@ -4116,9 +4147,13 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                                   </SelectContent>
                                 </Select>
                               </div>
-                            </div>
+                            </div>}
 
                             <Button onClick={() => {
+                              if (isRegionalHr) {
+                                submitHrOfficeReview(req.id, "regional-manager")
+                                return
+                              }
                               if (!officeRefNumber[req.id]?.trim()) {
                                 toast({ title: "Reference Number Required", description: "Please enter the memo reference number (Our Ref No.) before forwarding.", variant: "destructive" })
                                 return
@@ -4129,9 +4164,9 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
                               }
                               submitHrOfficeReview(req.id, selectedHrExecutive[req.id])
                             }}
-                              disabled={officeSubmitting === req.id || !officeRefNumber[req.id]?.trim() || !selectedHrExecutive[req.id]}
+                              disabled={officeSubmitting === req.id || (!isRegionalHr && (!officeRefNumber[req.id]?.trim() || !selectedHrExecutive[req.id]))}
                               className="w-full bg-blue-700 hover:bg-blue-800 text-white disabled:opacity-60">
-                              {officeSubmitting === req.id ? "Forwarding…" : "Forward to HR Approvers →"}
+                              {officeSubmitting === req.id ? "Forwarding…" : isRegionalHr ? "Adjust & Forward to Regional Manager →" : "Forward to HR Approvers →"}
                             </Button>
                           </div>
                         )}
