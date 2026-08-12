@@ -88,6 +88,7 @@ interface LeaveManagementClientProps {
   initialStaffRequests: LeaveRequest[]
   initialManagerNotifications: LeaveNotification[]
   initialApprovedStaffRequests?: LeaveRequest[]
+  initialSelectedTab?: string
 }
 
 interface HrMemoTemplate {
@@ -115,6 +116,7 @@ export function LeaveManagementClient({
   initialStaffRequests,
   initialManagerNotifications,
   initialApprovedStaffRequests = [],
+  initialSelectedTab = "my-requests",
 }: LeaveManagementClientProps) {
     const formatDateSafe = (value?: string | null) => {
       if (!value) return "-"
@@ -154,7 +156,7 @@ export function LeaveManagementClient({
   const [editEndDate, setEditEndDate] = useState("")
   const [editReason, setEditReason] = useState("")
   const [editLeaveType, setEditLeaveType] = useState("")
-  const [selectedTab, setSelectedTab] = useState("my-requests")
+  const [selectedTab, setSelectedTab] = useState(initialSelectedTab)
   // Sub-tabs for the Deferment and Recall sections: "tracking" | "approvals" | "submit"
   const [defermentSubTab, setDefermentSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")
   const [recallSubTab, setRecallSubTab] = useState<"tracking" | "approvals" | "submit">("tracking")

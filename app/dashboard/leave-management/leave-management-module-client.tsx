@@ -206,8 +206,25 @@ export function LeaveManagementModuleClient({
             />
         </TabsContent>
 
-        {/* Leave Planning Tab */}
-        {!isRegionalHR && (
+        {/* Regional HR works the scoped queue from Leave Center; other roles use planning. */}
+        {isRegionalHR ? (
+          <TabsContent value="leave-planning" className="space-y-4 sm:space-y-6 w-full">
+            <LeaveManagementClient
+              userId={userId}
+              userRole={userRole}
+              userDepartment={userDepartment}
+              userLocationId={userLocationId}
+              userFirstName={userFirstName}
+              userLastName={userLastName}
+              hasHodLinkage={hasHodLinkage}
+              inactivityDays={inactivityDays}
+              initialStaffRequests={initialStaffRequests}
+              initialManagerNotifications={initialManagerNotifications}
+              initialApprovedStaffRequests={initialApprovedStaffRequests}
+              initialSelectedTab="pending-approvals"
+            />
+          </TabsContent>
+        ) : (
           <TabsContent value="leave-planning" className="space-y-4 sm:space-y-6 w-full">
             <LeavePlanningClient
               profile={{
