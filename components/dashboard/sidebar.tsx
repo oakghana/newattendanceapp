@@ -31,6 +31,7 @@ import {
   X,
   Menu,
   ChevronRight,
+  ChevronDown,
   User,
   LogOut,
   RefreshCw,
@@ -288,6 +289,7 @@ const navigationItems = [
 export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
+  const [openAdminGroups, setOpenAdminGroups] = useState<string[]>([])
   const pathname = usePathname()
   const [ghanaTime, setGhanaTime] = useState<string>("")
 
@@ -616,31 +618,65 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
                 {adminGroupDefinitions.map((group) => {
                   if (group.items.length === 0) return null
                   const GroupIcon = group.icon
+                  const isOpen = isCollapsed || openAdminGroups.includes(group.title)
+                  const hasActiveItem = group.items.some((item) => pathname === item.href)
+
                   return (
-                    <DropdownMenu key={group.title}>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          title={isCollapsed ? group.title : undefined}
-                          className={cn(
-                            "w-full flex items-center rounded-lg text-sm font-medium transition-all min-h-[38px] border border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border",
-                            isCollapsed ? "justify-center px-0 py-2" : "gap-2.5 px-3 py-2",
-                          )}
-                        >
-                          <GroupIcon className="h-4.5 w-4.5 flex-shrink-0" />
-                          {!isCollapsed && <><span className="flex-1 text-left">{group.title}</span><ChevronRight className="h-4 w-4 text-muted-foreground" /></>}
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64 shadow-lg border-border bg-background">
-                        {group.items.map((item) => (
-                          <DropdownMenuItem asChild key={item.href}>
-                            <Link href={item.href} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted rounded-md" onClick={() => setIsMobileMenuOpen(false)}>
-                              <item.icon className="h-4 w-4" />
-                              <span className="font-medium">{item.title}</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div key={group.title} className="space-y-1">
+                      <button
+                        type="button"
+                        title={isCollapsed ? group.title : undefined}
+                        aria-expanded={!isCollapsed && isOpen}
+                        aria-controls={`admin-group-${group.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`}
+                        onClick={() => {
+                          if (isCollapsed) {
+                            setIsCollapsed(false)
+                            return
+                          }
+                          setOpenAdminGroups((current) => current.includes(group.title)
+                            ? current.filter((title) => title !== group.title)
+                            : [...current, group.title])
+                        }}
+                        className={cn(
+                          "w-full flex items-center rounded-lg text-sm font-medium transition-all min-h-[38px] border",
+                          isCollapsed ? "justify-center px-0 py-2" : "gap-2.5 px-3 py-2",
+                          hasActiveItem
+                            ? "bg-primary/10 border-primary/25 text-primary"
+                            : "border-transparent text-sidebar-foreground hover:bg-muted/60 hover:border-border",
+                        )}
+                      >
+                        <GroupIcon className="h-4.5 w-4.5 flex-shrink-0" />
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1 text-left">{group.title}</span>
+                            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
+                          </>
+                        )}
+                      </button>
+                      {!isCollapsed && isOpen && (
+                        <div id={`admin-group-${group.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`} className="ml-3 space-y-1 border-l border-border/60 pl-2">
+                          {group.items.map((item) => {
+                            const ItemIcon = item.icon
+                            const isActive = pathname === item.href
+                            return (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                className={cn(
+                                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-colors min-h-[36px]",
+                                  isActive ? "bg-primary/12 text-primary" : "text-sidebar-foreground hover:bg-muted/60 hover:text-foreground",
+                                )}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                              >
+                                <ItemIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                                <span className="flex-1">{item.title}</span>
+                                {isActive && <ChevronRight className="h-3.5 w-3.5 opacity-70" />}
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
                 {adminStandaloneItems.map((item) => {
