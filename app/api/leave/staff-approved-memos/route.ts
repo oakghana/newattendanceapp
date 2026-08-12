@@ -63,6 +63,8 @@ export async function GET(request: NextRequest) {
           hr_office_reviewed_at,
           hr_signature_image_url,
           hr_signature_data_url,
+          hr_approver_signature_data_url,
+          hr_approver_position,
           hr_approval_note,
           memo_token
         `)
@@ -117,6 +119,9 @@ export async function GET(request: NextRequest) {
           hr_office_reviewer_name: req.hr_office_reviewer_name,
           hr_office_reviewed_at: req.hr_office_reviewed_at,
           hr_signature_image_url: req.hr_signature_image_url,
+          hr_signature_data_url: req.hr_signature_data_url,
+          hr_approver_signature_data_url: req.hr_approver_signature_data_url,
+          hr_approver_position: req.hr_approver_position,
           memo_token: req.memo_token || null,
         }
       })
@@ -185,6 +190,9 @@ export async function GET(request: NextRequest) {
         hr_office_reviewer_name,
         hr_office_reviewed_at,
         hr_signature_image_url,
+        hr_signature_data_url,
+        hr_approver_signature_data_url,
+        hr_approver_position,
         hr_approval_note,
         memo_token
       `)
@@ -232,6 +240,9 @@ export async function GET(request: NextRequest) {
         hr_approver_name: req.hr_approver_name,
         hr_approved_at: req.hr_approved_at,
         hr_signature_image_url: req.hr_signature_image_url,
+        hr_signature_data_url: req.hr_signature_data_url,
+        hr_approver_signature_data_url: req.hr_approver_signature_data_url,
+        hr_approver_position: req.hr_approver_position,
         memo_token: req.memo_token || null,
       }
     })

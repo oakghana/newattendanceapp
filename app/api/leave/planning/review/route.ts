@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("user_profiles")
-      .select("id, role, assigned_location_id, region_id")
+      .select("id, role, assigned_location_id, region_id, first_name, last_name, position")
       .eq("id", user.id)
       .single()
 
@@ -224,6 +224,23 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
+    if (isRegionalNonAnnualApproval) {
+      const signerName = `${String((profile as any).first_name || "").trim()} ${String((profile as any).last_name || "").trim()}`.trim()
+      const { data: signerSignature } = await admin
+        .from("approval_signature_registry")
+        .select("signature_data_url")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle()
+
+      requestUpdatePayload.hr_approver_name = signerName || "Regional Manager"
+      requestUpdatePayload.hr_approver_position = (profile as any).position || "Regional Manager"
+      requestUpdatePayload.hr_approver_signature_data_url = signerSignature?.signature_data_url || null
+      requestUpdatePayload.hr_signature_data_url = signerSignature?.signature_data_url || null
+      requestUpdatePayload.hr_approved_at = new Date().toISOString()
+      requestUpdatePayload.hr_approval_note = "Approved by the Regional Manager under the regional non-annual leave workflow."
+    }
+
     if (decision === "approved" && (nextStatus === "hod_approved" || nextStatus === "manager_confirmed")) {
       requestUpdatePayload.hod_reviewer_id = user.id
       requestUpdatePayload.hod_reviewed_at = new Date().toISOString()
@@ -301,7 +318,7 @@ export async function POST(request: NextRequest) {
       }).catch(() => {})
     }
 
-    return NextResponse.json({ success: true, status: nextStatus })
+    return NextResponse.json({ success: true, status: isRegionalNonAnnualApproval ? "approved" : nextStatus })
   } catch (error) {
     if (isSchemaIssue(error)) {
       return schemaIssueResponse()
