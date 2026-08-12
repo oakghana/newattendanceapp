@@ -36,7 +36,14 @@ export async function GET(request: NextRequest) {
     // Fetch ALL pending leave requests in HR executive review stages
     // HR executives should see requests that have been forwarded by the HR Leave Office
     // or are awaiting HR approval (not just their department — they review org-wide)
-    const pendingStatuses = ["hr_office_forwarded", "manager_confirmed", "hod_approved"]
+    const pendingStatuses = [
+      "hr_office_forwarded",
+      "manager_confirmed",
+      "hod_approved",
+      "pending_hr_decision",
+      "pending_hr_review",
+      "pending_hr_approval",
+    ]
     
     const { data: requests, error: requestsError } = await admin
       .from("leave_plan_requests")

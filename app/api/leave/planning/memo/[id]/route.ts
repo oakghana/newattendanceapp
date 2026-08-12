@@ -824,9 +824,16 @@ export async function GET(
       // ─── Entitlement label (top-left cell): gross entitlement ───────────────
       // Show the staff's full annual entitlement (e.g. "24") even when some days were
       // already enjoyed — this is what the memo should declare as the entitlement.
-      // Priority: entitlement_days field → tableEntitlement (computed working days)
-      const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
-      const grossEntitlement = rawEntitlement > 0 ? rawEntitlement : Math.max(0, Number(tableEntitlement || 0))
+  // The applicant profile is authoritative for annual entitlement. The stored
+  // request value is retained only for legacy/non-annual records.
+  const isAnnualMemo = leaveTypeKey === "annual"
+  const profileEntitlement = isAnnualMemo && applicantProfile
+    ? resolveEntitlementFromProfile(applicantProfile as any).annualLeaveDays
+    : 0
+  const rawEntitlement = Number(lr.entitlement_days || lr.leave_entitlement_days || 0)
+  const grossEntitlement = isAnnualMemo
+    ? Math.max(0, profileEntitlement || Number(tableEntitlement || 0) || rawEntitlement)
+    : Math.max(0, rawEntitlement || Number(tableEntitlement || 0))
       const entitlementLabel = travelDays > 0
         ? `${grossEntitlement || effectiveDays} plus ${travelDays} travelling day${travelDays !== 1 ? "s" : ""}`
         : String(grossEntitlement || effectiveDays)
