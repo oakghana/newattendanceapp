@@ -39,6 +39,7 @@ export default async function LeaveManagementPage() {
   let userLocationName: string | null = null
   const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
   const isRegionalHr = ["regional_hr", "regional_hr_officer", "regional_hr_office", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole) || (normalizedRole.includes("regional") && normalizedRole.includes("hr"))
+  const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
 
   try {
     // Build parallel queries — include location lookup when user has an assigned location
@@ -71,7 +72,7 @@ export default async function LeaveManagementPage() {
     const results = await Promise.all(queries)
     const [requestsRes, linkageRes, locationRes] = results
 
-    if (isRegionalHr && (locationId || (profile as any)?.region_id)) {
+    if ((isRegionalHr || isRegionalManager) && (locationId || (profile as any)?.region_id)) {
       const staffQuery = admin
         .from("user_profiles")
         .select("id")
@@ -93,7 +94,7 @@ export default async function LeaveManagementPage() {
           .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, user_profiles:user_id(first_name, last_name, employee_id, assigned_location_id, region_id)")
           .in("user_id", regionalStaffIds)
           .neq("leave_type_key", "annual")
-          .in("status", ["pending_hod_review", "pending_regional_hr_review", "pending_hr_review", "pending_regional_manager_approval"])
+          .in("status", isRegionalManager ? ["pending_regional_manager_approval"] : ["pending_hod_review", "pending_regional_hr_review", "pending_hr_review", "pending_regional_manager_approval"])
           .order("created_at", { ascending: false })
           .limit(100)
         managerNotifications = (regionalRequests || []).map((request: any) => ({

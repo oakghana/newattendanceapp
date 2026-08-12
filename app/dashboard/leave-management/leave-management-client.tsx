@@ -792,6 +792,7 @@ export function LeaveManagementClient({
   const isAdmin = normalizedRole === "admin"
   const canUseStaffLeaveHub = ["staff", "nsp", "intern", "it_admin", "department_head", "regional_manager", "admin", "loan_office", "hr_loan_office", "accounts_loan_office", "accounts", "director_hr", "manager_hr", "hr_office", "hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_leave_office", "hr", "audit_staff", "contract", "loan_committee", "committee", "secretary", "managing_director"].includes(normalizedRole)
   const isManagerView = ["admin", "regional_manager", "department_head", "hr_officer", "manager_hr", "director_hr", "hr_director", "hr_office", "hr_leave_office", "hr", "regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
+  const isRegionalManager = normalizedRole === "regional_manager" || normalizedRole === "regional_manager_officer"
   const isAdminView = isAdmin
   const canViewHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
   const canEditHrTemplates = isAdmin || ["hr_director", "hr_leave_office"].includes(normalizedRole)
@@ -1790,7 +1791,7 @@ export function LeaveManagementClient({
                 <ArrowUpRight className="h-4 w-4" />
                 Recalls
               </Button>
-              {isRegionalHr && (
+              {(isRegionalHr || isRegionalManager) && (
                 <Button
                   onClick={() => setSelectedTab("pending-approvals")}
                   className={`gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
@@ -1801,7 +1802,7 @@ export function LeaveManagementClient({
                   variant={selectedTab === "pending-approvals" ? "default" : "outline"}
                 >
                   <ClipboardList className="h-4 w-4" />
-                  Regional Non-Annual Queue ({pendingNotifications.length})
+                  {isRegionalManager ? "Regional Manager Review" : "Regional Non-Annual Queue"} ({pendingNotifications.length})
                 </Button>
               )}
               {isManagerView && (
@@ -3113,14 +3114,14 @@ export function LeaveManagementClient({
             </PaymentAdviceErrorBoundary>
           )}
 
-        {isManagerView && selectedTab === "pending-approvals" && (
-          <>
-            <Alert className="border-blue-200 bg-blue-50">
+  {(isManagerView && selectedTab === "pending-approvals") && (
+  <>
+  <Alert className="border-blue-200 bg-blue-50">
               <AlertDescription>
-                Requests pending for {inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.
+                {isRegionalManager ? "Regional non-annual requests forwarded by Regional HR are ready for your review and approval." : `Requests pending for ${inactivityDays} days or more are marked as delayed and should be actioned immediately to avoid automatic supervisor timeout approvals.`}
               </AlertDescription>
             </Alert>
-            {renderManagerNotifications(adminAllPending, "No pending leave requests to approve", isRegionalHr)}
+            {renderManagerNotifications(isRegionalManager ? pendingNotifications.filter((n) => String(n.status || n.leave_requests?.status || "") === "pending_regional_manager_approval") : adminAllPending, isRegionalManager ? "No regional non-annual requests pending" : "No pending leave requests to approve", isRegionalHr)}
           </>
         )}
 
