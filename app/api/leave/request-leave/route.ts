@@ -33,11 +33,11 @@ export async function POST(request: NextRequest) {
     const start_date = formData.get("start_date") as string
     const end_date = formData.get("end_date") as string
     const reason = formData.get("reason") as string
+    const requested_days_raw = formData.get("requested_days") as string | null
+    const requested_days = requested_days_raw ? Number(requested_days_raw) : null
     const leave_type = formData.get("leave_type") as string
     const leave_year_period = (formData.get("leave_year_period") as string) || "2026/2027"
     const document = formData.get("document") as File | null
-    const delivery_date = formData.get("delivery_date") as string | null
-    const maternity_delivery_type = formData.get("maternity_delivery_type") as string | null
 
     if (!start_date || !end_date || !reason) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -51,7 +51,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: reasonValidation.error }, { status: 400 })
     }
 
-    const requestedDays = computeLeaveDays(start_date, end_date)
+    const requestedDays = requested_days && Number.isInteger(requested_days) && requested_days > 0
+      ? requested_days
+      : computeLeaveDays(start_date, end_date)
     if (requestedDays <= 0) {
       return NextResponse.json({ error: "Invalid leave date range" }, { status: 400 })
     }
@@ -73,18 +75,6 @@ export async function POST(request: NextRequest) {
       normalizedRole.includes("manager")
 
     const leaveTypeKey = String(leave_type || "annual").toLowerCase().trim()
-
-    if (leaveTypeKey === "maternity") {
-      if (!delivery_date || Number.isNaN(new Date(delivery_date).getTime())) {
-        return NextResponse.json({ error: "Date of delivery is required for maternity leave." }, { status: 400 })
-      }
-      if (!maternity_delivery_type || !["regular", "cs_twins"].includes(maternity_delivery_type)) {
-        return NextResponse.json({ error: "Select regular delivery or Cesarean Section / Twins." }, { status: 400 })
-      }
-      if (!document || document.size === 0) {
-        return NextResponse.json({ error: "A supporting document is required for maternity leave." }, { status: 400 })
-      }
-    }
 
     if (NON_ANNUAL_REQUIRES_APPROVED_ANNUAL.has(leaveTypeKey)) {
       try {
@@ -217,8 +207,7 @@ export async function POST(request: NextRequest) {
       approved_by: shouldAutoApprove ? user.id : null,
       approved_at: shouldAutoApprove ? new Date().toISOString() : null,
       document_url,
-      delivery_date: leaveTypeKey === "maternity" ? delivery_date : null,
-      maternity_delivery_type: leaveTypeKey === "maternity" ? maternity_delivery_type : null,
+      requested_days: requestedDays,
     }
 
     // Try insert; if column not found (schema mismatch), retry without `leave_type` and return a helpful error

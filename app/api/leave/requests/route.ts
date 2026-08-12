@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       adjusted_start_date,
       adjusted_end_date,
       requested_days,
+      reason,
       adjusted_days,
       entitlement_days,
       travelling_days_added,
