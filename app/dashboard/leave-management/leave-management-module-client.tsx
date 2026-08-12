@@ -8,7 +8,6 @@ import { LeaveBalanceWidget } from "@/components/leave/leave-balance-widget"
 import { TeamCalendarView } from "@/components/leave/team-calendar-view"
 import { HrLeaveAnalyticsPanel } from "./hr-leave-analytics-panel"
 import { OutstandingLeavePanel } from "./outstanding-leave-panel"
-import { LeaveCenterInfo } from "./leave-center-info"
 import { CarryoverApprovalDashboard } from "./carryover-approval-dashboard"
 import { AuditComplianceDashboard } from "./audit-compliance-dashboard"
 import { AllLeaveRequestsDashboard } from "@/components/leave/all-leave-requests-dashboard"
@@ -194,10 +193,7 @@ export function LeaveManagementModuleClient({
 
         {/* Info Tab — shows Leave Management overview */}
         <TabsContent value="leave-management" className="space-y-4 sm:space-y-6 w-full">
-          {isRegionalHR ? (
-            <LeaveCenterInfo userRole={userRole} userDepartmentName={userDepartmentName} />
-          ) : (
-            <LeaveManagementClient
+          <LeaveManagementClient
               userId={userId}
               userRole={userRole}
               userDepartment={userDepartment}
@@ -210,7 +206,6 @@ export function LeaveManagementModuleClient({
               initialManagerNotifications={initialManagerNotifications}
               initialApprovedStaffRequests={initialApprovedStaffRequests}
             />
-          )}
         </TabsContent>
 
         {/* Leave Planning Tab */}

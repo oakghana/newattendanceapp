@@ -34,8 +34,11 @@ export default async function LeaveManagementPage() {
 
   // Fetch only essential fast queries first
   let staffRequests: any[] = []
+  let managerNotifications: any[] = []
   let hasHodLinkage = false
   let userLocationName: string | null = null
+  const normalizedRole = String(profile.role || "").toLowerCase().trim().replace(/[-\s]+/g, "_")
+  const isRegionalHr = ["regional_hr", "regional_hr_leave_office", "regional_leave_office"].includes(normalizedRole)
 
   try {
     // Build parallel queries — include location lookup when user has an assigned location
@@ -68,6 +71,39 @@ export default async function LeaveManagementPage() {
     const results = await Promise.all(queries)
     const [requestsRes, linkageRes, locationRes] = results
 
+    if (isRegionalHr && locationId) {
+      const { data: regionalStaff } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("assigned_location_id", locationId)
+        .neq("id", user.id)
+      const regionalStaffIds = (regionalStaff || []).map((row: any) => row.id).filter(Boolean)
+      if (regionalStaffIds.length > 0) {
+        const { data: regionalRequests } = await admin
+          .from("leave_plan_requests")
+          .select("id, user_id, preferred_start_date, preferred_end_date, reason, leave_type_key, status, created_at, user_profiles:user_id(first_name, last_name, employee_id)")
+          .in("user_id", regionalStaffIds)
+          .in("status", ["pending_hod_review", "pending_regional_hr_review", "pending_hr_review"])
+          .order("created_at", { ascending: false })
+          .limit(100)
+        managerNotifications = (regionalRequests || []).map((request: any) => ({
+          id: request.id,
+          status: request.status,
+          leave_requests: {
+            id: request.id,
+            user_id: request.user_id,
+            start_date: request.preferred_start_date,
+            end_date: request.preferred_end_date,
+            reason: request.reason || "",
+            leave_type: request.leave_type_key || "",
+            status: request.status,
+            created_at: request.created_at,
+            user_name: `${request.user_profiles?.first_name || ""} ${request.user_profiles?.last_name || ""}`.trim(),
+          },
+        }))
+      }
+    }
+
     staffRequests = (requestsRes.data || []).map((request: any) => ({
       id: String(request.id),
       user_id: String(request.user_id),
@@ -91,7 +127,6 @@ export default async function LeaveManagementPage() {
   }
 
   // Heavy reviewer queries are lazy-loaded client-side to keep page fast
-  const managerNotifications: any[] = []
   const approvedStaffRequests: any[] = []
 
   try {
