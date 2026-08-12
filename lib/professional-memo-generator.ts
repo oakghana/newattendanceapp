@@ -20,8 +20,10 @@ export interface MemoData {
     approved_days?: number
     entitlement_days?: number
     adjusted_entitlement_days?: number
-    outstanding_entitlement_days?: number
-    adjusted_used_days?: number
+  outstanding_entitlement_days?: number
+  outstanding_leave_days?: number
+  adjusted_used_days?: number
+
     outstanding_used_days?: number
     used_this_period?: number
     prior_leave_days_deducted?: number
@@ -435,6 +437,7 @@ async function generateMainMemo(
     const publicHolidayDays = Number(firstStaff?.holiday_days_deducted ?? 0)
     const enjoyedDays = Number(firstStaff?.prior_leave_days_deducted ?? 0)
     const travellingDays = Number(firstStaff?.travelling_days_added ?? 0)
+    const outstandingLeaveDays = Math.max(0, Number(firstStaff?.outstanding_leave_days ?? 0))
     const storedEntitlementDays = Number(
       firstStaff?.adjusted_entitlement_days
         ?? firstStaff?.outstanding_entitlement_days
@@ -457,23 +460,27 @@ async function generateMainMemo(
     const hasAdjustedEntitlement = firstStaff?.adjusted_entitlement_days != null
       || firstStaff?.outstanding_entitlement_days != null
       || firstStaff?.entitlement_days != null
-    const entitlementDays = String(memoData.leave_type_key || "").toLowerCase() === "annual"
-      ? hasAdjustedEntitlement ? storedEntitlementDays : resolvedEntitlement.annualLeaveDays
+    const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
+    const entitlementDays = isAnnualLeave
+      ? hasAdjustedEntitlement
+        ? storedEntitlementDays
+        : resolvedEntitlement.annualLeaveDays + outstandingLeaveDays
       : storedEntitlementDays
     const annualMemoDates = calculateAnnualLeaveMemoDates({
       startDate: firstStaff?.leave_period_start || new Date(),
       entitlementDays,
       grantedDays: approvedDays,
-      daysAlreadyEnjoyed: adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || publicHolidayDays || null,
+      daysAlreadyEnjoyed: adjustedUsedDays > 0 ? adjustedUsedDays : enjoyedDays || null,
       travellingDays,
     })
     const annualDaysRemaining = Math.max(0, annualMemoDates.entitlementDays - annualMemoDates.daysAlreadyEnjoyed)
     const totalGrantedDays = annualMemoDates.grantedDays
 
     const entitled = entitlementDays > 0
-      ? travellingDays > 0
-        ? `${entitlementDays} plus ${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""}`
-        : String(entitlementDays)
+      ? [
+          `${entitlementDays} day${entitlementDays !== 1 ? "s" : ""}`,
+          travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""}` : "",
+        ].filter(Boolean).join(" plus ")
       : "—"
     const granted = totalGrantedDays > 0
       ? travellingDays > 0
@@ -489,7 +496,6 @@ async function generateMainMemo(
       fromDate = fmtDateLongPdf(firstStaff.leave_period_start)
     }
     if (firstStaff?.leave_period_end) {
-      const isAnnualLeave = String(memoData.leave_type_key || "").toLowerCase() === "annual"
       if (isAnnualLeave && firstStaff.leave_period_start) {
         // Annual leave uses the same inclusive calculation and totals as every memo route.
         toDate = fmtDateLongPdf(annualMemoDates.endDate)
@@ -509,7 +515,7 @@ async function generateMainMemo(
     }
 
     const calculatedRemarks = [
-      publicHolidayDays > 0 ? `${publicHolidayDays} public holiday day(s) deducted` : "",
+      outstandingLeaveDays > 0 ? `${outstandingLeaveDays} outstanding leave day${outstandingLeaveDays !== 1 ? "s" : ""} added to entitlement` : "",
       enjoyedDays > 0 ? `${enjoyedDays} day(s) given/already enjoyed deducted` : "",
       travellingDays > 0 ? `${travellingDays} travelling day${travellingDays !== 1 ? "s" : ""} added` : "",
     ].filter(Boolean)

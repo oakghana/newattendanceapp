@@ -156,6 +156,27 @@ describe("annual leave calculation", () => {
     expect(remarks).not.toContain("99 travelling")
   })
 
+  it("does not deduct public holidays from annual leave days", () => {
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 36,
+      daysAlreadyEnjoyed: 0,
+      travellingDays: 2,
+    })
+    expect(result.grantedDays).toBe(38)
+  })
+
+  it("includes outstanding leave days in the entitled total", () => {
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: 48,
+      daysAlreadyEnjoyed: 10,
+      travellingDays: 2,
+    })
+    expect(result.entitlementDays).toBe(48)
+    expect(result.grantedDays).toBe(40)
+  })
+
   it("calculates 36 - 4 + 2 = 34", () => {
     const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 4)
     const display = buildAnnualLeaveDisplay(result)

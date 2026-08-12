@@ -291,11 +291,10 @@ function buildMemoTemplateData(req: any): Record<string, string> {
   const approvedMonths = Number(req.approved_months || req.requested_months || Math.max(1, Math.round(effectiveDaysNumber / 30)))
   const entitlementDays = Number(req.entitlement_days || 0)
   const outstandingLeaveDays = Math.max(0, entitlementDays - effectiveDaysNumber)
-  const holidayDays = Number(req.holiday_days_deducted || 0)
   const priorLeaveDays = Number(req.prior_leave_days_deducted || 0)
   const travellingDays = Number(req.travelling_days_added || 0)
   const adjustmentLines = [
-    holidayDays > 0 ? `Public holidays added: ${holidayDays} day(s).` : "",
+    outstandingLeaveDays > 0 ? `${outstandingLeaveDays} outstanding leave day(s) added to entitlement.` : "",
     priorLeaveDays > 0 ? `Less prior leave enjoyed: ${priorLeaveDays} day(s).` : "",
     travellingDays > 0 ? `Travelling days added: ${travellingDays} day(s).` : "",
   ].filter(Boolean)
@@ -1075,7 +1074,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
-  // ── HR Executive HOD Review ────────────────────────────────���─────────
+  // ── HR Executive HOD Review ─────────────────────────────���──���─────────
   const [hodReviewRequests, setHodReviewRequests] = useState<any[]>([])
   const [hodReviewLoading, setHodReviewLoading] = useState(false)
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")
