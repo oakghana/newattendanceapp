@@ -398,10 +398,11 @@ function getLoanTypeBaseKey(loanType: LoanType) {
 function getExplicitLoanTypeTier(loanType: LoanType): "junior" | "senior" | "manager" | null {
   const key = String(loanType.loan_key || "").toLowerCase()
   const label = String(loanType.loan_label || "").toLowerCase()
+  const category = String(loanType.category || "").toLowerCase()
 
-  if (key.includes("_manager") || /\bmanager\b/i.test(label)) return "manager"
-  if (key.includes("_senior") || /\bsenior\b|\bsr\b|sr\./i.test(label)) return "senior"
-  if (key.includes("_junior") || /\bjunior\b|\bjr\b/i.test(label)) return "junior"
+  if (key.includes("_manager") || /\bmanager\b/i.test(label) || /\bmanager\b/i.test(category)) return "manager"
+  if (key.includes("_senior") || /\bsenior\b|\bsr\b|sr\./i.test(label) || /\bsenior\b/i.test(category)) return "senior"
+  if (key.includes("_junior") || /\bjunior\b|\bjr\b/i.test(label) || /\bjunior\b/i.test(category)) return "junior"
   return null
 }
 
@@ -419,7 +420,12 @@ function resolveLoanTypeTier(loanType: LoanType, allTypes: LoanType[]) {
   return hasHigherTier ? "junior" : null
 }
 
-function getUserLoanTier(position?: string | null, role?: string | null): "junior" | "senior" | "manager" | null {
+function getUserLoanTier(position?: string | null, role?: string | null, staffCategory?: string | null): "junior" | "senior" | "manager" | null {
+  const normalizedCategory = String(staffCategory || "").toLowerCase().trim()
+  if (/\bjunior\b/.test(normalizedCategory)) return "junior"
+  if (/\bsenior\b/.test(normalizedCategory)) return "senior"
+  if (/\bmanager\b/.test(normalizedCategory)) return "manager"
+
   const normalizedPosition = String(position || "").toLowerCase()
   const normalizedRole = String(role || "").toLowerCase()
 
@@ -459,11 +465,8 @@ function loanTypeGroupKey(loanType: LoanType) {
 function shouldIncludeLoanTypeForUser(loanType: LoanType, userTier: string | null, allTypes: LoanType[]) {
   const loanTier = resolveLoanTypeTier(loanType, allTypes)
   
-  // If no user tier or no loan tier restriction, include it
-  if (!userTier || !loanTier) {
-    return true
-  }
-  
+  // Staff-category users only see loan types explicitly assigned to their category.
+  if (!userTier) return true
   return loanTier === userTier
 }
 
@@ -1176,7 +1179,7 @@ export default function LoanAppPage() {
 
   const filteredLoanTypes = useMemo(() => {
     const rawTypes = data?.loanTypes || []
-    const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role)
+    const userTier = getUserLoanTier(data?.profile?.position, data?.profile?.role, data?.profile?.staffCategory)
 
     const normalizedTypes = rawTypes.map((type) => ({
       ...type,
@@ -1187,6 +1190,11 @@ export default function LoanAppPage() {
   }, [data])
 
   const selectedType = useMemo(() => filteredLoanTypes.find((t) => t.loan_key === loanTypeKey), [filteredLoanTypes, loanTypeKey])
+
+  useEffect(() => {
+    if (loanTypeKey && !selectedType) setLoanTypeKey("")
+  }, [loanTypeKey, selectedType])
+
   const needsAttachment = useMemo(
     () => requiresProofAttachment(loanTypeKey, selectedType?.loan_label, selectedType?.category),
     [loanTypeKey, selectedType],
