@@ -180,7 +180,7 @@ export async function getEntitlementDays(
       annual: 38,
       annual_leave: 38,
       sick_leave: 14,
-      maternity_leave: 98,
+      maternity_leave: 84,
       paternity_leave: 6,
       compassionate_leave: 3,
     };
