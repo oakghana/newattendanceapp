@@ -108,7 +108,7 @@ const LOAN_STATUS_MAP: Record<string, { label: string; color: string }> = {
 }
 
 const LEAVE_STATUS_MAP: Record<string, { label: string; color: string }> = {
-  approved: { label: "Approved", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  approved: { label: "Regional Manager Approved", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   hr_approved: { label: "HR Approved", color: "bg-blue-100 text-blue-800 border-blue-200" },
   hod_approved: { label: "HOD Approved", color: "bg-teal-100 text-teal-800 border-teal-200" },
 }
@@ -463,36 +463,36 @@ export function SecretaryMemosClient({ profile, loanMemos, leaveMemos, approvedM
                           <div>{memo.hr_approved_at ? "HR Approved" : "Requested"}</div>
                           <div className="font-medium text-slate-700">{fmtDate(memo.hr_approved_at || memo.created_at)}</div>
                         </div>
-                        <Badge className={cn("text-xs border font-medium", statusInfo.color)}>
-                          {statusInfo.label}
-                        </Badge>
-                        {memo.memo_token && (
-                          <>
-                            <button
-                              onClick={() => {
-                                const url = `/api/leave/planning/memo/${memo.id}?token=${encodeURIComponent(memo.memo_token || "")}`
-                                window.open(url, "_blank")
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors"
-                              title="Download leave memo PDF"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                              Download
-                            </button>
-                            <button
-                              onClick={() => {
-                                const url = `/api/leave/planning/memo/${memo.id}?token=${encodeURIComponent(memo.memo_token || "")}`
-                                const win = window.open(url, "_blank")
-                                win?.addEventListener("load", () => win.print())
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
-                              title="Print leave memo"
-                            >
-                              <Printer className="h-3.5 w-3.5" />
-                              Print
-                            </button>
-                          </>
-                        )}
+                          <Badge className={cn("text-xs border font-medium", statusInfo.color)}>
+                            {statusInfo.label}
+                          </Badge>
+                          {(memo.memo_token || memo.status === "approved") && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  const tokenQuery = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
+                                  window.open(`/api/leave/planning/memo/${memo.id}${tokenQuery}`, "_blank")
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-colors"
+                                title="Download leave memo PDF"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Download
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const tokenQuery = memo.memo_token ? `?token=${encodeURIComponent(memo.memo_token)}` : ""
+                                  const win = window.open(`/api/leave/planning/memo/${memo.id}${tokenQuery}`, "_blank")
+                                  win?.addEventListener("load", () => win.print())
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+                                title="Print leave memo"
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                                Print
+                              </button>
+                            </>
+                          )}
                       </div>
                     </div>
                   )
