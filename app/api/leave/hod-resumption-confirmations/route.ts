@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient()
     const admin = await createAdminClient()
@@ -17,18 +17,31 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Get HOD's department from user profile
+    // Resolve the reviewer's scope. HODs review their department; regional
+    // managers review staff assigned to their location.
     const { data: userProfile, error: profileErr } = await admin
       .from('user_profiles')
-      .select('department_id')
+      .select('role, department_id, assigned_location_id')
       .eq('id', user.id)
       .single()
 
-    if (profileErr || !userProfile || !userProfile.department_id) {
-      return NextResponse.json(
-        { error: 'User profile or department not found' },
-        { status: 404 }
-      )
+    if (profileErr || !userProfile) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
+    }
+
+    const normalizedRole = String(userProfile.role || '').toLowerCase().replace(/[\s-]+/g, '_')
+    const isRegionalManager = normalizedRole === 'regional_manager'
+    const isDepartmentHead = ['department_head', 'hod'].includes(normalizedRole)
+
+    if (!isRegionalManager && !isDepartmentHead) {
+      return NextResponse.json({ error: 'Only HODs and Regional Managers can review resumptions' }, { status: 403 })
+    }
+
+    if (isRegionalManager && !userProfile.assigned_location_id) {
+      return NextResponse.json({ error: 'Regional Manager location not found' }, { status: 404 })
+    }
+    if (isDepartmentHead && !userProfile.department_id) {
+      return NextResponse.json({ error: 'HOD department not found' }, { status: 404 })
     }
 
     const today = new Date()
@@ -36,10 +49,13 @@ export async function GET(req: NextRequest) {
     const todayStr = today.toISOString().split('T')[0]
 
     // Step 1: Get all user IDs in this HOD's department
-    const { data: deptUsers, error: deptErr } = await admin
+    const staffQuery = admin
       .from('user_profiles')
       .select('id, first_name, last_name, employee_id')
-      .eq('department_id', userProfile.department_id)
+
+    const { data: deptUsers, error: deptErr } = isRegionalManager
+      ? await staffQuery.eq('assigned_location_id', userProfile.assigned_location_id)
+      : await staffQuery.eq('department_id', userProfile.department_id)
 
     if (deptErr) {
       console.error('[hod-resumption] deptUsers error:', deptErr)
@@ -73,7 +89,7 @@ export async function GET(req: NextRequest) {
 
     // Step 3: Fetch HOD confirmation status from leave_resumption_notifications
     // Match by user_id + leave_end_date (same pattern as all-requests API)
-    let hodConfirmationMap: Record<string, { confirmed: boolean; confirmedAt: string | null }> = {}
+    const hodConfirmationMap: Record<string, { confirmed: boolean; confirmedAt: string | null }> = {}
     if (deptUserIds.length > 0) {
       const { data: resumptions } = await admin
         .from('leave_resumption_notifications')

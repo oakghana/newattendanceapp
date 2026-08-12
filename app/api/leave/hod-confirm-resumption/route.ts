@@ -40,6 +40,37 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const { data: reviewer, error: reviewerErr } = await admin
+      .from('user_profiles')
+      .select('role, department_id, assigned_location_id')
+      .eq('id', user.id)
+      .single()
+
+    if (reviewerErr || !reviewer) {
+      return NextResponse.json({ error: 'Reviewer profile not found' }, { status: 404 })
+    }
+
+    const normalizedRole = String(reviewer.role || '').toLowerCase().replace(/[\s-]+/g, '_')
+    const isRegionalManager = normalizedRole === 'regional_manager'
+    const isDepartmentHead = ['department_head', 'hod'].includes(normalizedRole)
+    if (!isRegionalManager && !isDepartmentHead) {
+      return NextResponse.json({ error: 'Only HODs and Regional Managers can confirm resumptions' }, { status: 403 })
+    }
+
+    const { data: staffProfile } = await admin
+      .from('user_profiles')
+      .select('department_id, assigned_location_id')
+      .eq('id', leaveRequest.user_id)
+      .single()
+
+    const isInScope = isRegionalManager
+      ? Boolean(reviewer.assigned_location_id && reviewer.assigned_location_id === staffProfile?.assigned_location_id)
+      : Boolean(reviewer.department_id && reviewer.department_id === staffProfile?.department_id)
+
+    if (!isInScope) {
+      return NextResponse.json({ error: 'This staff member is outside your review scope' }, { status: 403 })
+    }
+
     const staffUserId = leaveRequest.user_id
     const leaveEndDate = leaveRequest.preferred_end_date
 
@@ -47,7 +78,7 @@ export async function POST(req: NextRequest) {
     // Match by user_id and leave_end_date
     const { data: resumptions, error: searchErr } = await admin
       .from('leave_resumption_notifications')
-      .select('id')
+      .select('id, leave_request_id')
       .eq('user_id', staffUserId)
       .eq('leave_end_date', leaveEndDate)
 
@@ -67,6 +98,7 @@ export async function POST(req: NextRequest) {
         .from('leave_resumption_notifications')
         .insert({
           user_id: staffUserId,
+          leave_request_id: leave_plan_request_id,
           leave_end_date: leaveEndDate,
           status: 'confirmed',
           first_hod_rm_check_in_date: today,
@@ -89,6 +121,7 @@ export async function POST(req: NextRequest) {
       const { error: updateErr } = await admin
         .from('leave_resumption_notifications')
         .update({
+          leave_request_id: leave_plan_request_id,
           first_hod_rm_check_in_date: todayDate,
           confirmation_status: 'hod_confirmed',
         })

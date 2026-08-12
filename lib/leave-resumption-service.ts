@@ -82,7 +82,7 @@ export async function trackLeaveResumption(userId: string, checkInDate: Date) {
       .from('leave_resumption_notifications')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'warning_sent', 'letter_sent'])
       .is('first_check_in_date', null)
 
     if (fetchError) {
@@ -168,7 +168,7 @@ export async function checkLeaveOverdueBlock(userId: string): Promise<{ isBlocke
       .from('leave_resumption_notifications')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'warning_sent', 'letter_sent'])
       .is('first_check_in_date', null)
 
     if (error) {
@@ -201,6 +201,16 @@ export async function checkLeaveOverdueBlock(userId: string): Promise<{ isBlocke
   }
 }
 
+export function getResumptionEscalationLevel(
+  daysOverdue: number,
+  currentStatus: LeaveResumptionRecord['status']
+): 'warning' | 'letter' | 'memo' | null {
+  if (daysOverdue >= 10 && !['memo_sent'].includes(currentStatus)) return 'memo'
+  if (daysOverdue >= 5 && !['letter_sent', 'memo_sent'].includes(currentStatus)) return 'letter'
+  if (daysOverdue >= 2 && !['warning_sent', 'letter_sent', 'memo_sent'].includes(currentStatus)) return 'warning'
+  return null
+}
+
 /**
  * Check for staff who haven't resumed duty and send escalation notifications
  */
@@ -212,7 +222,7 @@ export async function checkAndEscalateNonResumption() {
     const { data: pendingRecords, error: fetchError } = await supabase
       .from('leave_resumption_notifications')
       .select('*, user_profiles:user_id(full_name, email, department, supervisor_id)')
-      .eq('status', 'pending')
+      .in('status', ['pending', 'warning_sent', 'letter_sent'])
 
     if (fetchError) {
       console.error('[v0] Error fetching pending records:', fetchError)
@@ -224,15 +234,7 @@ export async function checkAndEscalateNonResumption() {
 
       if (daysOverdue < 2) continue // Not yet overdue
 
-      let escalationLevel: 'warning' | 'letter' | 'memo' | null = null
-
-      if (daysOverdue >= 10 && record.status !== 'memo_sent') {
-        escalationLevel = 'memo'
-      } else if (daysOverdue >= 5 && record.status !== 'letter_sent' && record.status !== 'memo_sent') {
-        escalationLevel = 'letter'
-      } else if (daysOverdue >= 2 && record.status !== 'warning_sent') {
-        escalationLevel = 'warning'
-      }
+      const escalationLevel = getResumptionEscalationLevel(daysOverdue, record.status)
 
       if (escalationLevel) {
         await sendEscalationNotification(record, escalationLevel, daysOverdue)
