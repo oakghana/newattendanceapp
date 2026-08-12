@@ -617,7 +617,7 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                   <Label>Location</Label>
                   <div className="p-2 bg-muted rounded-md flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    {profile.assigned_location?.districts?.name || "No location assigned"}
+                    {profile.assigned_location?.districts?.name || profile.assigned_location?.name || profile.assigned_location?.address || "No location assigned"}
                   </div>
                 </div>
               </div>

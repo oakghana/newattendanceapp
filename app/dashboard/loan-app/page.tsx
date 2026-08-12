@@ -1196,6 +1196,8 @@ export default function LoanAppPage() {
     const label = String(selectedType?.loan_label || "").toLowerCase()
     return key === "salary_advance" || label.includes("salary advance")
   }, [selectedType])
+  const salaryAdvanceMaxMonths = String(data?.profile?.staffCategory || "").toLowerCase() === "senior" ? 2 : 3
+  const salaryAdvanceMonthOptions = Array.from({ length: salaryAdvanceMaxMonths }, (_, index) => index + 1)
 
   useEffect(() => {
     if (!isSalaryAdvanceRequest) {
@@ -2237,10 +2239,10 @@ export default function LoanAppPage() {
       return
     }
 
-    if (isSalaryAdvanceRequest && !salaryAdvanceMonths) {
+    if (isSalaryAdvanceRequest && (!salaryAdvanceMonths || salaryAdvanceMonths > salaryAdvanceMaxMonths)) {
       toast({
-        title: "Select repayment months",
-        description: "Salary advance requests require a 1-3 month recovery period.",
+        title: "Invalid repayment period",
+        description: `Salary advance recovery is limited to ${salaryAdvanceMaxMonths} month${salaryAdvanceMaxMonths === 1 ? "" : "s"} for your staff category.`,
         variant: "destructive",
       })
       return
@@ -3123,7 +3125,7 @@ export default function LoanAppPage() {
 
               {isSalaryAdvanceRequest && (
                 <div className="grid grid-cols-3 gap-3">
-                  {[1, 2, 3].map((months) => (
+                  {salaryAdvanceMonthOptions.map((months) => (
                     <label key={months} className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm hover:border-emerald-300">
                       <input
                         type="checkbox"
