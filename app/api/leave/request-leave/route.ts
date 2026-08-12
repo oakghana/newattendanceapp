@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
         if (hodIds.length === 0) {
           const { data: staffProfile } = await admin
             .from("user_profiles")
-            .select("department_id, first_name, last_name, assigned_location_id")
+            .select("department_id, region_id, first_name, last_name, assigned_location_id")
             .eq("id", user.id)
             .maybeSingle()
 
@@ -305,7 +305,24 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // 3. Further fallback: regional_manager at same location
+          // 3. Regional staff are routed to the Regional Manager for their region first.
+          // This makes Regional HR Office assignment effective for all staff under that manager.
+          if (hodIds.length === 0 && (staffProfile as any)?.region_id) {
+            const { data: regionalManagers } = await admin
+              .from("user_profiles")
+              .select("id")
+              .eq("region_id", (staffProfile as any).region_id)
+              .eq("role", "regional_manager")
+              .eq("is_active", true)
+              .limit(5)
+
+            for (const manager of regionalManagers || []) {
+              const id = (manager as any)?.id
+              if (id && !hodIds.includes(id)) hodIds.push(id)
+            }
+          }
+
+          // 4. Fallback: regional_manager at the same location
           if (hodIds.length === 0 && (staffProfile as any)?.assigned_location_id) {
             const { data: rmList } = await admin
               .from("user_profiles")

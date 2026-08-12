@@ -344,7 +344,7 @@ export function StaffManagement() {
         })
         fetchStaff()
         // Only Administrators manage HOD assignments from Staff Management.
-        if (currentUserRole === "admin" && result.data) {
+        if (isAdministrator && result.data) {
           openHodLinkDialog(result.data)
         }
       } else {
@@ -1181,13 +1181,14 @@ export function StaffManagement() {
                             <SelectItem value="audit_staff">Audit Staff</SelectItem>
                             <SelectItem value="department_head">Department Head</SelectItem>
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                            {isAdministrator && <SelectItem value="regional_hr_officer">Regional HR Officer</SelectItem>}
+                            {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-                            {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
+{isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+  {isAdministrator && <SelectItem value="hr_records">HR Records Office</SelectItem>}
+  {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {canManageStaffLinks && (
                               <SelectItem value="it-admin">IT Admin</SelectItem>
