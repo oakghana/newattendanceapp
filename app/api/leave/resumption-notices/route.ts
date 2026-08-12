@@ -50,8 +50,8 @@ export async function GET() {
     const { data: leaves, error: leavesError } = await admin
       .from('leave_plan_requests')
       .select('id, user_id, leave_type_key, preferred_end_date, adjusted_end_date, status')
-      .eq('status', 'hr_approved')
-      .eq('is_archived', false)
+      .in('status', ['hr_approved', 'approved', 'completed', 'hod_approved'])
+      .or('is_archived.is.null,is_archived.eq.false')
       .in('user_id', staffIds)
     if (leavesError) throw leavesError
 
@@ -75,7 +75,9 @@ export async function GET() {
       resumeDate.setUTCDate(resumeDate.getUTCDate() + 1)
       const resume = resumeDate.toISOString().slice(0, 10)
       const confirmation = byRequest.get(leave.id) || byDate.get(`${leave.user_id}::${endDate}`)
-      if (confirmation?.first_hod_rm_check_in_date || confirmation?.confirmation_status === 'confirmed') return []
+      // Staff check-in and HOD/RM confirmation are separate events. A staff
+      // check-in must never clear the management confirmation notice.
+      if (confirmation?.confirmation_status === 'confirmed') return []
       const upcoming = resume >= today && resume <= maxDateString
       const overdue = resume < today
       if (!upcoming && !overdue) return []

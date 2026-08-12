@@ -319,7 +319,7 @@ export default function LoginPage() {
 
         // Confirm the browser client can read the session before navigating. This
         // prevents the redirect from racing Supabase's cookie persistence.
-        const dashboardUrl = "/dashboard"
+        const dashboardUrl = "/dashboard/attendance"
         const { data: persistedSession } = await supabase.auth.getSession()
 
         if (!persistedSession.session) {
