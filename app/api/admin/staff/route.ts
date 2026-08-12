@@ -96,10 +96,6 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    const normalizedRequesterRole = String(requestingProfile?.role || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[-\s]+/g, "_")
     // Build a server-side query with pagination and optional filters (returns count)
     let query = adminDb
       .from("user_profiles")
@@ -373,6 +369,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
   const { email, first_name, last_name, employee_id, department_id, position, staff_category, role, assigned_location_id, password, date_of_appointment, years_of_service, contact_number } =
   body
+
+    // Regional HR Leave Office is an administrator-only role.
+    if (["hr_leave_office", "regional_hr", "regional_hr_leave_office", "regional_hr_officer"].includes(String(role).trim().toLowerCase()) && !isAdministrator) {
+      return createJsonResponse({ success: false, error: "Only administrators can assign the Regional HR Leave Office role" }, 403)
+    }
 
     if (isItAdmin) {
       const allowedForItAdmin = ["staff", "nsp", "contract", "department_head"]

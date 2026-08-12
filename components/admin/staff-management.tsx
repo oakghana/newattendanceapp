@@ -121,9 +121,9 @@ export function StaffManagement() {
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
   const [currentUserLocationId, setCurrentUserLocationId] = useState<string | null>(null)
-  const canManageStaffLinks = ["admin", "administrator", "it-admin", "it_admin", "itadmin"].includes(
-    String(currentUserRole).trim().toLowerCase(),
-  )
+  const normalizedCurrentUserRole = String(currentUserRole).trim().toLowerCase().replace(/[-\s]+/g, "_")
+  const isAdministrator = ["admin", "administrator"].includes(normalizedCurrentUserRole)
+  const canManageStaffLinks = ["admin", "administrator", "it_admin", "itadmin"].includes(normalizedCurrentUserRole)
 
   // Calculate years of service based on date of appointment
   const calculateYearsOfService = (dateStr: string): number | string => {
@@ -910,12 +910,12 @@ export function StaffManagement() {
                                 <SelectItem value="audit_staff">Audit Staff</SelectItem>
                                 <SelectItem value="department_head">Department Head</SelectItem>
                                 {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
+                                {isAdministrator && <SelectItem value="regional_hr">Regional HR Officer</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-                                {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                                {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                                 {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                                 {canManageStaffLinks && (
@@ -1179,12 +1179,12 @@ export function StaffManagement() {
                             <SelectItem value="audit_staff">Audit Staff</SelectItem>
                             <SelectItem value="department_head">Department Head</SelectItem>
                             {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="regional_hr_officer">Regional HR Officer</SelectItem>}
+                            {isAdministrator && <SelectItem value="regional_hr_officer">Regional HR Officer</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts">Accounts</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="loan_office">Loan Office (Legacy)</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="hr_loan_office">HR Loan Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="accounts_loan_office">Accounts Loan Office</SelectItem>}
-                            {currentUserRole === "admin" && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
+                            {isAdministrator && <SelectItem value="hr_leave_office">HR Leave Office</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="manager_hr">Manager HR</SelectItem>}
                             {currentUserRole === "admin" && <SelectItem value="director_hr">Director HR</SelectItem>}
                             {canManageStaffLinks && (
