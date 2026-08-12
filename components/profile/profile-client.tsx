@@ -21,6 +21,7 @@ import { SignaturePad } from "@/components/leave/signature-pad"
 import { useToast } from "@/hooks/use-toast"
 import { getPasswordEnforcementMessage, validatePassword } from "@/lib/security"
 import { displayRole } from "@/lib/role-mapping"
+import { canManageHolidays, canManageGlobalPolicies, normalizeAppRole } from "@/lib/role-capabilities"
 import { toast } from "sonner"
 
 interface UserProfile {
@@ -457,6 +458,8 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
   }
 
   const userInitials = `${profile.first_name[0]}${profile.last_name[0]}`
+  const normalizedRole = normalizeAppRole(profile.role)
+  const canEditGlobalLeaveSettings = canManageGlobalPolicies(normalizedRole) && canManageHolidays(normalizedRole)
 
   return (
     <div className="space-y-6">
@@ -465,6 +468,10 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
         <h1 className="text-3xl font-bold text-primary">Profile Settings</h1>
         <p className="text-muted-foreground mt-2">
           Manage your personal information, account details, and attendance history
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Role: <span className="font-medium text-foreground">{displayRole(profile.role).replace(/_/g, " ")}</span> · Personal profile changes affect only your account.
+          {!canEditGlobalLeaveSettings && " Global leave policies and holidays are managed by authorized HR administrators."}
         </p>
       </div>
 

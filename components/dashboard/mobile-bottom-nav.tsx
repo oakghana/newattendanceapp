@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Home, Clock, FileText, BarChart3, Settings, UserCheck, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isAdminRole, normalizeAppRole } from "@/lib/role-capabilities"
 
 interface NavItem {
   href: string
@@ -42,17 +43,13 @@ const adminNavItems: NavItem[] = [
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
 ]
 
-function normalizeRole(role?: string | null): string {
-  return (role || "").toString().trim().toLowerCase().replace(/[\s-]+/g, "_")
-}
-
 export const MobileBottomNav = memo(function MobileBottomNav({ profile }: MobileBottomNavProps) {
   const pathname = usePathname()
 
   const items = useMemo(() => {
-    const role = normalizeRole(profile?.role)
+    const role = normalizeAppRole(profile?.role)
 
-    if (["admin", "super_admin", "it_admin", "god"].includes(role)) {
+    if (isAdminRole(role) || role === "it-admin") {
       return adminNavItems
     }
 

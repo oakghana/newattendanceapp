@@ -21,7 +21,9 @@ const REVERSE_ROLE_MAPPINGS: Record<string, string> = {
  * Used to show the correct role name in UI components
  */
 export function displayRole(dbRole: string | null | undefined): string {
-  const normalized = String(dbRole || '').toLowerCase().trim();
+  const normalized = String(dbRole || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+  if (["regional_hr_leave_office", "regional_leave_office"].includes(normalized)) return "regional_hr";
+  if (normalized === "administrator") return "admin";
   return REVERSE_ROLE_MAPPINGS[normalized] || normalized;
 }
 

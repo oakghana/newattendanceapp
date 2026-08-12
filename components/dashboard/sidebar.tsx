@@ -49,6 +49,7 @@ import {
   ScrollText,
 } from "lucide-react"
 import Image from "next/image"
+import { canAccessMemoConsole, normalizeAppRole } from "@/lib/role-capabilities"
 
 interface SidebarProps {
   user: {
@@ -417,22 +418,19 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
   // Normalize both the profile role and each menu item's allowed roles so the
   // UI accepts the role values used by existing records, such as IT-ADMIN.
   // Support role hierarchy by treating audit_staff like staff for base menus.
-  const normalizedRole = (profile?.role || "staff").toLowerCase().replace(/[\s-]+/g, "_").trim()
-  const effectiveRole = normalizedRole === "administrator"
-  ? "admin"
-  : normalizedRole === "regional_hr_leave_office" || normalizedRole === "regional_leave_office"
-  ? "regional_hr"
-  : normalizedRole === "audit_staff"
-  ? "staff"
-  : normalizedRole
+  const normalizedRole = normalizeAppRole(profile?.role)
+  const effectiveRole = normalizedRole === "audit_staff" ? "staff" : normalizedRole
 
   const filteredNavItems = allNavigationItems.filter((item) => {
     // Defense-in-depth: keep device monitoring strictly admin-only in the UI.
-    if (item.href === "/dashboard/device-violations") {
-      return effectiveRole === "admin"
-    }
+  if (item.href === "/dashboard/device-violations") {
+  return effectiveRole === "admin"
+  }
+  if (item.href === "/dashboard/secretary-memos") {
+  return canAccessMemoConsole(effectiveRole)
+  }
 
-    return item.roles.some((role) => {
+  return item.roles.some((role) => {
       const normalizedAllowedRole = role.toLowerCase().replace(/[\s-]+/g, "_").trim()
       return normalizedAllowedRole === effectiveRole
     })
