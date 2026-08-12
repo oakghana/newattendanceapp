@@ -45,7 +45,10 @@ export function LeaveNotificationsClient() {
   const allowedRequestRoles = ["staff", "nsp", "intern", "it-admin", "regional_manager"]
 
   const handleLeaveSubmit = async (data: LeaveRequestData) => {
-    const m = new FormData()
+  if (data.leaveType === "maternity" && !data.documentFile) {
+    throw new Error("Maternity evidence is required before submitting this request")
+  }
+  const m = new FormData()
     m.append('start_date', data.startDate.toISOString().split('T')[0])
     m.append('end_date', data.endDate.toISOString().split('T')[0])
     m.append('reason', data.reason)

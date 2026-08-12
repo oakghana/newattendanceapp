@@ -145,6 +145,10 @@ export function summarizeManagerReviewStatus(decisions: LeavePlanReviewDecision[
 export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     pending_hod_review: "Pending HOD Review",
+    pending_regional_hr_review: "Pending Regional HR Office Review",
+    pending_regional_manager_approval: "Pending Regional Manager Approval",
+    pending_hr_records_reference: "Pending HR Records Reference",
+    pending_hr_leave_processing: "Pending HR Leave Office Processing",
     pending_manager_review: "Pending Manager Review",
     hod_changes_requested: "Changes Requested by HOD",
     manager_changes_requested: "Changes Requested",

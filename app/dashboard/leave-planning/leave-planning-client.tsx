@@ -650,19 +650,31 @@ async function downloadLeaveAnalyticsPdf(rows: LeaveAnalyticsRecord[], fileName:
 
 // ─── Stage Progress Indicator ────────────────────────────────────────────────
 function WorkflowStages({ status }: { status: string }) {
-  const stages = [
-    { label: "Submitted", Icon: Send },
-    { label: "HOD Review", Icon: UserCheck },
-    { label: "HR Leave Office", Icon: ClipboardList },
-    { label: "HR Approval", Icon: ShieldCheck },
-  ]
+  const isRegional = status.startsWith("pending_regional_") || status === "pending_hr_records_reference" || status === "pending_hr_leave_processing"
+  const stages = isRegional
+    ? [
+        { label: "Submitted", Icon: Send },
+        { label: "Regional HR Office Review", Icon: ClipboardList },
+        { label: "Regional Manager Approval", Icon: UserCheck },
+        { label: "HR Leave Processing", Icon: ShieldCheck },
+      ]
+    : [
+        { label: "Submitted", Icon: Send },
+        { label: "HOD Review", Icon: UserCheck },
+        { label: "HR Leave Office", Icon: ClipboardList },
+        { label: "HR Approval", Icon: ShieldCheck },
+      ]
   const rejected = status === "hod_rejected" || status === "manager_rejected"
   const hrRejected = status === "hr_rejected"
-  const stageIndex =
-    status === "hr_approved" || hrRejected ? 4
-    : status === "hr_office_forwarded" ? 3
-    : status === "hod_approved" || status === "manager_confirmed" ? 2
-    : 1
+  const stageIndex = isRegional
+    ? status === "completed" || status === "hr_approved" || hrRejected ? 4
+      : status === "pending_hr_leave_processing" || status === "pending_hr_records_reference" ? 3
+      : status === "pending_regional_manager_approval" ? 2
+      : 1
+    : status === "hr_approved" || hrRejected ? 4
+      : status === "hr_office_forwarded" ? 3
+      : status === "hod_approved" || status === "manager_confirmed" ? 2
+      : 1
 
   return (
     <div className="flex items-center w-full py-2">
@@ -1074,7 +1086,7 @@ export function LeavePlanningClient({ profile, annualEntitlement, initialHoliday
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<LeaveAnalyticsPayload | null>(null)
 
-  // ── HR Executive HOD Review ─────────────────────────────���──���─────────
+  // ── HR Executive HOD Review ─────────────────────────────���──���─��───────
   const [hodReviewRequests, setHodReviewRequests] = useState<any[]>([])
   const [hodReviewLoading, setHodReviewLoading] = useState(false)
   const [hrExecHodLocationFilter, setHrExecHodLocationFilter] = useState("all")

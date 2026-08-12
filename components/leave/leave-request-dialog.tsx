@@ -512,8 +512,21 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
           {/* Step: Document */}
           {step === "document" && requiresDocument && (
             <div className="space-y-3">
-              <p className="text-sm font-semibold">Supporting Document {formData.leaveType === "maternity" && <span className="text-destructive">(Required)</span>}</p>
-              <p className="text-xs text-muted-foreground">Medical certificate, delivery record, approval letter, or relevant document (PDF/JPG/PNG · max 5 MB)</p>
+              <p className="text-sm font-semibold">
+                {formData.leaveType === "maternity" ? "Maternity Evidence" : "Supporting Document"} {requiresDocument && <span className="text-destructive">(Required)</span>}
+              </p>
+              {formData.leaveType === "maternity" ? (
+                <div className="rounded-xl border border-pink-200 bg-pink-50 p-3 text-sm text-pink-950">
+                  <p className="font-semibold">{formData.maternityDeliveryType === "cs_twins" ? "Caesarean section / twins evidence" : "Regular delivery evidence"}</p>
+                  <p className="mt-1 text-xs leading-5 text-pink-800">
+                    {formData.maternityDeliveryType === "cs_twins"
+                      ? "Upload a Caesarean section certificate or twins birth certificate/medical record."
+                      : "Upload a medical certificate or doctor’s note confirming the delivery date."}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Medical certificate, delivery record, approval letter, or relevant document (PDF/JPG/PNG · max 5 MB)</p>
+              )}
               <label
                 htmlFor="document-upload"
                 className={cn(
@@ -550,6 +563,7 @@ export function LeaveRequestDialog({ open, onOpenChange, staffName, hasApprovedL
                   { label: "Leave Type", value: selectedType?.label ?? formData.leaveType },
                   { label: "Days requested", value: `${formData.requestedDays} day${formData.requestedDays !== 1 ? "s" : ""}` },
                   { label: "Duration", value: formData.leaveType === "maternity" ? `${formData.maternityDeliveryType === "cs_twins" ? 14 : 12} weeks` : `${daysDifference} working day${daysDifference !== 1 ? "s" : ""}` },
+                  ...(formData.leaveType === "maternity" ? [{ label: "Delivery Type", value: formData.maternityDeliveryType === "cs_twins" ? "Caesarean Section / Twins" : "Regular delivery" }] : []),
                   ...(formData.leaveType === "maternity" && formData.deliveryDate ? [{ label: "Delivery Date", value: formData.deliveryDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) }] : []),
                   { label: "Start Date", value: formData.startDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
                   { label: "End Date", value: formData.endDate.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) },
