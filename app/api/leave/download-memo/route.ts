@@ -69,7 +69,8 @@ export async function GET(request: NextRequest) {
         id, user_id, leave_type_key, status,
         preferred_start_date, preferred_end_date,
         adjusted_start_date, adjusted_end_date,
-        requested_days, adjusted_days, entitlement_days,
+        hr_approved_start_date, hr_approved_end_date, hr_approved_days,
+        requested_days, adjusted_days, entitlement_days, leave_entitlement_days,
         prior_leave_days_deducted, holiday_days_deducted, travelling_days_added, leave_year_period,
         hr_approver_id, hr_approver_name,
         hr_approved_at, hr_signature_data_url, hr_signature_text,
@@ -202,9 +203,9 @@ export async function GET(request: NextRequest) {
     const employeeId = staffMgmt?.employee_id || staff?.employee_id || 'N/A'
     const position = staffMgmt?.position || staff?.position || ''
 
-    const startRaw = req.adjusted_start_date || req.preferred_start_date
+    const startRaw = req.hr_approved_start_date || req.adjusted_start_date || req.preferred_start_date
     const leaveTypeKey = String(req.leave_type_key || 'annual').toLowerCase()
-    const storedGrantedDays = Number(req.adjusted_days || req.requested_days || 0)
+    const storedGrantedDays = Number(req.hr_approved_days ?? req.adjusted_days ?? req.requested_days ?? 0)
     // Always resolve entitlement from the current staff profile. If the richer
     // profile query is unavailable on a legacy schema, use the management view
     // position/category rather than falling back to stale request totals.
@@ -212,9 +213,13 @@ export async function GET(request: NextRequest) {
     const resolvedEntitlement = leaveTypeKey === 'annual' && entitlementProfile
       ? resolveEntitlementFromProfile(entitlementProfile)
       : null
-    const storedEntitledDays = Number(req.entitlement_days || storedGrantedDays)
-    const entitlementDays = resolvedEntitlement?.annualLeaveDays || storedEntitledDays
-    const travelDays = Number(req.travelling_days_added || resolvedEntitlement?.travelDays || 0)
+    const storedEntitledDays = Number(req.entitlement_days ?? req.leave_entitlement_days ?? 0)
+    const entitlementDays = leaveTypeKey === 'annual'
+      ? (resolvedEntitlement?.annualLeaveDays ?? 36)
+      : (storedEntitledDays || storedGrantedDays)
+    const travelDays = leaveTypeKey === 'annual'
+      ? (resolvedEntitlement?.travelDays ?? Number(req.travelling_days_added || 2))
+      : Number(req.travelling_days_added || 0)
     const explicitDeduction = (req.prior_leave_days_deducted != null || req.holiday_days_deducted != null)
       ? Number(req.prior_leave_days_deducted || 0) + Number(req.holiday_days_deducted || 0)
       : extractAlreadyEnjoyedDays(req.adjustment_reason)
@@ -229,7 +234,9 @@ export async function GET(request: NextRequest) {
           travellingDays: travelDays || 2,
         })
       : null
-    const endRaw = annualDates?.endDate.toISOString().slice(0, 10) || req.adjusted_end_date || req.preferred_end_date
+    const endRaw = leaveTypeKey === 'annual'
+      ? (annualDates?.endDate.toISOString().slice(0, 10) || req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
+      : (req.hr_approved_end_date || req.adjusted_end_date || req.preferred_end_date)
     const grantedDays = annualDates?.grantedDays ?? storedGrantedDays
     const entitledDays = annualDates?.entitlementDays ?? storedEntitledDays
     const entitledLabel = travelDays > 0

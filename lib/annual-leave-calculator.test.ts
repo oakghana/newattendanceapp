@@ -69,6 +69,20 @@ describe("annual leave calculation", () => {
     expect(extractAlreadyEnjoyedDays("No prior leave")).toBeNull()
   })
 
+  it("keeps senior staff at 36 core days even when a legacy request says 24", () => {
+    const profile = { position: "Senior IT Officer", staff_category: "senior" }
+    const resolved = resolveEntitlementFromProfile(profile)
+    const result = calculateAnnualLeaveMemoDates({
+      startDate: "2026-08-03",
+      entitlementDays: resolved.annualLeaveDays,
+      daysAlreadyEnjoyed: 4,
+      travellingDays: resolved.travelDays,
+    })
+    expect(resolved.annualLeaveDays).toBe(36)
+    expect(result.grantedDays).toBe(34)
+    expect(result.endDate.toISOString().slice(0, 10)).toBe("2026-09-17")
+  })
+
   it("calculates 36 entitlement with no enjoyed days and two travel days", () => {
     const result = calculateAnnualLeaveBreakdown({ staff_category: "senior" }, 0)
     expect(result.annualEntitlement).toBe(36)
