@@ -6,7 +6,7 @@ import path from "path"
 import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { isHrApproverRole, isHrLeaveOfficeRole, isManagerRole, isStaffRole, calculateWorkingDays } from "@/lib/leave-planning"
 import { resolveEntitlementFromProfile } from "@/lib/annual-leave-entitlement"
-import { calculateAnnualLeaveMemoDates, getNextWorkingDay } from "@/lib/annual-leave-calculator"
+import { calculateAnnualLeaveMemoDates, extractAlreadyEnjoyedDays, getNextWorkingDay } from "@/lib/annual-leave-calculator"
 
 export const runtime = "nodejs"
 
@@ -200,6 +200,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
       // Use the stored adjusted_days if it was explicitly set by HR office (may include travel adjustments),
       // otherwise fall back to the computed working-days figure so the table never shows a stale entitlement.
       const actualBaseDays = baseLeaveDays > 0 ? baseLeaveDays : computedWorkingDays
+      const entitlementForDisplay = Number(lr.entitlement_days || lr.leave_entitlement_days || actualBaseDays)
       return {
         useTable: true,
         paragraphs: [
@@ -207,7 +208,7 @@ function buildBuiltinBody(lr: any, effectiveStart: string, effectiveEnd: string,
           "Your leave details are shown below.",
         ],
         closing: "We wish you a pleasant and relaxing vacation.",
-        tableEntitlement: actualBaseDays,
+        tableEntitlement: entitlementForDisplay,
         tableTravellingDays: travellingDays,
       }
     }
@@ -619,14 +620,17 @@ export async function GET(
     let adjustedEffectiveEnd = effectiveEnd
     let annualMemoDates: ReturnType<typeof calculateAnnualLeaveMemoDates> | null = null
     if (leaveTypeKey === "annual") {
+      const explicitDeduction = (lr.prior_leave_days_deducted != null || lr.holiday_days_deducted != null)
+        ? Number(lr.prior_leave_days_deducted || 0) + Number(lr.holiday_days_deducted || 0)
+        : extractAlreadyEnjoyedDays(lr.adjustment_reason || lr.memo_draft_body)
       annualMemoDates = calculateAnnualLeaveMemoDates({
         startDate: effectiveStart,
         entitlementDays: Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays),
-        grantedDays: effectiveDays,
-        daysAlreadyEnjoyed: (lr.prior_leave_days_deducted != null || lr.holiday_days_deducted != null)
-          ? Number(lr.prior_leave_days_deducted || 0) + Number(lr.holiday_days_deducted || 0)
-          : null,
-        travellingDays: Number(lr.travelling_days_added || 0),
+        // Annual granted days are recalculated from the resolved entitlement,
+        // deductions, and travel days; never trust stale stored 22/24-day totals.
+        grantedDays: null,
+        daysAlreadyEnjoyed: explicitDeduction ?? Math.max(0, Number(lr.entitlement_days || lr.leave_entitlement_days || effectiveDays) - effectiveDays),
+        travellingDays: Number(lr.travelling_days_added || 2),
       })
       adjustedEffectiveEnd = annualMemoDates.endDate.toISOString().slice(0, 10)
     }

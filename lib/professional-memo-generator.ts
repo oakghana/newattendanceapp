@@ -23,6 +23,10 @@ export interface MemoData {
     travelling_days_added?: number
     leave_period_start?: string
     leave_period_end?: string
+    staff_category?: string
+    rank?: string
+    date_of_appointment?: string
+    years_of_service?: number
   }>
   signatory: {
     name: string
@@ -413,7 +417,7 @@ async function generateMainMemo(
     })
     yPos = (doc as any).lastAutoTable.finalY + 6
   } else if (!hasAttachment) {
-    // ── Individual annual leave table (QCC format) ─────────────────────────
+    // ── Individual annual leave table (QCC format) ─────��───────────────────
     // Parse days/dates from body or memoData fields
     // Table: Entitled | Granted | From | To | Remarks
     const tableHeaders = [

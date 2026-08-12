@@ -11,6 +11,13 @@
 
 import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 
+/** Extract a prior-leave deduction from HR adjustment text when legacy rows lack the numeric field. */
+export function extractAlreadyEnjoyedDays(value?: string | null): number | null {
+  const text = String(value || "")
+  const match = text.match(/(\d+)\s*(?:day|days)?\s*(?:given|already\s+enjoyed|previously\s+taken|deducted)/i)
+  return match ? Math.max(0, Number(match[1])) : null
+}
+
 export interface AnnualLeaveCalculation {
   /** Base annual leave entitlement (e.g., 36 for senior staff) */
   annualEntitlement: number

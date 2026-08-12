@@ -69,6 +69,16 @@ describe("resolveEntitlementFromProfile", () => {
     expect(e.annualLeaveDays).toBe(36)
   })
 
+  it("gives a junior staff member 36 days after 11 years", () => {
+    const e = resolveEntitlementFromProfile({
+      staff_category: "junior",
+      date_of_appointment: "2015-01-01",
+    }, new Date("2026-08-12"))
+    expect(e.yearsOfService).toBe(11)
+    expect(e.annualLeaveDays).toBe(36)
+    expect(e.totalEntitlement).toBe(38)
+  })
+
   it("tiers explicit 'junior' category by years of service", () => {
     const e = resolveEntitlementFromProfile({
       staff_category: "junior",

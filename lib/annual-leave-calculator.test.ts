@@ -4,6 +4,7 @@ import { resolveEntitlementFromProfile } from "./annual-leave-entitlement"
 import {
   addAnnualLeaveWorkingDays,
   calculateAnnualLeaveMemoDates,
+  extractAlreadyEnjoyedDays,
   buildAnnualLeaveDisplay,
   calculateAnnualLeaveBreakdown,
   getNextWorkingDay,
@@ -60,6 +61,12 @@ describe("annual leave calculation", () => {
     })
     expect(result.daysAlreadyEnjoyed).toBe(4)
     expect(result.endDate.toISOString().slice(0, 10)).toBe("2026-09-01")
+  })
+
+  it("extracts legacy enjoyed-day deductions from adjustment text", () => {
+    expect(extractAlreadyEnjoyedDays("4 given during Christmas holidays")).toBe(4)
+    expect(extractAlreadyEnjoyedDays("4 days already enjoyed deducted")).toBe(4)
+    expect(extractAlreadyEnjoyedDays("No prior leave")).toBeNull()
   })
 
   it("calculates 36 entitlement with no enjoyed days and two travel days", () => {
